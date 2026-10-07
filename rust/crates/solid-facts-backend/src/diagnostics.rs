@@ -1442,19 +1442,17 @@ fn artifact_contract_status(
 /// status that is not `certified`.
 ///
 /// Every acceptance is replayed through steps 1-3 of the one admission rule
-/// ([`crate::accepted_bundles::admission_refusals`]); a package is named only
+/// ([`crate::artifact_admission::admission_refusals`]); a package is named only
 /// when *every* acceptance for it failed one of those steps, because otherwise
 /// the refusal lies in the resolved file or case selection, which this does not
-/// explain. Project catalogs are consulted before the compiled-in tier, and
-/// within a tier the most specific refusal wins: an environment that differs
-/// (the artifact matched) over a receipt that states none, over an artifact
-/// that is not the certified one.
+/// explain. The most specific refusal wins: an environment that differs (the
+/// artifact matched) over a receipt that states none, over an artifact that is
+/// not the certified one.
 pub fn admission_refusal_details(
     project_directory: &Path,
     catalogs: &[PathBuf],
-    bundled: bool,
 ) -> Result<BTreeMap<String, String>, BackendError> {
-    use crate::accepted_bundles::AdmissionRefusal;
+    use crate::artifact_admission::AdmissionRefusal;
     let patches = crate::installed_patches::InstalledPatches::read(project_directory);
     let snapshots = InstalledSnapshots::default();
     let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
@@ -1465,7 +1463,7 @@ pub fn admission_refusal_details(
         installed_environment_difference(project_directory, specifier, environment, &patches)
     };
     let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
-    let mut tiers = vec![(
+    let tiers = [(
         "a project catalog entry",
         crate::contract_interface::project_admission_refusals(
             catalogs,
@@ -1475,13 +1473,6 @@ pub fn admission_refusal_details(
         )
         .map_err(contract)?,
     )];
-    if bundled {
-        tiers.push((
-            "a compiled-in contract",
-            crate::accepted_bundles::bundle_admission_refusals(&installed, &bytes, &difference)
-                .map_err(contract)?,
-        ));
-    }
     let rank = |refusal: &AdmissionRefusal| match refusal {
         AdmissionRefusal::EnvironmentDiffers(_) => 0,
         AdmissionRefusal::InstalledBytesDiffer(_) => 1,
@@ -1818,13 +1809,13 @@ fn importer_installs(
 }
 
 /// One tier's artifact admission (ADR 0123) over the installed-tree facts it
-/// is handed: [`crate::accepted_bundles::admitted_bundle_artifacts`] or
+/// is handed: [`crate::authored_contracts::admitted_authored_artifacts`] or
 /// [`crate::contract_interface::admitted_project_artifacts`].
 type TierAdmission<'a> = dyn Fn(
         &crate::contract_interface::InstalledArtifactIdentity,
-        &crate::accepted_bundles::InstalledArtifactBytes,
+        &crate::artifact_admission::InstalledArtifactBytes,
         &crate::contract_interface::ResolvedTargetIdentity,
-        &crate::accepted_bundles::InstalledEnvironment,
+        &crate::artifact_admission::InstalledEnvironment,
     ) -> Result<Vec<(String, String)>, crate::ContractFailure>
     + 'a;
 
@@ -2254,13 +2245,9 @@ pub fn project_accepted_contracts(
 ) -> Result<AcceptedContractIndex, BackendError> {
     let mut contracts = read_catalogs(catalogs, trust)?;
     if bundled {
-        // ADR 0198: the authored tier sits above the certified one.
+        // ADR 0198: the authored tier, below the project's own catalogs.
         contracts = contracts.with_fallback(
             crate::authored_contracts::compiled_in_authored_contracts()
-                .map_err(|error| BackendError::Contract(error.to_string()))?,
-        );
-        contracts = contracts.with_fallback(
-            crate::accepted_bundles::compiled_in_accepted_contracts()
                 .map_err(|error| BackendError::Contract(error.to_string()))?,
         );
     }
@@ -2291,9 +2278,6 @@ pub fn project_accepted_contracts(
         let authored =
             authored_admissions(directory, conditions, facts, &installs)?.agreed(&contracts);
         contracts = authored.admit_into(contracts);
-        let bundles =
-            bundled_admissions(directory, conditions, facts, &installs)?.agreed(&contracts);
-        contracts = bundles.admit_into(contracts);
     }
     // Why a project catalog's acceptance was not admitted, for the acceptance
     // gate to say at the imports it leaves unanswered and for the package
@@ -2539,14 +2523,14 @@ fn refusal_notes(
     within: Option<&Path>,
     installs: &ImporterInstalls,
 ) -> Result<AcceptedContractIndex, BackendError> {
-    let refusals = admission_refusal_details(directory, catalogs, false)?;
+    let refusals = admission_refusal_details(directory, catalogs)?;
     let mut by_importer = Vec::new();
     for (base, specifiers) in &installs.contexts {
         let replayed;
         let refusals = if base == directory {
             &refusals
         } else {
-            replayed = admission_refusal_details(base, catalogs, false)?;
+            replayed = admission_refusal_details(base, catalogs)?;
             &replayed
         };
         for (specifier, importers) in specifiers {
@@ -2712,21 +2696,6 @@ pub fn admission_input_paths(project_directory: &Path) -> Vec<PathBuf> {
     paths
 }
 
-/// The specifiers this project may import under a contract compiled into the
-/// checker.
-///
-/// The same two installed-tree facts answer both tiers, because the question is
-/// the same one: did *this* project resolve the artifact that acceptance was
-/// proven about. Only the source of the acceptances differs.
-pub fn admitted_bundled_artifacts(
-    project_directory: &Path,
-    conditions: &std::collections::BTreeSet<String>,
-    facts: &solid_facts::ProjectFacts,
-) -> Result<ArtifactAdmissions, BackendError> {
-    let installs = importer_installs(project_directory, facts, None)?;
-    bundled_admissions(project_directory, conditions, facts, &installs)
-}
-
 /// The authored tier's admissions (ADR 0198), asked from the same installs as
 /// every other tier.
 fn authored_admissions(
@@ -2752,33 +2721,9 @@ fn authored_admissions(
     )
 }
 
-/// [`admitted_bundled_artifacts`] over installs already grouped.
-fn bundled_admissions(
-    project_directory: &Path,
-    conditions: &std::collections::BTreeSet<String>,
-    facts: &solid_facts::ProjectFacts,
-    installs: &ImporterInstalls,
-) -> Result<ArtifactAdmissions, BackendError> {
-    admitted_by_install(
-        project_directory,
-        facts,
-        None,
-        installs,
-        &|installed, bytes, resolved_target, environment| {
-            crate::accepted_bundles::admitted_bundle_artifacts(
-                conditions,
-                installed,
-                bytes,
-                resolved_target,
-                environment,
-            )
-        },
-    )
-}
-
 /// Whether the catalog `contract certify` just published under `catalog_root`
 /// is admitted in the tree it was certified in: steps 1-3 of the one admission
-/// rule ([`crate::accepted_bundles::admission_refusals`]) for every entry of
+/// rule ([`crate::artifact_admission::admission_refusals`]) for every entry of
 /// `package_name`, one `(specifier, refusal)` per entry, `None` when admitted.
 ///
 /// A certification that its own tree would refuse is a certification no
@@ -2840,257 +2785,6 @@ pub fn certified_catalog_self_admission(
     .collect())
 }
 
-/// One entry of a cited environment (its edge removed), the real paths it was
-/// found at, and the lookups that found it: `(importer's installed real path,
-/// bare name)`.
-pub(crate) type LocatedCitedEntry = (
-    crate::DependencyEnvironmentEntry,
-    Vec<PathBuf>,
-    Vec<(PathBuf, String)>,
-);
-
-/// One compiled-in acceptance a certification cites (ADR 0151), with where
-/// its dependency and every package of its environment are installed in the
-/// dependent's tree.
-pub(crate) struct LocatedCitation {
-    pub(crate) cited: crate::accepted_bundles::CompiledInCitation,
-    /// The dependency itself, as installed: name, manifest version, lockfile
-    /// integrity, no edge.
-    pub(crate) installed: crate::DependencyEnvironmentEntry,
-    /// The dependency's installed real path.
-    pub(crate) root: PathBuf,
-    /// Each environment entry of the cited receipt (its edge removed), the
-    /// real paths it was found at, and the lookups that found it:
-    /// `(importer's installed real path, bare name)`. An environment the tier
-    /// states without edges records no lookups, and is then carried without
-    /// edges.
-    pub(crate) located: Vec<LocatedCitedEntry>,
-}
-
-/// The compiled-in acceptance the package installed at `dependent_root` may
-/// cite for `query` (ADR 0151), replayed against that package's own tree, or
-/// why it may not.
-///
-/// The tree is the dependent's installed location, from which Node finds the
-/// dependency exactly as the dependent's own imports do; the admission steps
-/// are the ones `contract check` and self-admission replay
-/// ([`crate::accepted_bundles::admission_refusals`]), so a citation is
-/// admitted here exactly when a project importing the dependency from this
-/// location would admit the same acceptance.
-pub(crate) fn compiled_in_citation(
-    dependent_root: &Path,
-    query: &crate::accepted_bundles::CitationQuery<'_>,
-) -> Result<LocatedCitation, String> {
-    let project = fs::canonicalize(dependent_root).map_err(|error| {
-        format!(
-            "the dependent's installed root {} cannot be read: {error}",
-            dependent_root.display()
-        )
-    })?;
-    let patches = crate::installed_patches::InstalledPatches::read(&project);
-    let snapshots = InstalledSnapshots::default();
-    let installed = |specifier: &str| installed_artifact_identity(&project, specifier);
-    let bytes = |specifier: &str, patched: bool| {
-        installed_artifact_bytes(&project, specifier, patched, &patches, &snapshots)
-    };
-    let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
-        installed_environment_difference(&project, specifier, environment, &patches)
-    };
-    let cited = crate::accepted_bundles::cite_compiled_in(query, &installed, &bytes, &difference)
-        .map_err(|refusal| refusal.to_string())?;
-    let unlocatable = || {
-        format!(
-            "{} is not installed where this tree can say",
-            query.specifier
-        )
-    };
-    let module = package_name_of_specifier(query.specifier).ok_or_else(unlocatable)?;
-    let directory = discover_package_directory(&project, &module)
-        .ok()
-        .flatten()
-        .ok_or_else(unlocatable)?;
-    let root = fs::canonicalize(&directory).map_err(|_| unlocatable())?;
-    let installed = installed_environment_identity(&project, &root).ok_or_else(unlocatable)?;
-    let located = locate_cited_environment(&project, &root, &cited.environment);
-    Ok(LocatedCitation {
-        cited,
-        installed,
-        root,
-        located,
-    })
-}
-
-/// One answer of [`compiled_in_citation_candidates`]: the acceptance a
-/// certification of the package would cite for one specifier, or why none.
-#[derive(Clone, Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CitationCandidate {
-    pub specifier: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub package_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub package_version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub artifact_case: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub accepted_contract_digest: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub receipt_digest: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub refusal: Option<String>,
-}
-
-/// For each specifier the package installed at `dependent_root` imports, the
-/// compiled-in acceptance a certification under `conditions` would cite
-/// (ADR 0151), or why none.
-///
-/// The generation adapter's question, answered by the same function
-/// certification uses, so the edge it writes into a proposal is the edge
-/// certification can discharge. An answer is a hint and never authority:
-/// certification replays the whole citation from the tree itself.
-pub fn compiled_in_citation_candidates(
-    dependent_root: &Path,
-    conditions: &[String],
-    specifiers: &[String],
-) -> Vec<CitationCandidate> {
-    specifiers
-        .iter()
-        .map(|specifier| {
-            let query = crate::accepted_bundles::CitationQuery {
-                specifier,
-                export_conditions: conditions,
-                artifact_case: None,
-                accepted_contract_digest: None,
-            };
-            match compiled_in_citation(dependent_root, &query) {
-                Ok(located) => CitationCandidate {
-                    specifier: specifier.clone(),
-                    package_name: Some(located.cited.citation.package_name.clone()),
-                    package_version: Some(located.cited.citation.package_version.clone()),
-                    artifact_case: located
-                        .cited
-                        .contract
-                        .artifact_cases()
-                        .first()
-                        .map(|case| case.id.clone()),
-                    accepted_contract_digest: Some(
-                        located.cited.contract.semantic_digest().as_str().to_owned(),
-                    ),
-                    receipt_digest: Some(located.cited.citation.receipt_digest.clone()),
-                    refusal: None,
-                },
-                Err(refusal) => CitationCandidate {
-                    specifier: specifier.clone(),
-                    package_name: None,
-                    package_version: None,
-                    artifact_case: None,
-                    accepted_contract_digest: None,
-                    receipt_digest: None,
-                    refusal: Some(refusal),
-                },
-            }
-        })
-        .collect()
-}
-
-/// Where each entry of a cited environment is installed, found by replaying
-/// its recorded lookup from every location its importer was found at, the
-/// dependency itself standing for `certified`.
-///
-/// Admission has already replayed the same lookups and compared every
-/// identity, so this only recovers the locations, which the dependent's own
-/// environment needs to state edges of its own. An environment stated without
-/// edges records none; its entries are located from the dependency and from
-/// each other, by the strict rule's own search, and carried without lookups.
-fn locate_cited_environment(
-    project: &Path,
-    dependency_root: &Path,
-    environment: &[crate::DependencyEnvironmentEntry],
-) -> Vec<LocatedCitedEntry> {
-    use crate::contract_certification::EnvironmentImporter;
-    let identity_at = |at: &Path| installed_environment_identity(project, at);
-    let mut located: Vec<LocatedCitedEntry> = Vec::new();
-    let locations_of =
-        |located: &[LocatedCitedEntry], importer: &EnvironmentImporter| -> Vec<PathBuf> {
-            match importer {
-                EnvironmentImporter::Certified => vec![dependency_root.to_path_buf()],
-                EnvironmentImporter::Package(package) => located
-                    .iter()
-                    .filter(|(entry, _, _)| package.is(entry))
-                    .flat_map(|(_, roots, _)| roots.iter().cloned())
-                    .collect(),
-            }
-        };
-    if crate::contract_certification::dependency_environment_states_edges(environment) {
-        // Edges are rooted, so repeated passes reach every entry whose
-        // importer is reachable; the bound is the entry count.
-        for _ in 0..=environment.len() {
-            let mut moved = false;
-            for entry in environment {
-                let Some(edge) = entry.resolved_from.as_ref() else {
-                    continue;
-                };
-                for from in locations_of(&located, &edge.importer) {
-                    let Ok(Some(at)) = node_package_lookup(&from, &edge.specifier) else {
-                        continue;
-                    };
-                    if !identity_at(&at).is_some_and(|found| found.same_package(entry)) {
-                        continue;
-                    }
-                    let bare = entry.without_edge();
-                    let lookup = (from.clone(), edge.specifier.clone());
-                    match located
-                        .iter_mut()
-                        .find(|(known, _, _)| known.same_package(&bare))
-                    {
-                        Some((_, roots, lookups)) => {
-                            if !roots.contains(&at) {
-                                roots.push(at.clone());
-                                moved = true;
-                            }
-                            if !lookups.contains(&lookup) {
-                                lookups.push(lookup);
-                                moved = true;
-                            }
-                        }
-                        None => {
-                            located.push((bare, vec![at.clone()], vec![lookup]));
-                            moved = true;
-                        }
-                    }
-                }
-            }
-            if !moved {
-                break;
-            }
-        }
-    } else {
-        let mut frontier = vec![dependency_root.to_path_buf()];
-        let mut seen = std::collections::BTreeSet::new();
-        while let Some(from) = frontier.pop() {
-            if !seen.insert(from.clone()) {
-                continue;
-            }
-            for entry in environment {
-                let Ok(Some(at)) = node_package_lookup(&from, &entry.name) else {
-                    continue;
-                };
-                if !identity_at(&at).is_some_and(|found| found.same_package(entry)) {
-                    continue;
-                }
-                if !located
-                    .iter()
-                    .any(|(known, _, _)| known.same_package(entry))
-                {
-                    located.push((entry.without_edge(), vec![at.clone()], Vec::new()));
-                }
-                frontier.push(at);
-            }
-        }
-    }
-    located
-}
-
 /// Whether this project's installed tree, resolved from the installed copy of
 /// the package `specifier` names, is the dependency environment an acceptance
 /// -- a compiled-in bundle or a project catalog entry -- was proven in.
@@ -3141,7 +2835,7 @@ fn installed_environment_matches_in(
     ) else {
         return false;
     };
-    crate::accepted_bundles::environment_is_installed(
+    crate::artifact_admission::environment_is_installed(
         environment,
         root,
         |from, name| node_package_lookup(from, name),
@@ -3179,7 +2873,7 @@ pub(crate) fn installed_environment_difference(
     ) else {
         return unlocatable();
     };
-    crate::accepted_bundles::environment_difference(
+    crate::artifact_admission::environment_difference(
         environment,
         root,
         |from, name| node_package_lookup(from, name),
@@ -3217,7 +2911,7 @@ struct InstalledSnapshots(std::cell::RefCell<HashMap<PathBuf, Result<String, Str
 /// names, as installed for `project_directory`, or why its files cannot be
 /// stated to be the published archive: a patch the tree records, or a member
 /// no archive installs as (ADR 0131). The admission side of
-/// [`crate::accepted_bundles::InstalledArtifactBytes`].
+/// [`crate::artifact_admission::InstalledArtifactBytes`].
 fn installed_artifact_bytes(
     project_directory: &Path,
     specifier: &str,

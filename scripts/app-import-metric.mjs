@@ -86,10 +86,10 @@
 // explained by the checker's admission sentence when it gave one (an
 // unreadable lockfile integrity, another installed version, a dependency
 // environment entry -- the Solid runtime's or another's), else against the
-// compiled-in tier (`pkg/contracts/accepted/index.json`):
-// no bundle for the package at all, none at the installed version, none for
-// the imported specifier, or a bundle whose environment the install does not
-// match (with the checker's own admission sentence when packageSummaries
+// compiled-in authored tier (`pkg/contracts/authored/index.json`; the
+// certified tier this once read is retired, ADR 0228): no entry for the
+// package at all, none at the installed version, none for the imported
+// specifier, or an entry whose environment the install does not match (with the checker's own admission sentence when packageSummaries
 // carries one). An open site gets one cause per open domain, joined to the
 // package side when `--package-metric` names a `make certification-metric`
 // output that measured the same package version: that export's own cause for
@@ -104,7 +104,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 export const CORPUS_PATH = join(root, "scripts/ecosystem-benchmark/app-import-corpus.json");
-const TIER_INDEX_PATH = join(root, "pkg/contracts/accepted/index.json");
+const TIER_INDEX_PATH = join(root, "pkg/contracts/authored/index.json");
 const DEFAULT_WORK = join(root, "rust/target/app-import-metric");
 
 /// The runtime foundation (ADR 0027): dialect vocabulary, never a site.
@@ -398,10 +398,14 @@ export function mergeProjects(projects) {
 // Walls (pure)
 // ---------------------------------------------------------------------------
 
-/// The tier's bundles by package: `{ versions: Set, specifiers: Map<version, Set> }`.
+/// The entries of a tier index by package: `{ versions: Set, specifiers:
+/// Map<version, Set> }`, from an authored index (`entries`) or a certified one
+/// (`bundles`).
+const tierEntries = index => [...(index?.entries ?? []), ...(index?.bundles ?? [])];
+
 export function tierByPackage(index) {
   const tier = new Map();
-  for (const bundle of index?.bundles ?? []) {
+  for (const bundle of tierEntries(index)) {
     const entry = tier.get(bundle.packageName) ?? { versions: new Set(), specifiers: new Map() };
     entry.versions.add(bundle.packageVersion);
     const specifiers = entry.specifiers.get(bundle.packageVersion) ?? new Set();
@@ -930,7 +934,7 @@ const slug = path => path.replace(/[\\/]/g, "__");
 /// only; a pnpm install records no integrity in the installed manifest.
 function probeEnvironments(record, repository, tierIndex) {
   const bundles = new Map();
-  for (const bundle of tierIndex.bundles ?? []) {
+  for (const bundle of tierEntries(tierIndex)) {
     const key = `${bundle.packageName}@${bundle.packageVersion}\u0000${bundle.specifier}`;
     bundles.set(key, [...(bundles.get(key) ?? []), bundle]);
   }
@@ -949,7 +953,7 @@ function probeEnvironments(record, repository, tierIndex) {
           const origins = [dirname(realpathSync(manifest))];
           const installed = {};
           const results = candidates.map(bundle => {
-            const entries = tierIndex.environments?.[bundle.dependencyEnvironmentRoot] ?? [];
+            const entries = bundle.solidRuntime ?? tierIndex.environments?.[bundle.dependencyEnvironmentRoot] ?? [];
             for (const entry of entries) {
               if (entry.name in installed) continue;
               let found = null;

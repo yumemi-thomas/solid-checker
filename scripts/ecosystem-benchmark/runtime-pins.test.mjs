@@ -55,34 +55,6 @@ test("the signals head is the audited Solid 2 release", () => {
   assert.equal(SIGNALS_HEAD, AUDITED_SOLID_2);
 });
 
-test("every pinned signals release the shipped tier was proven with carries the pinned integrity", () => {
-  const index = JSON.parse(readFileSync(join(ROOT, "pkg/contracts/accepted/index.json"), "utf8"));
-  const seen = new Set();
-  // Releases no probe installs come from consumer environments (ADR 0186):
-  // the app's own lockfile attests them, not this table. They must still
-  // name one integrity per version across the whole tier.
-  const unpinned = new Map();
-  for (const bundle of index.bundles) {
-    // Index version 3 keeps each environment once, in `environments`, keyed by
-    // the root a bundle names; version 2 stated it inline.
-    const environment = index.environments?.[bundle.dependencyEnvironmentRoot] ?? bundle.dependencyEnvironment;
-    for (const entry of environment ?? []) {
-      if (entry.name !== "@solidjs/signals") continue;
-      seen.add(entry.version);
-      const label = `${bundle.packageName} ${entry.version}`;
-      if (Object.hasOwn(SOLID_SIGNALS_RELEASES, entry.version)) {
-        assert.equal(entry.integrity, SOLID_SIGNALS_RELEASES[entry.version], label);
-      } else {
-        assert.equal(entry.integrity, unpinned.get(entry.version) ?? entry.integrity, label);
-        unpinned.set(entry.version, entry.integrity);
-      }
-    }
-  }
-  // rc.0 has no audited archive; the tier's floor environments are one of the
-  // two sources that attest its integrity.
-  assert.ok(seen.has(SIGNALS_FLOOR), "the tier carries floor environments");
-});
-
 test("every Solid 2 probe's pin sits inside the signals range its solid-js declares", () => {
   const peers = manifest.solidReleases["solid-js"].peers;
   const probes = solid2Probes([...manifest.rows, ...(manifest.supplemental ?? [])]);

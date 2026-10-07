@@ -24,8 +24,9 @@
 // A package is at the checkpoint when all of these hold:
 //
 //   1  its contract certifies from the published bytes host free and for
-//      `browser` and `node`, and every nameable entrypoint is in the accepted
-//      tier (`pkg/contracts/accepted/index.json`) for each of the three;
+//      `browser` and `node`, and every nameable entrypoint is in the authored
+//      tier (`pkg/contracts/authored/index.json`) for each of the three (the
+//      certified tier this once read is retired, ADR 0228);
 //   2  every export is certified clean in every host, or is uncertifiable only
 //      for a reason the owner has accepted as genuinely unprovable
 //      (`ACCEPTED_UNPROVABLE`, empty until the owner names one: no current
@@ -83,7 +84,7 @@ import { corpusProblems, measure, readRetainedRow } from "./certification-metric
 const root = resolve(import.meta.dirname, "..");
 export const CORPUS_PATH = join(root, "scripts/ecosystem-benchmark/primitives-checkpoint-corpus.json");
 const MANIFEST_PATH = join(root, "scripts/ecosystem-benchmark/manifest.json");
-const TIER_INDEX_PATH = join(root, "pkg/contracts/accepted/index.json");
+const TIER_INDEX_PATH = join(root, "pkg/contracts/authored/index.json");
 export const MISUSE_LEDGER_PATH = join(root, "fixtures/primitives-misuse/cases.json");
 const METRIC_CORPUS_PATH = join(root, "scripts/ecosystem-benchmark/certification-metric-corpus.json");
 
@@ -556,7 +557,7 @@ export function measureHost({ run, corpus, rows, typePaths = new Map() }) {
 }
 
 // ---------------------------------------------------------------------------
-// The accepted tier
+// The compiled-in tier
 // ---------------------------------------------------------------------------
 
 export function hostOfConditions(conditions) {
@@ -565,21 +566,22 @@ export function hostOfConditions(conditions) {
   return "none";
 }
 
-/// The Solid runtime packages a bundle's recorded dependency environment must
+/// The Solid runtime packages an entry's recorded environment must
 /// resolve to the corpus install's release, and which pin each one follows.
 /// `@solidjs/signals` has no pin of its own: the head probe's install holds it
 /// at the `solid-js` release, as the misuse runner's install does.
 const RUNTIME_PINS = Object.freeze({ "solid-js": "solid-js", "@solidjs/web": "@solidjs/web", "@solidjs/signals": "solid-js" });
 
-/// Whether a bundle's recorded environment is the runtime `pin` installs:
+/// Whether an entry's recorded environment is the runtime `pin` installs:
 /// every entry of every runtime package the environment records resolves to
-/// the pinned release. A consumer admits a bundle only in the environment it
-/// recorded (ADRs 0123, 0126), so a bundle certified on rc.3 is no tier entry
+/// the pinned release. A consumer admits an entry only in the environment it
+/// recorded (ADRs 0123, 0126), so an entry probed on rc.3 is no tier entry
 /// for a corpus that installs rc.9, however exactly its package matches.
-/// An environment the index does not carry, or a pin the corpus does not
-/// state, is no match: absence proves nothing.
+/// The environment is an authored entry's `solidRuntime`, or the one an older
+/// certified index named by root. One the index does not carry, or a pin the
+/// corpus does not state, is no match: absence proves nothing.
 export function bundleRuntimeMatches(bundle, index, pin) {
-  const entries = index?.environments?.[bundle.dependencyEnvironmentRoot];
+  const entries = bundle.solidRuntime ?? index?.environments?.[bundle.dependencyEnvironmentRoot];
   if (!Array.isArray(entries) || !pin) return false;
   for (const [name, pinnedBy] of Object.entries(RUNTIME_PINS)) {
     const recorded = entries.filter(entry => entry.name === name);
@@ -590,7 +592,8 @@ export function bundleRuntimeMatches(bundle, index, pin) {
   return entries.some(entry => entry.name === "solid-js");
 }
 
-/// `name@version` -> host -> set of requested entrypoints the tier carries.
+/// `name@version` -> host -> set of requested entrypoints the tier carries,
+/// from an authored index (`entries`) or a certified one (`bundles`).
 ///
 /// With `corpus`, only bundles whose recorded runtime is the one the corpus
 /// entry installs count (`bundleRuntimeMatches`); the others are kept apart in
@@ -600,7 +603,7 @@ export function tierEntrypoints(index, corpus = null) {
   const tier = new Map();
   const otherRuntime = new Map();
   const pins = new Map((corpus?.packages ?? []).map(entry => [`${entry.package}@${entry.version}`, entry.solid ?? null]));
-  for (const bundle of index?.bundles ?? []) {
+  for (const bundle of [...(index?.entries ?? []), ...(index?.bundles ?? [])]) {
     const key = `${bundle.packageName}@${bundle.packageVersion}`;
     const target = !corpus || bundleRuntimeMatches(bundle, index, pins.get(key)) ? tier : otherRuntime;
     const hosts = target.get(key) ?? new Map(HOSTS.map(host => [host, new Set()]));

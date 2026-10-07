@@ -639,7 +639,7 @@ fn read_catalog_with_trust(
                 // no longer carries is withdrawn with it. It authenticates, so
                 // it is not an error; it is simply not an acceptance here, by
                 // importer or by artifact.
-                if crate::accepted_bundles::withdrawn_compiled_in_citation(
+                if crate::artifact_admission::withdrawn_compiled_in_citation(
                     &bindings.cited_acceptances,
                 )
                 .is_some()
@@ -657,7 +657,7 @@ fn read_catalog_with_trust(
                     )
                     .zip(environment)
                     .map(|(root, environment)| {
-                        crate::accepted_bundles::environment_acceptance_identity(
+                        crate::artifact_admission::environment_acceptance_identity(
                             &root,
                             &environment,
                         )
@@ -677,48 +677,15 @@ fn read_catalog_with_trust(
         ))
 }
 
-/// One authenticated policy-2 catalog entry, in the shape the compiled-in
-/// accepted-contract tier needs to re-issue it as a bundle.
-///
-/// Maintainer-tool surface, not a product one: `read_catalog_with_trust` above
-/// is what ordinary analysis uses, and it deliberately hands back semantics
-/// rather than bytes. Bundling needs the bytes — it re-issues a receipt over the
-/// same canonical main — and it must not reimplement the catalog format to get
-/// them, because a second reader is a second place for the digest and binding
-/// checks to disagree.
-#[doc(hidden)]
-pub struct AuthenticatedCatalogEntry {
-    pub canonical_main: Vec<u8>,
-    pub bindings: Policy2ReceiptBindings,
-    pub import: ResolvedImport,
-    pub export_conditions: Vec<String>,
-    /// The published entries behind `bindings.dependency_environment_root`,
-    /// already checked to reproduce it; `None` when the receipt states no
-    /// environment or the catalog published none.
-    pub dependency_environment: Option<Vec<DependencyEnvironmentEntry>>,
+/// One authenticated policy-2 catalog entry: what a publication merging into
+/// an existing catalog keys it by.
+struct AuthenticatedCatalogEntry {
+    bindings: Policy2ReceiptBindings,
+    import: ResolvedImport,
 }
 
-/// Reads a published catalog and returns every entry whose receipt
-/// authenticates against `trust`.
-///
-/// An entry that does not authenticate is an error rather than a skip: this
-/// runs on material a maintainer is about to compile into the checker, and
-/// silently dropping one is how an empty bundle set ships looking full.
-#[doc(hidden)]
-pub fn authenticated_catalog_entries(
-    path: &Path,
-    trust: &Policy2TrustConfiguration,
-) -> Result<Vec<AuthenticatedCatalogEntry>, ContractFailure> {
-    let (catalog, base) = decode_accepted_contract_catalog(path)?;
-    catalog
-        .contracts
-        .into_iter()
-        .map(|entry| authenticate_catalog_entry(&base, entry, trust))
-        .collect()
-}
-
-/// One catalog entry through the ordinary loader, so a bundle candidate or a
-/// merge survivor is exactly what this project would have accepted from the
+/// One catalog entry through the ordinary loader, so a merge survivor is
+/// exactly what this project would have accepted from the
 /// catalog on disk.
 fn authenticate_catalog_entry(
     base: &Path,
@@ -765,16 +732,10 @@ fn authenticate_catalog_entry(
     verify_catalog_digest(&receipt, entry.receipt_digest.as_deref(), "receiptDigest")?;
     rebase_catalog_import(base, &mut entry.import)?;
     load_authenticated_policy2_contract(&document, &receipt, &entry.import, &bindings, provenance)?;
-    let dependency_environment =
-        verified_dependency_environment(&bindings, entry.dependency_environment.as_deref())?;
+    verified_dependency_environment(&bindings, entry.dependency_environment.as_deref())?;
     Ok(AuthenticatedCatalogEntry {
-        canonical_main: canonicalize_policy2_main(&document).map_err(authentication_error)?,
         bindings,
-        dependency_environment,
         import: entry.import,
-        export_conditions: entry
-            .export_conditions
-            .unwrap_or_else(|| vec!["import".to_owned()]),
     })
 }
 
@@ -886,7 +847,7 @@ pub(crate) fn catalog_entries_for_merge(
 /// acceptance was issued under the default single `import` condition.
 ///
 /// This is the artifact half of the key. The reader qualifies it with the
-/// verified dependency environment ([`crate::accepted_bundles::
+/// verified dependency environment ([`crate::artifact_admission::
 /// environment_acceptance_identity`]), and an entry whose receipt states no
 /// environment gets no artifact key at all: it stays importer-keyed.
 ///
@@ -957,7 +918,7 @@ pub(crate) fn declared_conditions(conditions: &std::collections::BTreeSet<String
 /// the one the acceptance was issued for.
 ///
 /// The same rule as the compiled-in tier, not a second one: the candidates go
-/// to [`crate::accepted_bundles::admit_by_artifact`], which recomputes the
+/// to [`crate::artifact_admission::admit_by_artifact`], which recomputes the
 /// acceptance root from the installed tree, resolves the receipt's dependency
 /// environment from the imported package's own location, and lets the host's
 /// declaration select a case. A project catalog is usually certified in the
@@ -980,9 +941,9 @@ pub fn admitted_project_artifacts(
     project_directory: &Path,
     conditions: &std::collections::BTreeSet<String>,
     installed_integrity: &InstalledArtifactIdentity,
-    installed_bytes: &crate::accepted_bundles::InstalledArtifactBytes,
+    installed_bytes: &crate::artifact_admission::InstalledArtifactBytes,
     resolved_target: &ResolvedTargetIdentity,
-    installed_environment: &crate::accepted_bundles::InstalledEnvironment,
+    installed_environment: &crate::artifact_admission::InstalledEnvironment,
 ) -> Result<Vec<(String, String)>, ContractFailure> {
     let _ = (project_directory, trust);
     // Every candidate, across every catalog. A case set publishes one catalog
@@ -1026,7 +987,7 @@ pub fn admitted_project_artifacts(
                 .clone()
                 .unwrap_or_else(|| vec!["import".to_owned()]);
             candidates.push(ProjectCandidate {
-                identity: crate::accepted_bundles::environment_acceptance_identity(
+                identity: crate::artifact_admission::environment_acceptance_identity(
                     &bindings.artifact_acceptance_root,
                     &environment,
                 ),
@@ -1042,19 +1003,18 @@ pub fn admitted_project_artifacts(
             });
         }
     }
-    Ok(crate::accepted_bundles::admit_by_artifact(
+    Ok(crate::artifact_admission::admit_by_artifact(
         candidates.iter().map(ProjectCandidate::acceptance),
         conditions,
         installed_integrity,
         installed_bytes,
         resolved_target,
         installed_environment,
-        crate::accepted_bundles::EnvironmentRule::Exact,
     ))
 }
 
 /// Why each project-catalog acceptance by artifact was or was not admitted
-/// by steps 1-3 of the admission rule ([`crate::accepted_bundles::
+/// by steps 1-3 of the admission rule ([`crate::artifact_admission::
 /// admission_refusals`]), for `contract check` to say why a package with a
 /// catalog entry is still `missing`. Diagnostic only: it admits nothing, and
 /// unlike [`admitted_project_artifacts`] it keeps entries that state no
@@ -1062,9 +1022,9 @@ pub fn admitted_project_artifacts(
 pub fn project_admission_refusals(
     catalogs: &[PathBuf],
     installed_integrity: &InstalledArtifactIdentity,
-    installed_bytes: &crate::accepted_bundles::InstalledArtifactBytes,
-    installed_difference: &crate::accepted_bundles::InstalledEnvironmentDifference,
-) -> Result<Vec<(String, Option<crate::accepted_bundles::AdmissionRefusal>)>, ContractFailure> {
+    installed_bytes: &crate::artifact_admission::InstalledArtifactBytes,
+    installed_difference: &crate::artifact_admission::InstalledEnvironmentDifference,
+) -> Result<Vec<(String, Option<crate::artifact_admission::AdmissionRefusal>)>, ContractFailure> {
     project_admission_refusals_where(
         catalogs,
         installed_integrity,
@@ -1080,10 +1040,10 @@ pub fn project_admission_refusals(
 pub(crate) fn project_admission_refusals_where(
     catalogs: &[PathBuf],
     installed_integrity: &InstalledArtifactIdentity,
-    installed_bytes: &crate::accepted_bundles::InstalledArtifactBytes,
-    installed_difference: &crate::accepted_bundles::InstalledEnvironmentDifference,
+    installed_bytes: &crate::artifact_admission::InstalledArtifactBytes,
+    installed_difference: &crate::artifact_admission::InstalledEnvironmentDifference,
     keep: impl Fn(&Policy2ReceiptBindings) -> bool,
-) -> Result<Vec<(String, Option<crate::accepted_bundles::AdmissionRefusal>)>, ContractFailure> {
+) -> Result<Vec<(String, Option<crate::artifact_admission::AdmissionRefusal>)>, ContractFailure> {
     let mut candidates = Vec::new();
     for path in catalogs {
         let (catalog, _) = decode_accepted_contract_catalog(path)?;
@@ -1128,7 +1088,7 @@ pub(crate) fn project_admission_refusals_where(
             ));
         }
     }
-    Ok(crate::accepted_bundles::admission_refusals(
+    Ok(crate::artifact_admission::admission_refusals(
         candidates.iter().map(|(candidate, stated, version)| {
             let mut acceptance = candidate.acceptance();
             if !stated {
@@ -1159,8 +1119,8 @@ struct ProjectCandidate {
 }
 
 impl ProjectCandidate {
-    fn acceptance(&self) -> crate::accepted_bundles::ArtifactAcceptance<'_> {
-        crate::accepted_bundles::ArtifactAcceptance {
+    fn acceptance(&self) -> crate::artifact_admission::ArtifactAcceptance<'_> {
+        crate::artifact_admission::ArtifactAcceptance {
             specifier: &self.specifier,
             requested_entrypoint: &self.requested_entrypoint,
             export_conditions: &self.conditions,
@@ -1350,16 +1310,13 @@ pub(crate) struct AuthenticCase {
     /// How many entries the acceptance's dependency environment states: the
     /// premises its certification checked against this tree (ADR 0187).
     environment_entries: usize,
-    /// Whether this tree reproduced the whole environment, rather than only
-    /// its Solid runtime entries (ADR 0189).
-    exact_environment: bool,
 }
 
 impl AuthenticCase {
-    /// A case whose package-relative targets the caller already holds: both
-    /// tiers' shape, since `admit_by_artifact` receives relative spellings
-    /// from each (a bundle records them; a catalog entry's are stripped of
-    /// its package root first).
+    /// A case whose package-relative targets the caller already holds: the
+    /// shape `admit_by_artifact` receives from every supply (an authored entry
+    /// records them; a catalog entry's are stripped of its package root
+    /// first).
     pub(crate) fn from_relative(
         identity: String,
         runtime_target: String,
@@ -1373,18 +1330,7 @@ impl AuthenticCase {
             declaration_target,
             conditions,
             environment_entries,
-            exact_environment: true,
         }
-    }
-
-    #[must_use]
-    pub(crate) fn with_exact_environment(mut self, exact_environment: bool) -> Self {
-        self.exact_environment = exact_environment;
-        self
-    }
-
-    pub(crate) const fn exact_environment(&self) -> bool {
-        self.exact_environment
     }
 
     /// Whether this project's resolved file is one this case was certified
@@ -2218,7 +2164,6 @@ mod tests {
             declaration_target: "dist/index.d.ts".to_owned(),
             conditions: conditions.iter().map(|it| (*it).to_owned()).collect(),
             environment_entries: 0,
-            exact_environment: true,
         }
     }
 

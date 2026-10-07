@@ -130,13 +130,5 @@
       "shape": "",
       "spelling": ""
     }
-  ],
-  "citedDependencies": [
-    {
-      "entrypoint": "./destructured",
-      "conditions": [],
-      "specifier": "bundled-dependency",
-      "refusal": "the compiled-in tier accepts no contract for bundled-dependency under [import]"
-    }
   ]
 }

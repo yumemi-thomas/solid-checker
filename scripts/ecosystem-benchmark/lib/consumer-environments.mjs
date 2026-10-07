@@ -1,9 +1,10 @@
 // Consumer environments: the exact Solid 2 trees real consumers install, as
-// reviewed data, so the compiled-in tier can carry contracts certified in them.
+// reviewed data. They fed the compiled-in certified tier, retired by ADR 0228;
+// a run in one is now a measurement only.
 //
-// The corpus certifies each package at its manifest floor and head. A bundle is
-// admitted only where its own dependency environment is installed
-// (bundle-accepted-contracts.mjs `bundleKey`), and a real consumer rarely
+// The corpus certifies each package at its manifest floor and head. A bundle
+// was admitted only where its own dependency environment is installed, and a
+// real consumer rarely
 // installs either: kobalte's `solid2` branch pins the rc.3 runtime *with*
 // `@solidjs/signals@2.0.0-rc.3`, where the corpus head installs rc.6. So every
 // bundle the census run delivers is refused in the tree the census demand was

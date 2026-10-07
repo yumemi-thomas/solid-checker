@@ -2591,30 +2591,6 @@ export function declinedDependencyGraphCases(declinedClosures) {
   );
 }
 
-/// ADR 0151: the frontier edges a compiled-in acceptance discharged, as the
-/// decline-shaped records the graph frontier reads.
-///
-/// A citation is the plain lane's composition. Where the published-graph lane
-/// can prepare, it composes the same dependency inside one transaction, and it
-/// may prove more than the tier does (a sibling the tier has no bundle for, a
-/// dependency whose tier bundle was certified in another environment), so a
-/// citation must not hide the frontier from it. The graph regenerates the
-/// root against its own private catalog, which states the edge itself, so a
-/// cited edge is exactly the coordinate a decline is. When the graph cannot be
-/// prepared, the reused proposal -- the one that cites -- is what certifies.
-export function citedFrontierRecords(citedDependencies) {
-  if (!Array.isArray(citedDependencies)) return [];
-  return citedDependencies
-    .filter(record => typeof record?.cited === "string" && typeof record?.specifier === "string")
-    .map(record => ({
-      kind: "unaccepted-external-dependency",
-      entrypoint: record.entrypoint,
-      conditions: record.conditions,
-      package: record.specifier,
-      citedFromCompiledInTier: record.cited
-    }));
-}
-
 export async function preparedGraphForPartialProposal(
   { output, ...preparation },
   { prepare = preparePublishedGraphFallback, prepareCases = preparePublishedGraphCases } = {}
@@ -2641,10 +2617,7 @@ export async function preparedGraphForPartialProposal(
     // the named dependency, then regenerate the root with that accepted
     // contract in its private catalog, which is the entire content of the
     // decline.
-    const frontier = [
-      ...(Array.isArray(audit?.declinedClosures) ? audit.declinedClosures : []),
-      ...citedFrontierRecords(audit?.citedDependencies)
-    ];
+    const frontier = Array.isArray(audit?.declinedClosures) ? audit.declinedClosures : [];
     const declined = declinedDependencyFrontier(frontier);
     if (!declined) return { graph: null, trace: null };
     const cases = declinedDependencyGraphCases(frontier);

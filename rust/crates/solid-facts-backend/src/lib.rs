@@ -4,18 +4,13 @@
 #[cfg(not(feature = "dialect-v2"))]
 compile_error!("solid-facts-backend requires at least one dialect feature");
 
-mod accepted_bundles;
+mod artifact_admission;
 mod authored_contracts;
-pub use accepted_bundles::{
-    AdmissionRefusal, admitted_bundle_artifacts, bundle_admission_refusals,
-    compiled_in_accepted_contracts,
-};
+pub use artifact_admission::AdmissionRefusal;
 
 mod artifact_resolution;
 mod bounded_json;
 mod cache;
-mod contract_bundling;
-pub use contract_bundling::{BUILT_IN_SCOPE, BundledAcceptance, bundle_published_catalog};
 
 mod contract_certification;
 pub use contract_certification::report_certification_timing;
@@ -175,17 +170,16 @@ pub use contract_workflow::{
     ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
 };
 pub use diagnostics::{
-    ArtifactAdmissions, CitationCandidate, DiagnosticAnalysis, DiagnosticSession,
-    DiagnosticTimings, Metrics, NestedCatalogs, PackageContractStatus, PackageSummary,
-    ProjectCatalogSelection, RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding,
-    SnapshotFix, SnapshotTextEdit, SourceLocation, UnauthenticatedCatalog,
-    accepted_package_contract_statuses, admission_input_paths, admission_refusal_details,
-    admitted_bundled_artifacts, admitted_project_artifacts, analysis_metrics,
+    ArtifactAdmissions, DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics,
+    NestedCatalogs, PackageContractStatus, PackageSummary, ProjectCatalogSelection,
+    RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix,
+    SnapshotTextEdit, SourceLocation, UnauthenticatedCatalog, accepted_package_contract_statuses,
+    admission_input_paths, admission_refusal_details, admitted_project_artifacts, analysis_metrics,
     analyze_project_accepted_measured_with_enablement, certified_catalog_self_admission,
-    compiled_in_citation_candidates, discovered_contract_paths, discovered_rule_options_path,
-    imported_package_roots, importer_admission_inputs, nested_catalog_candidates,
-    project_accepted_contracts, select_project_catalogs, select_project_catalogs_in,
-    semantic_demand_options_for_enablement, source_location, unsupported_runtime_snapshot,
+    discovered_contract_paths, discovered_rule_options_path, imported_package_roots,
+    importer_admission_inputs, nested_catalog_candidates, project_accepted_contracts,
+    select_project_catalogs, select_project_catalogs_in, semantic_demand_options_for_enablement,
+    source_location, unsupported_runtime_snapshot,
 };
 pub use evidence_sidecars::{
     EVIDENCE_SIDECAR_VERSION, EnvironmentIdentity, EvidenceCatalog, EvidenceSidecarDocuments,

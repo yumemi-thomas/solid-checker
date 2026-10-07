@@ -83,7 +83,7 @@ ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.3/node_m
   SOLID_CHECKER_RC9_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.9/node_modules" \
   SOLID_CHECKER_RC13_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.13/node_modules"
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update accepted-bundles tsc-oracle tsc-oracle-provision audited-archives-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision audited-archives-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -101,8 +101,7 @@ build-rust: build-typefacts
 # the packaged checker under bin/ untouched.
 build-checker-debug: build-typefacts
 	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
-	  -p solid-facts-backend --bin solid-checker-rust --bin solid-contract-authorize \
-	  --bin solid-contract-bundle
+	  -p solid-facts-backend --bin solid-checker-rust --bin solid-contract-authorize
 
 # A fresh optimized checker for performance measurements. Like the debug gate
 # build, this leaves the checked-in packaged binary under bin/ untouched.
@@ -404,10 +403,9 @@ ecosystem-regression: build-checker-release
 # measured it -- so the first run fails until it is re-pinned deliberately with
 # `--update`, and the 1.x-era numbers stay in git history as the evidence they
 # are.
-# The compiled-in tier is certified once host-free and once per host in
-# TIER_HOSTS (ADR 0140): a consumer that declares a host is admitted only a
-# case certified for it. The census and recipe-addressing pins gate the
-# host-free run alone; the per-host runs feed accepted-bundles. Pass
+# The census certifies once host-free and once per host in TIER_HOSTS (ADR
+# 0140). The census and recipe-addressing pins gate the host-free run alone.
+# The per-host runs fed the compiled-in tier, retired by ADR 0228. Pass
 # TIER_HOSTS= for the host-free run alone.
 TIER_HOSTS ?= browser node
 
@@ -568,49 +566,6 @@ consumer-environment-runs: build-checker-release
 	  done; \
 	done
 
-# Regenerates the compiled-in accepted-contract tier from the census run and
-# every delivery run that exists for a reviewed consumer environment.
-#
-# The rule this target used to state -- delivery and measurement come from one
-# certification -- is amended by owner decision (2026-09-26). The census run is
-# still delivered, so everything the pinned census counts ships. A delivery-only
-# run from `consumer-environment-runs` may feed the tier too, *without* being
-# counted by the pinned census: it certifies the tree a real consumer installs,
-# which the corpus floor and head do not, and a bundle is admitted only where
-# its own dependency environment is installed. Those contracts are measured by
-# re-sweeping the consumer the environment was taken from, never by the census
-# pin, and the census refuses such a run outright. Bundles are keyed by
-# dependency environment, so floor, head and delivery certifications of one
-# artifact are separate bundles and never refine one another. A run for an
-# environment the reviewed file no longer lists is not picked up here, and the
-# bundler refuses one if it is passed by hand.
-#
-# Deliberately a separate target. The census is a measurement and is safe to
-# re-run; this writes `pkg/contracts/accepted/**` and the generated
-# `include_bytes!` list, which are reviewed artifacts. Run it, read the diff,
-# rebuild, and check the Rust tier's own pin
-# (`every_bundle_this_build_carries_authenticates`) still passes.
-#
-# With PRIMITIVES_CHECKPOINT_KEEP=1, the @solid-primitives checkpoint's own
-# certification runs feed the tier too (owner checkpoint, 2026-09-28: every
-# primitive certified *in the accepted tier*). Produce them with
-# `make primitives-checkpoint PRIMITIVES_CHECKPOINT_KEEP=1`, which keeps the
-# retained trees the bundler reads; like the census, they are certifications of
-# pinned published bytes with the metric's flags.
-accepted-bundles: build-checker-debug
-	$(BUN) scripts/bundle-accepted-contracts.mjs \
-	  $$(for host in none $(TIER_HOSTS); do \
-	    if [ "$$host" = none ]; then suffix=""; else suffix="-$$host"; fi; \
-	    run="$(CURDIR)/rust/target/coverage-census/run$$suffix.json"; \
-	    if [ -f "$$run" ]; then printf -- '--run %s ' "$$run"; fi; \
-	    for id in $$($(BUN) scripts/ecosystem-benchmark/run.mjs --print-consumer-environments); do \
-	      run="$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run$$suffix.json"; \
-	      if [ -f "$$run" ]; then printf -- '--run %s ' "$$run"; fi; \
-	    done; \
-	    run="$(PRIMITIVES_CHECKPOINT_OUT)/run$$suffix.json"; \
-	    if [ -n "$(PRIMITIVES_CHECKPOINT_KEEP)" ] && [ -f "$$run" ]; then printf -- '--run %s ' "$$run"; fi; \
-	  done)
-
-.PHONY: contract-coverage-census consumer-environment-runs accepted-bundles
+.PHONY: contract-coverage-census consumer-environment-runs
 
 .PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark ecosystem-regression

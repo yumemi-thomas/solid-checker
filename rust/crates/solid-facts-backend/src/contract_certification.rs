@@ -37,7 +37,6 @@ use solid_facts::ast::{ModuleEmission, ModuleFlavor};
 const DECLARATION_MEMBER_SUFFIXES: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
 
 #[cfg(feature = "dialect-v2")]
-mod citations;
 mod compiler_facts;
 mod controlled_execution;
 mod dependencies;
@@ -91,8 +90,7 @@ pub use policy2_receipt::{
     policy2_ambiguous_empty_dependency_environment_root, policy2_artifact_acceptance_root,
     policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
     policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
-    policy2_receipt_payload_bindings, policy2_resolved_import_root,
-    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
     validate_dependency_environment,
 };
 pub use probe_gates::{ProbeGate, ProbeGateError, ProbeGateSchedule, VerifiedProbeGateBatch};
@@ -13415,115 +13413,6 @@ export const value = phantom;
             },
         )
         .unwrap()
-    }
-
-    /// ADR 0151's wrapper case at the composition seam: a root whose closure
-    /// names a dependency edge composes it from a compiled-in citation of
-    /// exactly the contract the edge names, and the composition names the
-    /// cited receipt and carries the dependency into the root's environment.
-    /// A citation of any other contract, or none, discharges nothing.
-    #[test]
-    fn a_dependency_edge_composes_only_from_a_citation_of_its_exact_contract() {
-        let (root, leaf) = two_node_published_graph(false, false, false);
-        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
-        let root_identity = graph.root_identity().clone();
-        let leaf_identity = graph
-            .dependency_first_identities()
-            .into_iter()
-            .find(|identity| identity.package_name == "leaf-package")
-            .unwrap()
-            .clone();
-        let root_plan = graph.plan(&root_identity).unwrap();
-        let leaf_plan = graph.plan(&leaf_identity).unwrap();
-        let edge = root_plan.verified_closure.manifest().dependencies[0].clone();
-        let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [41; 32]).unwrap();
-        let cite = |plan: &CertificationPlan| {
-            let receipt =
-                authenticated_graph_test_receipt(plan, &leaf_identity.importer, &issuer, 7);
-            let installed =
-                DependencyEnvironmentEntry::package("leaf-package", "2.0.0", "sha512-leaf");
-            super::citations::CitedDependency {
-                edge: edge.clone(),
-                cited: crate::accepted_bundles::CompiledInCitation {
-                    citation: super::CitedAcceptance {
-                        package_name: "leaf-package".into(),
-                        package_version: "2.0.0".into(),
-                        artifact_acceptance_root: receipt
-                            .bindings()
-                            .artifact_acceptance_root
-                            .clone(),
-                        dependency_environment_root: format!("sha256:{:064x}", 5),
-                        semantic_digest: receipt.semantic_digest().as_str().into(),
-                        receipt_digest: receipt.receipt_digest().into(),
-                    },
-                    acceptance_root: receipt.bindings().artifact_acceptance_root.clone(),
-                    contract: plan.selected_candidate.clone(),
-                    receipt,
-                    environment: Vec::new(),
-                },
-                installed: installed.clone(),
-                environment: vec![installed],
-                located: Vec::new(),
-            }
-        };
-
-        let cited = cite(leaf_plan);
-        let composition = super::VerifiedDependencyComposition::from_citations(
-            root_plan,
-            std::slice::from_ref(&cited),
-            None,
-        )
-        .expect("a citation of the exact contract composes");
-        assert_eq!(
-            composition.cited_acceptances(),
-            std::slice::from_ref(&cited.cited.citation),
-            "the composition names the receipt it rests on"
-        );
-        assert!(
-            composition
-                .dependency_environment()
-                .iter()
-                .any(|entry| entry.name == "leaf-package"),
-            "the cited dependency is a premise of the root's environment"
-        );
-        assert_eq!(
-            composition.verifier_build_digest(),
-            None,
-            "a citation's authority is tier membership, not a shared build"
-        );
-        assert_eq!(
-            composition.witnesses().len(),
-            root_plan
-                .dependency_composition_schedule()
-                .unwrap()
-                .requirements()
-                .len(),
-            "every dependency demand is witnessed"
-        );
-        assert!(composition.witnesses().iter().all(|witness| {
-            witness.site_ids().iter().any(|site| {
-                site == &format!(
-                    "compiled-in-citation:{}",
-                    cited.cited.citation.receipt_digest
-                )
-            })
-        }));
-
-        // Another contract -- here the root's own document -- is not the one
-        // the edge names.
-        assert!(matches!(
-            super::VerifiedDependencyComposition::from_citations(
-                root_plan,
-                &[cite(root_plan)],
-                None
-            ),
-            Err(DependencyReceiptCompositionError::ReceiptMismatch { .. })
-        ));
-        // And an edge with no citation has no authority at all.
-        assert!(matches!(
-            super::VerifiedDependencyComposition::from_citations(root_plan, &[], None),
-            Err(DependencyReceiptCompositionError::MissingGraphEdge { .. })
-        ));
     }
 
     #[test]

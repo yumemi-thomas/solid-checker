@@ -10,7 +10,7 @@
 //! of exactly the Solid runtime the claims were probed on. The rest of the
 //! dependency tree is not compared (ADR 0189 § 3).
 //!
-//! [`admit_by_artifact`]: crate::accepted_bundles::admit_by_artifact
+//! [`admit_by_artifact`]: crate::artifact_admission::admit_by_artifact
 
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
@@ -19,9 +19,8 @@ use serde::Deserialize;
 use solid_reactive_ir::contract_semantics::proof::accept_authored;
 use solid_reactive_ir::contract_semantics::{AcceptedContract, AcceptedContractIndex, Digest};
 
-use crate::accepted_bundles::{
-    ArtifactAcceptance, EnvironmentRule, InstalledArtifactBytes, InstalledEnvironment,
-    admit_by_artifact,
+use crate::artifact_admission::{
+    ArtifactAcceptance, InstalledArtifactBytes, InstalledEnvironment, admit_by_artifact,
 };
 use crate::contract_certification::{
     DependencyEnvironmentEntry, policy2_artifact_acceptance_root_for_identity,
@@ -96,7 +95,7 @@ fn authored_identity(
     patched_snapshot: Option<&str>,
 ) -> String {
     let identity =
-        crate::accepted_bundles::environment_acceptance_identity(acceptance_root, environment);
+        crate::artifact_admission::environment_acceptance_identity(acceptance_root, environment);
     // ADR 0208: an entry about one patched install is another artifact than
     // the published one of the same version, and is keyed by its bytes.
     match patched_snapshot {
@@ -296,7 +295,6 @@ pub(crate) fn admitted_from(
         installed_bytes,
         resolved_target,
         installed_environment,
-        EnvironmentRule::Exact,
     )
 }
 

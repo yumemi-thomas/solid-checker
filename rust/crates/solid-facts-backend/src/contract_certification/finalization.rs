@@ -202,12 +202,12 @@ pub(super) fn finalize_value_only_without_type_facts(
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
 ) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
-    let cited = cited_composition(plan, None)?;
+    refuse_undischarged_dependencies(plan)?;
     finalize_value_only_with_dependencies(
         plan,
         proposal_document,
         None,
-        cited.as_ref(),
+        None,
         probe_gates,
         pin,
         issuer,
@@ -224,12 +224,12 @@ pub(super) fn finalize_value_only(
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
 ) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
-    let cited = cited_composition(plan, Some(type_facts))?;
+    refuse_undischarged_dependencies(plan)?;
     finalize_value_only_with_dependencies(
         plan,
         proposal_document,
         Some(type_facts),
-        cited.as_ref(),
+        None,
         probe_gates,
         pin,
         issuer,
@@ -237,26 +237,21 @@ pub(super) fn finalize_value_only(
     )
 }
 
-/// The dependency authority a plan outside any graph transaction has: none
-/// when its verified closure names no dependency, and otherwise a composition
-/// of the compiled-in acceptances it cites for every edge (ADR 0151), or the
-/// refusal that says which edge has none.
+/// Refuses a plan outside any graph transaction whose verified closure names
+/// a dependency edge, naming the first.
 ///
-/// Without this a plain-lane plan with a dependency edge could only refuse
-/// with [`Policy2FinalizationError::DependenciesRequired`]. It still does,
-/// naming the edge, whenever an edge cannot be cited.
-fn cited_composition(
+/// Only a graph transaction supplies a dependency receipt. A plain-lane plan
+/// once cited the compiled-in tier's acceptance for an edge (ADR 0151); that
+/// tier is retired (ADR 0228), so nothing outside a graph discharges one.
+fn refuse_undischarged_dependencies(
     plan: &CertificationPlan,
-    type_facts: Option<&VerifiedTypeFactsEvidence>,
-) -> Result<Option<VerifiedDependencyComposition>, Policy2FinalizationError> {
-    if plan.verified_closure.manifest().dependencies.is_empty() {
-        return Ok(None);
+) -> Result<(), Policy2FinalizationError> {
+    match plan.verified_closure.manifest().dependencies.first() {
+        None => Ok(()),
+        Some(edge) => Err(Policy2FinalizationError::DependencyAuthorityMissing(
+            edge.specifier.clone(),
+        )),
     }
-    let citations = super::citations::cite_closure_dependencies(plan)
-        .map_err(Policy2FinalizationError::CitationRefused)?;
-    Ok(Some(VerifiedDependencyComposition::from_citations(
-        plan, &citations, type_facts,
-    )?))
 }
 
 #[expect(
@@ -657,13 +652,13 @@ pub enum Policy2FinalizationError {
     UnsupportedDemand { family: String },
     #[error("policy-2 value-only finalization requires authenticated dependency receipts")]
     DependenciesRequired,
-    /// ADR 0151: a dependency edge outside any graph transaction, for which
-    /// no compiled-in acceptance could be cited; the text names the edge and
-    /// the reason.
+    /// A dependency edge outside any graph transaction, which only a graph
+    /// receipt could discharge (ADR 0228 retired compiled-in citations); the
+    /// text names the edge.
     #[error(
-        "policy-2 value-only finalization requires dependency authority, and no compiled-in acceptance could be cited: {0}"
+        "policy-2 value-only finalization requires dependency authority for {0}, which only a graph transaction supplies"
     )]
-    CitationRefused(String),
+    DependencyAuthorityMissing(String),
     #[error("policy-2 value-only finalization requires live Type Facts evidence")]
     TypeFactsRequired,
     #[error("policy-2 value-only finalization received dependency authority for a leaf")]

@@ -33,35 +33,29 @@ struct CheckRequest {
     #[serde(default)]
     accepted_contracts: Vec<HostAcceptedContract>,
     /// What the host resolved each imported specifier to, in its own installed
-    /// tree. Only the compiled-in accepted contracts use it, and only to decide
-    /// whether one of them is about *this* project's artifact.
-    ///
-    /// The host states this exactly as it states `type_facts`: there is no
-    /// filesystem here to read a lockfile from, and this adapter checks nothing
-    /// against one. What is not weakened is the acceptance itself -- an
-    /// identity that does not reproduce a bundle's signed
-    /// `artifactAcceptanceRoot` admits nothing, so a wrong or invented entry
-    /// yields no contract rather than the wrong one. A host that cannot state a
-    /// package exactly should omit it.
+    /// tree. Accepted and unused: only the compiled-in accepted contracts read
+    /// it, and that tier is retired (ADR 0228). The authored tier is not served
+    /// here: it admits on a Solid runtime environment, and this adapter, with
+    /// no filesystem, can show only an empty one.
     #[serde(default)]
+    #[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
     installed_packages: Vec<HostInstalledPackage>,
-    /// The export conditions the host resolved under. Empty admits nothing,
-    /// exactly as on the native side: conditions select the artifact, and
-    /// guessing one is how a contract proven under `import` reaches a `require`
-    /// consumer.
+    /// The export conditions the host resolved under. Accepted and unused, for
+    /// the same reason.
     #[serde(default)]
+    #[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
     export_conditions: Vec<String>,
-    /// Whether the contracts compiled into this build may be applied.
-    #[serde(default = "enabled")]
+    /// Whether the contracts compiled into this build may be applied. Accepted
+    /// and without effect: no compiled-in contract reaches this adapter since
+    /// the certified tier retired (ADR 0228).
+    #[serde(default)]
+    #[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
     bundled_contracts: bool,
-}
-
-const fn enabled() -> bool {
-    true
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
 struct HostInstalledPackage {
     /// The specifier as written in the source, which is what an import states
     /// and what admission is keyed by.
@@ -252,80 +246,6 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
                 import,
             }
         }))?;
-    // The compiled-in accepted-contract tier. Host-supplied contracts above
-    // stay importer-keyed -- `load_external_contract_index` states no artifact
-    // identity for them -- so this adds acceptances and displaces none.
-    let contracts = if request.bundled_contracts {
-        let installed = |specifier: &str| {
-            request
-                .installed_packages
-                .iter()
-                .find(|package| package.specifier == specifier)
-                .map(|package| {
-                    (
-                        package.name.clone(),
-                        package.version.clone(),
-                        package.integrity.clone(),
-                    )
-                })
-        };
-        // The host states each package's installed snapshot root; whether a
-        // patch produced it is the host's to know, and the root still has to
-        // match the acceptance byte for byte (ADR 0208).
-        let installed_bytes = |specifier: &str, _patched_install: bool| {
-            request
-                .installed_packages
-                .iter()
-                .find(|package| package.specifier == specifier)
-                .and_then(|package| package.snapshot_root.clone())
-                .ok_or_else(|| {
-                    format!(
-                        "the host stated no snapshot root for the files installed for {specifier}"
-                    )
-                })
-        };
-        let resolved_target = |specifier: &str| {
-            request
-                .installed_packages
-                .iter()
-                .find(|package| package.specifier == specifier)
-                .map(|package| package.resolved_target.clone())
-        };
-        let conditions = request
-            .export_conditions
-            .iter()
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>();
-        // This adapter has no filesystem, so it cannot resolve a bundle's
-        // dependency environment from the imported package's location the way
-        // the native side does. Only a bundle whose proof read no other
-        // package can be shown to apply; every other one is refused, which is
-        // the import behaving exactly as if no bundle existed. "Read no other
-        // package" is exactly what an empty environment means now: the loader
-        // reads the retired ambiguous empty root -- what a certifier before
-        // 2026-09-26 wrote even when it had acquired nothing -- as no
-        // environment at all, so it never reaches this closure.
-        let environment =
-            |_: &str, environment: &[solid_facts_backend::DependencyEnvironmentEntry]| {
-                environment.is_empty()
-            };
-        let admitted = solid_facts_backend::admitted_bundle_artifacts(
-            &conditions,
-            &installed,
-            &installed_bytes,
-            &resolved_target,
-            &environment,
-        )?;
-        let contracts =
-            contracts.with_fallback(solid_facts_backend::compiled_in_accepted_contracts()?);
-        if admitted.is_empty() {
-            contracts
-        } else {
-            contracts.with_admitted_artifacts(admitted)
-        }
-    } else {
-        contracts
-    };
     let (analysis, _) = analyze_project_accepted_measured_with_enablement(
         dialect,
         Path::new(&request.project_id),
@@ -341,49 +261,20 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
 mod tests {
     use super::CheckRequest;
 
-    /// The fields a host must state before a compiled-in contract can apply,
-    /// and what their absence means.
-    ///
-    /// Absence is the whole safety property here. This adapter has no
-    /// filesystem: it cannot read a lockfile, cannot resolve a specifier, and
-    /// cannot check anything the host says against a tree. So a request that
-    /// says nothing must admit nothing -- not fall back to a guess -- and the
-    /// serde defaults are the only thing enforcing that.
+    /// A request from a host written for the retired compiled-in tier still
+    /// decodes: its fields are accepted and have no effect (ADR 0228).
     #[test]
-    fn a_host_that_states_no_installed_tree_admits_no_bundled_contract() {
-        let minimal: CheckRequest = serde_json::from_str(
-            r#"{"projectId":"/p/tsconfig.json","generation":1,"sources":[],
-                "typeFacts":{"schema":2,"generation":1,"projectId":"/p/tsconfig.json",
-                "sources":[],"entities":[],"symbols":[],"files":[]}}"#,
-        )
-        .expect("the minimal request still decodes");
-        assert!(minimal.installed_packages.is_empty());
-        assert!(
-            minimal.export_conditions.is_empty(),
-            "conditions select the artifact; an empty set admits nothing rather than assuming \
-             `import`"
-        );
-        assert!(
-            minimal.bundled_contracts,
-            "the tier is on by default, and turning it off is what has to be written down"
-        );
-    }
-
-    #[test]
-    fn an_installed_package_states_every_field_admission_recomputes() {
-        let stated: CheckRequest = serde_json::from_str(
+    fn a_request_stating_an_installed_tree_still_decodes() {
+        let stated: Result<CheckRequest, _> = serde_json::from_str(
             r#"{"projectId":"/p/tsconfig.json","generation":1,"sources":[],
                 "typeFacts":{"schema":2,"generation":1,"projectId":"/p/tsconfig.json",
                 "sources":[],"entities":[],"symbols":[],"files":[]},
-                "exportConditions":["import"],
+                "exportConditions":["import"],"bundledContracts":true,
                 "installedPackages":[{"specifier":"@scope/pkg","name":"@scope/pkg",
-                "version":"1.0.0","integrity":"sha512-x","resolvedTarget":"dist/index.js"}]}"#,
-        )
-        .expect("a stated installed tree decodes");
-        let package = &stated.installed_packages[0];
-        assert_eq!(package.specifier, "@scope/pkg");
-        assert_eq!(package.resolved_target, "dist/index.js");
-        assert_eq!(stated.export_conditions, ["import"]);
+                "version":"1.0.0","integrity":"sha512-x","resolvedTarget":"dist/index.js",
+                "snapshotRoot":"sha256:00"}]}"#,
+        );
+        assert!(stated.is_ok());
     }
 }
 

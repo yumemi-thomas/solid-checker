@@ -476,3 +476,19 @@ test("a tier bundle counts only in the runtime the corpus installs", () => {
   assert.deepEqual(result.certification.none.tierOtherRuntime, ["."]);
   assert.equal(result.certification.browser.met, true);
 });
+
+test("an authored index entry counts by its own solidRuntime (ADR 0228)", () => {
+  const corpus = {
+    measuredOn: "2026-10-08",
+    packages: [{ package: "@solid-primitives/a", version: "1.0.0", solid: { "solid-js": "2.0.0-rc.13", "@solidjs/web": "2.0.0-rc.13" } }],
+    withoutSolid2: []
+  };
+  const runtime = release => ["solid-js", "@solidjs/web", "@solidjs/signals"].map(name => ({ name, version: release, integrity: `sha512-${name}` }));
+  const entry = (requestedEntrypoint, release) => ({
+    packageName: "@solid-primitives/a", packageVersion: "1.0.0", requestedEntrypoint,
+    exportConditions: ["browser", "import"], solidRuntime: runtime(release)
+  });
+  const tier = tierEntrypoints({ format: 1, entries: [entry(".", "2.0.0-rc.13"), entry("./x", "2.0.0-rc.9")] }, corpus);
+  assert.deepEqual([...tier.get("@solid-primitives/a@1.0.0").get("browser")], ["."]);
+  assert.deepEqual([...tier.otherRuntime.get("@solid-primitives/a@1.0.0").get("browser")], ["./x"]);
+});

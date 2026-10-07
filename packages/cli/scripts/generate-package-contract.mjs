@@ -24,10 +24,7 @@ import {
   ArtifactResolutionSession,
   MUTUALLY_EXCLUSIVE_CONDITION_AXES,
   RESOLVER_STANDARD_CONDITIONS,
-  coreRuntimeSpecifier,
   isPrivateNamespacedCondition,
-  nodeBuiltinSpecifier,
-  resolvePackageArtifactClosure,
   nonEmittingModuleTarget,
   nonModuleTargetExtension,
   resolvePackageExport,
@@ -793,141 +790,6 @@ export function finiteArtifactCandidates(
   return candidates;
 }
 
-/// ADR 0151: the bare package specifiers one prepared case's closure left as
-/// an opaque frontier that a compiled-in acceptance could discharge.
-///
-/// A frontier is read off the closure's own `unaccepted-external-dependency`
-/// hazards, never guessed. A specifier the case also *re-exports* on either
-/// axis is left alone: a citation carries no per-export bindings, so a
-/// re-export through it would bind nothing and an `export *` would forward
-/// nothing, shrinking the published surface rather than describing it.
-export function citableSpecifiers(resolution, reexported) {
-  const frontier = new Set();
-  for (const hazard of resolution?.closure?.hazards ?? []) {
-    if (hazard?.kind !== "unaccepted-external-dependency") continue;
-    const separator = hazard.source.indexOf(":");
-    if (separator < 0) continue;
-    const specifier = hazard.source.slice(separator + 1);
-    if (
-      !specifier ||
-      /^[./#]/.test(specifier) ||
-      specifier.includes("?") ||
-      specifier.startsWith("node:") ||
-      nodeBuiltinSpecifier(specifier) ||
-      coreRuntimeSpecifier(specifier) ||
-      reexported.has(specifier)
-    ) {
-      continue;
-    }
-    frontier.add(specifier);
-  }
-  return [...frontier].sort();
-}
-
-/// Which compiled-in acceptance a certification of this installed package
-/// would cite for each specifier (ADR 0151), asked of the native checker so
-/// the edge a proposal states is the one certification can discharge. The
-/// answer is a hint: certification replays every citation from the tree.
-async function compiledInCitations({ packageRoot, conditions, specifiers, scratch }) {
-  const request = join(scratch, `${randomUUID()}-citations.json`);
-  writeFileSync(request, `${JSON.stringify({ packageRoot, conditions, specifiers })}\n`);
-  const child = await checked(["--cite-compiled-in", request], packageRoot);
-  const answer = JSON.parse(child.stdout);
-  if (answer?.format !== "solid-checker-compiled-in-citations" || answer?.version !== 1) {
-    throw new Error("the native checker answered citations in an unknown format");
-  }
-  return answer.citations ?? [];
-}
-
-/// Re-prepares every case whose frontier a compiled-in acceptance discharges,
-/// with those acceptances as its accepted dependencies (ADR 0151). A case
-/// whose re-preparation fails keeps the preparation it had, so citation only
-/// ever narrows a frontier; it never costs a case.
-async function citeCompiledInDependencies({
-  preparedCases,
-  packageRoot,
-  manifest,
-  integrity,
-  certificationImporter,
-  resolutionSession,
-  scratch
-}) {
-  const records = [];
-  for (const candidate of preparedCases) {
-    const { entrypoint, conditions, resolution } = candidate.prepared;
-    const resolutionConditions = [...new Set([...conditions, "import"])].sort();
-    let reexported;
-    try {
-      reexported = new Set(
-        resolvePackageArtifactClosure({
-          importer: resolution.importer,
-          specifier: resolution.specifier,
-          packageRoot,
-          conditions: resolutionConditions,
-          resolutionKind: "import",
-          integrity
-        }).externalDependencies
-          .filter(dependency => dependency.kind === "reexport")
-          .map(dependency => dependency.specifier)
-      );
-    } catch {
-      continue;
-    }
-    const specifiers = citableSpecifiers(resolution, reexported);
-    if (specifiers.length === 0) continue;
-    let answers;
-    try {
-      answers = await compiledInCitations({
-        packageRoot: resolution.packageRealRoot ?? resolution.packageRoot ?? packageRoot,
-        conditions: resolutionConditions,
-        specifiers,
-        scratch
-      });
-    } catch (error) {
-      records.push({ entrypoint, conditions, refusal: error.message });
-      continue;
-    }
-    const cited = {};
-    for (const answer of answers) {
-      if (answer.refusal || !answer.receiptDigest) {
-        records.push({ entrypoint, conditions, specifier: answer.specifier, refusal: answer.refusal });
-        continue;
-      }
-      cited[answer.specifier] = {
-        packageName: answer.packageName,
-        artifactCase: answer.artifactCase,
-        acceptedContractDigest: answer.acceptedContractDigest,
-        exports: {}
-      };
-    }
-    if (Object.keys(cited).length === 0) continue;
-    try {
-      candidate.prepared = prepareArtifact({
-        packageRoot,
-        manifest,
-        integrity,
-        entrypoint,
-        conditions,
-        resolutionSession,
-        certificationImporter: resolution.importer,
-        acceptedDependencies: cited
-      });
-      for (const answer of answers.filter(answer => cited[answer.specifier])) {
-        records.push({
-          entrypoint,
-          conditions,
-          specifier: answer.specifier,
-          cited: `${answer.packageName}@${answer.packageVersion}`,
-          receiptDigest: answer.receiptDigest
-        });
-      }
-    } catch (error) {
-      records.push({ entrypoint, conditions, refusal: `re-preparation failed: ${error.message}` });
-    }
-  }
-  return records;
-}
-
 async function checked(args, cwd) {
   const child = await runNativeAsync("solid-checker", args, {
     cwd,
@@ -1153,8 +1015,7 @@ function writeProposalRefusalAudit(
   refusals,
   inapplicable = [],
   withheldClaims = [],
-  declinedClosures = [],
-  citedDependencies = []
+  declinedClosures = []
 ) {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(
@@ -1167,11 +1028,7 @@ function writeProposalRefusalAudit(
         refusals,
         inapplicable,
         withheldClaims,
-        declinedClosures,
-        // ADR 0151: the frontier edges a compiled-in acceptance discharged,
-        // and the ones it could not. Present only when there are any, so an
-        // audit with no citation keeps its bytes.
-        ...(citedDependencies.length > 0 ? { citedDependencies } : {})
+        declinedClosures
       },
       null,
       2
@@ -1617,9 +1474,6 @@ export async function generatePackageContract(
   // is what `scripts/dialect-audit-yield.mjs` ranks.
   const declinedClosures = [];
   const attributionWidenings = [];
-  // ADR 0151: which frontier edges a compiled-in acceptance discharged, and
-  // which it could not, per case. Audit material; certification re-derives it.
-  const citations = [];
   const refusals = wildcardRefusals.map(entrypoint => ({
     entrypoint,
     conditions: null,
@@ -1698,26 +1552,6 @@ export async function generatePackageContract(
         });
       }
       caseIndex += 1;
-    }
-    // ADR 0151. Only outside a graph transaction and where no caller supplied
-    // dependency identities: a graph node's edges are the graph's own, and
-    // its certification composes receipts the same transaction issues, never
-    // citations. A citation is the answer for the frontier nothing else
-    // discharges.
-    if (
-      !privateGraphPreparation &&
-      Object.keys(resolutionDependencies).length === 0 &&
-      process.env.SOLID_CHECKER_COMPILED_IN_CITATIONS !== "0"
-    ) {
-      citations.push(...await citeCompiledInDependencies({
-        preparedCases,
-        packageRoot,
-        manifest,
-        integrity: options.integrity,
-        certificationImporter: options.certificationImporter,
-        resolutionSession,
-        scratch
-      }));
     }
     if (timing) {
       timing.preparationMs = performance.now() - preparationStartedAt;
@@ -1867,8 +1701,7 @@ export async function generatePackageContract(
         refusals,
         inapplicable,
         withheldClaims,
-        declinedClosures,
-        citations
+        declinedClosures
       );
       writeAttributionAudit(output, manifest, attributionWidenings);
       const first = refusals[0];
@@ -1954,8 +1787,7 @@ export async function generatePackageContract(
         refusals,
         inapplicable,
         withheldClaims,
-        declinedClosures,
-        citations
+        declinedClosures
       );
           writeAttributionAudit(output, manifest, attributionWidenings);
           throw new Error("no independently mergeable artifact case remains");
@@ -1979,8 +1811,7 @@ export async function generatePackageContract(
         refusals,
         inapplicable,
         withheldClaims,
-        declinedClosures,
-        citations
+        declinedClosures
       );
     writeAttributionAudit(output, manifest, attributionWidenings);
   } finally {
@@ -1998,7 +1829,6 @@ export async function generatePackageContract(
     inapplicableArtifactCases: inapplicable.length,
     withheldClaims: withheldClaims.length,
     declinedClosures: declinedClosures.length,
-    compiledInCitations: citations,
     // The subset of the inapplicable census whose premise is file content.
     // Certification carries these to Rust and refuses the whole proposal if the
     // authenticated archive refutes one; see `VERIFIER_PROVED_DISPOSITIONS`.

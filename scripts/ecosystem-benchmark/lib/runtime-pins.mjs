@@ -25,11 +25,12 @@
 //   rust/crates/solid-dialect/audited-archives.json); rc.6's and rc.9's
 //   `package.json` are checked in at
 //   benchmarks/package-contract-v2/phase0/{rc6,rc9}/solidjs-signals. rc.6 stays
-//   because the shipped tier's head environments were proven with it.
+//   because the head environments of the retired certified tier (ADR 0228)
+//   were proven with it.
 // - rc.0 has no audited archive. Its integrity is the one all 111 cached rc.0
-//   locks record and the one every rc.0 environment of the shipped tier
-//   (pkg/contracts/accepted/index.json) states. It is an install pin, never an
-//   authority: nothing is denied on rc.0's bytes.
+//   locks record, and the one every rc.0 environment of the retired certified
+//   tier stated. It is an install pin, never an authority: nothing is denied
+//   on rc.0's bytes.
 export const SOLID_SIGNALS_RELEASES = Object.freeze({
   "2.0.0-rc.0":
     "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA==",

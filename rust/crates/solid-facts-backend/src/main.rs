@@ -155,10 +155,6 @@ struct Request {
     /// Fresh-process ordinary discovery postcondition for the transaction.
     #[serde(default)]
     verify_policy2_discovery: String,
-    /// ADR 0151: which compiled-in acceptances a certification of one
-    /// installed package would cite. Answers the generation adapter.
-    #[serde(default)]
-    cite_compiled_in: String,
     #[serde(default)]
     package_name: String,
     #[serde(default)]
@@ -2669,36 +2665,6 @@ fn publish_policy2_case_set_pointer(
     Ok(())
 }
 
-/// ADR 0151: answers the generation adapter's question -- which compiled-in
-/// acceptance would a certification of this installed package cite for each
-/// specifier -- with the function certification itself uses. A hint, never
-/// authority: certification replays every citation from the tree.
-fn cite_compiled_in(request_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct CitationRequest {
-        package_root: String,
-        conditions: Vec<String>,
-        specifiers: Vec<String>,
-    }
-    let request: CitationRequest = serde_json::from_slice(&fs::read(request_path)?)?;
-    let citations = solid_facts_backend::compiled_in_citation_candidates(
-        Path::new(&request.package_root),
-        &request.conditions,
-        &request.specifiers,
-    );
-    serde_json::to_writer(
-        io::stdout(),
-        &serde_json::json!({
-            "format": "solid-checker-compiled-in-citations",
-            "version": 1,
-            "citations": citations,
-        }),
-    )?;
-    println!();
-    Ok(())
-}
-
 fn verify_policy2_discovery(request_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let request: ContractCertificationExecutionRequest =
         serde_json::from_slice(&fs::read(request_path)?)?;
@@ -3436,10 +3402,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         verify_policy2_discovery(Path::new(&request.verify_policy2_discovery))?;
         return Ok(0);
     }
-    if !request.cite_compiled_in.is_empty() {
-        cite_compiled_in(Path::new(&request.cite_compiled_in))?;
-        return Ok(0);
-    }
     // Refuse here: **before** the daemon branch below, not after it.
     //
     // `daemon::enabled()` defaults to on whenever `debug_assertions` is off,
@@ -3947,16 +3909,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         // from: the project directory, or the install directory of an
         // artifact only some importers reach.
         let refusals = |from: &Path| {
-            let mut refusals = solid_facts_backend::admission_refusal_details(
-                from,
-                &catalogs,
-                request.bundled_contracts,
-            )?;
+            let mut refusals = solid_facts_backend::admission_refusal_details(from, &catalogs)?;
             for scope in &selection.nested {
                 for (package, refusal) in solid_facts_backend::admission_refusal_details(
                     &scope.directory,
                     &scope.admitted,
-                    false,
                 )? {
                     refusals.entry(package).or_insert(refusal);
                 }
@@ -4256,7 +4213,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut certification_plan_output = String::new();
     let mut execute_contract_certification = String::new();
     let mut verify_policy2_discovery = String::new();
-    let mut cite_compiled_in = String::new();
     let mut package_name = String::new();
     let mut package_version = String::new();
     let mut contract_entry_file = String::new();
@@ -4592,9 +4548,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                     .next()
                     .ok_or("--verify-policy2-discovery needs a path")?
             }
-            "--cite-compiled-in" => {
-                cite_compiled_in = args.next().ok_or("--cite-compiled-in needs a path")?
-            }
             "--package-name" => package_name = args.next().ok_or("--package-name needs a value")?,
             "--package-version" => {
                 package_version = args.next().ok_or("--package-version needs a value")?
@@ -4657,7 +4610,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         && plan_contract_certification.is_empty()
         && execute_contract_certification.is_empty()
         && verify_policy2_discovery.is_empty()
-        && cite_compiled_in.is_empty()
     {
         project.canonicalize()?
     } else {
@@ -4710,7 +4662,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         certification_plan_output,
         execute_contract_certification,
         verify_policy2_discovery,
-        cite_compiled_in,
         package_name,
         package_version,
         contract_entry_file,

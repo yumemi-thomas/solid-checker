@@ -131,7 +131,7 @@ pub struct Policy2ReceiptBindings {
     ///
     /// Empty means the receipt states none -- it was issued before this binding
     /// existed -- and such a receipt can never be applied by environment
-    /// (`accepted_bundles` refuses it). It is skipped when empty so an older
+    /// (`artifact_admission` refuses it). It is skipped when empty so an older
     /// receipt re-encodes to the exact bytes it was signed over.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dependency_environment_root: String,
@@ -207,7 +207,7 @@ impl CitedAcceptance {
 /// environment states edges on every entry or on none. Without edges it cannot
 /// say which package read each one, so admission has to demand that every
 /// lookup of each name, from every located package, reaches that one entry
-/// (`accepted_bundles::environment_is_installed`) -- which a pnpm tree, whose
+/// (`artifact_admission::environment_is_installed`) -- which a pnpm tree, whose
 /// `.pnpm/node_modules` hoists other versions into every package's view, never
 /// satisfies. With edges, admission replays exactly the certified lookups from
 /// each importer's own installed location, and one package name may then
@@ -1330,34 +1330,6 @@ pub fn issue_builtin_policy2_receipt(
             value,
         },
     })
-}
-
-/// The bindings a receipt's payload states, decoded under the same limits
-/// [`authenticate_policy2_receipt`] applies. **Unauthenticated**: this reads
-/// the bytes and nothing vouches for them.
-///
-/// It exists for a caller that has pinned the receipt bytes some other way
-/// and therefore has nothing independent to compare the payload with. The
-/// compiled-in tier is that caller: a built-in receipt is authenticated by the
-/// whole-receipt digest its index states, so a second copy of the bindings
-/// beside that digest could only ever equal the payload or fail to load.
-/// Whatever it returns still goes through [`authenticate_policy2_receipt`],
-/// which checks canonical encoding, the main and semantic digests, the policy
-/// and the provenance exactly as it does for any other expected bindings.
-pub fn policy2_receipt_payload_bindings(
-    receipt_bytes: &[u8],
-) -> Result<Policy2ReceiptBindings, Policy2ReceiptError> {
-    let document: ReceiptDocument = bounded_json::decode(
-        receipt_bytes,
-        bounded_json::Limits {
-            bytes: MAX_RECEIPT_BYTES,
-            depth: 128,
-            nodes: 4096,
-            string_bytes: MAX_STRING_BYTES,
-        },
-    )
-    .map_err(|message| Policy2ReceiptError::Decode { message })?;
-    Ok(payload_bindings(&document.payload))
 }
 
 /// Policy-2 authentication boundary shared by native and WASM loaders.
