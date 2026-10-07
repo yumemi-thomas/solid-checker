@@ -505,15 +505,15 @@ fn normalize_operation(
     Ok(())
 }
 
-/// A non-call `invoke` (a property read, iteration, coercion or
-/// `hasInstance` of the caller's value) states exactly one shape.
+/// Legacy non-call uses retain their one broad shape; the two value-copy
+/// enumeration protocols have fixed narrower entry bounds and ambient owner.
 ///
 /// It runs whatever the caller's value carries, at the call, on the caller's
 /// stack, in the caller's tracking context: so `at` the call event,
 /// `same-stack`, and `ambient-at-execution` -- never `untracked`, which would
 /// claim the export cleared the caller's listener, and never `tracked` or
 /// unknown. How often it happens is not proved, so the count is the call's
-/// `0..many`, and nothing guards it. Which `callbacks` item names it, and from
+/// `0..many` for a legacy use, and nothing guards it. Which `callbacks` item names it, and from
 /// where, is checked with the claims (`validate_call_claims`).
 fn validate_protocol_operation(
     operation: &Operation,
@@ -538,6 +538,26 @@ fn validate_protocol_operation(
     }
     if operation.tracking != Tracking::AmbientAtExecution {
         return refuse("runs in the caller's tracking context and is ambient-at-execution");
+    }
+    if let Some(cardinality) = protocol.enumeration_cardinality() {
+        if operation.trigger != Some(Trigger::Event(Event::Call))
+            || operation.cardinality != cardinality
+            || operation.owner.source != OwnerSource::AmbientAtExecution
+            || operation.owner.requirements != OwnerRequirements::default()
+            || operation.owner.capabilities != OwnerCapabilities::default()
+            || operation.owner.lifetime.is_some()
+            || operation.owner.productions != KnowledgeSet::Unknown
+            || !operation.inputs.is_empty()
+            || operation.output.is_some()
+            || !operation.resources.is_empty()
+            || operation.composed_from.is_some()
+            || operation.guard.is_some()
+        {
+            return refuse(
+                "requires its fixed enumeration count, call trigger, ambient owner and no additional claims",
+            );
+        }
+        return Ok(());
     }
     if operation.cardinality
         != (Cardinality {

@@ -2391,6 +2391,157 @@
         }
       ],
       "correct": []
+    },
+    {
+      "spec": "@tanstack+virtual-core@3.17.8",
+      "package": "@tanstack/virtual-core",
+      "version": "3.17.8",
+      "export": "Virtualizer",
+      "propertyGetProbeDigest": "9a273a614918548fd3d671a5ea1bdbeb9ebbd6cfe5527bde344fa015df1a4ad5",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/esm/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 10,
+            "column": 20
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+virtual-core@3.17.8",
+      "package": "@tanstack/virtual-core",
+      "version": "3.17.8",
+      "export": "Virtualizer",
+      "label": "count",
+      "propertyGetProbeDigest": "4efd7d3351f413f73d377714e13c914ce9ef3c7cac73b87533a50de9b2bb93b8",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/esm/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 26
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+virtual-core@3.17.8",
+      "package": "@tanstack/virtual-core",
+      "version": "3.17.8",
+      "export": "Virtualizer",
+      "label": "getScrollElement",
+      "propertyGetProbeDigest": "be19e26c40f5cc6a52643ecc5476a81ad9ee527ad9047952d6e3385edb2214ee",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/esm/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 22
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@tanstack+virtual-core@3.17.8",
+      "package": "@tanstack/virtual-core",
+      "version": "3.17.8",
+      "export": "Virtualizer",
+      "label": "scrollMargin",
+      "propertyGetProbeDigest": "c2642fc80a23f9fbdc0e44b714706d8a42db32ef21cc79731d85ea09e82b630e",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/esm/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 10,
+            "column": 33
+          }
+        }
+      ],
+      "correct": []
     }
   ]
 }

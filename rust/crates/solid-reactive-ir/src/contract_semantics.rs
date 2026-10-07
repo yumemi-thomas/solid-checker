@@ -18,7 +18,7 @@ pub use consumer::{
     AcceptedContractIndex, AcceptedContractInput, AcceptedContractUse, AcceptedImportIdentity,
     AcceptedSemanticIdentity, CallSiteFacts, FiniteFact, InstantiatedClaim, InstantiatedExport,
     OpenDomainDiagnostic, OpenDomainReason, PropertyFact, SemanticQueryError,
-    UncertifiableImportReason, native_claim_precedence,
+    UncertifiableImportReason, enumeration_get_is_guaranteed, native_claim_precedence,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -1761,7 +1761,9 @@ pub enum Schedule {
 /// four are the non-call invocations of caller-supplied code `semantic-model.md`
 /// § callbacks names: a property read that may run a getter or a proxy trap
 /// (`Get`), the iteration protocol (`Iterate`), ToPrimitive (`Coerce`), and
-/// `Symbol.hasInstance` (`HasInstance`). Each runs whatever the caller's value
+/// `Symbol.hasInstance` (`HasInstance`). Two explicit value enumerations
+/// additionally distinguish which property values are obtained; their entry
+/// bounds never establish every getter's execution. Each runs whatever the caller's value
 /// carries, at the call, on the caller's stack, in the caller's tracking
 /// context, so a non-call item is always `ambient-at-execution` and never a
 /// claim that the export clears or establishes tracking.
@@ -1772,6 +1774,13 @@ pub enum InvokeProtocol {
     Iterate,
     Coerce,
     HasInstance,
+    /// One for-in value-copy enumeration entered on every call. Own keys
+    /// precede inherited enumerable string keys. This does not guarantee
+    /// reaching a key after an earlier getter throws or mutates the object.
+    GetEnumerableStringValues,
+    /// At most one CopyDataProperties occurrence, after an unproved prefix.
+    /// Own enumerable strings and symbols participate; inherited keys do not.
+    GetOwnEnumerableValues,
 }
 
 impl InvokeProtocol {
@@ -1784,7 +1793,28 @@ impl InvokeProtocol {
             Self::Iterate => "iterate",
             Self::Coerce => "coerce",
             Self::HasInstance => "has-instance",
+            Self::GetEnumerableStringValues => "get-enumerable-string-values",
+            Self::GetOwnEnumerableValues => "get-own-enumerable-values",
         }
+    }
+
+    #[must_use]
+    pub const fn is_value_enumeration(self) -> bool {
+        matches!(
+            self,
+            Self::GetEnumerableStringValues | Self::GetOwnEnumerableValues
+        )
+    }
+
+    /// Fixed occurrence bounds of the two deliberately narrow initial forms.
+    /// Bounds count enumeration entries, never every selected property Get.
+    #[must_use]
+    pub fn enumeration_cardinality(self) -> Option<Cardinality> {
+        self.is_value_enumeration().then_some(Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(u32::from(self == Self::GetEnumerableStringValues)),
+            max: Some(UpperBound::Finite(1)),
+        })
     }
 }
 

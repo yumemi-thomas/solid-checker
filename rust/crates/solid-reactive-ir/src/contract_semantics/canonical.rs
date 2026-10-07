@@ -787,6 +787,8 @@ impl CanonicalWriter {
             InvokeProtocol::Iterate => 2,
             InvokeProtocol::Coerce => 3,
             InvokeProtocol::HasInstance => 4,
+            InvokeProtocol::GetEnumerableStringValues => 5,
+            InvokeProtocol::GetOwnEnumerableValues => 6,
         });
     }
 

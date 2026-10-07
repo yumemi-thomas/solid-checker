@@ -319,10 +319,38 @@
         },
         "composedFrom": { "$ref": "#/$defs/composedFrom" },
         "protocol": {
-          "$comment": "Which protocol of the caller's value an `invoke` runs: a call (the default, and never written), a property read (`get`), the iteration protocol, a coercion (ToPrimitive), or `Symbol.hasInstance`. Only an `invoke` may carry it. A non-call protocol is always at the call event on the same stack, `ambient-at-execution`, count call 0..many, unguarded, and named by exactly one `callbacks` item from a bare parameter. A decoder that predates this field refuses the document, which is intended.",
-          "enum": ["call", "get", "iterate", "coerce", "has-instance"]
+          "$comment": "Which protocol of the caller's value an invoke runs. Absence means call. Legacy non-call forms retain their call 0..many shape; the two value enumerations have the narrower counts described below. Every non-call form is same-stack, ambient-at-execution, unguarded and named by one callbacks item from a bare parameter. Unknown protocol spellings are refused.",
+          "enum": ["call", "get", "iterate", "coerce", "has-instance", "get-enumerable-string-values", "get-own-enumerable-values"],
+          "description": "Value enumerations are distinct from broad get. get-enumerable-string-values enters one for-in value-copy enumeration per call (count call 1..1); get-own-enumerable-values may enter one own enumerable string+symbol value-copy enumeration after an unproved prefix (count call 0..1). Both use a bare parameter, call trigger/event, same-stack, ambient tracking and owner, no guard, inputs, output, resources or provenance. A count is about entering the enumeration; each getter requires a separate receiver, descriptor and prefix proof. Old documents retain their meaning."
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["protocol"], "properties": { "protocol": { "enum": ["get-enumerable-string-values", "get-own-enumerable-values"] } } },
+          "then": {
+            "required": ["trigger", "at", "tracking", "owner", "count"],
+            "properties": {
+              "kind": { "const": "invoke" },
+              "trigger": { "const": { "event": "call" } },
+              "at": { "const": { "event": "call", "schedule": "same-stack" } },
+              "tracking": { "const": "ambient-at-execution" },
+              "owner": { "const": { "source": "ambient-at-execution" } },
+              "inputs": { "maxItems": 0 },
+              "resources": { "maxItems": 0 },
+              "count": { "required": ["scope", "min", "max"], "properties": { "scope": { "const": "call" }, "max": { "const": 1 } } }
+            },
+            "not": { "anyOf": [{ "required": ["guard"] }, { "required": ["output"] }, { "required": ["composedFrom"] }] }
+          }
+        },
+        {
+          "if": { "required": ["protocol"], "properties": { "protocol": { "const": "get-enumerable-string-values" } } },
+          "then": { "properties": { "count": { "properties": { "min": { "const": 1 } } } } }
+        },
+        {
+          "if": { "required": ["protocol"], "properties": { "protocol": { "const": "get-own-enumerable-values" } } },
+          "then": { "properties": { "count": { "properties": { "min": { "const": 0 } } } } }
+        }
+      ]
     },
     "composedFrom": {
       "description": "The export and operation of the SAME artifact case this operation was composed from: the behaviour this operation describes is that export's own operation, performed through this export's call to it. `operation` is the target's own local operation id (`read-0`), never a qualified one -- a document cannot name an operation outside the artifact case that carries it. Optional and additive: an operation that omits it makes no provenance claim, and a consumer then requires this export's own evidence for the row. Only a `read` operation may carry it. A consumer must not read it as authority: it names a target to prove against, and discharging it requires proving both that this export really calls that export (by resolved declaration, never by name) and that the target's own claim for the named operation holds.",

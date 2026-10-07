@@ -1709,6 +1709,8 @@ enum WireInvokeProtocol {
     Iterate,
     Coerce,
     HasInstance,
+    GetEnumerableStringValues,
+    GetOwnEnumerableValues,
 }
 
 impl WireInvokeProtocol {
@@ -1720,6 +1722,8 @@ impl WireInvokeProtocol {
             Self::Iterate => Some(InvokeProtocol::Iterate),
             Self::Coerce => Some(InvokeProtocol::Coerce),
             Self::HasInstance => Some(InvokeProtocol::HasInstance),
+            Self::GetEnumerableStringValues => Some(InvokeProtocol::GetEnumerableStringValues),
+            Self::GetOwnEnumerableValues => Some(InvokeProtocol::GetOwnEnumerableValues),
         }
     }
 }
@@ -4079,6 +4083,64 @@ mod tests {
                 .contains("only an invoke operation may state a protocol"),
             "{refused}"
         );
+    }
+
+    #[test]
+    fn value_enumerations_round_trip_with_exact_counts_and_distinct_identity() {
+        let broad = normalized(PROTOCOLS);
+        for (protocol, min) in [
+            ("get-enumerable-string-values", 1),
+            ("get-own-enumerable-values", 0),
+        ] {
+            let mut document = protocols_rewritten("get", &json!(protocol));
+            for summary in document["summaries"].as_object_mut().unwrap().values_mut() {
+                for operation in summary["call"]["operations"]
+                    .as_array_mut()
+                    .into_iter()
+                    .flatten()
+                {
+                    if operation["protocol"] == json!(protocol) {
+                        operation["trigger"] = json!({"event": "call"});
+                        operation["at"] = json!({"event": "call", "schedule": "same-stack"});
+                        operation["owner"] = json!({"source": "ambient-at-execution"});
+                        operation["count"] = json!({"scope": "call", "min": min, "max": 1});
+                    }
+                }
+            }
+            let bytes = serde_json::to_vec(&document).unwrap();
+            let kept = normalized(&bytes);
+            assert_ne!(kept.semantic_digest(), broad.semantic_digest());
+            assert_eq!(
+                normalized(&encode(&kept, &SidecarDigests::default(), true).unwrap()),
+                kept
+            );
+            for (field, bad) in [
+                ("count", json!({"scope": "call", "min": min, "max": "many"})),
+                ("tracking", json!("untracked")),
+                ("owner", json!({"source": "none"})),
+                ("trigger", json!({"event": "result-access"})),
+                ("guard", json!({"all": [{"argumentCount": {"min": 1}}]})),
+            ] {
+                let mut refused = document.clone();
+                for summary in refused["summaries"].as_object_mut().unwrap().values_mut() {
+                    for operation in summary["call"]["operations"]
+                        .as_array_mut()
+                        .into_iter()
+                        .flatten()
+                    {
+                        if operation["protocol"] == json!(protocol) {
+                            operation[field] = bad.clone();
+                        }
+                    }
+                }
+                assert!(
+                    decode(&serde_json::to_vec(&refused).unwrap())
+                        .and_then(|value| value.normalize())
+                        .is_err(),
+                    "{protocol}: {field}"
+                );
+            }
+        }
     }
 
     /// The protocol golden with every `"protocol": from` replaced by `to`.

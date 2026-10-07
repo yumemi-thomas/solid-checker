@@ -1515,6 +1515,47 @@ fn evaluate_guard(guard: &Guard, facts: &CallSiteFacts, selected_case: &str) -> 
     }
 }
 
+/// The enumeration lower bound is not a bound on every getter. A preceding
+/// accessor may throw, delete a later key or replace its descriptor. The
+/// initial consumer has no completion/mutation proof for such an accessor.
+/// `receiver_exact` must come from a descriptor-aware, non-escaped allocation
+/// proof, not a TypeScript object type. Data-property Gets do not advance
+/// `preceding_getters` and methods held as data are never called by this use.
+#[must_use]
+pub fn enumeration_get_is_guaranteed(
+    protocol: InvokeProtocol,
+    receiver_exact: bool,
+    preceding_getters: usize,
+) -> bool {
+    protocol == InvokeProtocol::GetEnumerableStringValues
+        && receiver_exact
+        && preceding_getters == 0
+}
+
+#[cfg(test)]
+mod enumeration_tests {
+    use super::*;
+
+    #[test]
+    fn getter_strength_requires_receiver_and_prefix_not_only_enumeration() {
+        let protocol = InvokeProtocol::GetEnumerableStringValues;
+        assert!(enumeration_get_is_guaranteed(protocol, true, 0));
+        assert!(!enumeration_get_is_guaranteed(protocol, false, 0));
+        assert!(!enumeration_get_is_guaranteed(protocol, true, 1));
+        assert!(!enumeration_get_is_guaranteed(
+            InvokeProtocol::GetOwnEnumerableValues,
+            true,
+            0
+        ));
+        assert!(!enumeration_get_is_guaranteed(InvokeProtocol::Get, true, 0));
+        assert!(!enumeration_get_is_guaranteed(
+            InvokeProtocol::Call,
+            true,
+            0
+        ));
+    }
+}
+
 fn knowledge_from<T>(items: Vec<T>, complete: bool) -> KnowledgeSet<T> {
     if complete {
         KnowledgeSet::Complete(items)

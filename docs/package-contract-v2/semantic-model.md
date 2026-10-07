@@ -369,6 +369,28 @@ consumer keeps the items — the domain stays closed — and models none of them
 an invocation: a property read or coercion of the caller's value runs that
 value's own code, what its author wrote, and raised no obligation before.
 
+**[Proposed extension 2026-10-07]** two separately named value-copy
+enumerations must not borrow the broad `get` item's meaning or evidence.
+`get-enumerable-string-values` enters one for-in enumeration of a bare
+argument's enumerable string values, including inherited keys, count call
+`1..1`; `get-own-enumerable-values` may enter one own enumerable string and
+symbol value copy after an unproved prefix, count call `0..1`. Each is at the
+call event on the same stack, ambient for tracking and owner, unguarded and
+with no inputs, output, resource or provenance. The counts bound entry into
+the enumeration, not every key's Get. A throwing or mutating earlier getter
+can prevent a later one; each ordinary getter therefore needs an independent
+exact receiver, descriptor and evaluation-prefix proof at the call occurrence.
+A data property holding a function is copied without invoking that function.
+The initial consumer supports closed fresh literal receivers and non-escaped
+same-file const bindings, with transparent TypeScript wrappers. Internal
+spreads, aliases, descriptors/proxies, numeric/computed/duplicate/prototype
+keys, guarded partitions and unknown bodies stay uncertifiable. Source facts
+name a getter's exact first evaluated no-argument identifier Call; no global
+execution role is assigned to its declaration. Certified broad Get censuses
+cannot establish these stronger claims, which initially require the authored
+tier's exact identity and freshly bound probes. This is additive to the stable
+schema-1 meaning; existing documents and receipts need no re-emission.
+
 **[Decision 2026-09-25]** two limits of the census behind those items. First,
 ADR 0038's declared-signature premise classifies iteration, coercion and
 declared-member reads by the parameter's *declared* type, so for a type that

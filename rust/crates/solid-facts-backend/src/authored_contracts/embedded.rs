@@ -55,6 +55,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/56321c85496ccb52e156e0e70c661e45206985e7127228e41ddd2cb3d742751a.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/56321c85496ccb52e156e0e70c661e45206985e7127228e41ddd2cb3d742751a.json"
+        ),
+    ),
+    (
         "objects/5d82040b7b241c8dda58cb30d8177d94a3bb1b901002ed7cb694cfeeb72a69ec.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/5d82040b7b241c8dda58cb30d8177d94a3bb1b901002ed7cb694cfeeb72a69ec.json"

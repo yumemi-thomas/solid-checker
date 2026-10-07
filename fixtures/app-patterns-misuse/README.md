@@ -48,14 +48,7 @@ rc.13 corpus site:
 Each case names the corpus `install` whose `node_modules` it imports from.
 `run-corpus-twins.sh` runs one ledger pass per install.
 
-Measured 2026-10-07 in Chrome on rc.13 (ADR 0221). All 38 misuse twins
+Measured 2026-10-07 in Chrome on rc.13 (ADR 0225). All 38 misuse twins
 raise their rule's diagnostic, and no correct twin raises anything or gets a
-violation. The checker:
-- proves 21;
-- leaves 15 uncertifiable;
-- is silent on 2:
-  - `donegeon-returned-location-seed`: a store returned from a local hook;
-  - `error-menu-apply-browse-helper-prop`: a prop passed as a call of a
-    helper that reads a signal.
-
-The silent ones are the first recall targets.
+violation. The checker proves 25, leaves 13 uncertifiable and is silent on
+none.

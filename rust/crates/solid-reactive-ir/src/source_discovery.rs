@@ -1819,8 +1819,9 @@ pub(crate) fn discover_sources(
         if !parameter_reads.is_empty() {
             contract_parameter_reads.insert(contracted.symbol.clone(), parameter_reads);
         }
-        // Only the rows that invoke the argument, or a member of it, as a
-        // callable: a non-call row (`ContractCallback::is_invocation`) is no
+        // Callable rows and explicit value enumerations only. An enumeration
+        // is retained for the occurrence Get consumer, never as a callable:
+        // a non-call row (`ContractCallback::is_invocation`) is no
         // graph edge, no invoked parameter, no wrapper and no re-pushed row. A
         // member-path row is kept and every reader resolves the member it
         // calls before folding anything (`contract_callback_invoked_value`,
@@ -1832,7 +1833,9 @@ pub(crate) fn discover_sources(
                 contracted.symbol.clone(),
                 callbacks
                     .iter()
-                    .filter(|callback| callback.is_invocation())
+                    .filter(|callback| {
+                        callback.is_invocation() || callback.protocol.is_value_enumeration()
+                    })
                     .cloned()
                     .collect(),
             );

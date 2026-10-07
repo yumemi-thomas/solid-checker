@@ -1107,6 +1107,12 @@ impl ProtocolMasks {
             InvokeProtocol::Iterate => &mut self.iterate,
             InvokeProtocol::Coerce => &mut self.coerce,
             InvokeProtocol::HasInstance => &mut self.has_instance,
+            // A veto may exercise more Gets than the positive claim states.
+            // It never proves enumeration or its lower bound; the census
+            // refuses both new forms until it can establish them exactly.
+            InvokeProtocol::GetEnumerableStringValues | InvokeProtocol::GetOwnEnumerableValues => {
+                &mut self.get
+            }
         }
     }
 

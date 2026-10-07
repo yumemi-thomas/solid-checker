@@ -53,6 +53,9 @@ use crate::owners::{
 };
 use crate::pipeline::{parallel_file_results, parallel_slice_results};
 
+#[path = "property_gets.rs"]
+mod property_gets;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct SummaryRead {
     pub(super) symbol: SymbolId,
@@ -2033,8 +2036,8 @@ fn discover_interprocedural_graph(
             }
         }
         if !ambiguous_dispatch && let Some(callbacks) = contracts.callbacks.get(symbol) {
-            // The map holds invocation rows only (`source_discovery`); a
-            // non-call row is no edge, no invoked parameter and no re-push.
+            // The map also keeps value enumerations for the result consumer.
+            // They are no callable edge, invoked parameter or re-pushed row.
             for callback in callbacks.iter().filter(|callback| callback.is_invocation()) {
                 let Some((argument, invoked)) = contract_callback_invoked_value(call, callback)
                 else {
@@ -5997,7 +6000,29 @@ fn interprocedural_result_reads_for_file(
         }
         let mut context = None::<String>;
         if let Some(callbacks) = contract_callbacks.get(symbol) {
-            for callback in callbacks {
+            for callback in callbacks
+                .iter()
+                .filter(|callback| callback.protocol.is_value_enumeration())
+            {
+                let (reads, obligation, get_dependencies) =
+                    property_gets::reads(property_gets::ReadContext {
+                        file,
+                        call,
+                        callback,
+                        valid: valid_call && ambiguous_candidates.is_none(),
+                        execution,
+                        label: &label,
+                        source_kinds,
+                        accessors,
+                        entities,
+                        symbol_names,
+                        lookup,
+                    });
+                result.extend(reads);
+                dispatch_obligations.extend(obligation);
+                dependencies.extend(get_dependencies);
+            }
+            for callback in callbacks.iter().filter(|callback| callback.is_invocation()) {
                 // The value the row invokes: the argument itself for an
                 // empty path, a member of it the call names exactly for a
                 // member-path row (item B), and nothing folded otherwise --
@@ -6603,6 +6628,7 @@ pub(super) fn body_site_runs_during_call(
 /// no such proof.
 fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
     crate::indexes::returns_bare_identifier(file)
+        || !file.ast.object_get_shapes.is_empty()
         || file.ast.functions.iter().any(|function| {
             function.r#async
                 || function

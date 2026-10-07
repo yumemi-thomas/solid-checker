@@ -6692,6 +6692,12 @@ fn require_protocol_use(
                     && form.coercion_subject_parameters.contains(&index)
             }
             InvokeProtocol::Call => false,
+            // The broad accessor census proves neither a value enumeration
+            // nor its entry lower bound. Authored claims have their own gate;
+            // certification must withhold these until an exact census exists.
+            InvokeProtocol::GetEnumerableStringValues | InvokeProtocol::GetOwnEnumerableValues => {
+                false
+            }
         };
         if matches {
             found = true;

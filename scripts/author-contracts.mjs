@@ -40,6 +40,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { propertyGetProbeDigest, validatePropertyGets } from "./lib/property-get-contracts.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TIER = join(ROOT, "pkg/contracts/authored");
@@ -62,6 +63,7 @@ const option = name => { const index = rest.indexOf(name); return index >= 0 ? r
 const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("_")).sort().map(name => {
   const directory = join(TIER, "specs", name);
   const spec = read(join(directory, "spec.json"));
+  for (const claim of Object.values(spec.exports)) validatePropertyGets(claim.call);
   // ADR 0208: a spec about one patched install is named for its patch.
   const base = `${spec.package.replace("/", "+")}@${spec.version}`;
   assert.equal(name, spec.patchedInstall ? `${base}+${spec.patchedInstall.label}` : base, `${name}: directory names another version`);
@@ -205,6 +207,13 @@ function probe(browser) {
       correct: readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8")
     })));
     const scratch = mkdtempSync(join(tmpdir(), "solid-checker-authored-"));
+    // Bind the bytes handed to the ledger before execution. Re-reading a
+    // changed pair after a run must never stamp old observations as new input.
+    const probeDigests = new Map(cases.map(entry => {
+      const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
+      return [entry.id, propertyGetProbeDigest(spec, entry.export, pair,
+        entry.misuse, entry.correct, certifiedCases(spec))];
+    }));
     writeFileSync(join(scratch, "cases.json"), json({ cases }));
     // The ledger writes each case beside the install, whose node_modules (an
     // ancestor) supplies the package and its Solid runtime.
@@ -214,8 +223,10 @@ function probe(browser) {
     const labels = new Map(cases.map(entry => [entry.id, entry.label]));
     for (const row of read(join(scratch, "out.json")).results) {
       const label = labels.get(row.id);
+      const probeDigest = probeDigests.get(row.id);
       results.push({ spec: spec.name, package: spec.package, version: spec.version, export: row.export,
         ...(label ? { label } : {}),
+        ...(probeDigest ? { propertyGetProbeDigest: probeDigest } : {}),
         solidRuntime: identity.runtime, artifacts: identity.artifacts, rule: row.rule,
         verdict: row.runtime === "detected" ? "passed" : row.runtime,
         misuse: (row.misuse.diagnostics ?? []).map(({ code, site }) => ({ code, site })),
@@ -241,8 +252,15 @@ function pairsOf(name, claim) {
 function passed(spec, name) {
   const results = existsSync(RESULTS) ? read(RESULTS).results : [];
   const runtime = JSON.stringify(spec.solidRuntime.map(({ name, version }) => ({ name, version })));
-  return pairsOf(name, spec.exports[name]).every(pair => results.some(row => row.spec === spec.name && row.export === name
-    && (row.label ?? undefined) === pair.label && row.verdict === "passed" && JSON.stringify(row.solidRuntime) === runtime));
+  return pairsOf(name, spec.exports[name]).every(pair => {
+    const probeDigest = propertyGetProbeDigest(spec, name, pair,
+      readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
+      readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
+    return results.some(row => row.spec === spec.name && row.export === name
+      && (row.label ?? undefined) === pair.label && row.verdict === "passed"
+      && JSON.stringify(row.solidRuntime) === runtime
+      && (!probeDigest || row.propertyGetProbeDigest === probeDigest));
+  });
 }
 
 /** One authored document from one certified case document. */

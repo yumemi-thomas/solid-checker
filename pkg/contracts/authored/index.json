@@ -970,6 +970,39 @@
       ],
       "document": "objects/86f782fcdb16d39a7179b1f23069cbe61207c083982285e19727ada82de79cdb.json",
       "documentDigest": "sha256:86f782fcdb16d39a7179b1f23069cbe61207c083982285e19727ada82de79cdb"
+    },
+    {
+      "packageName": "@tanstack/virtual-core",
+      "specifier": "@tanstack/virtual-core",
+      "packageVersion": "3.17.8",
+      "packageIntegrity": "sha512-BfEvehNpOT75r5Ksc5xW6NZuXujTfb7nlSEyVu4XHG3gdxNg1KqXruWbDewXOUaUYIo4oRbSfkjIajz4MAT8tA==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/esm/index.js",
+      "declarationTarget": "dist/esm/index.d.ts",
+      "snapshotRoot": "sha256:d5ba519fe936baeca6cdbf46620c798dfbcbd45a6fe9396191432c0c9b7a8e32",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/56321c85496ccb52e156e0e70c661e45206985e7127228e41ddd2cb3d742751a.json",
+      "documentDigest": "sha256:56321c85496ccb52e156e0e70c661e45206985e7127228e41ddd2cb3d742751a"
     }
   ]
 }

@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 50;
+pub const AST_FACTS_SCHEMA: u32 = 51;
 
 mod binding_references;
 mod class_obligation;
@@ -245,6 +245,9 @@ pub struct AstFacts {
     pub logical_expressions: Vec<LogicalExpressionFact>,
     #[serde(default)]
     pub object_properties: Vec<ObjectPropertyFact>,
+    /// Descriptor-aware literal shapes for per-occurrence package Gets.
+    #[serde(default)]
+    pub object_get_shapes: Vec<ObjectGetShapeFact>,
     #[serde(default)]
     pub template_literals: Vec<TemplateLiteralFact>,
     /// Operands in TypeScript-valid coercions where a function object is
@@ -1156,6 +1159,66 @@ pub struct SpreadFact {
     pub argument: Span,
 }
 
+/// A fresh literal, with its own enumerable string properties in source
+/// order. `closed` is false on any spread, computed/numeric key, duplicate,
+/// setter or prototype-setting member. No descriptor or proxy is inferred.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectGetShapeFact {
+    pub span: Span,
+    pub closed: bool,
+    pub properties: Vec<ObjectGetPropertyFact>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectGetPropertyFact {
+    pub key: CompactString,
+    /// Exact function expression of a get descriptor; never a method value.
+    pub getter: Option<Span>,
+    /// A no-argument identifier Call evaluated as the first operation of the
+    /// getter body. This is a positive prefix fact, not absence of hazards.
+    pub entry_call: Option<Span>,
+}
+
+fn getter_entry_call(value: &Expression<'_>) -> Option<Span> {
+    fn first(expression: &Expression<'_>) -> Option<Span> {
+        match expression.get_inner_expression() {
+            Expression::CallExpression(call)
+                if !call.optional
+                    && call.arguments.is_empty()
+                    && matches!(
+                        call.callee.get_inner_expression(),
+                        Expression::Identifier(_)
+                    ) =>
+            {
+                Some(span(call.span))
+            }
+            // The receiver is evaluated before the member is obtained.
+            Expression::StaticMemberExpression(member) => first(&member.object),
+            _ => None,
+        }
+    }
+    let Expression::FunctionExpression(function) = value else {
+        return None;
+    };
+    if function.r#async || function.generator || !function.params.items.is_empty() {
+        return None;
+    }
+    let body = function.body.as_ref()?;
+    // Directives cause no effect, but no other statement is skipped.
+    match body.statements.first()? {
+        oxc_ast::ast::Statement::ReturnStatement(statement) => first(statement.argument.as_ref()?),
+        oxc_ast::ast::Statement::ExpressionStatement(statement) => first(&statement.expression),
+        oxc_ast::ast::Statement::VariableDeclaration(statement)
+            if statement.declarations.len() == 1 =>
+        {
+            first(statement.declarations[0].init.as_ref()?)
+        }
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CoerciveOperandKind {
@@ -1430,6 +1493,7 @@ impl AstFacts {
             conditional_expressions: Vec::new(),
             logical_expressions: Vec::new(),
             object_properties: Vec::new(),
+            object_get_shapes: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
             coercing_operands: Vec::new(),
@@ -1577,6 +1641,7 @@ struct Collector<'s, 'semantic> {
     conditional_expressions: Vec<ConditionalExpressionFact>,
     logical_expressions: Vec<LogicalExpressionFact>,
     object_properties: Vec<ObjectPropertyFact>,
+    object_get_shapes: Vec<ObjectGetShapeFact>,
     template_literals: Vec<TemplateLiteralFact>,
     coercive_operands: Vec<CoerciveOperandFact>,
     coercing_operands: Vec<Span>,
@@ -1729,6 +1794,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             conditional_expressions: Vec::new(),
             logical_expressions: Vec::new(),
             object_properties: Vec::new(),
+            object_get_shapes: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
             coercing_operands: Vec::new(),
@@ -1841,6 +1907,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             conditional_expressions: self.conditional_expressions,
             logical_expressions: self.logical_expressions,
             object_properties: self.object_properties,
+            object_get_shapes: self.object_get_shapes,
             template_literals: self.template_literals,
             coercive_operands: self.coercive_operands,
             coercing_operands: self.coercing_operands,
@@ -3399,6 +3466,50 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.conditional_flow_depth -= 1;
     }
 
+    fn visit_object_expression(&mut self, object: &oxc_ast::ast::ObjectExpression<'a>) {
+        let mut shape = ObjectGetShapeFact {
+            span: span(object.span),
+            closed: true,
+            properties: Vec::new(),
+        };
+        for item in &object.properties {
+            let ObjectPropertyKind::ObjectProperty(property) = item else {
+                shape.closed = false;
+                continue;
+            };
+            let key: Option<CompactString> = match &property.key {
+                PropertyKey::StaticIdentifier(key) => Some(key.name.as_str().into()),
+                PropertyKey::StringLiteral(key) if !key.lone_surrogates => {
+                    Some(key.value.as_str().into())
+                }
+                _ => None,
+            };
+            let Some(key) = key else {
+                shape.closed = false;
+                continue;
+            };
+            // Integer-index keys reorder enumeration. Refuse them here until
+            // the fact domain records canonical ECMAScript key order.
+            if property.computed
+                || key == "__proto__"
+                || key.parse::<u32>().is_ok()
+                || property.kind == PropertyKind::Set
+                || shape.properties.iter().any(|prior| prior.key == key)
+            {
+                shape.closed = false;
+            }
+            shape.properties.push(ObjectGetPropertyFact {
+                key,
+                getter: (property.kind == PropertyKind::Get).then(|| span(property.value.span())),
+                entry_call: (property.kind == PropertyKind::Get)
+                    .then(|| getter_entry_call(&property.value))
+                    .flatten(),
+            });
+        }
+        self.object_get_shapes.push(shape);
+        walk::walk_object_expression(self, object);
+    }
+
     fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {
         // `{ __proto__: p }` sets the prototype at construction, and no member
         // expression exists for a literal key, so the static-member arm never
@@ -4230,6 +4341,59 @@ export const short = async () => 2;
             panic!("one tag: {:?}", facts.tagged_template_tags);
         };
         assert_eq!(&source[tag.start as usize..tag.end as usize], "o.t");
+    }
+
+    #[test]
+    fn object_get_shapes_distinguish_getters_from_function_values() {
+        let facts = extract(
+            "/project/gets.ts",
+            "const o = { get count() { return n(); }, fn: () => n(), method() { return n(); } }; ",
+        )
+        .unwrap();
+        let shape = &facts.object_get_shapes[0];
+        assert!(shape.closed);
+        assert_eq!(shape.properties.len(), 3);
+        assert!(shape.properties[0].getter.is_some());
+        assert!(shape.properties[0].entry_call.is_some());
+        assert!(shape.properties[1].getter.is_none());
+        assert!(shape.properties[2].getter.is_none());
+        for source in [
+            "const o = { get x() { before(); return n(); } };",
+            "const o = { get x() { const y = unknown; return n(); } };",
+            "const o = { get x() { return n(before()); } };",
+            "const o = { get x() { if (ready) return n(); return 0; } };",
+            "const o = { get x() { return () => n(); } };",
+        ] {
+            // `n()` is never the getter's guaranteed entry: something else
+            // is evaluated first, or it is conditional or deferred. An
+            // earlier no-argument statement call (`before()`) may itself be
+            // the entry call, which proves nothing about `n()`.
+            let entry = extract("/project/gets.ts", source)
+                .unwrap()
+                .object_get_shapes[0]
+                .properties[0]
+                .entry_call;
+            assert!(
+                entry.is_none_or(|span| &source[span.start as usize..span.end as usize] != "n()"),
+                "{source}"
+            );
+        }
+        for source in [
+            "const o = { ...other, get count() { return n(); } };",
+            "const o = { [key]: 1 };",
+            "const o = { __proto__: other };",
+            "const o = { get x() { return n(); }, x: 1 };",
+            "const o = { set x(v) {} };",
+            "const o = { '0': 1, get x() { return n(); } };",
+        ] {
+            assert!(
+                !extract("/project/gets.ts", source)
+                    .unwrap()
+                    .object_get_shapes[0]
+                    .closed,
+                "{source}"
+            );
+        }
     }
 
     #[test]

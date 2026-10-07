@@ -1341,16 +1341,20 @@ fn callback_operation(
     callback: &ContractCallback,
     resources: &mut Vec<Resource>,
 ) -> Result<Operation, ContractFailure> {
-    // A non-call row is one shape and only one (the model's
-    // `validate_protocol_operation`): at the call event on the same stack, in
-    // the caller's tracking context, counted per call from zero to many,
-    // unguarded, with no inputs and no owner claim. Built directly, so no
+    // Non-call rows use the model's exact protocol shapes: legacy uses have
+    // count call 0..many; value enumerations preserve their fixed entry count
+    // and ambient owner. All are same-stack in the caller's tracking context,
+    // unguarded, with no inputs. Built directly, so no
     // attribute a call row's execution word carries can leak into it, and a
     // projected row is republished as that shape whatever it was read from.
     if !callback.is_invocation() {
         let mut operation = operation(id, OperationKind::Invoke, Vec::new(), None);
         operation.tracking = Tracking::AmbientAtExecution;
         operation.protocol = Some(callback.protocol);
+        if let Some(cardinality) = callback.protocol.enumeration_cardinality() {
+            operation.cardinality = cardinality;
+            operation.owner.source = OwnerSource::AmbientAtExecution;
+        }
         return Ok(operation);
     }
     // ADR 0139's retention item is one shape too (the model's

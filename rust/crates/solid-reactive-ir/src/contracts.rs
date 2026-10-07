@@ -405,6 +405,16 @@ fn project_callbacks(
             open.insert(ClaimDomain::Callbacks);
             continue;
         };
+        // The initial enumeration consumer supports unpartitioned occurrences
+        // only. A partition must be instantiated at the call before it can
+        // establish the enumeration entry, even when the operation has no
+        // individual guard.
+        if operation.invoke_protocol().is_value_enumeration()
+            && export.call.guards.cases != crate::contract_semantics::KnowledgeSet::Unknown
+        {
+            open.insert(ClaimDomain::Callbacks);
+            continue;
+        }
         let Some(execution) = projected_execution(operation) else {
             open.insert(ClaimDomain::Callbacks);
             continue;

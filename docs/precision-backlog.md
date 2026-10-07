@@ -1,5 +1,23 @@
 # Precision backlog
 
+## A constructor's option getters run at the call (2026-10-07)
+
+ADR 0225. Two contract protocol words state that a call copies argument N's
+values: `get-enumerable-string-values` (a `for…in` copy, entered once) and
+`get-own-enumerable-values` (an object-spread copy, entered at most once). The
+consumer evaluates the first getter of a fresh closed literal, or of one
+non-escaped local `const`, at that package call, with the call's role.
+
+- **Gained:** twins went from 22 proven and 16 uncertifiable to 25 and 13, out
+  of 38. The three `Virtualizer` option-getter twins are proven. No correct
+  twin changed, and the base ledger is unchanged.
+- **Corpus:** no violation moved. The real apps call `Virtualizer` through
+  their own helper modules, which this slice does not follow.
+- **Not yet:** option objects passed through helpers, spreads inside the
+  literal, aliases, later getters, member-only getter bodies,
+  `virtual-core` 3.17.10 and 3.17.11 (identities not generated), the table
+  feature prefix, G6 instance callbacks and G7 query lifecycles.
+
 ## Open contract claims are one notice per package (2026-10-07)
 
 ADR 0224. Open-claims `SC9005` at imports and call arguments group per
