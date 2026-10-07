@@ -1250,11 +1250,12 @@ pub struct ContractExport {
     /// from or encoded into a package-contract document.
     pub open_return: Option<ContractReturn>,
     /// ADR 0179: the owner registrations this export makes on its caller's
-    /// owner, at the call and on the same stack, on every call: unguarded,
+    /// owner, at the call and on the same stack, on every call:
     /// `ambient-at-call`, call-scoped, `min >= 1`. Inside a leaf owner each is
-    /// a forbidden operation the runtime throws on. Projected from an accepted
-    /// document only; empty for a local summary.
-    pub leaf_forbidden_operations: Vec<OwnerRequirementOperation>,
+    /// a forbidden operation the runtime throws on. A guarded one keeps its
+    /// guard and counts only at a call where the guard holds (ADR 0223).
+    /// Projected from an accepted document only; empty for a local summary.
+    pub leaf_forbidden_operations: Vec<ContractOwnerRequirement>,
     /// ADR 0207: the accepted contract's `event-handler-props` items, each
     /// exhaustive for the `on…` members of one argument value. They stay out
     /// of [`Self::callbacks`], whose claim opens instead, so no consumer that

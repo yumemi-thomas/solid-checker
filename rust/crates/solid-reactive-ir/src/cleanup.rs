@@ -249,9 +249,16 @@ pub(super) fn leaf_owner_operations_for_file(
                         .unwrap_or_default()
                         .to_owned();
                     for registration in registrations {
+                        // ADR 0223: a guarded registration is a forbidden
+                        // operation only where its guard holds at this call.
+                        if crate::owners::owner_requirement_at_call(registration, call)
+                            != Some(true)
+                        {
+                            continue;
+                        }
                         operations.push(LeafOwnerOperation {
                             through_contract: true,
-                            kind: match registration {
+                            kind: match registration.operation {
                                 crate::OwnerRequirementOperation::Cleanup => {
                                     crate::LeafOwnerOperationKind::Cleanup
                                 }

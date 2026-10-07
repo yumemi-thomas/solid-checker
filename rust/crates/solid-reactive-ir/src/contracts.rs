@@ -935,7 +935,7 @@ fn project_guaranteed_callback_parameters(
 /// the call's own synchronous extent, against the owner the caller has.
 fn project_leaf_forbidden_operations(
     export: &crate::contract_semantics::ExportSemantics,
-) -> Vec<OwnerRequirementOperation> {
+) -> Vec<ContractOwnerRequirement> {
     use crate::contract_semantics::{CardinalityScope, Event, OwnerSource, Schedule, Trigger};
     let mut operations = Vec::new();
     for domain in [
@@ -951,9 +951,10 @@ fn project_leaf_forbidden_operations(
             .iter()
             .filter_map(|id| export.operation(&id.0))
         {
+            // ADR 0223: a guarded registration travels with its guard; the
+            // leaf rule reports it only where the guard holds at the call.
             if !(operation.imposes_owner_requirement()
                 && operation.owner.source == OwnerSource::AmbientAtCall
-                && operation.guard.is_none()
                 && operation.trigger == Some(Trigger::Event(Event::Call))
                 && operation.at == Some(Event::Call)
                 && operation.schedule == Some(Schedule::SameStack)
@@ -968,12 +969,19 @@ fn project_leaf_forbidden_operations(
                 }
                 _ => OwnerRequirementOperation::Effect,
             };
-            if !operations.contains(&kind) {
-                operations.push(kind);
+            let registration = ContractOwnerRequirement {
+                operation: kind,
+                guaranteed: true,
+                guard: operation.guard.clone(),
+            };
+            if !operations.contains(&registration) {
+                operations.push(registration);
             }
         }
     }
-    operations.sort_by_key(|operation| format!("{operation:?}"));
+    operations.sort_by_key(|registration| {
+        format!("{:?} {:?}", registration.operation, registration.guard)
+    });
     operations
 }
 
@@ -1141,6 +1149,9 @@ mod owner_requirement_projection_tests {
                     .collect(),
             );
             super::project_leaf_forbidden_operations(&export(claims, operations, Vec::new()))
+                .into_iter()
+                .map(|registration| registration.operation)
+                .collect::<Vec<_>>()
         };
         assert_eq!(
             project(vec![

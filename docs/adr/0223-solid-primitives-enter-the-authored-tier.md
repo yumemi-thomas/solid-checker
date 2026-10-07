@@ -52,19 +52,27 @@ others carry knowledge that turns obligations into proven-clean results.
    after an `await`, that an effect was created with no owner. That was false:
    only an accessor delay creates one.
 
+4. **The leaf-forbidden projection carries guards too.** A guarded
+   registration is a forbidden operation inside a leaf owner only where its
+   guard holds at the call. The message says the export registers "at this
+   call", which is true whether or not a guard selects it.
+
 ## Consequences
 
-- rc.13 corpus: one new proven violation, `readingroom`
-  `settings/integrations.tsx:30`. There `createTimer(…, 1500, setTimeout)`
-  runs after an `await`, and its cleanup has no owner. Three `SC1001`
-  obligations become proven clean.
+- rc.13 corpus: four new proven violations, all `readingroom` timers with a
+  numeric delay:
+  - `settings/integrations.tsx:30`: `createTimer(…, 1500, setTimeout)` runs
+    after an `await`, so its cleanup has no owner (`missing-owner`);
+  - `queue.tsx:45`, `settings/metadata.tsx:174` and `books/[...id].tsx:469`:
+    `createTimer` runs inside a component's `onSettled`, a leaf owner that
+    forbids the cleanup (`leaf-owner-forbidden-call`).
+
+  Each matches its Chrome-probed pair. Three `SC1001` obligations become
+  proven clean.
 - More `SC9005` rows (675 to 741). A package with no contract was one
   grouped notice; with a contract, each export and call site whose claims stay
   open is listed. That is more rows, not more uncertainty.
 - Not yet:
-  - three `readingroom` leaf-scope timer sites need the leaf-forbidden
-    projection (`contracts.rs`, unguarded only) to evaluate guards too, and a
-    proof that the route component owns the call;
   - no repository fixture pins the guarded projection, because the authored
     tier admits only an install whose files reproduce the package's
     identity;

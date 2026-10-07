@@ -851,7 +851,7 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn contract_leaf_forbidden_operations(
         &self,
         symbol: &str,
-    ) -> Option<&[super::OwnerRequirementOperation]> {
+    ) -> Option<&[super::ContractOwnerRequirement]> {
         self.resolved_contracts
             .by_symbol
             .get(symbol)

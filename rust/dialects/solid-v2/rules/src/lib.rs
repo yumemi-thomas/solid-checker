@@ -296,7 +296,7 @@ fn leaf_contract_registration_wording(
         _ => "a reactive computation",
     };
     let mut message = format!(
-        "{export}() registers {registration} on its caller's owner on every call, and it is called inside {}, a leaf owner that forbids it; Solid throws here in dev",
+        "{export}() registers {registration} on its caller's owner at this call, which is inside {}, a leaf owner that forbids it; Solid throws here in dev",
         operation.owner
     );
     let hint = format!(
