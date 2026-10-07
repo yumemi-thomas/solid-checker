@@ -110,6 +110,30 @@ function installed(name, from) {
  * `patch-package` files. A probe guard, not admission: admission reads every
  * mechanism itself (installed_patches.rs).
  */
+/**
+ * The `patchedDependencies` block of a lockfile, workspace or manifest: a JSON
+ * object in `bun.lock`/`package.json`, an indented YAML map in pnpm files.
+ * A lockfile names every installed package elsewhere, so only this block says
+ * which ones are patched. Empty when there is none.
+ */
+function patchedDependenciesBlock(text) {
+  const at = text.indexOf("patchedDependencies");
+  if (at < 0) return "";
+  const rest = text.slice(at);
+  const lineEnd = rest.indexOf("\n");
+  const brace = rest.indexOf("{");
+  if (brace >= 0 && (lineEnd < 0 || brace < lineEnd)) {
+    let depth = 0;
+    for (let index = brace; index < rest.length; index += 1) {
+      if (rest[index] === "{") depth += 1;
+      else if (rest[index] === "}" && --depth === 0) return rest.slice(0, index + 1);
+    }
+    return rest;
+  }
+  const next = lineEnd < 0 ? -1 : rest.slice(lineEnd + 1).search(/^\S/m);
+  return next < 0 ? rest : rest.slice(0, lineEnd + 1 + next);
+}
+
 function recordedPatches(install, name, version) {
   const key = `${name}@${version}`;
   const found = [];
@@ -120,7 +144,7 @@ function recordedPatches(install, name, version) {
       const text = readFileSync(path, "utf8");
       const match = text.match(new RegExp(`"?${key.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}"?\\s*:\\s*"([^"]+\\.patch)"`));
       if (match) found.push(join(directory, match[1]));
-      else if (text.includes("patchedDependencies") && text.includes(key)) found.push(path);
+      else if (patchedDependenciesBlock(text).includes(key)) found.push(path);
     }
     const patches = join(directory, "patches");
     if (existsSync(patches))

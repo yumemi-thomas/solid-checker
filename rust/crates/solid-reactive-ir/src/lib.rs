@@ -1805,6 +1805,11 @@ pub struct ContractOwnerRequirement {
     /// every completion. `false` is "may register": calling the export with no
     /// owner is then a proof obligation, never a proven violation.
     pub guaranteed: bool,
+    /// The accepted operation's guard, when only some calls register: an
+    /// argument-kind guard is evaluated at each call
+    /// (`owners::owner_requirement_at_call`, ADR 0223), and any other guard
+    /// leaves the registration possible, never guaranteed.
+    pub guard: Option<crate::contract_semantics::Guard>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]

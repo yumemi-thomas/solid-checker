@@ -1,0 +1,154 @@
+{
+  "package": "@solid-primitives/resize-observer",
+  "version": "4.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "makeResizeObserver": {
+      "why": "Browser construction creates ResizeObserver and immediately registers observer.disconnect with onCleanup on the caller owner, dist/index.js:16\u201326. Positive cleanup requirement only.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "cleanups": [
+          "observer-cleanup"
+        ],
+        "operations": [
+          {
+            "id": "observer-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ]
+      }
+    },
+    "createElementSize": {
+      "why": "Every successful browser call constructs an observer and registers disconnect with onCleanup, dist/index.js:119\u2013124. No unconditional reactive-store return is claimed: createStaticStore lazily installs signal getters only after tracking.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "cleanups": [
+          "element-observer-cleanup"
+        ],
+        "operations": [
+          {
+            "id": "element-observer-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ]
+      }
+    },
+    "createResizeObserver": {
+      "why": "Every browser call uses makeResizeObserver (which registers cleanup) and creates an effect on the caller owner. dist/index.js:43\u201361 and :16\u201326. The positive cleanup and child-owner requirements are separate.",
+      "rule": "leaf-owner-forbidden-call",
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "Module-scope setup exercises both onCleanup in makeResizeObserver and createEffect in createResizeObserver; expect NO_OWNER_CLEANUP and NO_OWNER_EFFECT, and neither under a live root."
+        }
+      ],
+      "call": {
+        "cleanups": [
+          "resize-cleanup"
+        ],
+        "computations": [
+          "resize-effect"
+        ],
+        "operations": [
+          {
+            "id": "resize-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "resize-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

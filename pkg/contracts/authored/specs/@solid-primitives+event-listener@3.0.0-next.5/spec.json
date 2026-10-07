@@ -1,0 +1,63 @@
+{
+  "package": "@solid-primitives/event-listener",
+  "version": "3.0.0-next.5",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "createEventListener": {
+      "why": "Every browser call creates createEffect (function target) or createRenderEffect (plain target) synchronously on the caller owner; both need a children-capable owner. dist/eventListener.js:10\u201325 is byte-identical in these two installed versions. Only that positive requirement is claimed; handlers and target callback roles remain open.",
+      "rule": "leaf-owner-forbidden-call",
+      "probes": [
+        {
+          "label": "accessor",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "An accessor target selects the createEffect branch at eventListener.js:24; plain-target primary selects createRenderEffect at :25. Both need their own runtime confirmation."
+        }
+      ],
+      "call": {
+        "computations": [
+          "listener-effect"
+        ],
+        "operations": [
+          {
+            "id": "listener-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "e1c01013135c1b43d915a583d587e4409e5f16d3fd031474af9e37a9ddf5efd0",
+            "path": "./dist/index.js",
+            "sha256": "3c5f1fc3eec2b1fe89cf37f8ad500edd3631b24c7fa50e0aee547de1ca4c4373"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "6d63f84278aebb4756d1d608cead749ae35bd1faf988ea047ffda85be3699799"
+          },
+          "exports": {
+            "createIntervalCounter": "open-callable",
+            "createPolled": "open-callable",
+            "createTimeoutLoop": "open-callable",
+            "createTimer": "authored-createTimer",
+            "makeTimer": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-+nDGvEk/9d+uC6hrjuDpKH393hWR9tMhHfFso9qKa3/Q2xdoKXHvH+gmslP01/HBs2OGwPkriHxg892gFbJ6Kg==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "b029e0b5443615ce0d310bd6cdd9ab59ee5859ac5057122458beba1fc72803b0"
+    },
+    "name": "@solid-primitives/timer",
+    "version": "1.4.5-next.1"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createTimer": {
+      "call": {
+        "cleanups": [
+          "numeric-cleanup"
+        ],
+        "computations": [
+          "accessor-effect"
+        ],
+        "operations": [
+          {
+            "id": "numeric-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "accessor-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

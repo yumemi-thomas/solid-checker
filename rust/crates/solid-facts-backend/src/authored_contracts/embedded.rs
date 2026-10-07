@@ -13,15 +13,39 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/0b577fb9be772c8f2183eda7c39e7a9533f176467595d34802b4ed34ce0ec24d.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/0b577fb9be772c8f2183eda7c39e7a9533f176467595d34802b4ed34ce0ec24d.json"
+        ),
+    ),
+    (
+        "objects/22fe0c3501e3cc5f09ccf24e9b47064501d0853021f4215ab4aeb58a21a6b2b8.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/22fe0c3501e3cc5f09ccf24e9b47064501d0853021f4215ab4aeb58a21a6b2b8.json"
+        ),
+    ),
+    (
         "objects/286bd6d92341076f25ec7fb361e3c5af1256edc2a369c53bfcb30fddb3f2783b.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/286bd6d92341076f25ec7fb361e3c5af1256edc2a369c53bfcb30fddb3f2783b.json"
         ),
     ),
     (
+        "objects/31e53da55922530f4b3f21b3cf0e2b3a0c8a3d4f47ad873f7c260f4129eee14e.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/31e53da55922530f4b3f21b3cf0e2b3a0c8a3d4f47ad873f7c260f4129eee14e.json"
+        ),
+    ),
+    (
         "objects/38c1ec2ebaba34d1187b6f94e055e497d4d035e99cc18b561b7d898537ba58ea.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/38c1ec2ebaba34d1187b6f94e055e497d4d035e99cc18b561b7d898537ba58ea.json"
+        ),
+    ),
+    (
+        "objects/3bc8454a0362a86f369c68ea055e78d68b7bbcff123339ec2a28878cb98c57a3.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/3bc8454a0362a86f369c68ea055e78d68b7bbcff123339ec2a28878cb98c57a3.json"
         ),
     ),
     (
@@ -91,9 +115,21 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/974882df2e8072d9a14ca39b8b792769b3ba83c854d9f2bb665425dea6b65249.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/974882df2e8072d9a14ca39b8b792769b3ba83c854d9f2bb665425dea6b65249.json"
+        ),
+    ),
+    (
         "objects/b218319732e2b7813e280f67e26c59361430a55e04e8fdc59b22cb295ac625f9.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/b218319732e2b7813e280f67e26c59361430a55e04e8fdc59b22cb295ac625f9.json"
+        ),
+    ),
+    (
+        "objects/c3a447213540657b53257d50cdf68d745b584b221a81e20bb69d0b0b364905c3.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/c3a447213540657b53257d50cdf68d745b584b221a81e20bb69d0b0b364905c3.json"
         ),
     ),
     (
@@ -103,15 +139,33 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/e4d2fd4ab3933bbe44c919956c52d2e9ce8e6a023211b7793c4b6b1c49a2708e.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/e4d2fd4ab3933bbe44c919956c52d2e9ce8e6a023211b7793c4b6b1c49a2708e.json"
+        ),
+    ),
+    (
         "objects/ec768407825964e86f08a791cd679949e73559826999c7fe68edecebdb2ff3bd.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/ec768407825964e86f08a791cd679949e73559826999c7fe68edecebdb2ff3bd.json"
         ),
     ),
     (
+        "objects/f1ea45c84c4eba6fe8ea5cfba82322e2735e01e56de619f9af2b601c2093c69b.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/f1ea45c84c4eba6fe8ea5cfba82322e2735e01e56de619f9af2b601c2093c69b.json"
+        ),
+    ),
+    (
         "objects/f7572e654114e0655cfd0068ee70b3a6e3d37de8bbacc80e97853353dc5878ae.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/f7572e654114e0655cfd0068ee70b3a6e3d37de8bbacc80e97853353dc5878ae.json"
+        ),
+    ),
+    (
+        "objects/fd6b3c6afc3f14da4db70a02b2159fbb84e60de62979466df23b57cc30d65788.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/fd6b3c6afc3f14da4db70a02b2159fbb84e60de62979466df23b57cc30d65788.json"
         ),
     ),
     (

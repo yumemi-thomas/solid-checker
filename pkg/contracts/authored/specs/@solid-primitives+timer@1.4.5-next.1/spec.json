@@ -1,0 +1,122 @@
+{
+  "package": "@solid-primitives/timer",
+  "version": "1.4.5-next.1",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "createTimer": {
+      "why": "Browser-only positive owner requirements, split by delay kind: numeric delay synchronously registers onCleanup; accessor delay synchronously creates an effect. Installed readingroom/frontend/node_modules/@solid-primitives/timer/dist/index.js:35\u201350. No handler scheduling or domain closure is claimed.",
+      "rule": "missing-owner",
+      "call": {
+        "cleanups": [
+          "numeric-cleanup"
+        ],
+        "computations": [
+          "accessor-effect"
+        ],
+        "operations": [
+          {
+            "id": "numeric-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "accessor-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Numeric-delay cleanup is forbidden in an owned onSettled leaf, index.js:38."
+        },
+        {
+          "label": "callable",
+          "rule": "missing-owner",
+          "why": "Accessor delay enters createEffect, index.js:50; outside an owner it emits NO_OWNER_EFFECT."
+        }
+      ]
+    }
+  }
+}

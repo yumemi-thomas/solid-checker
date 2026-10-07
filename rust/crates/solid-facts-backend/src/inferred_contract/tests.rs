@@ -313,6 +313,7 @@ fn owner_requirement_summary(
             solid_reactive_ir::ContractOwnerRequirement {
                 operation,
                 guaranteed: false,
+                guard: None,
             },
         ]),
         ..ContractExport::default()
@@ -1123,6 +1124,7 @@ fn a_creates_closure_waits_for_every_owner_requirement_to_be_published() {
         ContractClaim::Known(vec![solid_reactive_ir::ContractOwnerRequirement {
             operation,
             guaranteed: false,
+            guard: None,
         }])
     };
 
@@ -1169,10 +1171,12 @@ fn an_open_owner_requirement_list_publishes_its_items_and_keeps_creates_open() {
             solid_reactive_ir::ContractOwnerRequirement {
                 operation: solid_reactive_ir::OwnerRequirementOperation::Effect,
                 guaranteed: true,
+                guard: None,
             },
             solid_reactive_ir::ContractOwnerRequirement {
                 operation: solid_reactive_ir::OwnerRequirementOperation::Cleanup,
                 guaranteed: true,
+                guard: None,
             },
         ],
         ..ContractExport::default()

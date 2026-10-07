@@ -849,8 +849,12 @@ fn project_owner_requirements(
         // withdrawal of an operation asks too).
         if operation.imposes_owner_requirement() {
             // ADR 0161: the lower bound decides the finding kind. Only a count
-            // whose minimum is at least one says every call registers.
+            // whose minimum is at least one says every call registers. A
+            // guard says which calls do (`createTimer`'s cleanup runs for a
+            // numeric delay, its effect for an accessor one); it travels with
+            // the requirement and is evaluated at each call (ADR 0223).
             let guaranteed = operation.cardinality.min.is_some_and(|min| min >= 1);
+            let guard = operation.guard.clone();
             let operation = match operation.kind {
                 OperationKind::Cleanup | OperationKind::Dispose => {
                     OwnerRequirementOperation::Cleanup
@@ -861,17 +865,20 @@ fn project_owner_requirements(
             };
             match requirements
                 .iter_mut()
-                .find(|existing: &&mut ContractOwnerRequirement| existing.operation == operation)
-            {
+                .find(|existing: &&mut ContractOwnerRequirement| {
+                    existing.operation == operation && existing.guard == guard
+                }) {
                 Some(existing) => existing.guaranteed |= guaranteed,
                 None => requirements.push(ContractOwnerRequirement {
                     operation,
                     guaranteed,
+                    guard,
                 }),
             }
         }
     }
-    requirements.sort_by_key(|requirement| format!("{:?}", requirement.operation));
+    requirements
+        .sort_by_key(|requirement| format!("{:?} {:?}", requirement.operation, requirement.guard));
     match knowledge {
         KnowledgeSet::Unknown if requirements.is_empty() => ContractClaim::Open,
         _ => ContractClaim::Known(requirements),
@@ -1991,6 +1998,7 @@ mod owner_requirement_projection_tests {
             ContractClaim::Known(vec![ContractOwnerRequirement {
                 operation: OwnerRequirementOperation::Effect,
                 guaranteed: false,
+                guard: None,
             }])
         );
         assert!(open.is_empty());
@@ -2068,6 +2076,7 @@ mod owner_requirement_projection_tests {
             ContractClaim::Known(vec![ContractOwnerRequirement {
                 operation: OwnerRequirementOperation::Cleanup,
                 guaranteed: false,
+                guard: None,
             }])
         );
         // `creates` is closed and empty here, and the *cleanups* read must not
@@ -2100,6 +2109,7 @@ mod owner_requirement_projection_tests {
         let effect = ContractClaim::Known(vec![ContractOwnerRequirement {
             operation: OwnerRequirementOperation::Effect,
             guaranteed: false,
+            guard: None,
         }]);
 
         let closed = export(claims.clone(), vec![compute.clone()], Vec::new());
@@ -2120,6 +2130,7 @@ mod owner_requirement_projection_tests {
             ContractClaim::Known(vec![ContractOwnerRequirement {
                 operation: OwnerRequirementOperation::Effect,
                 guaranteed: true,
+                guard: None,
             }])
         );
         assert!(open.is_empty(), "computations adds no domain of its own");

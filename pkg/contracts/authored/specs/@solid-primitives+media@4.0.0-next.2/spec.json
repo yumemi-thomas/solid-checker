@@ -1,0 +1,55 @@
+{
+  "package": "@solid-primitives/media",
+  "version": "4.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "createMediaQuery": {
+      "why": "Returns the createHydratableSignal accessor in browser mode, dist/index.js:38\u201344; utils/dist/index.js:209\u2013218 supplies it. Positive reactive-accessor return only; no owner requirement or callback closure is asserted.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      }
+    }
+  }
+}

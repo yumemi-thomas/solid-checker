@@ -1,0 +1,60 @@
+{
+  "package": "@solid-primitives/utils",
+  "version": "7.0.0-next.4",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "access": {
+      "why": "Possible invocation of argument 0 at the call, on the same stack, with ambient tracking and owner. It runs only for typeof function && length === 0, utils/dist/index.js:88; min stays 0 because a callable type does not establish exact runtime function.length. The grammar can name that literal leaf, but its value requires a fact. No closure or guaranteed invocation is asserted.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "access-argument"
+          }
+        ],
+        "operations": [
+          {
+            "id": "access-argument",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -877,6 +877,9 @@ pub(crate) fn find_missing_owners(
                 && let Some(requirements_for_call) = lookup.contract_owner_requirements(symbol)
             {
                 for requirement in requirements_for_call {
+                    let Some(guaranteed) = owner_requirement_at_call(requirement, call) else {
+                        continue;
+                    };
                     let after_await = after_await
                         && requirement.operation
                             != crate::OwnerRequirementOperation::SettledCleanup;
@@ -891,7 +894,7 @@ pub(crate) fn find_missing_owners(
                     let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0;
                     // ADR 0161: an export that may register without doing so
                     // on every call leaves the unowned call a proof obligation.
-                    let registration_uncertain = !requirement.guaranteed;
+                    let registration_uncertain = !guaranteed;
                     let operation = match requirement.operation {
                         crate::OwnerRequirementOperation::Effect => "effect",
                         crate::OwnerRequirementOperation::Cleanup => "cleanup",
@@ -1247,6 +1250,9 @@ pub(crate) fn discover_owner_file(
             && let Some(contract_requirements) = lookup.contract_owner_requirements(symbol)
         {
             for requirement in contract_requirements {
+                let Some(guaranteed) = owner_requirement_at_call(requirement, call) else {
+                    continue;
+                };
                 let operation = match requirement.operation {
                     crate::OwnerRequirementOperation::Effect => "effect",
                     crate::OwnerRequirementOperation::Cleanup => "cleanup",
@@ -1261,7 +1267,7 @@ pub(crate) fn discover_owner_file(
                     allow_uncertain: true,
                     runtime_uncertain: false,
                     through_contract: true,
-                    registration_uncertain: !requirement.guaranteed,
+                    registration_uncertain: !guaranteed,
                     settled_target: None,
                     settled_gate: None,
                     providing_region_chain: providing_region_chain.clone(),
@@ -3449,6 +3455,68 @@ pub(crate) fn analysis_context(
         }
     }
     enclosing
+}
+
+/// ADR 0223: whether an accepted owner requirement applies to `call`, and if
+/// so whether this call is guaranteed to register. `None` when the
+/// requirement's guard is false here: an argument the guard says is callable
+/// is a literal value, or the reverse. An argument-kind atom whose kind the
+/// syntax does not settle, and any other guard atom, leave the registration
+/// possible, never guaranteed.
+pub(crate) fn owner_requirement_at_call(
+    requirement: &crate::ContractOwnerRequirement,
+    call: &solid_facts::ast::CallFact,
+) -> Option<bool> {
+    use crate::contract_semantics::{GuardAtom, ValueKind};
+    use solid_facts::ast::RuntimeValueKind;
+    let Some(guard) = &requirement.guard else {
+        return Some(requirement.guaranteed);
+    };
+    let mut settled = true;
+    for atom in &guard.0 {
+        let GuardAtom::ValueKind {
+            argument,
+            path,
+            kind,
+        } = atom
+        else {
+            settled = false;
+            continue;
+        };
+        let index = usize::from(*argument);
+        let Some(value) = call
+            .arguments
+            .get(index)
+            .filter(|_| path.is_empty())
+            .filter(|_| {
+                !call.arguments[..=index]
+                    .iter()
+                    .any(|argument| argument.spread)
+            })
+        else {
+            settled = false;
+            continue;
+        };
+        let holds = match (kind, value.runtime_value_kind) {
+            (ValueKind::Plain, RuntimeValueKind::Primitive | RuntimeValueKind::Nullish)
+            | (ValueKind::Callable, RuntimeValueKind::Function) => Some(true),
+            (ValueKind::Plain, RuntimeValueKind::Function)
+            | (
+                ValueKind::Callable,
+                RuntimeValueKind::Primitive
+                | RuntimeValueKind::Nullish
+                | RuntimeValueKind::Object
+                | RuntimeValueKind::Array,
+            ) => Some(false),
+            _ => None,
+        };
+        match holds {
+            Some(true) => {}
+            Some(false) => return None,
+            None => settled = false,
+        }
+    }
+    Some(settled && requirement.guaranteed)
 }
 
 #[cfg(test)]

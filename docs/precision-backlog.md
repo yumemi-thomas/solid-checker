@@ -1,5 +1,20 @@
 # Precision backlog
 
+## Solid Primitives enter the authored tier (2026-10-07)
+
+ADR 0223. Nine `@solid-primitives` specs, each claim probed in Chrome on
+rc.13. A guarded owner requirement is now evaluated at each call, by argument
+kind.
+
+- **Gained:** one proven `missing-owner` violation (`readingroom`, a timer
+  after an `await`) and three `SC1001` obligations proven clean.
+- **Fixed false positive:** the missing-owner projection counted a guarded
+  registration as guaranteed on every call, so a numeric `createTimer` was
+  reported as creating an effect.
+- **Not yet:** guard-aware leaf-forbidden projection (three `readingroom`
+  timer sites), `utils.access`, `upload`, and a repository fixture for the
+  guarded projection.
+
 ## A returned source and a helper's prop read reach the caller (2026-10-07)
 
 ADR 0222. Two misuses with no finding at all are closed:

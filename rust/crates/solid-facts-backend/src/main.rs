@@ -5035,6 +5035,7 @@ fn insert_owner_requirement(
         None => requirements.push(solid_reactive_ir::ContractOwnerRequirement {
             operation,
             guaranteed,
+            guard: None,
         }),
     }
     requirements.sort_by_key(|requirement| match requirement.operation {
@@ -10370,6 +10371,7 @@ mod open_owner_requirement_tests {
         ContractOwnerRequirement {
             operation,
             guaranteed,
+            guard: None,
         }
     }
 
