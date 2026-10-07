@@ -19,6 +19,7 @@
     }
   ],
   "pairs": "../_pairs/@tanstack+virtual-core",
+  "identity": "identity.json",
   "exports": {
     "Virtualizer": {
       "why": "Source: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/ai-memory-ui/node_modules/@tanstack/virtual-core/dist/esm/index.js:282-284,1124. The constructor enters exactly one for-in option VALUE enumeration on its own stack, preserving ambient tracking and owner. Includes inherited enumerable string keys; does not invoke function-valued data properties. The count bounds enumeration entry, not each getter after a throwing/mutating earlier getter. Base probe pair: Virtualizer.misuse.tsx / Virtualizer.correct.tsx; estimateSize GETTER before a returned callback. New protocol proposal; requires fresh per-version probes and the consumer patch. No domain closure.",

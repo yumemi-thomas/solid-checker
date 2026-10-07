@@ -19,6 +19,7 @@
     }
   ],
   "pairs": "../_pairs/@tanstack+solid-query",
+  "identity": "identity.json",
   "exports": {
     "useQuery": {
       "why": "Invokes the options function on every call, on the same stack, as the tracked compute of a createMemo it creates.",

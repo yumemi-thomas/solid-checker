@@ -10,7 +10,7 @@
 //       fail if the written tier is not what `build` would write
 //   bun scripts/author-contracts.mjs identity --spec <spec> --install <dir> --proposal <file>
 //       write the spec's identity.json from a `contract generate --host browser`
-//       proposal for a version the certified tier does not carry (ADR 0207)
+//       proposal (ADR 0207)
 //
 // A spec named `<package>@<version>+<label>` with `patchedInstall` in its
 // spec.json is about one patched install (ADR 0208): its identity is that
@@ -26,10 +26,9 @@
 // rule, why, scenario? }` exercised by `<export>.<label>.misuse.tsx` and
 // `<export>.<label>.correct.tsx`; the call ships only when every pair passed.
 //
-// Each artifact case of that version starts from the certified document the
-// compiled-in tier already carries for it, or, for a version it does not carry,
-// from the spec's `identity.json` (ADR 0207): its identity, case structure and
-// file digests are the version's own. Every export's `call` is then replaced,
+// Each artifact case of that version starts from the spec's `identity.json`
+// (ADR 0207; every spec has one since the certified tier retired, ADR 0228):
+// its identity, case structure and file digests are the version's own. Every export's `call` is then replaced,
 // with the authored claim where the spec states one and its pair passed, and
 // fully open (`{}`) everywhere else. Nothing a certification inferred ships
 // without its own probe.
@@ -44,11 +43,10 @@ import { propertyGetProbeDigest, validatePropertyGets } from "./lib/property-get
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TIER = join(ROOT, "pkg/contracts/authored");
-const ACCEPTED = join(ROOT, "pkg/contracts/accepted");
 const EMBEDDED = join(ROOT, "rust/crates/solid-facts-backend/src/authored_contracts/embedded.rs");
 const RESULTS = join(TIER, "probe-results.json");
 const LEDGER = join(ROOT, "benchmarks/reviewed-package-models/development/misuse-runtime-ledger.mjs");
-// The case-level fields a certified document may carry. Anything else is a
+// The case-level fields an identity document may carry. Anything else is a
 // claim this script would carry without a probe, so it refuses.
 const CASE_FIELDS = new Set(["artifact", "declarations", "resolution", "exports"]);
 
@@ -102,28 +100,16 @@ const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("
   assert.equal(name, spec.patchedInstall ? `${base}+${spec.patchedInstall.label}` : base, `${name}: directory names another version`);
   return { ...spec, name, directory, pairs: join(directory, spec.pairs ?? ".") };
 });
-const accepted = read(join(ACCEPTED, "index.json"));
-
 /**
- * The certified cases of one version: one per (entrypoint, conditions, target).
- * Only browser cases: the probes run in Chrome, so a claim is evidence for the
- * browser host and nothing else.
+ * The artifact cases of one version, from the spec's identity: one per
+ * (entrypoint, conditions, target). Only browser cases: the probes run in
+ * Chrome, so a claim is evidence for the browser host and nothing else.
  */
 function certifiedCases(spec) {
-  if (spec.identity) {
-    const identity = read(join(spec.directory, spec.identity));
-    assert.equal(identity.format, 1, `${spec.name}: identity format`);
-    return identity.cases.map(entry => ({ ...entry, packageName: spec.package, packageVersion: spec.version }));
-  }
-  const cases = new Map();
-  for (const bundle of accepted.bundles) {
-    if (bundle.packageName !== spec.package || bundle.packageVersion !== spec.version) continue;
-    if (!bundle.exportConditions.includes("browser")) continue;
-    const key = JSON.stringify([bundle.specifier, bundle.requestedEntrypoint, bundle.exportConditions, bundle.runtimeTarget]);
-    if (!cases.has(key)) cases.set(key, bundle);
-  }
-  assert(cases.size > 0, `${spec.name}: the certified tier carries no case of this version`);
-  return [...cases.values()];
+  assert(spec.identity, `${spec.name}: spec.json names no identity`);
+  const identity = read(join(spec.directory, spec.identity));
+  assert.equal(identity.format, 1, `${spec.name}: identity format`);
+  return identity.cases.map(entry => ({ ...entry, packageName: spec.package, packageVersion: spec.version }));
 }
 
 /** The installed directory of `name` as Node resolves it from `from`. */
@@ -204,11 +190,9 @@ function probeInstall(spec, install) {
   } else {
     assert.deepEqual(patches, [], `${spec.name}: the probe install patches ${spec.package}@${spec.version}`);
   }
-  if (spec.identity) {
-    const root = snapshotRoot(packageDirectory, spec.package, spec.version);
-    for (const bundle of certifiedCases(spec))
-      assert.equal(root, bundle.snapshotRoot, `${spec.name}: the probe install's files are not the identity's snapshot`);
-  }
+  const root = snapshotRoot(packageDirectory, spec.package, spec.version);
+  for (const bundle of certifiedCases(spec))
+    assert.equal(root, bundle.snapshotRoot, `${spec.name}: the probe install's files are not the identity's snapshot`);
   const artifacts = certifiedCases(spec).map(bundle => {
     const document = caseDocument(bundle);
     const [artifactCase] = Object.values(document.entrypoints).flatMap(entrypoint => entrypoint.cases ?? [entrypoint]);
@@ -321,10 +305,9 @@ function passed(spec, name) {
   });
 }
 
-/** One authored document from one certified case document. */
-/** The identity document of one case: certified, or from the spec's identity. */
+/** The identity document of one case, from the spec's identity. */
 function caseDocument(bundle) {
-  return bundle.identityDocument ? structuredClone(bundle.identityDocument) : read(join(ACCEPTED, bundle.document));
+  return structuredClone(bundle.identityDocument);
 }
 
 /**
@@ -410,7 +393,7 @@ function author(spec, bundle) {
   for (const entrypoint of Object.values(document.entrypoints))
     for (const artifactCase of entrypoint.cases ?? [entrypoint]) {
       for (const field of Object.keys(artifactCase))
-        assert(CASE_FIELDS.has(field), `${bundle.document}: case field ${field} would ship unprobed`);
+        assert(CASE_FIELDS.has(field), `${spec.name} ${bundle.runtimeTarget}: case field ${field} would ship unprobed`);
       for (const [name, reference] of Object.entries(artifactCase.exports)) {
         const stability = typeof reference === "string" ? undefined : reference.stability;
         const { shape } = document.summaries[typeof reference === "string" ? reference : reference.summary];
@@ -436,7 +419,7 @@ function build() {
     const integrity = Object.fromEntries(spec.solidRuntime.map(entry => [entry.name, entry]));
     assert.deepEqual(Object.keys(integrity).sort(), ["@solidjs/signals", "@solidjs/web", "solid-js"], `${spec.name}: solidRuntime`);
     for (const bundle of certifiedCases(spec)) {
-      const snapshotRoot = bundle.snapshotRoot ?? read(join(ACCEPTED, bundle.receipt)).payload?.snapshotRoot;
+      const { snapshotRoot } = bundle;
       assert(snapshotRoot, `${spec.name}: no snapshotRoot for ${bundle.runtimeTarget}`);
       const { document, shipped } = author(spec, bundle);
       if (shipped.length === 0) continue;

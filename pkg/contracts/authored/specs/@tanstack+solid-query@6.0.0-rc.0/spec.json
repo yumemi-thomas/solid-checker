@@ -19,6 +19,7 @@
     }
   ],
   "pairs": "../_pairs/@tanstack+solid-query",
+  "identity": "identity.json",
   "exports": {
     "useMutation": {
       "why": "Returns a store of the mutation's state; reading a property untracked is a strict read.",

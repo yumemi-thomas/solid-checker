@@ -1,0 +1,236 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solidjs/router",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-sYaq5h4ISdDVZKhA1R0X4NHFg4Kao7HpK3QRfbFcE25/x2PFl4VxlHLZIoBUfv3T3L9g4GVTD376pvArwgGlDA==",
+      "snapshotRoot": "sha256:932380360f33b806964620ac52772c70543717da3ff7a91fbeb13f64932c23f3",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "994828fab071594ae59f60f3b1d33091731a0c054767eaab6034da852152abb4",
+                  "path": "./dist/index.js",
+                  "sha256": "f857f19b4cdf65adaa3f8cef2008943c2b61f1a9b9d989221a42778704ee8fd5"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "687dad4f3f4e4374125f244e3286d4c5167d83fb78a8b786ce63deba8610d383"
+                },
+                "exports": {
+                  "RouterContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "_mergeSearchString": "summary-d2638b2041b6a2569ee8907e8f1ddb33807f59e88135e9f67fb7eb4822aecd68",
+                  "action": "summary-18ec3d138d61b48a7fb69952db44980a38e6bb36cee356beaf149c818c03f2d8",
+                  "browserHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createBeforeLeave": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRouter": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defineRoute": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "defineRoutes": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "hashHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "int": "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d",
+                  "memoryHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "query": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "revalidate": "summary-d0a54a938bc3e7e97bc318e88b4a9b6b41b0eb9799603201219379eefd7c20ee",
+                  "useAction": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useBeforeLeave": "summary-548f1bf65653b61de7346bbf028b3d9335d815d753138fa61b008712b4729567",
+                  "useHref": "summary-9e54c051240d66239998ac128d4c7350d8efdfbade80b37d6b667d95624e7a22",
+                  "useIsRouting": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useLinkState": "summary-bb1d0257e7b825b95a458c55a0922a73a7295e963d4f08a429b148b29e2e5c90",
+                  "useLocation": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useMatch": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useNavigate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useParams": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "usePreloadRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useResolvedPath": "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a",
+                  "useRouteMatches": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useSearchParams": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useSubmissions": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./default",
+                  "typesBranch": "/exports/./default"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-sYaq5h4ISdDVZKhA1R0X4NHFg4Kao7HpK3QRfbFcE25/x2PFl4VxlHLZIoBUfv3T3L9g4GVTD376pvArwgGlDA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "2e1ba673f6b24d41b0e5c5a5000791a892c37ce1320f16c3add4f239e2f06643"
+          },
+          "name": "@solidjs/router",
+          "version": "2.0.0-next.16"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-18ec3d138d61b48a7fb69952db44980a38e6bb36cee356beaf149c818c03f2d8": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-36981dd50d8c935b6ac802ae05199b4e11ec88c64741742e1a8a082057916d1d": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-548f1bf65653b61de7346bbf028b3d9335d815d753138fa61b008712b4729567": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9e54c051240d66239998ac128d4c7350d8efdfbade80b37d6b667d95624e7a22": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-bb1d0257e7b825b95a458c55a0922a73a7295e963d4f08a429b148b29e2e5c90": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-d0a54a938bc3e7e97bc318e88b4a9b6b41b0eb9799603201219379eefd7c20ee": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-d2638b2041b6a2569ee8907e8f1ddb33807f59e88135e9f67fb7eb4822aecd68": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "specifier": "@solidjs/router",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "runtimeTarget": "dist/index.jsx",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-sYaq5h4ISdDVZKhA1R0X4NHFg4Kao7HpK3QRfbFcE25/x2PFl4VxlHLZIoBUfv3T3L9g4GVTD376pvArwgGlDA==",
+      "snapshotRoot": "sha256:932380360f33b806964620ac52772c70543717da3ff7a91fbeb13f64932c23f3",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "dbbdf8c1a81b706590c7b5e84681c18ae279d6e100c1cd3256e5f474ca8b0c6a",
+                  "path": "./dist/index.jsx",
+                  "sha256": "e73fc341f9427ae738b2ba86d62045518ab6093bb7a57a3a4035d01c03ef920b"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "687dad4f3f4e4374125f244e3286d4c5167d83fb78a8b786ce63deba8610d383"
+                },
+                "exports": {
+                  "RouterContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "_mergeSearchString": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "action": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "browserHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createBeforeLeave": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRouter": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defineRoute": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "defineRoutes": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "hashHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "int": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "memoryHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "query": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "revalidate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useAction": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useBeforeLeave": "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a",
+                  "useHref": "summary-c96fb00b0d434b593d542a53249206fe787fb8c64b143d2394cffe530fbb8198",
+                  "useIsRouting": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useLinkState": "summary-bb1d0257e7b825b95a458c55a0922a73a7295e963d4f08a429b148b29e2e5c90",
+                  "useLocation": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useMatch": "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a",
+                  "useNavigate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useParams": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "usePreloadRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useResolvedPath": "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a",
+                  "useRouteMatches": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useSearchParams": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useSubmissions": "summary-32b4a0e116a8a46dbcc776065f0bb1095eb9d59b5b8493eb61242b4fc860ab7d"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./solid",
+                  "typesBranch": "/exports/./solid"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-sYaq5h4ISdDVZKhA1R0X4NHFg4Kao7HpK3QRfbFcE25/x2PFl4VxlHLZIoBUfv3T3L9g4GVTD376pvArwgGlDA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "2e1ba673f6b24d41b0e5c5a5000791a892c37ce1320f16c3add4f239e2f06643"
+          },
+          "name": "@solidjs/router",
+          "version": "2.0.0-next.16"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-32b4a0e116a8a46dbcc776065f0bb1095eb9d59b5b8493eb61242b4fc860ab7d": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-bb1d0257e7b825b95a458c55a0922a73a7295e963d4f08a429b148b29e2e5c90": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c96fb00b0d434b593d542a53249206fe787fb8c64b143d2394cffe530fbb8198": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

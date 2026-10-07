@@ -19,6 +19,7 @@
     }
   ],
   "pairs": "../_pairs/@solid-primitives+keyboard",
+  "identity": "identity.json",
   "exports": {
     "createKeyHold": {
       "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:91-151,203-212; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",

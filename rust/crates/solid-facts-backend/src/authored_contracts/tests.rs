@@ -4,26 +4,27 @@ use super::*;
 
 const SNAPSHOT: &str = "sha256:0000000000000000000000000000000000000000000000000000000000000003";
 
-/// The certified rc.4 router document the tier carries for `browser`/`import`,
-/// read from disk, as the pilot's authored documents start from (ADR 0198 § 6).
+/// The rc.4 router's `browser`/`import` identity case, as the authored spec's
+/// identity.json carries it (ADR 0207), and its document's bytes.
 fn router_document() -> (serde_json::Value, Vec<u8>) {
-    let root =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../pkg/contracts/accepted");
-    let index: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(root.join("index.json")).unwrap()).unwrap();
-    let bundle = index["bundles"]
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../../pkg/contracts/authored/specs/@tanstack+solid-router@2.0.0-rc.4/identity.json",
+    );
+    let identity: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let mut bundle = identity["cases"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|bundle| {
-            bundle["packageName"] == "@tanstack/solid-router"
-                && bundle["packageVersion"] == "2.0.0-rc.4"
-                && bundle["exportConditions"] == serde_json::json!(["browser", "import"])
-                && bundle["runtimeTarget"] == "dist/esm/index.js"
+        .find(|case| {
+            case["exportConditions"] == serde_json::json!(["browser", "import"])
+                && case["runtimeTarget"] == "dist/esm/index.js"
         })
-        .expect("the tier carries the rc.4 router browser case")
+        .expect("the spec's identity carries the rc.4 router browser case")
         .clone();
-    let document = std::fs::read(root.join(bundle["document"].as_str().unwrap())).unwrap();
+    let document = serde_json::to_vec_pretty(&bundle["identityDocument"]).unwrap();
+    bundle["packageName"] = "@tanstack/solid-router".into();
+    bundle["packageVersion"] = "2.0.0-rc.4".into();
     (bundle, document)
 }
 

@@ -18,6 +18,7 @@
       "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
     }
   ],
+  "identity": "identity.json",
   "exports": {
     "useSearch": {
       "why": "Returns a memo of the matched route's search; reading it untracked is a strict read.",

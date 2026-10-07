@@ -19,6 +19,7 @@
     }
   ],
   "pairs": "../_pairs/@solidjs+router",
+  "identity": "identity.json",
   "exports": {
     "useLocation": {
       "why": "Returns the router's location: getters over memos, and a memo-backed query proxy.",

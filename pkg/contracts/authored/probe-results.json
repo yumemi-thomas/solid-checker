@@ -4496,7 +4496,7 @@
       "package": "@tanstack/virtual-core",
       "version": "3.17.8",
       "export": "Virtualizer",
-      "propertyGetProbeDigest": "9a273a614918548fd3d671a5ea1bdbeb9ebbd6cfe5527bde344fa015df1a4ad5",
+      "propertyGetProbeDigest": "839bb17c34dccb080c421c110ec95b5b81dbe6ec4f6f81a85569c1ce8ea565a4",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -4534,7 +4534,7 @@
       "version": "3.17.8",
       "export": "Virtualizer",
       "label": "count",
-      "propertyGetProbeDigest": "4efd7d3351f413f73d377714e13c914ce9ef3c7cac73b87533a50de9b2bb93b8",
+      "propertyGetProbeDigest": "a7b1c51a9e7cf421ca6630bf3885021ea50e1ba8c376e8c992880b3a71a3696b",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -4572,7 +4572,7 @@
       "version": "3.17.8",
       "export": "Virtualizer",
       "label": "getScrollElement",
-      "propertyGetProbeDigest": "be19e26c40f5cc6a52643ecc5476a81ad9ee527ad9047952d6e3385edb2214ee",
+      "propertyGetProbeDigest": "b5bbbcc57477a087fb93ffdc0b1c622a14ebe9d945398f31334526d0f976f09f",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -4610,7 +4610,7 @@
       "version": "3.17.8",
       "export": "Virtualizer",
       "label": "scrollMargin",
-      "propertyGetProbeDigest": "c2642fc80a23f9fbdc0e44b714706d8a42db32ef21cc79731d85ea09e82b630e",
+      "propertyGetProbeDigest": "ea9a2af3c91976aec7eefd795e6c0fa0f090c225ebcad5ff823f3954822ed2c1",
       "solidRuntime": [
         {
           "name": "solid-js",
