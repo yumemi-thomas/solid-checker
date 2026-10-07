@@ -1,5 +1,20 @@
 # Precision backlog
 
+## An authored contract may close a domain it cites (2026-10-07)
+
+ADR 0226.
+- **Closures:** an authored contract may close a domain only with a citation
+  of the installed source, and its positive claims must pass their probes.
+- **Premise:** function `length`/`name` and primitive coercion are not
+  reactive.
+- **Package reads:** reads stated to run later are not attributed to the
+  call.
+- **Leaf owners:** operations needing a children- or cleanup-capable owner
+  are forbidden in a leaf.
+
+No snapshot moved.
+- **Still open:** host-dispatched callbacks and lazy first-read getters.
+
 ## A constructor's option getters run at the call (2026-10-07)
 
 ADR 0225. Two contract protocol words state that a call copies argument N's

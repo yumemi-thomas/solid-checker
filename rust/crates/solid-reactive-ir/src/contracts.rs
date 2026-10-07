@@ -504,6 +504,20 @@ fn projected_execution(operation: &crate::contract_semantics::Operation) -> Opti
     }
 }
 
+/// ADR 0226: whether `operation` is stated to run after the call returns:
+/// queued or external, at an event other than the call, or triggered by a
+/// resource. An operation with unstated timing, or one another operation
+/// triggers on the same stack, is not.
+fn operation_runs_after_the_call(operation: &crate::contract_semantics::Operation) -> bool {
+    use crate::contract_semantics::{Event, Schedule, Trigger};
+    matches!(
+        operation.schedule,
+        Some(Schedule::Queued | Schedule::External)
+    ) || operation.at.is_some_and(|event| event != Event::Call)
+        || matches!(operation.trigger, Some(Trigger::Event(event)) if event != Event::Call)
+        || matches!(operation.trigger, Some(Trigger::Resource { .. }))
+}
+
 fn project_reactive_reads(
     export: &crate::contract_semantics::ExportSemantics,
     open: &mut BTreeSet<ClaimDomain>,
@@ -520,6 +534,14 @@ fn project_reactive_reads(
             open.insert(ClaimDomain::Reads);
             continue;
         };
+        // ADR 0226: a read the contract states happens later -- on a native
+        // event, in a queued or deferred callback, at result access -- is not
+        // a read during this call. It stays a known item of the domain, so a
+        // closed `reads` still means nothing else is read, but it is not
+        // attributed to the call. A read with unstated timing still is.
+        if operation_runs_after_the_call(operation) {
+            continue;
+        }
         match operation.inputs.first() {
             // Carry the whole path back. Keeping only `path.last()` would
             // round-trip an accepted `["modifiers", "includes"]` down into a
@@ -943,6 +965,21 @@ fn project_guaranteed_callback_parameters(
 /// the missing-owner question and reads the count alone: a leaf owner forbids
 /// a registration *while it is current*, so the registration must happen in
 /// the call's own synchronous extent, against the owner the caller has.
+/// ADR 0179 and 0226: whether a leaf owner forbids `operation` at its call.
+/// A leaf accepts neither child owners nor cleanups, so an operation that
+/// needs either from the owner present at the call is forbidden there,
+/// whether or not it also requires an owner to exist.
+fn leaf_forbids(operation: &crate::contract_semantics::Operation) -> bool {
+    use crate::contract_semantics::{OwnerSource, Requirement};
+    if matches!(operation.owner.source, OwnerSource::Created(_)) {
+        return false;
+    }
+    let requirements = &operation.owner.requirements;
+    operation.imposes_owner_requirement()
+        || requirements.child_owners == Requirement::Required
+        || requirements.cleanup == Requirement::Required
+}
+
 fn project_leaf_forbidden_operations(
     export: &crate::contract_semantics::ExportSemantics,
 ) -> Vec<ContractOwnerRequirement> {
@@ -963,7 +1000,10 @@ fn project_leaf_forbidden_operations(
         {
             // ADR 0223: a guarded registration travels with its guard; the
             // leaf rule reports it only where the guard holds at the call.
-            if !(operation.imposes_owner_requirement()
+            // ADR 0226: an operation that tolerates no owner but needs a
+            // present one to accept children or cleanups (`createMemo` with
+            // an optional owner, `tryOnCleanup`) is forbidden in a leaf too.
+            if !(leaf_forbids(operation)
                 && operation.owner.source == OwnerSource::AmbientAtCall
                 && operation.trigger == Some(Trigger::Event(Event::Call))
                 && operation.at == Some(Event::Call)
@@ -1186,6 +1226,18 @@ mod owner_requirement_projection_tests {
             project(vec![deferred]).is_empty(),
             "not on the call's stack"
         );
+        // ADR 0226: no owner needed, but a present one must accept children
+        // (`createMemo` with an optional owner): a leaf forbids it.
+        let mut optional = requiring("compute", OperationKind::Compute, 1);
+        optional.owner.requirements.owner = Requirement::Unconstrained;
+        optional.owner.requirements.child_owners = Requirement::Required;
+        assert_eq!(
+            project(vec![optional.clone()]),
+            vec![OwnerRequirementOperation::Effect]
+        );
+        // Neither children nor cleanups needed, and no owner required.
+        optional.owner.requirements.child_owners = Requirement::Unconstrained;
+        assert!(project(vec![optional]).is_empty(), "nothing a leaf forbids");
     }
 
     #[test]

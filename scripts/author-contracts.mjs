@@ -58,12 +58,34 @@ const read = path => JSON.parse(readFileSync(path, "utf8"));
 const [command, ...rest] = process.argv.slice(2);
 const option = name => { const index = rest.indexOf(name); return index >= 0 ? rest[index + 1] : undefined; };
 
+/**
+ * ADR 0226: an authored contract may close a domain only with a citation of
+ * the installed source showing that export's complete behavior in it. Each
+ * domain in `call.closed` needs a `closures[domain]` entry naming a file and
+ * lines; a citation without a closed domain is refused too, so the two cannot
+ * drift apart. `closures` is spec metadata and never enters the document.
+ */
+function validateClosures(where, claim) {
+  const closed = claim.call?.closed ?? [];
+  const closures = claim.closures ?? {};
+  for (const domain of closed) {
+    const citation = closures[domain];
+    assert(typeof citation === "string" && /\S+:\d+/.test(citation),
+      `${where}: closed domain ${domain} needs a closures citation of the installed source (file:line)`);
+  }
+  for (const domain of Object.keys(closures))
+    assert(closed.includes(domain), `${where}: closures cites ${domain}, which the call does not close`);
+}
+
 // A directory whose name starts with `_` holds probe pairs that several specs
 // share (`"pairs"` in spec.json, relative to the spec); it is not a spec.
 const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("_")).sort().map(name => {
   const directory = join(TIER, "specs", name);
   const spec = read(join(directory, "spec.json"));
-  for (const claim of Object.values(spec.exports)) validatePropertyGets(claim.call);
+  for (const [name, claim] of Object.entries(spec.exports)) {
+    validatePropertyGets(claim.call);
+    validateClosures(`${spec.package}@${spec.version}#${name}`, claim);
+  }
   // ADR 0208: a spec about one patched install is named for its patch.
   const base = `${spec.package.replace("/", "+")}@${spec.version}`;
   assert.equal(name, spec.patchedInstall ? `${base}+${spec.patchedInstall.label}` : base, `${name}: directory names another version`);
