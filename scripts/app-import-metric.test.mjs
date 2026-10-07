@@ -85,6 +85,21 @@ test("a collapsed acceptance-gate finding is attributed per site from the bytes"
   assert.deepEqual(partial.sites.map(site => site.export), ["?"]);
 });
 
+test("open claims grouped over several exports are attributed per site from the bytes", () => {
+  const grouped = {
+    id: "SC9005",
+    analysisContext: "unknown-contract-claims:returns",
+    message: "the reactivity contract for m leaves returns unknown for 2 imported exports: a, e; " +
+      "code whose proof depends on those claims cannot be certified (3 import sites)",
+    primaryLocation: span("a", 1),
+    relatedLocations: [span("e"), span("d")]
+  };
+  const { gate, sites } = sitesOf(grouped, readSource);
+  assert.equal(gate, "open claims");
+  // `d` is not a listed name, so its export is not settled by the bytes.
+  assert.deepEqual(sites.map(site => `${site.module}:${site.export}`), ["m:a", "m:e", "m:?"]);
+});
+
 test("gates are read from the analysis context, not the sentence", () => {
   const missing = {
     id: "SC9005",

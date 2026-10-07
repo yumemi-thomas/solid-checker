@@ -10,16 +10,6 @@
       "start": 21,
       "end": 35,
       "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-argument-container-consumer/App.tsx",
-      "start": 46,
-      "end": 57,
-      "fixes": 0
     }
   ]
 }

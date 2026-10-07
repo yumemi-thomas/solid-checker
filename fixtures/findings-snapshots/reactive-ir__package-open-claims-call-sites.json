@@ -12,16 +12,6 @@
       "fixes": 0
     },
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-open-claims-call-sites/App.ts",
-      "start": 692,
-      "end": 716,
-      "fixes": 0
-    },
-    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

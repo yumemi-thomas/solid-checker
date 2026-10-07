@@ -853,9 +853,16 @@ pub fn suppress_findings_owned_by_enabled_rules(
 /// 7): admitting a partly closed contract for `@solid-primitives/form` turned
 /// its one acceptance-gate finding into 31 per-call warnings, so a project
 /// that got strictly better reported more. They now group per
-/// `(package, export, open domains)` for the project, anchored at the first
-/// site in `(path, start, end)` order, with the rest in `related_locations`
-/// and the count in the message.
+/// `(package, open domains)` for the project, anchored at the first site in
+/// `(path, start, end)` order, with the rest in `related_locations` and the
+/// count in the message.
+///
+/// **Open claims at imports group the same way** (ADR 0224). Accepting the
+/// Solid Primitives contracts turned one acceptance-gate notice per package
+/// into one per used export: the rc.13 corpus went from 675 to 741 `SC9005`
+/// rows while its answers only improved. The fix is still the package's
+/// contract, once, so every export with the same open domains shares one
+/// finding, and a group of several exports names them in its message.
 ///
 /// What still keeps its own finding at an argument is everything whose fix is
 /// *at that call*: an unbound claim (`unbound-contract-claims:` — pass the
@@ -888,9 +895,63 @@ fn collapse_unaccepted_contract_defects(
         /// for this exact export. Different exports, and different open
         /// domains, are different findings.
         Claim(&'a str, &'a str, &'a str),
+        /// Open claims at imports: an accepted contract leaves these exact
+        /// domains open, for one or more of the package's exports. The fix is
+        /// the package's contract, once, so the exports share one finding.
+        OpenClaims(&'a str, &'a str),
         /// Open claims at call arguments: an accepted contract leaves these
-        /// exact domains open for this exact export, observed at a call.
-        CallClaim(&'a str, &'a str, &'a str),
+        /// exact domains open, for one or more exports, observed at calls.
+        CallClaim(&'a str, &'a str),
+    }
+
+    /// The exports a group names, sorted and distinct.
+    fn group_exports<'d>(group: &[&'d StaticDefect]) -> Vec<&'d str> {
+        let mut exports = group
+            .iter()
+            .filter_map(|defect| match &defect.kind {
+                StaticDefectKind::PackageContractExportMissing { export, .. } => {
+                    Some(export.as_str())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        exports.sort_unstable();
+        exports.dedup();
+        exports
+    }
+
+    /// "A, B, C, and 2 more": at most six names.
+    fn listed(exports: &[&str]) -> String {
+        let named = exports.len().min(6);
+        let remainder = exports.len() - named;
+        let mut listed = exports[..named].join(", ");
+        if remainder > 0 {
+            listed.push_str(&format!(", and {remainder} more"));
+        }
+        listed
+    }
+
+    /// The sentence for open claims shared by several exports, in the single
+    /// export's wording with the exports listed instead of one name.
+    fn open_claims_message(
+        module: &str,
+        context: &str,
+        exports: &[&str],
+        sites: usize,
+        site_noun: &str,
+        domain_noun: &str,
+    ) -> String {
+        let domains = context
+            .strip_prefix("unknown-contract-claims:")
+            .unwrap_or(context);
+        format!(
+            "the reactivity contract for {module} leaves {domains} unknown for {} {domain_noun} \
+             exports: {}; code whose proof depends on those claims cannot be certified \
+             ({sites} {site_noun}{})",
+            exports.len(),
+            listed(exports),
+            if sites == 1 { "" } else { "s" },
+        )
     }
 
     fn interchangeable(defect: &StaticDefect) -> Option<Interchangeable<'_>> {
@@ -914,7 +975,6 @@ fn collapse_unaccepted_contract_defects(
                 .starts_with("unknown-contract-claims:")
                 .then_some(Interchangeable::CallClaim(
                     module.as_str(),
-                    export.as_str(),
                     defect.analysis_context.as_str(),
                 ));
         }
@@ -925,6 +985,13 @@ fn collapse_unaccepted_contract_defects(
         Some(
             if defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT {
                 Interchangeable::Package(module.as_str())
+            } else if defect
+                .analysis_context
+                .starts_with("unknown-contract-claims:")
+            {
+                // The fix is the same for every export the contract leaves
+                // these domains open on: complete the package's contract.
+                Interchangeable::OpenClaims(module.as_str(), defect.analysis_context.as_str())
             } else {
                 Interchangeable::Claim(
                     module.as_str(),
@@ -977,16 +1044,52 @@ fn collapse_unaccepted_contract_defects(
             sites.dedup_by(|left, right| left.location == right.location);
             let mut finding = project_finding(FindingSeed::StaticDefect(sites[0]), catalog);
             finding.subject_kind = "package-export".into();
-            if sites.len() > 1 {
+            let exports = group_exports(&sites);
+            if exports.len() > 1 {
+                let Interchangeable::CallClaim(module, context) = key else {
+                    unreachable!("matched above")
+                };
+                finding.subject_kind = "package".into();
+                finding.message = open_claims_message(
+                    module,
+                    context,
+                    &exports,
+                    sites.len(),
+                    "call site",
+                    "called",
+                );
+            } else if sites.len() > 1 {
                 finding.message = format!("{} ({} call sites)", finding.message, sites.len());
-                finding
-                    .related_locations
-                    .extend(sites[1..].iter().map(|defect| defect.location.clone()));
             }
+            finding
+                .related_locations
+                .extend(sites[1..].iter().map(|defect| defect.location.clone()));
             findings.push(finding);
             continue;
         }
         let mut finding = project_finding(FindingSeed::StaticDefect(group[0]), catalog);
+        if let Interchangeable::OpenClaims(module, context) = key {
+            let exports = group_exports(group);
+            finding.subject_kind = "package-export".into();
+            if exports.len() > 1 {
+                finding.subject_kind = "package".into();
+                finding.message = open_claims_message(
+                    module,
+                    context,
+                    &exports,
+                    group.len(),
+                    "import site",
+                    "imported",
+                );
+            } else if group.len() > 1 {
+                finding.message = format!("{} ({} import sites)", finding.message, group.len());
+            }
+            finding
+                .related_locations
+                .extend(group[1..].iter().map(|defect| defect.location.clone()));
+            findings.push(finding);
+            continue;
+        }
         let Interchangeable::Package(module) = key else {
             // A claim group keeps the message it already has -- it names the
             // package, the export and the open domains, which is the whole
@@ -1478,12 +1581,12 @@ mod tests {
 
     /// Kobalte defect 7: open claims at call arguments were one warning per
     /// argument. Two exports, three call sites each, spread over two files and
-    /// supplied out of order, become one warning per export, anchored at the
-    /// first site in `(path, start)` order, with the other two in
-    /// `related_locations` and the count in the message. An unbound claim at
-    /// the same arguments keeps its own finding per call.
+    /// supplied out of order, become one warning for the package (ADR 0224),
+    /// anchored at the first site in `(path, start)` order, with the other
+    /// five in `related_locations`, the exports and the count in the message.
+    /// An unbound claim at the same arguments keeps its own finding per call.
     #[test]
-    fn open_claims_at_call_arguments_collapse_per_export_across_files() {
+    fn open_claims_at_call_arguments_collapse_per_package_across_files() {
         let at = |export: &str, path: &str, start: u64, context: &str| StaticDefect {
             kind: StaticDefectKind::PackageContractExportMissing {
                 module: "pkg".into(),
@@ -1546,29 +1649,32 @@ mod tests {
         let (open_findings, unbound): (Vec<_>, Vec<_>) = forward
             .drain(..)
             .partition(|finding| finding.analysis_context == open);
-        assert_eq!(open_findings.len(), 2, "one finding per export");
-        let first = open_findings
-            .iter()
-            .find(|finding| finding.primary_location.start_byte == 10)
-            .expect("first is anchored at a.tsx:10");
         assert_eq!(
-            sites(first),
-            [site("a.tsx", 10), site("a.tsx", 40), site("b.tsx", 20)]
+            open_findings.len(),
+            1,
+            "one finding per package and open domains, whatever the export"
         );
-        let second = open_findings
-            .iter()
-            .find(|finding| finding.primary_location.start_byte == 5)
-            .expect("second is anchored at a.tsx:5");
+        let group = &open_findings[0];
         assert_eq!(
-            sites(second),
-            [site("a.tsx", 5), site("b.tsx", 7), site("b.tsx", 30)]
+            sites(group),
+            [
+                site("a.tsx", 5),
+                site("a.tsx", 10),
+                site("a.tsx", 40),
+                site("b.tsx", 7),
+                site("b.tsx", 20),
+                site("b.tsx", 30)
+            ]
         );
-        for finding in &open_findings {
-            assert_eq!(finding.message, "contract (3 call sites)");
-            assert_eq!(finding.severity, "warning");
-            assert_eq!(finding.kind, "uncertifiable");
-            assert_eq!(finding.subject_kind, "package-export");
-        }
+        assert_eq!(
+            group.message,
+            "the reactivity contract for pkg leaves callbacks unknown for 2 called exports: \
+             first, second; code whose proof depends on those claims cannot be certified (6 call \
+             sites)"
+        );
+        assert_eq!(group.severity, "warning");
+        assert_eq!(group.kind, "uncertifiable");
+        assert_eq!(group.subject_kind, "package");
         // An unbound claim is about its call: one finding per site, unchanged.
         assert_eq!(
             unbound.iter().map(sites).collect::<Vec<_>>(),

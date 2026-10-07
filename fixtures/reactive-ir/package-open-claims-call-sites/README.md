@@ -1,8 +1,9 @@
-# Open claims at call arguments, collapsed per export
+# Open claims at call arguments, collapsed per package
 
 Pins the collapse of open-claims `SC9005` raised at **call arguments**
 (`unknown-contract-claims:callbacks`, a warning since ADR 0119): one finding per
-`(package, export, open domains)` for the project, not one per call.
+`(package, open domains)` for the project (ADR 0224), not one per call or
+per export.
 
 The accepted contract leaves `callbacks` open for `runFirst` and `runSecond`
 and closes it, empty, for `runClosed`. Every callable argument of an export
@@ -15,20 +16,20 @@ into 31 warnings when a partly closed contract was admitted.
 
 | export | call sites | findings before | after |
 | --- | --- | ---: | ---: |
-| `runFirst` | `App.ts` x2, `Other.ts` x1 | 3 | 1, anchored at `App.ts`'s first call |
-| `runSecond` | `App.ts` x1, `Other.ts` x2 | 3 | 1, anchored at `App.ts`'s call |
+| `runFirst`, `runSecond` | `App.ts` x3, `Other.ts` x3 | 6 | 1, anchored at `App.ts`'s first call |
 | `runClosed` | `App.ts` x1 | 0 | 0, the control |
 
-Each surviving finding carries its other two sites in `relatedLocations`, says
-"(3 call sites)", keeps `severity: warning` and `kind: uncertifiable`, and names
-its subject as `subjectKind: "package-export"`, which is what makes the ESLint
-adapter report it in `Other.ts` too. This snapshot format records neither
-related locations nor messages, so what it pins is the count and the anchors;
-the grouping, order and wording are pinned by
-`projection::tests::open_claims_at_call_arguments_collapse_per_export_across_files`.
+The surviving finding carries the other five sites in `relatedLocations`,
+names both exports and says "(6 call sites)". It keeps `severity: warning`
+and `kind: uncertifiable`, and names its subject as `subjectKind: "package"`,
+which is what makes the ESLint adapter report it in `Other.ts` too. This
+snapshot format records neither related locations nor messages, so what it
+pins is the count and the anchor; the grouping, order and wording are pinned
+by `projection::tests::open_claims_at_call_arguments_collapse_per_package_across_files`.
 
-Two exports stay two findings: the export is part of the key, because closing
-`runFirst`'s domain does nothing for `runSecond`.
+Two exports share one finding: closing `runFirst`'s domain does nothing for
+`runSecond`, but both are fixed in the same place, the package's contract,
+and the message names each of them.
 
 `Other.ts` reaches the exports through `App.ts`'s re-export because an
 authorized fixture's receipt binds exactly one importer

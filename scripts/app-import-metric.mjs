@@ -142,6 +142,10 @@ const PER_EXPORT = [
   /the reactivity contract for (\S+) has different certified behavior for conditional runtime targets at (?:imported|re-exported) export (\S+?);/
 ];
 const COLLAPSED = /this project has no accepted reactivity contract for (\S+?);/;
+// ADR 0224: open claims shared by several exports are one finding per
+// package, listing the exports. Each site's bytes are the export's name at an
+// import or call; a site whose text is not a listed name stays "?".
+const OPEN_CLAIMS_GROUP = /the reactivity contract for (\S+) leaves .+? unknown for \d+ (?:imported|called) exports: (.+?); code whose proof/;
 const CALLBACK_EXECUTION = /callback parameter \d+ \(.*?\) of (.+?):([^\s:]+) reaches a call whose execution timing is unknown/;
 const ENVIRONMENT_DEPENDENT = /has different certified behavior for conditional runtime targets/;
 
@@ -228,6 +232,20 @@ export function sitesOf(finding, readSource) {
   for (const pattern of PER_EXPORT) {
     const match = pattern.exec(message);
     if (match) return { gate, sites: locations.map(location => ({ module: match[1], export: match[2], path: location.path })) };
+  }
+  const group = OPEN_CLAIMS_GROUP.exec(message);
+  if (group) {
+    const listed = new Set(group[2].replace(/, and \d+ more$/, "").split(", "));
+    return {
+      gate,
+      sites: locations.map(location => {
+        const data = location.path ? readSource(location.path) : null;
+        const text = data && location.startByte != null && location.endByte != null
+          ? data.subarray(location.startByte, location.endByte).toString("utf8")
+          : null;
+        return { module: group[1], export: text && listed.has(text) ? text : "?", path: location.path };
+      })
+    };
   }
   const collapsed = COLLAPSED.exec(message);
   if (!collapsed) return { gate: "unrecognized", sites: locations.map(location => ({ module: "?", export: "?", path: location.path })) };

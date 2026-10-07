@@ -1,5 +1,13 @@
 # Precision backlog
 
+## Open contract claims are one notice per package (2026-10-07)
+
+ADR 0224. Open-claims `SC9005` at imports and call arguments group per
+`(package, open domains)`, naming the exports, instead of one notice per
+export. The rc.13 corpus went from 741 to 648 rows, with no violation moved.
+Per-export gates (missing summary, unbound claims, argument shape, runtime
+identity) are unchanged.
+
 ## Solid Primitives enter the authored tier (2026-10-07)
 
 ADR 0223. Nine `@solid-primitives` specs, each claim probed in Chrome on
