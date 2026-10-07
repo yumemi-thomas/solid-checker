@@ -10,7 +10,7 @@
 //   bun scripts/primitives-checkpoint.mjs --print-probes    probe ids, one per line
 //   bun scripts/primitives-checkpoint.mjs --measure <run.json> --json <out> [--clean-retained]
 //                                        one host's certification, measured
-//   bun scripts/primitives-checkpoint.mjs --misuse --json <out> [--case <id>]...
+//   bun scripts/primitives-checkpoint.mjs --misuse --json <out> [--case <id>]... [--package <name>]... [--concurrency <n>]
 //                                        network: evaluate the misuse ledger
 //   bun scripts/primitives-checkpoint.mjs --report <measure.json,...> [--misuse-results <json>]
 //                                        [--json <out>] [--markdown <out>]
@@ -71,7 +71,9 @@
 // weakened it, so a path from it is a path the export *has*, even while the
 // accepted summary cannot say so yet.
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { availableParallelism } from "node:os";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -660,60 +662,106 @@ export function misuseVerdict({ rule, kind = "violation", tsc, misuseFindings, c
   return { status: "reports correctly", detail: null };
 }
 
-async function evaluateMisuse({ ledger, corpus, only, checker, typefacts }) {
+async function evaluateMisuse({ ledger, corpus, only, packages = [], concurrency = defaultConcurrency(), checker, typefacts }) {
   const { oracleCompilerOptions } = await import("./tsc-oracle.mjs");
   const ts = loadTypeScript();
-  const results = [];
   const work = join(root, "rust/target/primitives-checkpoint/misuse");
-  for (const entry of ledger.cases ?? []) {
-    if (only.length && !only.includes(entry.id)) continue;
-    const pinned = corpus.packages.find(candidate => candidate.package === entry.package);
-    const dir = join(work, entry.id.replace(/[^A-Za-z0-9._-]/g, "_"));
-    mkdirSync(dir, { recursive: true });
-    // The head probe's install, as the benchmark makes it: the package, the
-    // pinned solid-js, the matching @solidjs/web, and @solidjs/signals held at
-    // the same release, so the tier's recorded environment can reproduce.
-    const solid = pinned?.solid?.["solid-js"] ?? null;
-    if (!solid) {
-      results.push({ id: entry.id, package: entry.package, export: entry.export, hosts: {}, error: "the corpus entry pins no solid-js" });
-      continue;
+  const entries = (ledger.cases ?? []).filter(entry => (!only.length || only.includes(entry.id)) && (!packages.length || packages.includes(entry.package)));
+  const results = new Array(entries.length);
+  let next = 0;
+  // Cases are independent, so they run `concurrency` at a time; results keep
+  // ledger order.
+  const worker = async () => {
+    while (next < entries.length) {
+      const index = next++;
+      results[index] = await evaluateMisuseCase({ entry: entries[index], corpus, work, ts, oracleCompilerOptions, checker, typefacts });
     }
-    const dependencies = { [entry.package]: entry.version, "solid-js": solid, "@solidjs/web": pinned.solid["@solidjs/web"] ?? solid };
-    const manifest = { name: "primitives-misuse-case", private: true, type: "module", overrides: { "@solidjs/signals": solid }, dependencies };
-    writeFileSync(join(dir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-    const install = spawnSync("bun", ["install", "--no-summary"], { cwd: dir, encoding: "utf8" });
-    if (install.status !== 0) {
-      results.push({ id: entry.id, package: entry.package, export: entry.export, hosts: {}, error: `bun install failed: ${install.stderr.slice(0, 300)}` });
-      continue;
-    }
-    const options = oracleCompilerOptions("v2", true);
-    const tsc = {};
-    for (const part of ["misuse", "correct"]) {
-      writeFileSync(join(dir, `${part}.tsx`), entry[part].endsWith("\n") ? entry[part] : `${entry[part]}\n`);
-      writeFileSync(join(dir, `tsconfig.${part}.json`), `${JSON.stringify({ compilerOptions: options, files: [`${part}.tsx`] }, null, 2)}\n`);
-      const converted = ts.convertCompilerOptionsFromJson(options, dir);
-      const program = ts.createProgram([join(dir, `${part}.tsx`)], converted.options);
-      tsc[part] = ts
-        .getPreEmitDiagnostics(program)
-        .filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)
-        .map(diagnostic => diagnostic.code);
-    }
-    const hosts = {};
-    for (const host of entry.hosts) {
-      const findings = {};
-      for (const part of ["misuse", "correct"]) {
-        const output = execFileSync(
-          checker,
-          ["--format", "json", "--project", join(dir, `tsconfig.${part}.json`), ...(host === "none" ? [] : ["--runtime-target", host])],
-          { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, env: { ...process.env, SOLID_TYPEFACTS_BIN: typefacts } }
-        );
-        findings[part] = (JSON.parse(output).findings ?? []).map(finding => ({ rule: finding.rule, kind: finding.kind }));
-      }
-      hosts[host] = { ...misuseVerdict({ rule: entry.rule, kind: entry.kind, tsc, misuseFindings: findings.misuse, correctFindings: findings.correct }), findings };
-    }
-    results.push({ id: entry.id, package: entry.package, entrypoint: entry.entrypoint ?? ".", export: entry.export, class: entry.class, rule: entry.rule, kind: entry.kind ?? "violation", tsc, hosts });
-  }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, concurrency) }, worker));
   return { format: "solid-checker-primitives-misuse-results", version: 1, results };
+}
+
+function defaultConcurrency() {
+  return Math.max(1, Math.min(8, Math.floor(availableParallelism() / 2)));
+}
+
+function runProcess(command, args, options) {
+  return new Promise(resolvePromise => {
+    execFile(command, args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, ...options }, (error, stdout, stderr) =>
+      resolvePromise({ status: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout, stderr: stderr || (error?.message ?? "") })
+    );
+  });
+}
+
+async function evaluateMisuseCase({ entry, corpus, work, ts, oracleCompilerOptions, checker, typefacts }) {
+  const pinned = corpus.packages.find(candidate => candidate.package === entry.package);
+  const dir = join(work, entry.id.replace(/[^A-Za-z0-9._-]/g, "_"));
+  mkdirSync(dir, { recursive: true });
+  // The head probe's install, as the benchmark makes it: the package, the
+  // pinned solid-js, the matching @solidjs/web, and @solidjs/signals held at
+  // the same release, so the tier's recorded environment can reproduce.
+  const solid = pinned?.solid?.["solid-js"] ?? null;
+  if (!solid) return { id: entry.id, package: entry.package, export: entry.export, hosts: {}, error: "the corpus entry pins no solid-js" };
+  const dependencies = { [entry.package]: entry.version, "solid-js": solid, "@solidjs/web": pinned.solid["@solidjs/web"] ?? solid };
+  const manifest = `${JSON.stringify({ name: "primitives-misuse-case", private: true, type: "module", overrides: { "@solidjs/signals": solid }, dependencies }, null, 2)}\n`;
+  const manifestPath = join(dir, "package.json");
+  const lockPath = join(dir, "bun.lock");
+  // An unchanged manifest over a finished install needs no new install.
+  const installed = existsSync(manifestPath) && readFileSync(manifestPath, "utf8") === manifest && existsSync(lockPath) && existsSync(join(dir, "node_modules"));
+  if (!installed) {
+    writeFileSync(manifestPath, manifest);
+    const install = await runProcess("bun", ["install", "--no-summary"], { cwd: dir });
+    if (install.status !== 0) return { id: entry.id, package: entry.package, export: entry.export, hosts: {}, error: `bun install failed: ${install.stderr.slice(0, 300)}` };
+  }
+  const options = oracleCompilerOptions("v2", true);
+  // tsc's answer depends on the twin, the compiler options, the TypeScript
+  // release and the installed typings (pinned by the lockfile), never on the
+  // checker, so it is cached under a digest of exactly those.
+  const cachePath = join(dir, "tsc-cache.json");
+  const cache = existsSync(cachePath) ? JSON.parse(readFileSync(cachePath, "utf8")) : {};
+  const tsc = {};
+  for (const part of ["misuse", "correct"]) {
+    const source = entry[part].endsWith("\n") ? entry[part] : `${entry[part]}\n`;
+    writeFileSync(join(dir, `${part}.tsx`), source);
+    writeFileSync(join(dir, `tsconfig.${part}.json`), `${JSON.stringify({ compilerOptions: options, files: [`${part}.tsx`] }, null, 2)}\n`);
+    const key = createHash("sha256").update(JSON.stringify([source, options, ts.version, manifest, readFileSync(lockPath, "utf8")])).digest("hex");
+    if (cache[part]?.key === key) {
+      tsc[part] = cache[part].codes;
+      continue;
+    }
+    const converted = ts.convertCompilerOptionsFromJson(options, dir);
+    const program = ts.createProgram([join(dir, `${part}.tsx`)], converted.options);
+    tsc[part] = ts
+      .getPreEmitDiagnostics(program)
+      .filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)
+      .map(diagnostic => diagnostic.code);
+    cache[part] = { key, codes: tsc[part] };
+  }
+  writeFileSync(cachePath, `${JSON.stringify(cache)}\n`);
+  const runs = entry.hosts.flatMap(host => ["misuse", "correct"].map(part => ({ host, part })));
+  const outputs = await Promise.all(
+    runs.map(({ host, part }) =>
+      runProcess(checker, ["--format", "json", "--project", join(dir, `tsconfig.${part}.json`), ...(host === "none" ? [] : ["--runtime-target", host])], {
+        env: { ...process.env, SOLID_TYPEFACTS_BIN: typefacts },
+      })
+    )
+  );
+  const hosts = {};
+  for (const host of entry.hosts) {
+    const findings = {};
+    for (const part of ["misuse", "correct"]) {
+      const output = outputs[runs.findIndex(run => run.host === host && run.part === part)];
+      let report;
+      try {
+        report = JSON.parse(output.stdout);
+      } catch {
+        return { id: entry.id, package: entry.package, export: entry.export, hosts: {}, error: `checker failed (${host}, ${part}, exit ${output.status}): ${output.stderr.slice(0, 300)}` };
+      }
+      findings[part] = (report.findings ?? []).map(finding => ({ rule: finding.rule, kind: finding.kind }));
+    }
+    hosts[host] = { ...misuseVerdict({ rule: entry.rule, kind: entry.kind, tsc, misuseFindings: findings.misuse, correctFindings: findings.correct }), findings };
+  }
+  return { id: entry.id, package: entry.package, entrypoint: entry.entrypoint ?? ".", export: entry.export, class: entry.class, rule: entry.rule, kind: entry.kind ?? "violation", tsc, hosts };
 }
 
 // ---------------------------------------------------------------------------
@@ -957,7 +1005,7 @@ export function renderMarkdown(result) {
 // ---------------------------------------------------------------------------
 
 function parseArguments(argv) {
-  const options = { select: false, branch: true, printProbes: false, measure: null, misuse: false, cases: [], report: null, misuseResults: null, json: null, markdown: null, cleanRetained: false, corpus: CORPUS_PATH };
+  const options = { select: false, branch: true, printProbes: false, measure: null, misuse: false, cases: [], packages: [], concurrency: null, report: null, misuseResults: null, json: null, markdown: null, cleanRetained: false, corpus: CORPUS_PATH };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--select") options.select = true;
@@ -966,6 +1014,8 @@ function parseArguments(argv) {
     else if (argument === "--measure") options.measure = resolve(argv[++index]);
     else if (argument === "--misuse") options.misuse = true;
     else if (argument === "--case") options.cases.push(argv[++index]);
+    else if (argument === "--package") options.packages.push(argv[++index]);
+    else if (argument === "--concurrency") options.concurrency = Number(argv[++index]);
     else if (argument === "--report") options.report = argv[++index].split(",").map(path => resolve(path));
     else if (argument === "--misuse-results") options.misuseResults = resolve(argv[++index]);
     else if (argument === "--json") options.json = resolve(argv[++index]);
@@ -1033,7 +1083,7 @@ async function main() {
     if (!checker || !existsSync(checker) || !typefacts || !existsSync(typefacts)) {
       fail("--misuse needs SOLID_CHECKER_NATIVE_BIN and SOLID_TYPEFACTS_BIN pointing at real files");
     }
-    const results = await evaluateMisuse({ ledger, corpus, only: options.cases, checker, typefacts });
+    const results = await evaluateMisuse({ ledger, corpus, only: options.cases, packages: options.packages, ...(options.concurrency ? { concurrency: options.concurrency } : {}), checker, typefacts });
     if (options.json) write(options.json, `${JSON.stringify(results, null, 2)}\n`);
     for (const result of results.results) console.log(`${result.id}: ${result.error ?? Object.entries(result.hosts).map(([host, verdict]) => `${host} ${verdict.status}`).join(", ")}`);
     return;
