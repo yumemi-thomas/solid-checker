@@ -337,7 +337,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 186 adds package-own-tracked-read-consumer's hand-stated document,
       // ADR 0239's pin of a tracked read under a created owner.
-      stableMainDocuments: 186,
+      //
+      // 188 adds the hand-stated documents of
+      // package-tracked-optional-callback-consumer and
+      // package-mandatory-first-compute-consumer, ADR 0244's pins.
+      stableMainDocuments: 188,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

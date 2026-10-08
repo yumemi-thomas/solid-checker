@@ -1,5 +1,13 @@
 # Precision backlog
 
+## Tracked callbacks that may not run (2026-10-08)
+
+ADR 0244: an accessor read in a closed, always-tracked, created-owner callback
+slot is tracked even when the callback may not run (`createLazyMemo`). The
+`createBodyCursor` and `capitalize` computes are stated `min: 1`. Remaining
+approximation: the slot identity check misses `(...) satisfies T`, as ADR
+0183's does, so that read stays uncertifiable.
+
 ## Solid Primitives batch 5 (2026-10-08)
 
 ADR 0240: seven specs close reads and creates, and five exports gain claims.

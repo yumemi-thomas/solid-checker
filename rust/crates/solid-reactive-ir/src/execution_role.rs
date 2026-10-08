@@ -2112,6 +2112,43 @@ fn forwarded_tracked_compute_role(
     )
 }
 
+/// The context of an accessor read directly in a synchronous callback
+/// literal whose accepted, closed callback domain describes every use as a
+/// tracked invocation under a created owner. The callback may run zero times
+/// or on resource access: neither changes the context of a read when it runs.
+/// This answer must not establish execution, write legality, or ownership.
+pub(super) fn contract_tracked_accessor_read_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    if discarded_region_contains(file, span) {
+        return None;
+    }
+    let literal = containing_ast_function(&file.ast, span)?;
+    // Suspension, generator resumption, named self-escapes and parameter
+    // defaults need their own execution proof. Keep this slice to arrows.
+    if literal.r#async
+        || literal.generator
+        || literal.kind != solid_facts::ast::FunctionKind::Arrow
+        || !literal.body.contains(span)
+    {
+        return None;
+    }
+    file.ast.arguments_containing(span).find(|(call, index)| {
+        let argument = &call.arguments[*index];
+        !argument.spread
+            && file.ast.peel_ts_sugar_span(argument.span) == literal.span
+            && direct_callback_contains(file, argument.span, span)
+            && lookup.primitive_at_call(file, call.span).is_none()
+            && lookup
+                .callee_symbol(file, call.callee)
+                .is_some_and(|symbol| lookup.contract_callback_reads_are_tracked(symbol, *index))
+            && !attribute_function_within(file, argument.span, span, lookup)
+    })?;
+    Some(ExecutionRole::TrackedJsx)
+}
+
 /// ADR 0183: code directly in a function literal handed, as the whole
 /// argument, to an accepted contract export that states the slot is invoked
 /// on every call, during it, as the tracked compute of an owned computation

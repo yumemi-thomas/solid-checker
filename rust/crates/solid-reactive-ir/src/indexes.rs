@@ -858,6 +858,57 @@ impl<'a> SemanticLookup<'a> {
             .map(|binding| binding.summary.leaf_forbidden_operations.as_slice())
     }
 
+    /// Every use of this exact callback slot is a tracked invocation under
+    /// a created owner. Closure proves the universal context; no lower bound
+    /// or schedule is inferred. This is a read-only consumer proof.
+    pub(super) fn contract_callback_reads_are_tracked(
+        &self,
+        symbol: &str,
+        parameter: usize,
+    ) -> bool {
+        let Some(binding) = self.resolved_contracts.by_symbol.get(symbol) else {
+            return false;
+        };
+        if binding
+            .summary
+            .open_claims
+            .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
+        {
+            return false;
+        }
+        // A returned argument/opaque member can expose this same function
+        // to another invoker. This slice handles a closed accessor return
+        // only; broader result shapes need their own escape/use proof.
+        if binding
+            .summary
+            .open_claims
+            .contains(&crate::contract_semantics::ClaimDomain::Returns)
+            || !binding.summary.returns.known().is_some_and(|returned| {
+                returned.as_ref().is_some_and(|returned| {
+                    returned.kind == "accessor"
+                        && returned.parameter.is_none()
+                        && returned.elements.is_empty()
+                        && returned.properties.is_empty()
+                })
+            })
+        {
+            return false;
+        }
+        let Some(callbacks) = binding.summary.callbacks.known() else {
+            return false;
+        };
+        let mut rows = callbacks
+            .iter()
+            .filter(|row| row.parameter == parameter)
+            .peekable();
+        rows.peek().is_some()
+            && rows.all(|row| {
+                row.invokes_argument()
+                    && row.execution == "tracked"
+                    && row.owner.as_deref() == Some("created")
+            })
+    }
+
     /// ADR 0183: the parameters an accepted contract states are invoked, on
     /// every call and during it, as the tracked compute of an owned
     /// computation the export creates.

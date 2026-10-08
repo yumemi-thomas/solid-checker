@@ -103,6 +103,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
+        "objects/2af01e12eb03557de84895352c0e20e8f00fa83d99e0d63b9c7d1393b6b8ef21.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/2af01e12eb03557de84895352c0e20e8f00fa83d99e0d63b9c7d1393b6b8ef21.json"
+        ),
+    ),
+    (
         "objects/2cc8fe9b03fa1e3d87e084829a025922b836e49230ac2d036548e79436d25d7f.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/2cc8fe9b03fa1e3d87e084829a025922b836e49230ac2d036548e79436d25d7f.json"
@@ -322,18 +328,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/92c698f239d2b07db20f3714724f71ad8c2b6272754948d82164fff1eb799e01.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/92c698f239d2b07db20f3714724f71ad8c2b6272754948d82164fff1eb799e01.json"
-        ),
-    ),
-    (
-        "objects/9501a4d42d66fed583e5629e8a3798dc2695b203b2d8064d21113237422f0dbe.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/authored/objects/9501a4d42d66fed583e5629e8a3798dc2695b203b2d8064d21113237422f0dbe.json"
-        ),
-    ),
-    (
-        "objects/95ce6f8ac38cbe239e55946e2b7845f06a83b6ef423f373dfb165adf425d83ee.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/authored/objects/95ce6f8ac38cbe239e55946e2b7845f06a83b6ef423f373dfb165adf425d83ee.json"
         ),
     ),
     (
@@ -610,6 +604,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/fa6cfa14cba9cf2380cb4ec7f90e08b3693e8f95ed8f654f45faebf83a9dd52c.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/fa6cfa14cba9cf2380cb4ec7f90e08b3693e8f95ed8f654f45faebf83a9dd52c.json"
+        ),
+    ),
+    (
+        "objects/fa7a133b7afb18e782c694aceb42ba42a58af9ca1a8b3a124bd28aa5a1e0fb1a.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/fa7a133b7afb18e782c694aceb42ba42a58af9ca1a8b3a124bd28aa5a1e0fb1a.json"
         ),
     ),
     (

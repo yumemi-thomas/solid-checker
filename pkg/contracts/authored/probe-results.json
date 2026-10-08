@@ -1475,6 +1475,43 @@
       "package": "@solid-primitives/cursor",
       "version": "1.0.0-next.2",
       "export": "createBodyCursor",
+      "label": "first-run",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 11,
+            "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+cursor@1.0.0-next.2",
+      "package": "@solid-primitives/cursor",
+      "version": "1.0.0-next.2",
+      "export": "createBodyCursor",
       "label": "leaf",
       "solidRuntime": [
         {
@@ -9487,6 +9524,43 @@
             "file": "case",
             "line": 6,
             "column": 19
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+signal-builders@1.0.0-next.4",
+      "package": "@solid-primitives/signal-builders",
+      "version": "1.0.0-next.4",
+      "export": "capitalize",
+      "label": "first-run",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 11,
+            "column": 11
           }
         }
       ],

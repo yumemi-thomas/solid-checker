@@ -26,10 +26,10 @@ use std::{
 
 use crate::execution_role::{
     RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
-    control_flow_execution_role, direct_control_flow_body_role, host_callback_timing,
-    missing_jsx_census, named_callback_execution_role, nested_literal_runs_during_body,
-    pending_accessor_probe, read_analysis_context, semantic_execution_role,
-    semantic_write_execution_role,
+    contract_tracked_accessor_read_role, control_flow_execution_role,
+    direct_control_flow_body_role, host_callback_timing, missing_jsx_census,
+    named_callback_execution_role, nested_literal_runs_during_body, pending_accessor_probe,
+    read_analysis_context, semantic_execution_role, semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -1145,6 +1145,16 @@ impl LocalAccessContext<'_, '_> {
                 self.symbol_names,
                 self.lookup,
             );
+            // A universal callback-context proof can certify an accessor
+            // read even when invocation is optional or resource-triggered.
+            // Keep write/action and owner classification on their existing
+            // execution proofs; this override applies only to known accessors.
+            let execution = if self.accessors.contains_key(symbol) {
+                contract_tracked_accessor_read_role(file, call.callee, self.lookup)
+                    .unwrap_or(execution)
+            } else {
+                execution
+            };
             let typed_effect_accessor = execution == ExecutionRole::EffectApply
                 && call.arguments.is_empty()
                 && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee)
