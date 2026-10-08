@@ -3814,6 +3814,7 @@ pub(super) fn allowed_callback_spans(
                     })
                     .collect()
             });
+        let primitive_indices = indices.len();
         if let Some(symbol) = lookup.callee_symbol(file, call.callee) {
             if let Some(callbacks) = lookup.contract_callbacks(symbol) {
                 for callback in &callbacks {
@@ -3847,9 +3848,27 @@ pub(super) fn allowed_callback_spans(
                 }
             }
         }
-        for index in indices {
-            if let Some(argument) = call.arguments.get(index) {
+        for (position, index) in indices.into_iter().enumerate() {
+            let Some(argument) = call.arguments.get(index) else {
+                continue;
+            };
+            // A contract slot states when the callee runs a *function* it
+            // receives, never when the caller evaluates the argument. Only a
+            // function literal delivered as the value is wholly callback
+            // code; any other argument — `overlay()`, `...overlays()`, a
+            // member read — runs in the caller now, and only the functions
+            // written inside it can be the deferred code. Shielding the whole
+            // expression would turn a proven eager read into a callback one.
+            if position < primitive_indices
+                || argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Function
+            {
                 spans.push(argument.span);
+            } else {
+                spans.extend(
+                    file.ast
+                        .functions_within(argument.span)
+                        .map(|function| function.span),
+                );
             }
         }
     }

@@ -1,5 +1,14 @@
 # Precision backlog
 
+## Eager arguments to callback slots (2026-10-08)
+
+ADR 0237: an argument to a contract callback slot (`deferred` or open) is
+deferred only where it is function code. An eager read such as
+`combineProps(props, ...overlays())` in a component body is a proven SC1001
+again. Remaining approximation: the body of an IIFE argument is still treated
+as deferred, which can only under-report.
+Fixture: `fixtures/reactive-ir/package-open-callbacks-eager-argument`.
+
 ## Solid Primitives batch 3 (2026-10-08)
 
 ADR 0236, slice 3a: nine more primitive packages enter the authored tier.

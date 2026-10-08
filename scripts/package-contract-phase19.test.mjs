@@ -331,7 +331,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 184 adds package-effectful-member-consumer's hand-stated document,
       // ADR 0235's pin of an `effectful-callable` member.
-      stableMainDocuments: 184,
+      //
+      // 185 adds package-open-callbacks-eager-argument's hand-stated document,
+      // ADR 0237's pin of an eager argument to an open callback slot.
+      stableMainDocuments: 185,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
