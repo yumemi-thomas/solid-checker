@@ -1350,6 +1350,12 @@ impl CanonicalWriter {
             }
             // ADR 0146. Appended; no document before it carries the tag.
             ValueShape::ReadValue => self.u8(22),
+            // Appended; no old shape or optional-field stream changes.
+            ValueShape::LazyGetterObject { keys, from } => {
+                self.u8(26);
+                self.sequence(keys, |writer, key| writer.text(key));
+                self.option(from.as_ref(), |writer, index| writer.u16(*index));
+            }
             // ADR 0235. Appended; no document before it carries the tag.
             ValueShape::EffectfulCallable(call) => {
                 self.u8(24);

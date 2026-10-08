@@ -18,7 +18,7 @@
             "createWindowSize": "authored-createWindowSize",
             "getElementSize": "open-callable",
             "getWindowSize": "open-callable",
-            "makeResizeObserver": "open-callable",
+            "makeResizeObserver": "authored-makeResizeObserver",
             "useWindowSize": "open-callable"
           },
           "resolution": {
@@ -58,7 +58,7 @@
             },
             "tracking": "untracked",
             "count": {
-              "min": 0,
+              "min": 1,
               "max": 1,
               "scope": "call"
             },
@@ -111,7 +111,7 @@
             },
             "tracking": "untracked",
             "count": {
-              "min": 0,
+              "min": 1,
               "max": 1,
               "scope": "call"
             },
@@ -149,7 +149,7 @@
             },
             "tracking": "tracked",
             "count": {
-              "min": 0,
+              "min": 1,
               "max": 1,
               "scope": "call"
             },
@@ -317,35 +317,12 @@
               "scope": "call"
             },
             "output": {
-              "kind": "object",
-              "closed": [
-                "properties"
-              ],
-              "properties": [
-                {
-                  "name": "width",
-                  "value": {
-                    "kind": "unknown"
-                  }
-                },
-                {
-                  "name": "height",
-                  "value": {
-                    "kind": "unknown"
-                  }
-                },
-                {
-                  "name": "clientWidth",
-                  "value": {
-                    "kind": "unknown"
-                  }
-                },
-                {
-                  "name": "clientHeight",
-                  "value": {
-                    "kind": "unknown"
-                  }
-                }
+              "kind": "lazy-getter-object",
+              "keys": [
+                "width",
+                "height",
+                "clientWidth",
+                "clientHeight"
               ]
             }
           }
@@ -418,7 +395,7 @@
             },
             "tracking": "untracked",
             "count": {
-              "min": 0,
+              "min": 1,
               "max": 1,
               "scope": "call"
             },
@@ -440,7 +417,7 @@
             },
             "tracking": "untracked",
             "count": {
-              "min": 0,
+              "min": 1,
               "max": 1,
               "scope": "call"
             },
@@ -660,6 +637,115 @@
     },
     "open-callable": {
       "call": {},
+      "shape": "callable"
+    },
+    "authored-makeResizeObserver": {
+      "call": {
+        "operations": [
+          {
+            "id": "observer-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "resize-callback",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "observe",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "unobserve",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "resize-callback"
+          }
+        ],
+        "cleanups": [
+          "observer-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": []
+      },
       "shape": "callable"
     }
   }

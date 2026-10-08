@@ -1077,6 +1077,19 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 return Err("a relational return requires a parameter only");
             }
         }
+        crate::contracts::LAZY_GETTER_OBJECT => {
+            if !returned.label.is_empty()
+                || !returned.elements.is_empty()
+                || returned.parameter.is_some() != returned.properties.is_empty()
+            {
+                return Err("lazy getters require exact keys or an argument index only");
+            }
+            if returned.properties.keys().any(|key| {
+                key.is_empty() || crate::contract_semantics::lazy_getter_cache_key_is_reserved(key)
+            }) {
+                return Err("invalid lazy getter cache key");
+            }
+        }
         // ADR 0234: an opaque member of a returned tuple or object.
         crate::contracts::OPAQUE_MEMBER => {
             if !returned.label.is_empty()

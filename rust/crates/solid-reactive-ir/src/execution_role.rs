@@ -25,6 +25,65 @@ use crate::owners::{
     returned_callback_invocation_sites, returned_primitive_invocation,
 };
 
+/// Invocation capability, distinct from lifecycle owner/cleanup capability.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ObserverPresence {
+    Present,
+    Absent,
+    Unknown,
+}
+
+/// Do not use a helper's inferred call sites as proof of lazy-cache state.
+/// A direct tracked compute or compiler-censused JSX establishes presence;
+/// broader owner, deferred, getter and wrapper contexts remain unknown.
+pub(crate) fn observer_presence_at(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> ObserverPresence {
+    let role = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
+    if role == ExecutionRole::TrackedJsx {
+        let jsx = file.compiler.tracked_regions.iter().any(|region| {
+            region.span.contains(span)
+                && !attribute_function_within(file, region.span, span, lookup)
+        });
+        let compute = file.ast.arguments_containing(span).any(|(call, index)| {
+            call_primitive_name(file, call, entities, symbol_names, lookup.dialect)
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| {
+                    callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                        && lookup
+                            .dialect
+                            .callback_semantics_at(primitive, index, call.arguments.len())
+                            .tracks_reads
+                        && direct_callback_contains(file, call.arguments[index].span, span)
+                })
+        });
+        return if jsx || compute {
+            ObserverPresence::Present
+        } else {
+            ObserverPresence::Unknown
+        };
+    }
+    if matches!(
+        role,
+        ExecutionRole::UntrackedRendering
+            | ExecutionRole::ModuleInitialization
+            | ExecutionRole::EffectApply
+            | ExecutionRole::EventCallback
+            | ExecutionRole::DirectiveApply
+    ) && !missing_jsx_census(file, span, role)
+    {
+        ObserverPresence::Absent
+    } else {
+        ObserverPresence::Unknown
+    }
+}
+
 /// Whether the untracked-rendering role at `span` rests on the *absence* of a
 /// compiler census entry rather than on a compiler fact.
 ///

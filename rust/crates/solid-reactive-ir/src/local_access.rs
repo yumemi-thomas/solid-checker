@@ -806,6 +806,234 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    /// Initial lazy-cache consumer: no priming/dominance inference and no
+    /// violation emission. Every unsupported Get/escape is an obligation.
+    fn lazy_getter_obligations(
+        &self,
+        file: &solid_facts::FileFacts,
+        result: &mut LocalAccessResult,
+    ) {
+        use crate::contracts::LAZY_GETTER_OBJECT;
+        use crate::execution_role::{ObserverPresence, observer_presence_at};
+        use solid_facts::ast::{BindingShape, IdentifierRole, RuntimeValueKind};
+        let allowed = allowed_callback_spans(file, self.lookup);
+        let obligation = |span, export: &str, context: &str| crate::StaticDefect {
+            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: export.to_owned(),
+                member: None,
+            },
+            location: crate::location(file.path.shared(), span),
+            analysis_context: context.to_owned(),
+            fixes: vec![],
+            uncertain: true,
+        };
+        for call in &file.ast.calls {
+            if call.result_discarded {
+                continue;
+            }
+            let Some((returned, _)) = self
+                .lookup
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| self.contract_returns.get(symbol))
+            else {
+                continue;
+            };
+            let (recipe, tuple_index) = if returned.kind == LAZY_GETTER_OBJECT {
+                (returned, None)
+            } else if returned.kind == "tuple" {
+                let recipes = returned
+                    .elements
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, value)| {
+                        value
+                            .as_ref()
+                            .filter(|value| value.kind == LAZY_GETTER_OBJECT)
+                            .map(|value| (value, index))
+                    })
+                    .collect::<Vec<_>>();
+                if recipes.len() != 1 {
+                    continue;
+                }
+                (recipes[0].0, Some(recipes[0].1))
+            } else {
+                continue;
+            };
+            let export = file.source_text(call.callee).unwrap_or_default();
+            let binding = file.ast.bindings.iter().find(|binding| {
+                binding.initializer.is_some_and(|initializer| {
+                    file.ast.peel_ts_sugar_span(initializer) == call.span
+                })
+            });
+            let root = binding.and_then(|binding| {
+                if !binding.immutable {
+                    return None;
+                }
+                match (binding.shape, tuple_index) {
+                    (BindingShape::Identifier, None) if binding.names.len() == 1 => {
+                        Some(binding.names[0].span)
+                    }
+                    (BindingShape::Array, Some(index))
+                        if binding
+                            .array_slots
+                            .iter()
+                            .enumerate()
+                            .all(|(position, slot)| position == index || slot.is_none()) =>
+                    {
+                        binding
+                            .array_slots
+                            .get(index)
+                            .and_then(Option::as_ref)
+                            .map(|slot| slot.span)
+                    }
+                    _ => None,
+                }
+            });
+            let Some(root) = root else {
+                result.dispatch_obligations.push(obligation(call.span, export,
+                    "lazy getter result lacks one exact immutable receiver; setter retention, destructuring, wrappers and escape need their own proof"));
+                continue;
+            };
+            let names_root = |span| file.ast.reference_declaration(span) == Some(root);
+            let mutated = crate::indexes::binding_written(file, root)
+                || file
+                    .ast
+                    .assignments
+                    .iter()
+                    .map(|assignment| assignment.target)
+                    .chain(file.ast.deleted_targets.iter().copied())
+                    .chain(file.ast.iteration_targets.iter().copied())
+                    .any(|target| {
+                        file.ast.members.iter().any(|member| {
+                            target.contains(member.span)
+                                && names_root(file.ast.peel_ts_sugar_span(member.object))
+                        })
+                    });
+            let exported = file
+                .ast
+                .exports
+                .iter()
+                .filter(|export| !export.type_only)
+                .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+                .any(|export| export.local.span == root || names_root(export.local.span));
+            // A missing binder answer can only weaken this proof. Spelling
+            // is never used to establish a receiver or select a clean Get.
+            let unresolved = file.ast.identifiers.iter().any(|identifier| {
+                identifier.role == IdentifierRole::Reference
+                    && file.ast.reference_declaration(identifier.span).is_none()
+                    && file.source_text(identifier.span) == file.source_text(root)
+                    && !file.ast.transparent_wrappers.iter().any(|wrapper| {
+                        wrapper.span.contains(identifier.span)
+                            && !wrapper.inner.contains(identifier.span)
+                    })
+            });
+            let escaped = unresolved
+                || exported
+                || file.ast.identifiers.iter().any(|identifier| {
+                    identifier.role == IdentifierRole::Reference
+                        && names_root(identifier.span)
+                        && !file.ast.transparent_wrappers.iter().any(|wrapper| {
+                            wrapper.span.contains(identifier.span)
+                                && !wrapper.inner.contains(identifier.span)
+                        })
+                        && !file.ast.members.iter().any(|member| {
+                            file.ast.peel_ts_sugar_span(member.object) == identifier.span
+                        })
+                });
+            // Key provenance never trusts names or a widened generic type.
+            // Dynamic inputs, getters, function values and setters stay open.
+            let keys = if let Some(index) = recipe.parameter {
+                call.arguments
+                    .get(index)
+                    .filter(|argument| argument.exact_object_literal && !argument.spread)
+                    .and_then(|argument| {
+                        let properties = file
+                            .ast
+                            .object_properties
+                            .iter()
+                            .filter(|property| argument.property_names.contains(&property.key))
+                            .collect::<Vec<_>>();
+                        (properties.len() == argument.property_names.len()
+                            && properties.iter().all(|property| {
+                                property.data
+                                    && !property.computed
+                                    && !property.runtime_type_escape
+                                    && matches!(
+                                        property.value_kind,
+                                        RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
+                                    )
+                            }))
+                        .then(|| {
+                            argument
+                                .property_names
+                                .iter()
+                                .filter_map(|key| file.source_text(*key))
+                                .map(str::to_owned)
+                                .collect::<Vec<_>>()
+                        })
+                    })
+            } else {
+                Some(recipe.properties.keys().cloned().collect::<Vec<_>>())
+            };
+            let keys = keys.filter(|keys| {
+                !keys
+                    .iter()
+                    .any(|key| crate::contract_semantics::lazy_getter_cache_key_is_reserved(key))
+            });
+            if mutated || escaped || keys.is_none() {
+                result.dispatch_obligations.push(obligation(call.span, export,
+                    "lazy getter receiver or initial key values escape the proven static data shape"));
+            }
+            for member in &file.ast.members {
+                let receiver = file.ast.peel_ts_sugar_span(member.object);
+                if !names_root(receiver) {
+                    continue;
+                }
+                let execution = semantic_execution_role(
+                    file,
+                    member.span,
+                    &allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
+                if execution == ExecutionRole::DiscardedRendering {
+                    continue;
+                }
+                let key = file.source_text(member.property).unwrap_or_default();
+                let computed = file.ast.computed_members.contains(&member.span);
+                // The recipe proves only these own keys. A different named
+                // member does not become a reactive getter; in particular,
+                // do not duplicate tsc's nonexistent-property diagnostic.
+                if !computed
+                    && keys
+                        .as_ref()
+                        .is_some_and(|keys| !keys.iter().any(|candidate| candidate == key))
+                {
+                    continue;
+                }
+                let selected = !computed
+                    && keys
+                        .as_ref()
+                        .is_some_and(|keys| keys.iter().any(|candidate| candidate == key));
+                let present = observer_presence_at(
+                    file,
+                    member.span,
+                    &allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                ) == ObserverPresence::Present;
+                // This operation is the Get, not an alleged call of the
+                // returned scalar. Noncallability is TypeScript's claim.
+                if !selected || !present || mutated || escaped {
+                    result.dispatch_obligations.push(obligation(member.span, export,
+                        "lazy per-key Get needs an exact receiver/key and observer; untracked reads require retained-cache priming and dominance proof"));
+                }
+            }
+        }
+    }
+
     /// ADR 0234: a member of a package's returned tuple or object whose
     /// invocation the contract does not describe (`callable`, `unknown`).
     /// Each call of it in a component body, module scope or compiler callback,
@@ -827,8 +1055,9 @@ impl LocalAccessContext<'_, '_> {
         let effectful =
             |returned: &ContractReturn| returned.kind == crate::contracts::EFFECTFUL_MEMBER;
         let holds_opaque = |returned: &ContractReturn| {
-            returned.elements.iter().flatten().any(opaque)
-                || returned.properties.values().any(opaque)
+            returned.kind != crate::contracts::LAZY_GETTER_OBJECT
+                && (returned.elements.iter().flatten().any(opaque)
+                    || returned.properties.values().any(opaque))
         };
         let obligation =
             |span: solid_facts::core::Span, callee: &str, context: &str| crate::StaticDefect {
@@ -1317,6 +1546,7 @@ impl LocalAccessContext<'_, '_> {
 
     pub(crate) fn discover(&self, file: &solid_facts::FileFacts) -> LocalAccessResult {
         let mut result = LocalAccessResult::default();
+        self.lazy_getter_obligations(file, &mut result);
         self.opaque_member_obligations(file, &mut result);
         self.returned_callable_obligations(file, &mut result);
         self.callback_result_obligations(file, &mut result);

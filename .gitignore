@@ -315,3 +315,6 @@ docs/package-contract-v2/phase21/*measurement.json
 
 !fixtures/reactive-ir/package-owner-guards-consumer/node_modules/
 !fixtures/reactive-ir/package-owner-guards-consumer/node_modules/**
+
+!fixtures/reactive-ir/package-lazy-getter-consumer/node_modules/
+!fixtures/reactive-ir/package-lazy-getter-consumer/node_modules/**

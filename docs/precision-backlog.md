@@ -1,5 +1,14 @@
 # Precision backlog
 
+## Lazy per-key getters (2026-10-08)
+
+ADR 0255: a lazy getter Get in tracked code is clean; any other Get is an
+uncertifiable obligation (no cache-priming proof). Still open: untracked Gets
+after a proven priming are obligations rather than violations;
+`createWindowSize` keeps `returns` open because enumerating it trades import
+notices for many prop-read obligations; `ReactiveSet` caches are evicted and
+are not modelled here.
+
 ## Receiver members and optional reads (2026-10-08)
 
 ADR 0254: `obj.member()` on an exact `const obj = factory()` receiver uses the

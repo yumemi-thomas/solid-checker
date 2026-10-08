@@ -15,7 +15,7 @@
           "exports": {
             "createDerivedStaticStore": "authored-createDerivedStaticStore",
             "createHydratableStaticStore": "open-callable",
-            "createStaticStore": "open-callable"
+            "createStaticStore": "authored-createStaticStore"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import/default",
@@ -313,6 +313,110 @@
     },
     "open-callable": {
       "call": {},
+      "shape": "callable"
+    },
+    "authored-createStaticStore": {
+      "call": {
+        "operations": [
+          {
+            "id": "initial-copy-0",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "protocol": "get-own-enumerable-values",
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "initial-copy-1",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "protocol": "get-own-enumerable-values",
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "static-return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "lazy-getter-object",
+                  "keys": [],
+                  "from": 0
+                },
+                {
+                  "kind": "unknown"
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "initial-copy-0"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "initial-copy-1"
+          }
+        ],
+        "closed": [
+          "returns"
+        ],
+        "returns": [
+          "static-return"
+        ]
+      },
       "shape": "callable"
     }
   }

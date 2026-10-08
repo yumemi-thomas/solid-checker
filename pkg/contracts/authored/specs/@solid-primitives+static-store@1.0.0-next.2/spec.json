@@ -441,6 +441,230 @@
         "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createDerivedStaticStore-write-in-tracked-callback/node_modules/@solid-primitives/static-store/dist/index.js:97-107 \u2014 fnMemo and per-key memos are all computed owners; derive result spread/Gets are explicit callback-result operations. untrack clears only fnMemo read at 98, not the spread. Each returned property reads keyMemo.",
         "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createDerivedStaticStore-write-in-tracked-callback/node_modules/@solid-primitives/static-store/dist/index.js:97-107 \u2014 fnMemo and per-key memos are all computed owners; derive result spread/Gets are explicit callback-result operations. untrack clears only fnMemo read at 98, not the spread. Each returned property reads keyMemo."
       }
+    },
+    "createStaticStore": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Getter returns plain copy without observer, creates and caches a per-key ownedWrite signal under an observer, and then always reads that cached signal. Cache is retained, not reset on owner cleanup. Fixed resize values are plain numbers/null. Arbitrary static-store input values and unknown keys need consumer proof; no blanket store branding. Constructor spreads init twice. Function-valued seeds may select createSignal\u2019s memo overload later; no constructor read/create negative closure is asserted. Setter remains opaque.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "initial-copy-0",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "protocol": "get-own-enumerable-values",
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "initial-copy-1",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "protocol": "get-own-enumerable-values",
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "static-return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "lazy-getter-object",
+                  "keys": [],
+                  "from": 0
+                },
+                {
+                  "kind": "unknown"
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "initial-copy-0"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "initial-copy-1"
+          }
+        ],
+        "closed": [
+          "returns"
+        ],
+        "returns": [
+          "static-return"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Fresh static object, keys derived from exact input; second tuple item is unknown. Recipe binds lazy Get only, not setter or arbitrary seed behavior."
+      },
+      "lazyGetterClosures": {
+        "static-return": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Getter returns plain copy without observer, creates and caches a per-key ownedWrite signal under an observer, and then always reads that cached signal. Cache is retained, not reset on owner cleanup. Fixed resize values are plain numbers/null. Arbitrary static-store input values and unknown keys need consumer proof; no blanket store branding."
+      },
+      "probes": [
+        {
+          "label": "lazy-memo",
+          "rule": "strict-read-untracked",
+          "why": "Correct twin Gets count inside a memo after priming; misuse reads in component body."
+        }
+      ],
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Static-store itself has no host branch, but server signal semantics and function-valued seeds are not transplanted from browser signals. Same tuple shape with unknown first item keeps later server Gets uncertifiable.",
+        "minZero": [],
+        "closed": [
+          "returns"
+        ],
+        "closures": {
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Exactly a two-item tuple; both member values are unknown in this host-free graph."
+        },
+        "call": {
+          "operations": [
+            {
+              "id": "initial-copy-0",
+              "kind": "invoke",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "ambient-at-execution",
+              "count": {
+                "min": 0,
+                "max": 1,
+                "scope": "call"
+              },
+              "protocol": "get-own-enumerable-values",
+              "owner": {
+                "source": "ambient-at-execution"
+              }
+            },
+            {
+              "id": "initial-copy-1",
+              "kind": "invoke",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "ambient-at-execution",
+              "count": {
+                "min": 0,
+                "max": 1,
+                "scope": "call"
+              },
+              "protocol": "get-own-enumerable-values",
+              "owner": {
+                "source": "ambient-at-execution"
+              }
+            },
+            {
+              "id": "static-return",
+              "kind": "return",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "untracked",
+              "count": {
+                "min": 1,
+                "max": 1,
+                "scope": "call"
+              },
+              "output": {
+                "kind": "tuple",
+                "closed": [
+                  "items"
+                ],
+                "items": [
+                  "unknown",
+                  "unknown"
+                ]
+              }
+            }
+          ],
+          "callbacks": [
+            {
+              "from": {
+                "arg": 0,
+                "path": []
+              },
+              "operation": "initial-copy-0"
+            },
+            {
+              "from": {
+                "arg": 0,
+                "path": []
+              },
+              "operation": "initial-copy-1"
+            }
+          ],
+          "closed": [
+            "callbacks",
+            "returns"
+          ],
+          "returns": [
+            "static-return"
+          ]
+        }
+      }
     }
   }
 }

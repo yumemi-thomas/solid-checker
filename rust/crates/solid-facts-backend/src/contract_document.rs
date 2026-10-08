@@ -1210,6 +1210,13 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
         }
         // ADR 0146: a shorthand, like `undefined`, with a detailed spelling.
         ValueShape::ReadValue => json!("read-value"),
+        ValueShape::LazyGetterObject { keys, from } => {
+            let mut value = json!({"kind": "lazy-getter-object", "keys": keys});
+            if let Some(from) = from {
+                value["from"] = json!(from);
+            }
+            value
+        }
         ValueShape::Action { transition } => {
             let mut node = json!({"kind": "action"});
             if let Some(transition) = transition {
@@ -2441,6 +2448,11 @@ enum WireValueNode {
     },
     /// ADR 0146. Carries no field, as `undefined` does not.
     ReadValue {},
+    LazyGetterObject {
+        keys: Vec<String>,
+        #[serde(default)]
+        from: Option<u16>,
+    },
     /// ADR 0235: a returned member's own call graph, in the export's id
     /// namespace. Additive to `schemaVersion: 1`.
     EffectfulCallable {
@@ -3843,6 +3855,10 @@ fn expand_value_node(
         }),
         WireValueNode::Undefined {} => Ok(ValueShape::Undefined),
         WireValueNode::ReadValue {} => Ok(ValueShape::ReadValue),
+        WireValueNode::LazyGetterObject { keys, from } => Ok(ValueShape::LazyGetterObject {
+            keys: keys.clone(),
+            from: *from,
+        }),
         WireValueNode::EffectfulCallable { call } => Ok(ValueShape::EffectfulCallable(Box::new(
             expand_call(Some(call), ids)?,
         ))),
@@ -4614,6 +4630,39 @@ mod tests {
                 .inspect_candidates(&kept)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn lazy_getter_recipe_round_trips_and_refuses_certification() {
+        let document = json!({
+            "format": "solid-reactivity-contract", "schemaVersion": 1,
+            "semanticModelVersion": 1,
+            "package": {"name": "consumer", "version": "1.0.0", "integrity": "sha512:test",
+                "manifest": {"path": "package.json", "sha256": "a".repeat(64)}},
+            "summaries": {"fn": {"shape": "callable", "call": {
+                "closed": ["returns"], "returns": ["return"], "operations": [{
+                    "id": "return", "kind": "return", "trigger": {"event": "call"},
+                    "at": {"event": "call", "schedule": "same-stack"},
+                    "tracking": "untracked", "count": {"min": 1, "max": 1, "scope": "call"},
+                    "output": {"kind": "lazy-getter-object", "keys": ["width", "height"]}
+                }]
+            }}},
+            "entrypoints": {".": {
+                "artifact": {"path": "dist/index.js", "sha256": "b".repeat(64), "closureSha256": "c".repeat(64)},
+                "declarations": {"path": "dist/index.d.ts", "sha256": "d".repeat(64)},
+                "exports": {"make": "fn"}
+            }}, "sidecars": {}
+        });
+        let kept = normalized(&serde_json::to_vec(&document).unwrap());
+        let encoded = encode(&kept, &SidecarDigests::default(), true).unwrap();
+        assert!(String::from_utf8_lossy(&encoded).contains("lazy-getter-object"));
+        assert_eq!(normalized(&encoded), kept);
+        let Err(refusal) = solid_reactive_ir::contract_semantics::certification::proof_policy_2()
+            .inspect_candidates(&kept)
+        else {
+            panic!("lazy recipe certified without a census");
+        };
+        assert!(refusal.to_string().contains("authored-only"));
     }
 
     /// ADR 0235: an `effectful-callable` member round-trips with its own

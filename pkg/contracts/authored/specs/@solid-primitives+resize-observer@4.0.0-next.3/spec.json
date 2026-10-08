@@ -298,35 +298,12 @@
               "scope": "call"
             },
             "output": {
-              "kind": "object",
-              "closed": [
-                "properties"
-              ],
-              "properties": [
-                {
-                  "name": "width",
-                  "value": {
-                    "kind": "unknown"
-                  }
-                },
-                {
-                  "name": "height",
-                  "value": {
-                    "kind": "unknown"
-                  }
-                },
-                {
-                  "name": "clientWidth",
-                  "value": {
-                    "kind": "unknown"
-                  }
-                },
-                {
-                  "name": "clientHeight",
-                  "value": {
-                    "kind": "unknown"
-                  }
-                }
+              "kind": "lazy-getter-object",
+              "keys": [
+                "width",
+                "height",
+                "clientWidth",
+                "clientHeight"
               ]
             }
           }
@@ -384,7 +361,7 @@
       },
       "closures": {
         "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - P1 geometry/observer objects and P2 plain fallback data. No direct reactive read at construction. Target reads belong to its tracked callback. Later size getters alone read the lazy signals (listed as deferred); unknown member values do not certify getter use.",
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Both server fallback and browser store have exactly width, height, clientWidth, clientHeight. Each member is unknown, preserving the lazy getter/cache obligation; no getter is labeled plain or a proven accessor.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:85-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Getter returns plain copy without observer, creates and caches a per-key ownedWrite signal under an observer, and then always reads that cached signal. Cache is retained, not reset on owner cleanup. Fixed resize values are plain numbers/null. Arbitrary static-store input values and unknown keys need consumer proof; no blanket store branding.",
         "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Browser creates exactly one effect iff target is callable, registered in computations. Static-store construction creates no signal; later observed getter access can allocate cached signals, conservatively listed as deferred 0..many. Native ResizeObserver is host behavior under P1, not a reactive owner.",
         "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - The sole caller callable is target: initial compute and later recomputes under the stated created effect owner. Observer, apply and lazy getter callbacks are package-defined; P1/P2 cover host/plain traversal. No additional constructor caller callback.",
         "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137 - One required observer.disconnect cleanup, one plain-target unobserve cleanup, and the callable-target apply-returned unobserve cleanup on a truthy target, deferred under the created effect owner. Lazy store getters register no cleanup (/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54)."
@@ -426,15 +403,16 @@
               "text": "done"
             }
           ]
+        },
+        {
+          "label": "lazy-getter",
+          "rule": "strict-read-untracked",
+          "why": "Same exact width is synchronously primed by the default eager memo before its component-body Get. Correct twin Gets in JSX. Fresh Chrome observation required."
         }
       ],
       "hostFree": {
-        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Sound host-free weakening: isServer returns the same four-property fallback before observer, target effect/callback, cleanup or cache work. Required browser operations are weakened to zero; other deferred/optional operations already permit zero. The unknown member return covers both paths without claiming server getters or accessors.",
-        "minZero": [
-          "element-observer-cleanup",
-          "element-target-effect",
-          "target-compute"
-        ],
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:85-137 - Server returns ELEMENT_SIZE_FALLBACK before static-store construction. Explicit host-free graph retains the old optional census and returns four plain fields; it states no lazy recipe.",
+        "minZero": [],
         "closed": [
           "reads",
           "returns",
@@ -444,11 +422,363 @@
         ],
         "closures": {
           "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Sound host-free weakening: isServer returns the same four-property fallback before observer, target effect/callback, cleanup or cache work. Required browser operations are weakened to zero; other deferred/optional operations already permit zero. The unknown member return covers both paths without claiming server getters or accessors. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - P1 geometry/observer objects and P2 plain fallback data. No direct reactive read at construction. Target reads belong to its tracked callback. Later size getters alone read the lazy signals (listed as deferred); unknown member values do not certify getter use.",
-          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Sound host-free weakening: isServer returns the same four-property fallback before observer, target effect/callback, cleanup or cache work. Required browser operations are weakened to zero; other deferred/optional operations already permit zero. The unknown member return covers both paths without claiming server getters or accessors. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Both server fallback and browser store have exactly width, height, clientWidth, clientHeight. Each member is unknown, preserving the lazy getter/cache obligation; no getter is labeled plain or a proven accessor.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:85-137 - Server fallback has exactly width, height, clientWidth and clientHeight as plain null data; no getter descriptors.",
           "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Sound host-free weakening: isServer returns the same four-property fallback before observer, target effect/callback, cleanup or cache work. Required browser operations are weakened to zero; other deferred/optional operations already permit zero. The unknown member return covers both paths without claiming server getters or accessors. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Browser creates exactly one effect iff target is callable, registered in computations. Static-store construction creates no signal; later observed getter access can allocate cached signals, conservatively listed as deferred 0..many. Native ResizeObserver is host behavior under P1, not a reactive owner.",
           "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Sound host-free weakening: isServer returns the same four-property fallback before observer, target effect/callback, cleanup or cache work. Required browser operations are weakened to zero; other deferred/optional operations already permit zero. The unknown member return covers both paths without claiming server getters or accessors. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - The sole caller callable is target: initial compute and later recomputes under the stated created effect owner. Observer, apply and lazy getter callbacks are package-defined; P1/P2 cover host/plain traversal. No additional constructor caller callback.",
           "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Sound host-free weakening: isServer returns the same four-property fallback before observer, target effect/callback, cleanup or cache work. Required browser operations are weakened to zero; other deferred/optional operations already permit zero. The unknown member return covers both paths without claiming server getters or accessors. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/resize-observer/dist/index.js:109-137 - One required observer.disconnect cleanup, one plain-target unobserve cleanup, and the callable-target apply-returned unobserve cleanup on a truthy target, deferred under the created effect owner. Lazy store getters register no cleanup (/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:27-54)."
+        },
+        "call": {
+          "operations": [
+            {
+              "id": "element-observer-cleanup",
+              "kind": "cleanup",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "untracked",
+              "count": {
+                "min": 0,
+                "max": 1,
+                "scope": "call"
+              },
+              "owner": {
+                "source": "ambient-at-call",
+                "requires": "required",
+                "requiresCleanup": "required"
+              }
+            },
+            {
+              "id": "plain-target-unobserve",
+              "kind": "cleanup",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "untracked",
+              "count": {
+                "min": 0,
+                "max": 1,
+                "scope": "call"
+              },
+              "owner": {
+                "source": "ambient-at-call",
+                "requires": "required",
+                "requiresCleanup": "required"
+              },
+              "guard": {
+                "all": [
+                  {
+                    "arg": 0,
+                    "path": [],
+                    "kind": "plain"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "element-target-effect",
+              "kind": "compute",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "untracked",
+              "count": {
+                "min": 0,
+                "max": 1,
+                "scope": "call"
+              },
+              "owner": {
+                "source": "ambient-at-call",
+                "requires": "required",
+                "requiresChildren": "required",
+                "productions": [
+                  {
+                    "resource": "element-target-effect-owner",
+                    "children": "allowed",
+                    "cleanup": "supported"
+                  }
+                ]
+              },
+              "guard": {
+                "all": [
+                  {
+                    "arg": 0,
+                    "path": [],
+                    "kind": "callable"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "target-compute",
+              "kind": "invoke",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "tracked",
+              "count": {
+                "min": 0,
+                "max": 1,
+                "scope": "call"
+              },
+              "owner": {
+                "source": "created",
+                "resource": "element-target-effect-owner",
+                "children": "allowed",
+                "cleanup": "supported",
+                "productions": [
+                  {
+                    "resource": "element-target-effect-owner",
+                    "children": "allowed",
+                    "cleanup": "supported"
+                  }
+                ]
+              },
+              "guard": {
+                "all": [
+                  {
+                    "arg": 0,
+                    "path": [],
+                    "kind": "callable"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "lazy-size-cache-read",
+              "kind": "read",
+              "trigger": {
+                "event": "external-event"
+              },
+              "at": {
+                "event": "external-event",
+                "schedule": "external"
+              },
+              "tracking": "ambient-at-execution",
+              "owner": {
+                "source": "ambient-at-execution"
+              },
+              "count": {
+                "min": 0,
+                "max": "many",
+                "scope": "trigger"
+              },
+              "inputs": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor"
+                }
+              ]
+            },
+            {
+              "id": "target-recompute",
+              "kind": "invoke",
+              "trigger": {
+                "event": "external-event"
+              },
+              "at": {
+                "event": "external-event",
+                "schedule": "external"
+              },
+              "tracking": "tracked",
+              "count": {
+                "min": 0,
+                "max": "many",
+                "scope": "trigger"
+              },
+              "owner": {
+                "source": "created",
+                "resource": "element-target-effect-owner",
+                "children": "allowed",
+                "cleanup": "supported",
+                "productions": [
+                  {
+                    "resource": "element-target-effect-owner",
+                    "children": "allowed",
+                    "cleanup": "supported"
+                  }
+                ]
+              },
+              "guard": {
+                "all": [
+                  {
+                    "arg": 0,
+                    "path": [],
+                    "kind": "callable"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "target-apply-unobserve",
+              "kind": "cleanup",
+              "trigger": {
+                "event": "flush"
+              },
+              "at": {
+                "event": "flush",
+                "schedule": "queued"
+              },
+              "tracking": "untracked",
+              "count": {
+                "min": 0,
+                "max": "many",
+                "scope": "trigger"
+              },
+              "owner": {
+                "source": "created",
+                "resource": "element-target-effect-owner",
+                "children": "allowed",
+                "cleanup": "supported",
+                "productions": [
+                  {
+                    "resource": "element-target-effect-owner",
+                    "children": "allowed",
+                    "cleanup": "supported"
+                  }
+                ]
+              },
+              "guard": {
+                "all": [
+                  {
+                    "arg": 0,
+                    "path": [],
+                    "kind": "callable"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "create-lazy-size-cache",
+              "kind": "create",
+              "trigger": {
+                "event": "external-event"
+              },
+              "at": {
+                "event": "external-event",
+                "schedule": "external"
+              },
+              "tracking": "untracked",
+              "count": {
+                "min": 0,
+                "max": "many",
+                "scope": "trigger"
+              },
+              "resources": [
+                "lazy-size-cache"
+              ]
+            },
+            {
+              "id": "element-size-return",
+              "kind": "return",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "untracked",
+              "count": {
+                "min": 1,
+                "max": 1,
+                "scope": "call"
+              },
+              "output": {
+                "kind": "object",
+                "closed": [
+                  "properties"
+                ],
+                "properties": [
+                  {
+                    "name": "width",
+                    "value": "plain"
+                  },
+                  {
+                    "name": "height",
+                    "value": "plain"
+                  },
+                  {
+                    "name": "clientWidth",
+                    "value": "plain"
+                  },
+                  {
+                    "name": "clientHeight",
+                    "value": "plain"
+                  }
+                ]
+              }
+            }
+          ],
+          "callbacks": [
+            {
+              "from": {
+                "arg": 0,
+                "path": []
+              },
+              "operation": "target-compute"
+            },
+            {
+              "from": {
+                "arg": 0,
+                "path": []
+              },
+              "operation": "target-recompute"
+            }
+          ],
+          "cleanups": [
+            "element-observer-cleanup",
+            "plain-target-unobserve",
+            "target-apply-unobserve"
+          ],
+          "computations": [
+            "element-target-effect"
+          ],
+          "resources": [
+            {
+              "id": "element-target-effect-owner",
+              "kind": "owner"
+            },
+            {
+              "id": "lazy-size-cache",
+              "kind": "reactive-source"
+            }
+          ],
+          "closed": [
+            "reads",
+            "returns",
+            "creates",
+            "callbacks",
+            "cleanups"
+          ],
+          "reads": [
+            "lazy-size-cache-read"
+          ],
+          "creates": [
+            "create-lazy-size-cache"
+          ],
+          "returns": [
+            "element-size-return"
+          ]
         }
+      },
+      "lazyGetterClosures": {
+        "element-size-return": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Getter returns plain copy without observer, creates and caches a per-key ownedWrite signal under an observer, and then always reads that cached signal. Cache is retained, not reset on owner cleanup. Fixed resize values are plain numbers/null. Arbitrary static-store input values and unknown keys need consumer proof; no blanket store branding."
       }
     },
     "createResizeObserver": {

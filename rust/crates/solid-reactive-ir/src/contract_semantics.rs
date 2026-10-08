@@ -2457,6 +2457,41 @@ pub enum ValueShape {
     /// `() => count()`. Valid only as an item of a described callable's
     /// `returns` whose `reads` is not empty (`validate::normalize_described_callable`).
     ReadValue,
+    /// Authored Get recipe for a fresh static object. Exact named keys, or
+    /// keys of the factory argument at `from`; these alternatives are exclusive.
+    /// An unobserved first Get returns plain data; an observed Get creates an
+    /// owned-write signal for this key and reads it. Subsequent Gets retain
+    /// that signal. This does not brand the object as an unconditional store.
+    /// The initial consumer proves only direct tracked Gets. It deliberately
+    /// retains every untracked Get as an obligation, without guessing cache
+    /// state, dominance, or the observer from the lifecycle owner.
+    /// `from` additionally requires a getter-free primitive-valued literal
+    /// at the consumer: arbitrary functions can select createSignal's memo
+    /// overload, and arbitrary inherited/cache-prototype keys are unsafe.
+    LazyGetterObject {
+        keys: Vec<String>,
+        from: Option<u16>,
+    },
+}
+
+/// The audited static-store cache is an ordinary object, not a Map or a
+/// null-prototype object. A prototype collision is not a lazy signal recipe.
+pub(crate) fn lazy_getter_cache_key_is_reserved(key: &str) -> bool {
+    matches!(
+        key,
+        "__proto__"
+            | "constructor"
+            | "toString"
+            | "toLocaleString"
+            | "valueOf"
+            | "hasOwnProperty"
+            | "isPrototypeOf"
+            | "propertyIsEnumerable"
+            | "__defineGetter__"
+            | "__defineSetter__"
+            | "__lookupGetter__"
+            | "__lookupSetter__"
+    )
 }
 
 /// ADR 0145: what one invocation of a [`ValueShape::DescribedCallable`] does.

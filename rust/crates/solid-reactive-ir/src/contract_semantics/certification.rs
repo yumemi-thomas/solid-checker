@@ -311,6 +311,22 @@ impl ProofPolicy2 {
 
         for artifact in &mut artifact_cases {
             for (export_name, export) in &mut artifact.exports {
+                // Per-key lazy cache behavior has no certification census.
+                if value_has_lazy_getters(&export.shape)
+                    || export.call.operations.iter().any(|operation| {
+                        operation.inputs.iter().any(value_has_lazy_getters)
+                            || operation
+                                .output
+                                .as_ref()
+                                .is_some_and(value_has_lazy_getters)
+                    })
+                {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "lazy getter cache behavior is authored-only and not certifiable"
+                            .into(),
+                    });
+                }
                 // No implementation census establishes result-use closure.
                 if !export.call.callback_results().is_empty() {
                     return Err(ModelError::Contradiction {
@@ -771,6 +787,7 @@ fn inventory_value_shape(
         // ADR 0235: refused before inventory (`inspect_candidates`).
         | ValueShape::EffectfulCallable(_)
         | ValueShape::ReturnedCallable { .. }
+        | ValueShape::LazyGetterObject { .. }
         | ValueShape::ReadValue
         | ValueShape::Callable
         | ValueShape::Reactive { .. }
@@ -825,6 +842,7 @@ const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability 
         | ValueShape::ArgumentArray { .. }
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
+        | ValueShape::LazyGetterObject { .. }
         | ValueShape::ReadValue
         | ValueShape::Action { .. }
         | ValueShape::Cleanup { .. }
@@ -2003,6 +2021,23 @@ const fn manifest() -> PolicyManifest {
 
 /// Whether a returned tuple or object carries an effectful callable member
 /// (ADR 0235).
+fn value_has_lazy_getters(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::LazyGetterObject { .. } => true,
+        ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+            items.items().iter().any(value_has_lazy_getters)
+        }
+        ValueShape::Object(properties) => properties
+            .items()
+            .iter()
+            .any(|property| value_has_lazy_getters(&property.value)),
+        ValueShape::Array { element, .. }
+        | ValueShape::Promise(element)
+        | ValueShape::AsyncIterable(element) => value_has_lazy_getters(element),
+        _ => false,
+    }
+}
+
 fn holds_effectful_member(output: &ValueShape) -> bool {
     match output {
         ValueShape::ReturnedCallable { .. } => true,

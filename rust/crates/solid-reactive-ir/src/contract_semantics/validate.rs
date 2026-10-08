@@ -54,6 +54,12 @@ pub(super) fn normalize(mut proposal: ContractProposal) -> Result<NormalizedCont
             validate_export_identity(&case.id, &case.entrypoint, name, &export.identity)?;
             normalize_call(&mut export.call, &format!("case {} export {name}", case.id))?;
             let resources = resource_map(&export.call.resources);
+            if contains_lazy_getters(&export.shape) {
+                return contradiction(
+                    "export shape",
+                    "lazy getters are valid only as factory returns",
+                );
+            }
             normalize_value(
                 &mut export.shape,
                 &resources,
@@ -512,6 +518,18 @@ fn normalize_operation(
     }
     validate_cardinality(&operation.cardinality, &op_path)?;
     normalize_owner(&mut operation.owner, resources, &op_path)?;
+    if operation.inputs.iter().any(contains_lazy_getters) {
+        return contradiction(&op_path, "lazy getters cannot be operation inputs");
+    }
+    if let Some(output) = operation.output.as_ref()
+        && contains_lazy_getters(output)
+        && (nested || operation.kind != OperationKind::Return || !direct_lazy_getter_output(output))
+    {
+        return contradiction(
+            &op_path,
+            "lazy getters require a whole factory return or direct tuple item",
+        );
+    }
     for (index, input) in operation.inputs.iter_mut().enumerate() {
         normalize_value(input, resources, &format!("{op_path}.input.{index}"))?;
     }
@@ -1242,6 +1260,33 @@ fn restore_effectful_member(
     }
 }
 
+fn contains_lazy_getters(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::LazyGetterObject { .. } => true,
+        ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+            items.items().iter().any(contains_lazy_getters)
+        }
+        ValueShape::Object(properties) => properties
+            .items()
+            .iter()
+            .any(|property| contains_lazy_getters(&property.value)),
+        ValueShape::Array { element, .. }
+        | ValueShape::Promise(element)
+        | ValueShape::AsyncIterable(element) => contains_lazy_getters(element),
+        _ => false,
+    }
+}
+
+fn direct_lazy_getter_output(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::LazyGetterObject { .. } => true,
+        ValueShape::Tuple(items) => items.items().iter().all(|item| {
+            matches!(item, ValueShape::LazyGetterObject { .. }) || !contains_lazy_getters(item)
+        }),
+        _ => false,
+    }
+}
+
 fn normalize_value(
     value: &mut ValueShape,
     resources: &BTreeMap<ResourceId, ResourceInfo>,
@@ -1283,6 +1328,27 @@ fn normalize_value(
                 path,
                 "a returned callable is valid only as the whole output of a factory return",
             );
+        }
+        ValueShape::LazyGetterObject { keys, from } => {
+            if from.is_some() != keys.is_empty() {
+                return contradiction(
+                    path,
+                    "lazy getters require either exact keys or an argument index",
+                );
+            }
+            for key in keys.iter() {
+                require_text(key, "lazy getter key")?;
+                if super::lazy_getter_cache_key_is_reserved(key) {
+                    return contradiction(
+                        path,
+                        "lazy getter key collides with the cache prototype",
+                    );
+                }
+            }
+            keys.sort();
+            if keys.windows(2).any(|pair| pair[0] == pair[1]) {
+                return contradiction(path, "duplicate lazy getter key");
+            }
         }
         ValueShape::ReadValue => {
             return contradiction(
@@ -2345,6 +2411,7 @@ fn visit_closed_value(
         | ValueShape::DescribedCallable(_)
         | ValueShape::EffectfulCallable(_)
         | ValueShape::ReturnedCallable { .. }
+        | ValueShape::LazyGetterObject { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
@@ -2758,6 +2825,7 @@ fn open_value_closure(
         | ValueShape::DescribedCallable(_)
         | ValueShape::EffectfulCallable(_)
         | ValueShape::ReturnedCallable { .. }
+        | ValueShape::LazyGetterObject { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
@@ -2791,6 +2859,7 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::DescribedCallable(_)
         | ValueShape::EffectfulCallable(_)
         | ValueShape::ReturnedCallable { .. }
+        | ValueShape::LazyGetterObject { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
@@ -3032,4 +3101,54 @@ fn normalize_callback_results(
     call.callback_results
         .sort_by(|a, b| a.producer.cmp(&b.producer));
     Ok(())
+}
+
+#[cfg(test)]
+mod lazy_getter_tests {
+    use super::*;
+
+    #[test]
+    fn lazy_getters_require_one_key_provenance_and_reject_cache_collisions() {
+        let resources = BTreeMap::new();
+        let mut sorted = ValueShape::LazyGetterObject {
+            keys: vec!["width".into(), "height".into()],
+            from: None,
+        };
+        normalize_value(&mut sorted, &resources, "return").unwrap();
+        assert_eq!(
+            sorted,
+            ValueShape::LazyGetterObject {
+                keys: vec!["height".into(), "width".into()],
+                from: None,
+            }
+        );
+        let mut from = ValueShape::LazyGetterObject {
+            keys: vec![],
+            from: Some(0),
+        };
+        normalize_value(&mut from, &resources, "return").unwrap();
+        for mut invalid in [
+            ValueShape::LazyGetterObject {
+                keys: vec![],
+                from: None,
+            },
+            ValueShape::LazyGetterObject {
+                keys: vec!["count".into()],
+                from: Some(0),
+            },
+            ValueShape::LazyGetterObject {
+                keys: vec!["count".into(), "count".into()],
+                from: None,
+            },
+            ValueShape::LazyGetterObject {
+                keys: vec!["constructor".into()],
+                from: None,
+            },
+        ] {
+            assert!(normalize_value(&mut invalid, &resources, "return").is_err());
+        }
+        assert!(!direct_lazy_getter_output(&ValueShape::Promise(Box::new(
+            from
+        ))));
+    }
 }

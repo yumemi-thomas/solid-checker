@@ -356,7 +356,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 193 adds package-member-receiver-consumer's hand-stated document,
       // ADR 0254's pin of exact receiver member binding.
-      stableMainDocuments: 193,
+      //
+      // 194 adds package-lazy-getter-consumer's hand-stated document,
+      // ADR 0255's pin of lazy per-key getters.
+      stableMainDocuments: 194,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

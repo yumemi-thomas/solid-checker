@@ -54,6 +54,7 @@ import { propertyGetProbeDigest, validatePropertyGets } from "./lib/property-get
 import { strictReadProbeDigest, strictReadWireCall, validateStrictReads } from "./lib/strict-read-contracts.mjs";
 
 import { callbackResultProbeDigest, validateCallbackResults } from "./lib/callback-result-contracts.mjs";
+import { lazyGetterProbeDigest, validateLazyGetters } from "./lib/lazy-getter-contracts.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TIER = join(ROOT, "pkg/contracts/authored");
@@ -151,6 +152,7 @@ function returnedCallableProbeDigest(spec, name, pair, misuse, correct, artifact
 function validateClosures(where, claim) {
   validateStrictReads(where, claim);
   validateCallbackResults(where, claim);
+  validateLazyGetters(where, claim);
   const closed = claim.call?.closed ?? [];
   const closures = claim.closures ?? {};
   for (const domain of closed) {
@@ -215,7 +217,8 @@ function hostFreeClaim(where, claim) {
   const derived = { call, closures: hostFree.closures ?? {},
     memberClosures: hostFree.memberClosures ?? claim.memberClosures,
     returnedClosures: hostFree.returnedClosures ?? claim.returnedClosures,
-    resultClosures: hostFree.resultClosures ?? (hostFree.call ? undefined : claim.resultClosures) };
+    resultClosures: hostFree.resultClosures ?? (hostFree.call ? undefined : claim.resultClosures),
+    lazyGetterClosures: hostFree.lazyGetterClosures ?? (hostFree.call ? undefined : claim.lazyGetterClosures) };
   validateMemberClosures(`${where} (host-free)`, derived);
   validateReturnedClosures(`${where} (host-free)`, derived);
   validateClosures(`${where} (host-free)`, derived);
@@ -390,6 +393,11 @@ function probe(browser) {
       return [entry.id, returnedCallableProbeDigest(spec, entry.export, pair,
         entry.misuse, entry.correct, certifiedCases(spec))];
     }));
+    const lazyGetterDigests = new Map(cases.map(entry => {
+      const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
+      return [entry.id, lazyGetterProbeDigest(spec, entry.export, pair,
+        entry.misuse, entry.correct, certifiedCases(spec))];
+    }));
     const scratch = mkdtempSync(join(tmpdir(), "solid-checker-authored-"));
     // Bind the bytes handed to the ledger before execution. Re-reading a
     // changed pair after a run must never stamp old observations as new input.
@@ -411,12 +419,14 @@ function probe(browser) {
       const strictReadDigest = strictReadDigests.get(row.id);
       const returnedDigest = returnedDigests.get(row.id);
       const callbackResultDigest = callbackResultDigests.get(row.id);
+      const lazyGetterDigest = lazyGetterDigests.get(row.id);
       results.push({ spec: spec.name, package: spec.package, version: spec.version, export: row.export,
         ...(label ? { label } : {}),
         ...(probeDigest ? { propertyGetProbeDigest: probeDigest } : {}),
         ...(strictReadDigest ? { strictReadProbeDigest: strictReadDigest } : {}),
         ...(returnedDigest ? { returnedCallableProbeDigest: returnedDigest } : {}),
         ...(callbackResultDigest ? { callbackResultProbeDigest: callbackResultDigest } : {}),
+        ...(lazyGetterDigest ? { lazyGetterProbeDigest: lazyGetterDigest } : {}),
         solidRuntime: identity.runtime, artifacts: identity.artifacts, rule: row.rule,
         verdict: row.runtime === "detected" ? "passed" : row.runtime,
         misuse: (row.misuse.diagnostics ?? []).map(({ code, site }) => ({ code, site })),
@@ -480,13 +490,17 @@ function passed(spec, name) {
     const callbackResultDigest = callbackResultProbeDigest(spec, name, pair,
       readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
+    const lazyGetterDigest = lazyGetterProbeDigest(spec, name, pair,
+      readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
+      readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
     return results.some(row => row.spec === spec.name && row.export === name
       && (row.label ?? undefined) === pair.label && row.verdict === "passed"
       && JSON.stringify(row.solidRuntime) === runtime
       && (!probeDigest || row.propertyGetProbeDigest === probeDigest)
       && (!strictReadDigest || row.strictReadProbeDigest === strictReadDigest)
       && (!returnedDigest || row.returnedCallableProbeDigest === returnedDigest)
-      && (!callbackResultDigest || row.callbackResultProbeDigest === callbackResultDigest));
+      && (!callbackResultDigest || row.callbackResultProbeDigest === callbackResultDigest)
+      && (!lazyGetterDigest || row.lazyGetterProbeDigest === lazyGetterDigest));
   });
 }
 

@@ -9144,6 +9144,7 @@
       "package": "@solid-primitives/resize-observer",
       "version": "4.0.0-next.3",
       "export": "createElementSize",
+      "lazyGetterProbeDigest": "e188d39ba89fc47474986608a9b7afaacd9f816a11247242581b65c615146fae",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -9189,6 +9190,7 @@
       "version": "4.0.0-next.3",
       "export": "createElementSize",
       "label": "discarded-owner",
+      "lazyGetterProbeDigest": "66141f76e58310b28cf8dece7a42db15d069641579f752b4e5ad8acb587ed6cc",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -9233,7 +9235,46 @@
       "package": "@solid-primitives/resize-observer",
       "version": "4.0.0-next.3",
       "export": "createElementSize",
+      "label": "lazy-getter",
+      "lazyGetterProbeDigest": "dc5f798eaad549ed650f4878f02fd62dd6cec695e6336814c28668e82d84c4dc",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 24
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+resize-observer@4.0.0-next.3",
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "export": "createElementSize",
       "label": "target-effect",
+      "lazyGetterProbeDigest": "83fb351ae553d224651fd3134813fffbd8f01209d7691039f9184817f9a6ed1c",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -9279,6 +9320,7 @@
       "version": "4.0.0-next.3",
       "export": "createElementSize",
       "label": "target-tracking",
+      "lazyGetterProbeDigest": "6024b962ce79c209b08901f6e4c1c957752413fd244a65207fcf3930dfc2c425",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -11952,6 +11994,83 @@
             "file": "case",
             "line": 5,
             "column": 58
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+static-store@1.0.0-next.2",
+      "package": "@solid-primitives/static-store",
+      "version": "1.0.0-next.2",
+      "export": "createStaticStore",
+      "propertyGetProbeDigest": "18df6b7913e9c63375d84346663ba58b6d2766489d9c4cd87f6454941c4a9853",
+      "lazyGetterProbeDigest": "b4ff4b0dcdb5be2db75b3342da5842f66ecbd97ca90962c4fba02176ea4ae03b",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 24
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+static-store@1.0.0-next.2",
+      "package": "@solid-primitives/static-store",
+      "version": "1.0.0-next.2",
+      "export": "createStaticStore",
+      "label": "lazy-memo",
+      "propertyGetProbeDigest": "4c1a3eb982b060b30ecd48b12a5c198ac68c1b13491e5bf6aaf67beaa7afd0ca",
+      "lazyGetterProbeDigest": "ccaec888f1099ecb6b3120d7df93e873ffeb976ad5e70243085679449a2458a1",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 24
           }
         }
       ],

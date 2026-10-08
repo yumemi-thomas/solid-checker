@@ -739,6 +739,20 @@ fn project_return(
                 .is_none()
         })
         .count();
+    let lazy_recipe = |returned: &ContractReturn| {
+        returned.kind == LAZY_GETTER_OBJECT
+            || returned
+                .elements
+                .iter()
+                .flatten()
+                .any(|item| item.kind == LAZY_GETTER_OBJECT)
+    };
+    if returns.iter().any(lazy_recipe)
+        && (!knowledge.is_closed() || dropped > 0 || returns.len() != 1)
+    {
+        open.insert(ClaimDomain::Returns);
+        return ContractClaim::Open;
+    }
     match (knowledge, returns.as_slice()) {
         (KnowledgeSet::Complete(items), []) if items.is_empty() || plain_only => {
             ContractClaim::Known(None)
@@ -948,6 +962,7 @@ fn project_returned_callable_effects(
 
 /// The [`ContractReturn::kind`] of an opaque returned member (ADR 0234).
 pub(crate) const OPAQUE_MEMBER: &str = "opaque-callable";
+pub(crate) const LAZY_GETTER_OBJECT: &str = "lazy-getter-object";
 
 fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
     match shape {
@@ -1051,6 +1066,23 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         ValueShape::DescribedCallable(_) => None,
         // ADR 0146: only ever an item of a described callable's returns.
         ValueShape::ReadValue => None,
+        ValueShape::LazyGetterObject { keys, from } => Some(ContractReturn {
+            kind: LAZY_GETTER_OBJECT.into(),
+            parameter: from.map(usize::from),
+            properties: keys
+                .iter()
+                .map(|key| {
+                    (
+                        key.clone(),
+                        ContractReturn {
+                            kind: OPAQUE_MEMBER.into(),
+                            ..ContractReturn::default()
+                        },
+                    )
+                })
+                .collect(),
+            ..ContractReturn::default()
+        }),
         ValueShape::Unknown
         | ValueShape::Plain
         | ValueShape::ArgumentArray { .. }
