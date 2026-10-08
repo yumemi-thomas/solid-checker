@@ -664,6 +664,69 @@ fn project_reactive_reads(
     }
 }
 
+/// Direct runtime values only: no awaited shape or dropped return branch.
+fn direct_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
+    match shape {
+        ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            ..
+        } => project_return_shape(shape),
+        ValueShape::Plain => Some(ContractReturn {
+            kind: "plain".into(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Tuple(KnowledgeSet::Complete(items)) => Some(ContractReturn {
+            kind: "tuple".into(),
+            elements: items.iter().map(direct_return_shape).collect(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Object(KnowledgeSet::Complete(properties)) => Some(ContractReturn {
+            kind: "object".into(),
+            properties: properties
+                .iter()
+                .filter_map(|property| {
+                    direct_return_shape(&property.value).map(|value| (property.name.clone(), value))
+                })
+                .collect(),
+            ..ContractReturn::default()
+        }),
+        _ => None,
+    }
+}
+
+fn direct_contract_return(
+    accepted: &AcceptedContractIndex,
+    file: &solid_facts::FileFacts,
+    module: &str,
+    imported: &str,
+) -> Option<ContractReturn> {
+    let accepted = accepted
+        .resolve_name(file.path.as_str(), module, imported)
+        .ok()?;
+    let export = accepted.export();
+    let claim = export.operation_claim(ClaimDomain::Returns)?;
+    if !claim.is_closed() || claim.items().is_empty() {
+        return None;
+    }
+    let mut agreed = None;
+    for id in claim.items() {
+        let operation = export.operation(&id.0)?;
+        if operation.kind != OperationKind::Return
+            || operation.guard.is_some()
+            || operation.at != Some(crate::contract_semantics::Event::Call)
+            || operation.schedule != Some(Schedule::SameStack)
+        {
+            return None;
+        }
+        let output = operation.output.as_ref()?;
+        if agreed.is_some_and(|previous| previous != output) {
+            return None;
+        }
+        agreed = Some(output);
+    }
+    direct_return_shape(agreed?)
+}
+
 fn project_return(
     export: &crate::contract_semantics::ExportSemantics,
     open: &mut BTreeSet<ClaimDomain>,
@@ -1803,6 +1866,45 @@ mod owner_requirement_projection_tests {
     use crate::{
         ContractClaim, ContractOwnerRequirement, ContractReturn, OwnerRequirementOperation,
     };
+
+    #[test]
+    fn callback_result_identity_does_not_unwrap_async_or_partial_shapes() {
+        let accessor = ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Complete(Vec::new()),
+        };
+        assert_eq!(
+            super::direct_return_shape(&accessor).unwrap().kind,
+            "accessor"
+        );
+        for shape in [
+            ValueShape::Promise(Box::new(accessor.clone())),
+            ValueShape::AsyncIterable(Box::new(accessor.clone())),
+            ValueShape::Tuple(KnowledgeSet::Partial(vec![accessor.clone()])),
+            ValueShape::Choice(KnowledgeSet::Complete(vec![
+                accessor.clone(),
+                ValueShape::Plain,
+            ])),
+            ValueShape::Reactive {
+                role: crate::contract_semantics::ReactiveRole::Setter,
+                resource: None,
+                capabilities: KnowledgeSet::Complete(Vec::new()),
+            },
+        ] {
+            assert!(super::direct_return_shape(&shape).is_none());
+        }
+        let tuple = super::direct_return_shape(&ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            accessor,
+            ValueShape::Callable,
+        ])))
+        .unwrap();
+        assert_eq!(tuple.elements[0].as_ref().unwrap().kind, "accessor");
+        assert!(
+            tuple.elements[1].is_none(),
+            "an opaque slot is never an accessor"
+        );
+    }
 
     fn digest() -> Digest {
         Digest::parse(format!("sha256:{}", "a".repeat(64))).unwrap()
@@ -3424,6 +3526,8 @@ pub(super) struct ResolvedContractBinding {
 pub(super) struct ResolvedContracts {
     pub(super) bindings: Vec<ResolvedContractBinding>,
     pub(super) by_symbol: HashMap<SymbolId, ResolvedContractBinding>,
+    /// Closed, agreed direct runtime returns for callback-result identity.
+    pub(super) direct_returns: HashMap<SymbolId, ContractReturn>,
     /// Exact receiver-bound calls. Never attach a graph to a shared structural
     /// member declaration or infer dispatch from a property spelling alone.
     pub(super) callee_bindings: HashMap<Location, SymbolId>,
@@ -4177,6 +4281,7 @@ fn resolve_contract_imports_inner(
 ) -> ResolvedContracts {
     let mut bindings = Vec::new();
     let mut by_symbol = HashMap::new();
+    let mut direct_returns = HashMap::new();
     let mut missing_exports = Vec::new();
     let mut counts = crate::ContractBindingCounts::default();
     let returns_shed = returns_shed_symbols(facts, entities);
@@ -4305,6 +4410,12 @@ fn resolve_contract_imports_inner(
                         };
                         // External namespace bindings use the same exact
                         // accepted semantics as named imports.
+                        if unmet.is_empty()
+                            && let Some(returned) =
+                                direct_contract_return(accepted, file, &import.module, &imported)
+                        {
+                            direct_returns.insert(symbol.clone(), returned);
+                        }
                         bindings.push(resolved.clone());
                         by_symbol.insert(symbol, resolved);
                     }
@@ -4401,6 +4512,12 @@ fn resolve_contract_imports_inner(
                     summary,
                 };
                 // Only external package bindings enter this projection.
+                if unmet.is_empty()
+                    && let Some(returned) =
+                        direct_contract_return(accepted, file, &import.module, imported)
+                {
+                    direct_returns.insert(symbol.clone(), returned);
+                }
                 bindings.push(resolved.clone());
                 by_symbol.insert(symbol, resolved);
             }
@@ -4486,6 +4603,11 @@ fn resolve_contract_imports_inner(
                     },
                     summary,
                 };
+                if unmet.is_empty()
+                    && let Some(returned) = direct_contract_return(accepted, file, module, imported)
+                {
+                    direct_returns.insert(symbol.clone(), returned);
+                }
                 bindings.push(resolved.clone());
                 by_symbol.insert(symbol, resolved);
             }
@@ -4518,6 +4640,7 @@ fn resolve_contract_imports_inner(
     ResolvedContracts {
         bindings,
         by_symbol,
+        direct_returns,
         callee_bindings,
         returned_callable_bindings,
         missing_exports,

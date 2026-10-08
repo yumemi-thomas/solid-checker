@@ -2704,6 +2704,13 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// The callback argument whose exact returned value is the call's result.
+    /// This is a runtime identity claim, separate from callback execution and
+    /// ownership. Silence grants no passthrough to an unaudited dialect.
+    fn returned_callback_value(&self, _primitive: Primitive) -> Option<usize> {
+        None
+    }
+
     /// The reactive role this dialect assigns to one slot of what `primitive`
     /// returns, or `None` where this dialect's audited vocabulary does not
     /// state it.
@@ -4482,6 +4489,19 @@ mod tests {
             None,
             "a store slot has no accessor row"
         );
+    }
+
+    #[test]
+    fn callback_result_identity_is_an_explicit_dialect_claim() {
+        let two = &Solid2 as &dyn Dialect;
+        assert_eq!(two.returned_callback_value(Primitive::CreateRoot), Some(0));
+        for primitive in [
+            Primitive::Untrack,
+            Primitive::RunWithOwner,
+            Primitive::CreateMemo,
+        ] {
+            assert_eq!(two.returned_callback_value(primitive), None);
+        }
     }
 
     /// ADR 0146: only the plain signal's accessor is inert, and only its slot.

@@ -121,6 +121,78 @@ fn push_contracted_return_source(
     ));
 }
 
+/// Rebind the exact callback value, never the callback's parameter or its
+/// function identity. This produces the same local read evidence as a direct
+/// factory binding and leaves the caller's execution role untouched.
+fn push_callback_return_sources(
+    result: &mut SourceDiscoveryContribution,
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    entities: &EntitySymbols,
+    resolved_contracts: &ResolvedContracts,
+    returned: crate::callback_return::CallbackReturn<'_>,
+) {
+    for (name, value) in returned.bindings {
+        let Some(symbol) = entities.at(file.path.as_str(), name) else {
+            continue;
+        };
+        let declaration = crate::location(file.path.shared(), name);
+        let display = symbol_id(file.source_text(name).unwrap_or_default());
+        if value.kind == "accessor" {
+            if let Some((export, origin)) = returned.origin {
+                push_contracted_return_source(result, symbol, display, &value, export, origin);
+            } else {
+                result
+                    .accessors
+                    .push((symbol.clone(), (display, declaration)));
+                result
+                    .source_kinds
+                    .push((symbol.clone(), ReactiveSourceKind::Accessor));
+            }
+        } else if value.kind == "setter" {
+            result.setters.push((
+                symbol.clone(),
+                (
+                    display,
+                    declaration,
+                    returned.created.owned_write_option,
+                    ReactiveSourceKind::Accessor,
+                ),
+            ));
+        } else {
+            continue;
+        }
+        result.source_phases.push((symbol.clone(), 1));
+        if let Some(primitive) = returned.primitive {
+            if let Some(spelling) = lookup.dialect.name_of(primitive) {
+                result
+                    .source_primitives
+                    .push((symbol.clone(), spelling.into()));
+            }
+            result
+                .source_owned_write
+                .push((symbol.clone(), returned.created.owned_write_option));
+            let options =
+                async_source_options(file, returned.created, Some(primitive), lookup.dialect);
+            if options != AsyncSourceOptions::default() {
+                result.source_async_options.push((symbol.clone(), options));
+            }
+            if value.kind == "accessor"
+                && returned.created.arguments.first().is_some_and(|argument| {
+                    computation_is_async_with_contracts(
+                        lookup,
+                        file,
+                        argument.span,
+                        &resolved_contracts.by_symbol,
+                    )
+                })
+            {
+                result.async_sources.push(symbol.clone());
+            }
+        }
+    }
+}
+
 struct EffectiveReturnContext<'a> {
     file: &'a FileFacts,
     ast_index: &'a CachedAstFileIndex,
@@ -912,6 +984,19 @@ pub(crate) fn discover_file_sources(
         let Some(call) = ast_index.call_by_span(initializer) else {
             continue;
         };
+        if crate::callback_return::callback_slot(lookup, file, call).is_some() {
+            if let Some(returned) = crate::callback_return::resolve(lookup, file, call) {
+                push_callback_return_sources(
+                    &mut result,
+                    lookup,
+                    file,
+                    entities,
+                    resolved_contracts,
+                    returned,
+                );
+            }
+            continue;
+        }
         let contracted = entities
             .get(&location(file.path.shared(), call.callee))
             .and_then(|symbol| resolved_contracts.by_symbol.get(symbol));
@@ -2052,6 +2137,24 @@ pub(crate) fn discover_sources(
             role,
             solid_dialect::TypeRole::Component | solid_dialect::TypeRole::Owner
         ) {
+            continue;
+        }
+        if semantic_lookup
+            .file_by_path(entity.location.path.as_ref())
+            .is_some_and(|file| {
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(entity.location.start_byte),
+                    u32::try_from(entity.location.end_byte),
+                ) else {
+                    return true;
+                };
+                crate::callback_return::binding_is_callback_result(
+                    semantic_lookup,
+                    file,
+                    solid_facts::core::Span::new(start, end),
+                )
+            })
+        {
             continue;
         }
         // ADR 0172: a tuple containing an accessor is not itself an accessor.

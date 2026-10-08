@@ -28709,3 +28709,16 @@ escaped receivers, class/instance mutation, wrappers, unsupported members and
 stored iterator resumption remain uncertifiable. union's created-owner iteration
 and dynamic constructor iterable population stay open. No compiler/checker or
 runtime result has been observed and no snapshot/receipt has been generated.
+
+## createRoot callback return identity (2026-10-09, ADR 0259)
+
+A binding of `createRoot(fn)`'s result takes the inner factory's exact identity
+when `fn` is one synchronous parameterless literal with a single complete
+return of an exact dialect-known or contracted factory, and the binding is
+immutable, unexported, unescaped and only called. Every other shape is
+unresolved and keeps its prior evidence: no obligation is added (a blanket one
+cost 123 uncertifiable corpus sites). Open: roots returning `dispose`, async
+roots, named or non-literal callbacks, conditional or multiple returns, and
+escaping or container bindings. The `createPolled` and `createPagination`
+top-level-read twins still need spec claims (callbacks; reactive reads and
+owner requirements) before their correct use is clean.

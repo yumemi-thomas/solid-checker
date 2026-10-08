@@ -1777,6 +1777,11 @@ impl LocalAccessContext<'_, '_> {
             };
             let typed_effect_accessor = execution == ExecutionRole::EffectApply
                 && call.arguments.is_empty()
+                && !crate::callback_return::binding_is_callback_result(
+                    self.lookup,
+                    file,
+                    call.callee,
+                )
                 && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee)
                     .is_some();
             let Some(multiplicity) = self.reachable_calls.get(&callee).copied().or_else(|| {
@@ -1914,6 +1919,11 @@ impl LocalAccessContext<'_, '_> {
             if !self.accessors.contains_key(symbol)
                 && execution == ExecutionRole::EffectApply
                 && call.arguments.is_empty()
+                && !crate::callback_return::binding_is_callback_result(
+                    self.lookup,
+                    file,
+                    call.callee,
+                )
                 && let Some(descriptor) =
                     typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee)
                 && seen.insert(key.clone())

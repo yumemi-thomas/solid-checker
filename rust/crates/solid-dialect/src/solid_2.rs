@@ -7663,6 +7663,14 @@ impl Dialect for Solid2 {
         )
     }
 
+    /// `createRoot` returns `runWithOwner(owner, () => init(dispose))`.
+    /// Source: rc.9 signals-negative-rows audit § 3.1; rc.13 runtime audit
+    /// row `createRoot` records both the core and hydration bodies unchanged.
+    /// This says nothing about the dispose parameter's value or lifetime.
+    fn returned_callback_value(&self, primitive: Primitive) -> Option<usize> {
+        (primitive == Primitive::CreateRoot).then_some(0)
+    }
+
     /// Source: the published declarations, read from the exact package
     /// artifacts of the audited prerelease. In
     /// `solid-js@2.0.0-rc.3/types/server/signals.d.ts`:

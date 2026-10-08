@@ -691,6 +691,25 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    /// Exact admitted factory return; callers do not inspect contract storage.
+    pub(super) fn contract_return_at_call(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<(&crate::ContractReturn, &str, &Location)> {
+        let binding = self
+            .resolved_contracts
+            .by_symbol
+            .get(self.callee_symbol(file, call.callee)?)?;
+        Some((
+            self.resolved_contracts
+                .direct_returns
+                .get(&binding.symbol)?,
+            binding.local_name.as_str(),
+            &binding.contract_location,
+        ))
+    }
+
     pub(super) fn contract_callback_results(
         &self,
         symbol: &str,
@@ -4181,6 +4200,7 @@ mod tests {
         let contracts = crate::contracts::ResolvedContracts {
             bindings: Vec::new(),
             by_symbol: HashMap::new(),
+            direct_returns: HashMap::new(),
             callee_bindings: HashMap::new(),
             returned_callable_bindings: HashSet::new(),
             missing_exports: Vec::new(),
@@ -4270,6 +4290,7 @@ mod tests {
             let returned_binding = binding("captured-instance", returned_summary);
             let contracts = crate::contracts::ResolvedContracts {
                 bindings: vec![],
+                direct_returns: HashMap::new(),
                 by_symbol: HashMap::from([
                     (factory_binding.symbol.clone(), factory_binding),
                     (returned_binding.symbol.clone(), returned_binding),
@@ -4312,6 +4333,7 @@ mod tests {
         let second = span_of(source, "second.clear", 0);
         let contracts = crate::contracts::ResolvedContracts {
             bindings: vec![],
+            direct_returns: HashMap::new(),
             by_symbol: HashMap::new(),
             callee_bindings: HashMap::from([
                 (
@@ -4687,6 +4709,7 @@ mod tests {
         let contracts = crate::contracts::ResolvedContracts {
             bindings: Vec::new(),
             by_symbol: HashMap::new(),
+            direct_returns: HashMap::new(),
             callee_bindings: HashMap::new(),
             returned_callable_bindings: HashSet::new(),
             missing_exports: Vec::new(),
