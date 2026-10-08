@@ -19,8 +19,21 @@
     }
   ],
   "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
   "exports": {
     "repeat": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53. Same constructor and same mapLength function on both builds: one ordinary memo invokes times under its observer, and the returned mapper creates roots only when called. No host branch or untrack. Only cleanup is closed; reads/creates/callbacks/returns remain open. Server direct cleanup can skip an unowned call. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [
+          "cleanup"
+        ],
+        "closed": [
+          "cleanups"
+        ],
+        "closures": {
+          "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53. Same constructor and same mapLength function on both builds: one ordinary memo invokes times under its observer, and the returned mapper creates roots only when called. No host branch or untrack. Only cleanup is closed; reads/creates/callbacks/returns remain open. Server direct cleanup can skip an unowned call. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain cleanups: The server path has only the listed direct cleanup registration; server onCleanup may skip an absent owner. The lowered lower bound permits that branch without claiming a guaranteed registration."
+        }
+      },
       "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 Source-reviewed draft only; Chrome probes and identity generation are pending.",
       "call": {
         "operations": [
