@@ -6,7 +6,9 @@ function memberCalls(call) {
   return (call?.operations ?? []).flatMap(operation => {
     const output = operation.output;
     const entries = output?.kind === "tuple" ? (output.items ?? []).map((value, index) => [String(index), value])
-      : output?.kind === "object" ? Object.entries(output.properties ?? {})
+      : output?.kind === "object" ? (Array.isArray(output.properties)
+        ? output.properties.map(property => [property.name, property.value])
+        : Object.entries(output.properties ?? {}))
       : output?.kind === "returned-callable" ? (output.members ?? []).map(member => [member.name, member.value]) : [];
     return entries.filter(([, value]) => value?.kind === "effectful-callable")
       .map(([key, value]) => [`${operation.id}.${key}`, value.call]);

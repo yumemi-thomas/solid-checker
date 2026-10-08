@@ -104,7 +104,72 @@
                 {
                   "name": "notification",
                   "value": {
-                    "kind": "callable"
+                    "kind": "effectful-callable",
+                    "call": {
+                      "operations": [
+                        {
+                          "id": "notification-read",
+                          "kind": "read",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "ambient-at-execution",
+                          "count": {
+                            "min": 0,
+                            "max": 1,
+                            "scope": "call"
+                          },
+                          "inputs": [
+                            {
+                              "kind": "reactive",
+                              "role": "accessor",
+                              "resource": "notification"
+                            }
+                          ],
+                          "owner": {
+                            "source": "ambient-at-execution"
+                          }
+                        },
+                        {
+                          "id": "notification-return",
+                          "kind": "return",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "untracked",
+                          "count": {
+                            "min": 1,
+                            "max": 1,
+                            "scope": "call"
+                          },
+                          "output": {
+                            "kind": "plain"
+                          }
+                        }
+                      ],
+                      "reads": [
+                        "notification-read"
+                      ],
+                      "returns": [
+                        "notification-return"
+                      ],
+                      "creates": [],
+                      "callbacks": [],
+                      "closed": [
+                        "reads",
+                        "returns",
+                        "creates",
+                        "callbacks"
+                      ]
+                    }
                   }
                 },
                 {
@@ -141,10 +206,10 @@
         ]
       },
       "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification is only callable across the union: unsupported path has no signal. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks.",
-        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification is only callable across the union: unsupported path has no signal. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification is only callable across the union: unsupported path has no signal. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks.",
-        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification is only callable across the union: unsupported path has no signal. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks."
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification has a stated effectful-callable graph with read count 0..1: unsupported path has no signal, while the supported path returns the exact getter. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks. The notification member now states its own optional getter graph, citing the supported signal return and inert unsupported return separately. show and close remain opaque; this factory closure does not discharge their uses.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification has a stated effectful-callable graph with read count 0..1: unsupported path has no signal, while the supported path returns the exact getter. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks. The notification member now states its own optional getter graph, citing the supported signal return and inert unsupported return separately. show and close remain opaque; this factory closure does not discharge their uses.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification has a stated effectful-callable graph with read count 0..1: unsupported path has no signal, while the supported path returns the exact getter. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks. The notification member now states its own optional getter graph, citing the supported signal return and inert unsupported return separately. show and close remain opaque; this factory closure does not discharge their uses.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification has a stated effectful-callable graph with read count 0..1: unsupported path has no signal, while the supported path returns the exact getter. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks. The notification member now states its own optional getter graph, citing the supported signal return and inert unsupported return separately. show and close remain opaque; this factory closure does not discharge their uses."
       },
       "rule": "missing-owner",
       "scenario": [
@@ -163,8 +228,21 @@
           "label": "leaf",
           "rule": "leaf-owner-forbidden-call",
           "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        },
+        {
+          "label": "notification-read",
+          "rule": "strict-read-untracked",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:86-94,139-145 - On a browser with Notification support, notification() in the component body warns; in tracked JSX it is clean. The graph deliberately keeps min:0 because the unsupported browser/server path is inert. This pair does not prove support on every host. Chrome observation and digest rebinding are pending."
         }
-      ]
+      ],
+      "memberClosures": {
+        "return.notification": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:86-94,139-145 - The unsupported branch returns () => null and reads nothing. The supported branch returns the exact signal getter allocated at line 94; each invocation reads it on the caller stack in ambient tracking. Count 0..1 preserves the support uncertainty; neither capability nor permission is assumed.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:90,94,139-145 - The inert branch returns null; the signal branch returns a native Notification or null. These are non-reactive return values under P1, not another accessor or caller callable.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:90,94,139-145 - Calling this getter allocates no signal, owner or computation. Allocation at line 94 belongs to the factory, not the getter.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:90,94,139-145 - Calling this getter invokes no caller callback. show/close/native handlers are separate opaque members and are not invoked by notification()."
+        }
+      }
     },
     "isNotificationSupported": {
       "hostFree": {

@@ -90,7 +90,9 @@ function effectfulMembers(call) {
     if (operation.kind !== "return" || !operation.output || typeof operation.output !== "object") continue;
     const output = operation.output;
     const entries = output.kind === "tuple" ? (output.items ?? []).map((item, index) => [String(index), item])
-      : output.kind === "object" ? Object.entries(output.properties ?? {})
+      : output.kind === "object" ? (Array.isArray(output.properties)
+        ? output.properties.map(property => [property.name, property.value])
+        : Object.entries(output.properties ?? {}))
       : output.kind === "returned-callable" ? (output.members ?? []).map(member => [member.name, member.value]) : [];
     for (const [key, member] of entries)
       if (member?.kind === "effectful-callable") members.set(`${operation.id}.${key}`, member.call);

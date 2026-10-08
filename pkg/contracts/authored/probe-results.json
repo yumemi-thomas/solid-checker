@@ -6399,6 +6399,43 @@
       "correct": []
     },
     {
+      "spec": "@solid-primitives+notification@1.0.0-next.3",
+      "package": "@solid-primitives/notification",
+      "version": "1.0.0-next.3",
+      "export": "createNotification",
+      "label": "notification-read",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 23
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
       "spec": "@solid-primitives+orientation@1.0.0-next.2",
       "package": "@solid-primitives/orientation",
       "version": "1.0.0-next.2",

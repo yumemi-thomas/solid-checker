@@ -1607,8 +1607,8 @@ pub(crate) struct SourceDiscovery {
     /// `INVALID_REFRESH_TARGET` in dev (probed, rc.0). A store whose
     /// construction form is unknown is absent, keeping refresh acceptance.
     pub(crate) value_form_stores: HashSet<SymbolId>,
-    pub(crate) contract_reads: HashMap<SymbolId, Vec<(String, String, Location, String)>>,
-    pub(crate) contract_parameter_reads: HashMap<SymbolId, Vec<(usize, String, String, Location)>>,
+    pub(crate) contract_reads: HashMap<SymbolId, Vec<crate::ContractReadSite>>,
+    pub(crate) contract_parameter_reads: HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
     pub(crate) contract_callbacks: HashMap<SymbolId, Vec<ContractCallback>>,
     pub(crate) contract_returns: HashMap<SymbolId, (ContractReturn, Location)>,
     pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
@@ -1777,9 +1777,9 @@ pub(crate) fn discover_sources(
     let mut async_sources = HashSet::<SymbolId>::new();
     let mut source_async_options = HashMap::<SymbolId, AsyncSourceOptions>::new();
     let mut value_form_stores = HashSet::<SymbolId>::new();
-    let mut contract_reads = HashMap::<SymbolId, Vec<(String, String, Location, String)>>::new();
+    let mut contract_reads = HashMap::<SymbolId, Vec<crate::ContractReadSite>>::new();
     let mut contract_parameter_reads =
-        HashMap::<SymbolId, Vec<(usize, String, String, Location)>>::new();
+        HashMap::<SymbolId, Vec<crate::ContractParameterReadSite>>::new();
     let mut contract_callbacks = HashMap::<SymbolId, Vec<ContractCallback>>::new();
     let mut contract_returns = HashMap::<SymbolId, (ContractReturn, Location)>::new();
     let mut contracted_accessor_symbols = HashSet::<SymbolId>::new();
@@ -1798,6 +1798,7 @@ pub(crate) fn discover_sources(
                     contracted.local_name.clone(),
                     contracted.contract_location.clone(),
                     read.kind.clone(),
+                    read.execution.clone(),
                 )
             })
             .collect::<Vec<_>>();
@@ -1817,6 +1818,7 @@ pub(crate) fn discover_sources(
                         format!("{}.{}", contracted.package_name, contracted.imported_name),
                         contracted.local_name.clone(),
                         contracted.contract_location.clone(),
+                        read.execution.clone(),
                     )
                 })
             })

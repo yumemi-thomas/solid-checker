@@ -353,7 +353,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 192 adds package-callback-result-consumer's hand-stated document,
       // ADR 0253's pin of callback-result provenance.
-      stableMainDocuments: 192,
+      //
+      // 193 adds package-member-receiver-consumer's hand-stated document,
+      // ADR 0254's pin of exact receiver member binding.
+      stableMainDocuments: 193,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

@@ -58,6 +58,7 @@ mod property_gets;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct SummaryRead {
+    pub(super) contract_read_context: Option<crate::ContractReadContext>,
     pub(super) symbol: SymbolId,
     pub(super) display: SymbolId,
     pub(super) kind: Option<String>,
@@ -109,7 +110,12 @@ impl SummaryReads {
     }
 
     pub(super) fn push_unique(&mut self, read: SummaryRead) -> bool {
-        if !self.seen.insert(Self::key(&read)) {
+        if !self.seen.insert(Self::key(&read))
+            && self.ordered.iter().any(|previous| {
+                Self::key(previous) == Self::key(&read)
+                    && previous.contract_read_context == read.contract_read_context
+            })
+        {
             return false;
         }
         self.ordered.push(read);
@@ -149,7 +155,14 @@ impl SummaryReads {
 /// second. The caller unions every candidate's reads once this returns true,
 /// so anything short of set equality would attribute an unproven read.
 fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
-    fn effect(reads: &SummaryReads) -> HashSet<(&SymbolId, &SymbolId, Option<&str>, &Location)> {
+    type Effect<'r> = (
+        &'r SymbolId,
+        &'r SymbolId,
+        Option<&'r str>,
+        &'r Location,
+        &'r Option<crate::ContractReadContext>,
+    );
+    fn effect(reads: &SummaryReads) -> Vec<Effect<'_>> {
         reads
             .iter()
             .map(|read| {
@@ -158,11 +171,14 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
                     &read.display,
                     read.kind.as_deref(),
                     &read.declaration,
+                    &read.contract_read_context,
                 )
             })
             .collect()
     }
-    effect(left) == effect(right)
+    let left = effect(left);
+    let right = effect(right);
+    left.iter().all(|read| right.contains(read)) && right.iter().all(|read| left.contains(read))
 }
 
 /// Set equality over callback timing, for the same reason as
@@ -474,6 +490,7 @@ fn discover_typed_accessors(
         contributions.push(TypedAccessorContribution {
             owner: nodes[owner].span,
             read: SummaryRead {
+                contract_read_context: None,
                 symbol: SymbolId::from(format!(
                     "typed:{}\0{}\0{}",
                     call_location.path, call_location.start_byte, call_location.end_byte
@@ -608,8 +625,8 @@ fn discover_summary_nodes(
 }
 
 struct InterproceduralContracts<'a> {
-    reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
-    parameter_reads: &'a HashMap<SymbolId, Vec<(usize, String, String, Location)>>,
+    reads: &'a HashMap<SymbolId, Vec<crate::ContractReadSite>>,
+    parameter_reads: &'a HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
     callbacks: &'a HashMap<SymbolId, Vec<ContractCallback>>,
 }
 
@@ -1643,10 +1660,11 @@ fn discover_interprocedural_graph(
                 .push((owner_span, SymbolId::from(symbol)));
         }
         if !ambiguous_dispatch && let Some(contracted) = contracts.reads.get(symbol) {
-            for (display, _, declaration, kind) in contracted {
+            for (display, _, declaration, kind, read_context) in contracted {
                 contribution.direct_reads.push((
                     owner_span,
                     SummaryRead {
+                        contract_read_context: read_context.clone(),
                         symbol: SymbolId::from(symbol),
                         display: SymbolId::from(display.as_str()),
                         kind: Some(kind.clone()),
@@ -1659,7 +1677,7 @@ fn discover_interprocedural_graph(
             }
         }
         if !ambiguous_dispatch && let Some(contracted) = contracts.parameter_reads.get(symbol) {
-            for (parameter, _, _, _) in contracted {
+            for (parameter, _, _, _, _) in contracted {
                 let Some(argument) = call.arguments.get(*parameter) else {
                     continue;
                 };
@@ -5834,6 +5852,7 @@ fn interprocedural_result_reads_for_file(
                     push_unique_summary_read(
                         &mut effective,
                         SummaryRead {
+                            contract_read_context: None,
                             symbol: argument_symbol.clone(),
                             display: display.clone(),
                             kind: Some("accessor".into()),
@@ -5886,6 +5905,7 @@ fn interprocedural_result_reads_for_file(
                         push_unique_summary_read(
                             &mut effective,
                             SummaryRead {
+                                contract_read_context: None,
                                 symbol: argument_symbol.clone(),
                                 display: SymbolId::from(
                                     file.source_text(argument.span).unwrap_or("store"),
@@ -6140,6 +6160,7 @@ fn interprocedural_result_reads_for_file(
                         }
                         let (display, declaration) = accessors.get(symbol.as_str())?;
                         Some(SummaryRead {
+                            contract_read_context: None,
                             symbol: symbol.clone(),
                             display: display.clone(),
                             kind: Some("accessor".into()),
@@ -6161,6 +6182,12 @@ fn interprocedural_result_reads_for_file(
                     _ => execution,
                 };
                 for read in argument_summary {
+                    let (callback_execution, read_unproven) = read
+                        .contract_read_context
+                        .as_ref()
+                        .map_or((callback_execution, false), |context| {
+                            context.at_call(callback_execution)
+                        });
                     if seen.insert((
                         callee.path.clone(),
                         callee.start_byte,
@@ -6184,7 +6211,7 @@ fn interprocedural_result_reads_for_file(
                             via: label.clone().into(),
                             origin: Some(read.origin.clone()),
                             origin_context: read.origin_context.clone().into(),
-                            uncertain: false,
+                            uncertain: read_unproven,
                             missing_jsx_census: missing_jsx_census(
                                 file,
                                 call.span,
@@ -6292,6 +6319,7 @@ fn interprocedural_result_reads_for_file(
                     push_unique_summary_read(
                         &mut activated_defaults,
                         SummaryRead {
+                            contract_read_context: None,
                             symbol: accessor.clone(),
                             display: display.clone(),
                             kind: Some("accessor".into()),
@@ -6339,6 +6367,7 @@ fn interprocedural_result_reads_for_file(
                     push_unique_summary_read(
                         &mut activated_defaults,
                         SummaryRead {
+                            contract_read_context: None,
                             symbol: store.clone(),
                             display: SymbolId::from(
                                 callee_file.source_text(member.span).unwrap_or("store"),
@@ -6443,6 +6472,10 @@ fn interprocedural_result_reads_for_file(
             .collect::<Vec<_>>();
         effective.sort_by_key(|(direct, _)| !*direct);
         for (direct, read) in effective {
+            let (execution, read_unproven) = read
+                .contract_read_context
+                .as_ref()
+                .map_or((execution, false), |context| context.at_call(execution));
             let accessor = read.display.to_string();
             // A summary read whose symbol is the callee itself is the export's
             // own contracted `reads`, not a value passed in. ADR 0246: so is
@@ -6457,7 +6490,10 @@ fn interprocedural_result_reads_for_file(
             if seen.insert((
                 callee.path.clone(),
                 callee.start_byte,
-                read.symbol.to_string(),
+                format!(
+                    "{}#contract-context:{:?}",
+                    read.symbol, read.contract_read_context
+                ),
             )) {
                 result.push(ReactiveRead {
                     kind: read
@@ -6476,7 +6512,7 @@ fn interprocedural_result_reads_for_file(
                     via: label.clone().into(),
                     origin: Some(read.origin),
                     origin_context: read.origin_context.into(),
-                    uncertain: false,
+                    uncertain: read_unproven,
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
                     host_callback_timing: host_callback_timing(file, call.span, execution, lookup),
                     project_consumer_non_strict: false,
@@ -6942,6 +6978,7 @@ fn direct_reference_contributions(
             .and_then(|index| index.direct_call_by_callee(reference_span))
         {
             let read = SummaryRead {
+                contract_read_context: None,
                 symbol: source.symbol.clone(),
                 display: source.display.clone(),
                 kind: Some(
@@ -6972,6 +7009,7 @@ fn direct_reference_contributions(
                     .map(|member| DirectReferenceContribution {
                         owner,
                         read: SummaryRead {
+                            contract_read_context: None,
                             symbol: source.symbol.clone(),
                             display: SymbolId::from(format!(
                                 "{}.{}",
@@ -7001,9 +7039,9 @@ pub(super) struct InterproceduralContext<'a, 'facts> {
     pub(super) summary_source_symbols: &'a HashSet<SymbolId>,
     pub(super) source_phases: &'a HashMap<SymbolId, u8>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(super) contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    pub(super) contract_reads: &'a HashMap<SymbolId, Vec<crate::ContractReadSite>>,
     pub(super) contract_parameter_reads:
-        &'a HashMap<SymbolId, Vec<(usize, String, String, Location)>>,
+        &'a HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
     pub(super) contract_callbacks: &'a HashMap<SymbolId, Vec<ContractCallback>>,
     pub(super) contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
     pub(super) entities: &'a EntitySymbols,
@@ -7534,6 +7572,7 @@ fn interprocedural_reads(
                             && let Some((display, declaration)) = accessors.get(symbol)
                         {
                             returned[index].push_unique(SummaryRead {
+                                contract_read_context: None,
                                 symbol: symbol.clone(),
                                 display: display.clone(),
                                 kind: Some(
@@ -7582,6 +7621,7 @@ fn interprocedural_reads(
                             let contracted = contract_returns.get(symbol).cloned();
                             if let Some((returned_contract, declaration)) = contracted {
                                 returned[index].push_unique(SummaryRead {
+                                    contract_read_context: None,
                                     symbol: symbol.clone(),
                                     display: SymbolId::from(returned_contract.label),
                                     kind: Some(returned_contract.kind),
@@ -8215,6 +8255,7 @@ mod tests {
 
     fn read(symbol: &str, display: &str, origin: u64) -> SummaryRead {
         SummaryRead {
+            contract_read_context: None,
             symbol: SymbolId::from(symbol),
             display: SymbolId::from(display),
             kind: None,

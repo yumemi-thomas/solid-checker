@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/partial-structural-return-consumer/App.tsx",
-      "start": 1127,
-      "end": 1137,
+      "start": 1110,
+      "end": 1123,
       "fixes": 0
     },
     {

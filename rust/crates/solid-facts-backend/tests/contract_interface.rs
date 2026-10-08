@@ -160,6 +160,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
             callback_results: Vec::new(),
             kind: "function".into(),
             reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+                execution: None,
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(0),

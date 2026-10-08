@@ -969,6 +969,13 @@ impl<'a> SemanticLookup<'a> {
         self.resolved_contracts.by_symbol.contains_key(symbol)
     }
 
+    /// Successful receiver-specific binding of this exact, unwrapped callee.
+    pub(super) fn contract_member_call_is_bound(&self, file: &FileFacts, callee: Span) -> bool {
+        self.resolved_contracts
+            .callee_bindings
+            .contains_key(&crate::location(file.path.shared(), callee))
+    }
+
     /// Every primitive this build can resolve at a call site.
     ///
     /// `primitive_name` answers only through the symbol-name table, so a
@@ -2402,13 +2409,34 @@ impl<'a> SemanticLookup<'a> {
     /// inherit the identity of `i` or `wrapper` when the complete callee has no
     /// semantic fact.
     pub(super) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
-        let callee = file.ast.peel_ts_sugar_span(callee);
+        let written_callee = callee;
         if let Some(symbol) = self
             .resolved_contracts
             .callee_bindings
             .get(&crate::location(file.path.shared(), callee))
         {
             return Some(symbol.as_str());
+        }
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        if self
+            .resolved_contracts
+            .callee_bindings
+            .contains_key(&crate::location(file.path.shared(), callee))
+        {
+            return None;
+        }
+        if written_callee != callee
+            && self
+                .entities
+                .at(file.path.as_str(), callee)
+                .is_some_and(|symbol| {
+                    self.resolved_contracts
+                        .by_symbol
+                        .get(symbol)
+                        .is_some_and(|binding| binding.contract_location.path.ends_with(']'))
+                })
+        {
+            return None;
         }
         let member_property = self
             .ast_indexes
@@ -2447,13 +2475,34 @@ impl<'a> SemanticLookup<'a> {
     /// property spelling into a project-wide method lookup. Callers must
     /// compare the returned candidates' summaries before using more than one.
     pub(super) fn callee_symbols(&self, file: &FileFacts, callee: Span) -> Vec<SymbolId> {
-        let callee = file.ast.peel_ts_sugar_span(callee);
+        let written_callee = callee;
         if let Some(symbol) = self
             .resolved_contracts
             .callee_bindings
             .get(&crate::location(file.path.shared(), callee))
         {
             return vec![symbol.clone()];
+        }
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        if self
+            .resolved_contracts
+            .callee_bindings
+            .contains_key(&crate::location(file.path.shared(), callee))
+        {
+            return vec![];
+        }
+        if written_callee != callee
+            && self
+                .entities
+                .at(file.path.as_str(), callee)
+                .is_some_and(|symbol| {
+                    self.resolved_contracts
+                        .by_symbol
+                        .get(symbol)
+                        .is_some_and(|binding| binding.contract_location.path.ends_with(']'))
+                })
+        {
+            return vec![];
         }
         let member_property = self
             .ast_indexes
@@ -4109,6 +4158,80 @@ mod tests {
             lookup.callee_symbol(&facts.files[0], span_of(source, "make", 0)),
             None
         );
+    }
+
+    #[test]
+    fn object_member_stability_uses_every_binder_reference() {
+        let returned = crate::ContractReturn {
+            kind: "object".into(),
+            properties: std::collections::BTreeMap::from([(
+                "member".into(),
+                crate::ContractReturn {
+                    kind: crate::contracts::EFFECTFUL_MEMBER.into(),
+                    ..crate::ContractReturn::default()
+                },
+            )]),
+            ..crate::ContractReturn::default()
+        };
+        for (source, stable) in [
+            ("const obj = make(); obj.member();", true),
+            (
+                "const obj = make(); const other = make(); other.member(); obj.member();",
+                true,
+            ),
+            ("const obj = make(); keep([obj]); obj.member();", false),
+            ("const obj = make(); keep({obj}); obj.member();", false),
+            (
+                "const obj = make(); keep(obj as unknown); obj.member();",
+                false,
+            ),
+            (
+                "const obj = make(); const alias = obj; obj.member();",
+                false,
+            ),
+            ("const obj = make(); keep(obj); obj.member();", false),
+            ("function f() { const obj = make(); return obj; }", false),
+            ("export const obj = make(); obj.member();", false),
+            ("const obj = make(); export {obj}; obj.member();", false),
+            (
+                "const obj = make(); const view = <View value={obj}/>; obj.member();",
+                false,
+            ),
+            ("const obj = make(); (obj as any).member();", false),
+            (
+                "const obj = make(); obj.member = replacement; obj.member();",
+                false,
+            ),
+            (
+                "const obj = make(); delete obj.member; obj.member();",
+                false,
+            ),
+            (
+                "const obj = make(); for (obj.member of values) {} obj.member();",
+                false,
+            ),
+        ] {
+            let facts = project(source);
+            let file = &facts.files[0];
+            let root = file
+                .ast
+                .bindings
+                .iter()
+                .find(|binding| {
+                    binding
+                        .names
+                        .iter()
+                        .any(|name| file.source_text(name.span) == Some("obj"))
+                })
+                .unwrap()
+                .names[0]
+                .span;
+            assert_eq!(
+                crate::contracts::returned_object_members_are_stable(file, root, &returned),
+                stable,
+                "{source}"
+            );
+        }
     }
 
     /// Call sites keyed by target function span, as `(callee start, end)`.

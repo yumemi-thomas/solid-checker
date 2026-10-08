@@ -765,6 +765,32 @@ fn normalize_export(
                     };
                     let mut read_operation =
                         operation(id.clone(), OperationKind::Read, vec![input], None);
+                    if let Some(context) = &read.execution {
+                        // An exact re-export preserves the dependency's row.
+                        // A project wrapper establishes neither invocation
+                        // count nor the inner tracking/timing at its own call.
+                        // Do not turn accepted optional reads into guarantees.
+                        if summary.inherited_from.is_some() {
+                            read_operation.cardinality = context.count.clone();
+                            read_operation.tracking = context.tracking;
+                            read_operation.at = context.at;
+                            read_operation.schedule = context.schedule;
+                            if matches!(context.trigger, Some(Trigger::Event(_)) | None) {
+                                read_operation.trigger = context.trigger.clone();
+                            } else {
+                                read_operation.trigger = None;
+                                read_operation.cardinality.min = Some(0);
+                            }
+                            if context.guarded {
+                                read_operation.cardinality.min = Some(0);
+                            }
+                        } else {
+                            read_operation.tracking = Tracking::Unknown;
+                            read_operation.at = None;
+                            read_operation.schedule = None;
+                            read_operation.trigger = None;
+                        }
+                    }
                     // The provenance the IR could name exactly. `read-<n>` is
                     // this same naming rule applied to the *other* export's
                     // own list, which is why the IR carries an ordinal rather

@@ -580,11 +580,23 @@ fn project_reactive_reads(
         if operation.strict_read == Some(crate::contract_semantics::StrictRead::Cleared) {
             continue;
         }
+        if operation.cardinality.max == Some(crate::contract_semantics::UpperBound::Finite(0)) {
+            continue;
+        }
+        let execution = Some(crate::ContractReadContext {
+            count: operation.cardinality.clone(),
+            tracking: operation.tracking,
+            at: operation.at,
+            schedule: operation.schedule,
+            trigger: operation.trigger.clone(),
+            guarded: operation.guard.is_some(),
+        });
         match operation.inputs.first() {
             // Carry the whole path back. Keeping only `path.last()` would
             // round-trip an accepted `["modifiers", "includes"]` down into a
             // claim about a `includes` property of the parameter itself.
             Some(ValueShape::Parameter { index, path }) => reads.push(ContractReactiveRead {
+                execution: execution.clone(),
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(usize::from(*index)),
@@ -600,6 +612,7 @@ fn project_reactive_reads(
                 composed_from: None,
             }),
             Some(ValueShape::Reactive { .. }) => reads.push(ContractReactiveRead {
+                execution: execution.clone(),
                 kind: "accessor".into(),
                 label: "normalized reactive read".into(),
                 parameter: None,
@@ -608,6 +621,7 @@ fn project_reactive_reads(
                 composed_from: None,
             }),
             Some(ValueShape::Store { .. }) => reads.push(ContractReactiveRead {
+                execution,
                 kind: "store-path".into(),
                 label: "normalized store read".into(),
                 parameter: None,
@@ -1562,6 +1576,119 @@ mod owner_requirement_projection_tests {
         assert!(
             open.contains(&ClaimDomain::Reads),
             "clearing does not close an open census"
+        );
+    }
+
+    #[test]
+    fn read_projection_preserves_optional_count_and_execution() {
+        let mut read = operation("read", OperationKind::Read, &[]);
+        read.inputs = vec![ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        }];
+        read.tracking = Tracking::AmbientAtExecution;
+        read.cardinality.max = Some(UpperBound::Finite(1));
+        let mut census = claims();
+        census.reads = KnowledgeSet::Complete(vec![read.id.clone()]);
+        let project = |read: Operation| {
+            let subject = export(census.clone(), vec![read], vec![]);
+            super::project_reactive_reads(&subject, &mut BTreeSet::new())
+                .known()
+                .unwrap()
+                .clone()
+        };
+        let rows = project(read.clone());
+        let context = rows[0].execution.as_ref().unwrap();
+        assert_eq!(context.count, read.cardinality);
+        assert_eq!(context.at, read.at);
+        assert_eq!(context.schedule, read.schedule);
+        assert_eq!(context.tracking, read.tracking);
+        assert_eq!(
+            context.at_call(crate::ExecutionRole::UntrackedRendering),
+            (crate::ExecutionRole::UntrackedRendering, true)
+        );
+        assert_eq!(
+            context.at_call(crate::ExecutionRole::TrackedJsx),
+            (crate::ExecutionRole::TrackedJsx, true)
+        );
+        read.cardinality.min = Some(1);
+        assert_eq!(
+            project(read.clone())[0]
+                .execution
+                .as_ref()
+                .unwrap()
+                .at_call(crate::ExecutionRole::UntrackedRendering),
+            (crate::ExecutionRole::UntrackedRendering, false)
+        );
+        read.schedule = None;
+        assert!(
+            project(read.clone())[0]
+                .execution
+                .as_ref()
+                .unwrap()
+                .at_call(crate::ExecutionRole::UntrackedRendering)
+                .1
+        );
+        // ADR 0254: the read keeps the caller's role; missing timing only
+        // makes it unproven.
+        assert_eq!(
+            project(read.clone())[0]
+                .execution
+                .as_ref()
+                .unwrap()
+                .at_call(crate::ExecutionRole::TrackedJsx),
+            (crate::ExecutionRole::TrackedJsx, true)
+        );
+        read.cardinality.min = Some(0);
+        read.cardinality.max = Some(UpperBound::Finite(0));
+        assert!(project(read).is_empty());
+    }
+
+    #[test]
+    fn read_tracking_and_missing_timing_are_independent_of_count() {
+        let mut context = crate::ContractReadContext {
+            count: Cardinality {
+                scope: Some(CardinalityScope::Call),
+                min: Some(0),
+                max: Some(UpperBound::Finite(1)),
+            },
+            tracking: Tracking::AmbientAtExecution,
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            trigger: Some(Trigger::Event(Event::Call)),
+            guarded: false,
+        };
+        // ADR 0254: tracking does not move the read out of the caller's
+        // role (`strictRead: cleared` is the explicit clearing); an optional
+        // count makes it unproven whatever the tracking.
+        for tracking in [Tracking::Untracked, Tracking::Unknown, Tracking::Tracked] {
+            context.tracking = tracking;
+            assert_eq!(
+                context.at_call(crate::ExecutionRole::TrackedJsx),
+                (crate::ExecutionRole::TrackedJsx, true)
+            );
+            assert_eq!(
+                context.at_call(crate::ExecutionRole::UntrackedRendering),
+                (crate::ExecutionRole::UntrackedRendering, true)
+            );
+        }
+        assert_eq!(
+            context.at_call(crate::ExecutionRole::DiscardedRendering),
+            (crate::ExecutionRole::DiscardedRendering, false)
+        );
+        context.tracking = Tracking::AmbientAtExecution;
+        context.count.min = Some(1);
+        context.count.scope = Some(CardinalityScope::Trigger);
+        assert!(context.at_call(crate::ExecutionRole::UntrackedRendering).1);
+        context.count.scope = Some(CardinalityScope::Call);
+        context.guarded = true;
+        assert!(context.at_call(crate::ExecutionRole::UntrackedRendering).1);
+        context.guarded = false;
+        context.at = None;
+        assert_eq!(
+            context.at_call(crate::ExecutionRole::TrackedJsx),
+            (crate::ExecutionRole::TrackedJsx, true)
         );
     }
 
@@ -3750,8 +3877,14 @@ fn resolve_contract_imports_inner(
         &mut by_symbol,
         &mut missing_exports,
     );
-    bind_returned_member_effects(facts, entities, &mut bindings, &mut by_symbol);
     let mut callee_bindings = HashMap::new();
+    bind_returned_member_effects(
+        facts,
+        entities,
+        &mut bindings,
+        &mut by_symbol,
+        &mut callee_bindings,
+    );
     let mut returned_callable_bindings = HashSet::new();
     bind_returned_callable_effects(
         facts,
@@ -3958,11 +4091,12 @@ fn contract_export_function(
         escaped_parameters,
         invoked_parameter_members,
     } = inputs;
-    let mut seen_reactive_reads = HashSet::new();
+    let mut seen_reactive_reads = BTreeSet::new();
     let mut reactive_reads = summary
         .iter()
         .filter_map(|read| {
             let reactive_read = ContractReactiveRead {
+                execution: read.contract_read_context.clone(),
                 kind: read.kind.clone().unwrap_or_else(|| "accessor".into()),
                 label: read.display.to_string(),
                 parameter: None,
@@ -3990,6 +4124,7 @@ fn contract_export_function(
                     reactive_read.kind.clone(),
                     reactive_read.label.clone(),
                     reactive_read.composed_owner.clone(),
+                    reactive_read.execution.clone(),
                 ))
                 .then_some(reactive_read)
         })
@@ -4010,8 +4145,14 @@ fn contract_export_function(
             .insert(path.as_slice());
     }
     for (parameter, paths) in paths_by_parameter {
-        if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string(), None)) {
+        if seen_reactive_reads.insert((
+            "parameter-member".into(),
+            parameter.to_string(),
+            None,
+            None,
+        )) {
             reactive_reads.push(ContractReactiveRead {
+                execution: None,
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(parameter),
@@ -5926,6 +6067,7 @@ fn bind_returned_callable_effects(
                         Some(ContractExport {
                             kind: "function".into(),
                             reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+                                execution: None,
                                 kind: "accessor".into(),
                                 label: member.label.clone(),
                                 parameter: None,
@@ -6008,6 +6150,7 @@ fn bind_returned_member_effects(
     entities: &EntitySymbols,
     bindings: &mut Vec<ResolvedContractBinding>,
     by_symbol: &mut HashMap<SymbolId, ResolvedContractBinding>,
+    callees: &mut HashMap<Location, SymbolId>,
 ) {
     let mut members = Vec::new();
     for file in &facts.files {
@@ -6030,6 +6173,76 @@ fn bind_returned_member_effects(
             };
             let effects = &contracted.summary.returned_member_effects;
             if effects.is_empty() {
+                continue;
+            }
+            // The receiver is selected by its binder declaration, never by
+            // a demand-dependent Type Facts entity or structural property.
+            // Each accepted direct call gets a distinct synthetic identity.
+            if binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.initializer == Some(call.span)
+                && !call.construct
+                && call.callee == file.ast.peel_ts_sugar_span(call.callee)
+                && contracted.summary.returns.known().is_some_and(|returned| {
+                    returned
+                        .as_ref()
+                        .is_some_and(|returned| returned.kind == "object")
+                })
+                && contracted
+                    .summary
+                    .returns
+                    .known()
+                    .and_then(Option::as_ref)
+                    .is_some_and(|returned| {
+                        returned_object_members_are_stable(file, binding.names[0].span, returned)
+                    })
+            {
+                for member_call in &file.ast.calls {
+                    let Some(member) = file.ast.members.iter().find(|member| {
+                        member.span == member_call.callee
+                            && file.ast.reference_declaration(member.object)
+                                == Some(binding.names[0].span)
+                    }) else {
+                        continue;
+                    };
+                    if member_call.construct
+                        || file.ast.computed_members.contains(&member.span)
+                        || file.ast.optional_members.contains(&member.span)
+                    {
+                        continue;
+                    }
+                    let Some(key) = file.source_text(member.property) else {
+                        continue;
+                    };
+                    let Some(summary) = effects.get(key) else {
+                        continue;
+                    };
+                    let site = crate::location(file.path.shared(), member_call.callee);
+                    let symbol = SymbolId::from(format!(
+                        "returned-object-member:{}:{}:{}",
+                        file.path, member_call.callee.start, member_call.callee.end
+                    ));
+                    callees.insert(site, symbol.clone());
+                    members.push(ResolvedContractBinding {
+                        local_name: file
+                            .source_text(member_call.callee)
+                            .unwrap_or_default()
+                            .to_owned(),
+                        imported_name: format!("{}[{key}]", contracted.imported_name),
+                        package_name: contracted.package_name.clone(),
+                        symbol,
+                        runtime_identity: String::new(),
+                        contract_location: Location {
+                            path: format!(
+                                "{}@{}:{}[{key}]",
+                                contracted.contract_location.path, file.path, call.span.start
+                            )
+                            .into(),
+                            ..contracted.contract_location.clone()
+                        },
+                        summary: summary.clone(),
+                    });
+                }
                 continue;
             }
             let slots = match binding.shape {
@@ -6079,6 +6292,65 @@ fn bind_returned_member_effects(
             by_symbol.insert(member.symbol.clone(), member);
         }
     }
+}
+
+/// A const binding is not a frozen object. Reject writes, deletion, iteration
+/// targets, exports and every receiver escape. Wrappers are deliberately not
+/// peeled: `(obj as T).member()` is not a direct receiver. The binder records
+/// array elements and shorthand references even when Type Facts does not.
+pub(crate) fn returned_object_members_are_stable(
+    file: &solid_facts::FileFacts,
+    root: solid_facts::core::Span,
+    returned: &ContractReturn,
+) -> bool {
+    let refers_to_root = |span| file.ast.reference_declaration(span) == Some(root);
+    if file
+        .ast
+        .exports
+        .iter()
+        .filter(|export| !export.type_only)
+        .any(|export| {
+            export
+                .declarations
+                .iter()
+                .chain(&export.specifiers)
+                .any(|export| {
+                    !export.type_only
+                        && (export.local.span == root || refers_to_root(export.local.span))
+                })
+        })
+    {
+        return false;
+    }
+    file.ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == solid_facts::ast::IdentifierRole::Reference)
+        .filter(|id| refers_to_root(id.span))
+        .all(|id| {
+            file.ast.members.iter().any(|member| {
+                member.object == id.span
+                    && !file.ast.computed_members.contains(&member.span)
+                    && !file.ast.optional_members.contains(&member.span)
+                    && file.source_text(member.property).is_some_and(|key| {
+                        returned.properties.get(key).is_some_and(|selected| {
+                            // An opaque method may replace another member.
+                            // Its unknown call cannot prove receiver stability.
+                            selected.kind != OPAQUE_MEMBER
+                                || !file.ast.calls.iter().any(|call| {
+                                    file.ast.peel_ts_sugar_span(call.callee) == member.span
+                                })
+                        })
+                    })
+            }) && !file
+                .ast
+                .assignments
+                .iter()
+                .map(|assignment| assignment.target)
+                .chain(file.ast.deleted_targets.iter().copied())
+                .chain(file.ast.iteration_targets.iter().copied())
+                .any(|target| target.contains(id.span))
+        })
 }
 
 fn project_callback_results(

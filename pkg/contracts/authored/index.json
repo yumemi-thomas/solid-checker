@@ -1572,8 +1572,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/f1b0421acc9b03d65473fef60c6c130ce5e77e3fe12abe048841ff8b4ee2a695.json",
-      "documentDigest": "sha256:f1b0421acc9b03d65473fef60c6c130ce5e77e3fe12abe048841ff8b4ee2a695"
+      "document": "objects/0766e60649ab93c628a71087a3985dc8e76e0e435389bbdf4772785ebdb708bf.json",
+      "documentDigest": "sha256:0766e60649ab93c628a71087a3985dc8e76e0e435389bbdf4772785ebdb708bf"
     },
     {
       "packageName": "@solid-primitives/notification",

@@ -112,9 +112,9 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     /// may live in another tsconfig or package.
     pub(crate) server_rendering: crate::source_discovery::ServerRenderingPremise,
     pub(crate) source_declarations: &'a HashMap<SymbolId, Declaration>,
-    pub(crate) contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    pub(crate) contract_reads: &'a HashMap<SymbolId, Vec<crate::ContractReadSite>>,
     pub(crate) contract_parameter_reads:
-        &'a HashMap<SymbolId, Vec<(usize, String, String, Location)>>,
+        &'a HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
     pub(crate) contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
@@ -362,6 +362,11 @@ impl LocalAccessContext<'_, '_> {
                     .get(&location(file.path.shared(), span))
                     .cloned()
             })
+            .chain(file.ast.calls.iter().filter_map(|call| {
+                self.lookup
+                    .callee_symbol(file, call.callee)
+                    .map(SymbolId::from)
+            }))
             .collect()
     }
 
@@ -950,7 +955,14 @@ impl LocalAccessContext<'_, '_> {
                             .any(|member| member.object == id.span)
                     })
             };
-            let tracked_root = root.filter(|root| !aliased(*root) && only_members(*root));
+            let tracked_root = root.filter(|root| {
+                !aliased(*root)
+                    && only_members(*root)
+                    && (returned.kind != "object"
+                        || crate::contracts::returned_object_members_are_stable(
+                            file, *root, returned,
+                        ))
+            });
             let Some(root) = tracked_root else {
                 result.dispatch_obligations.push(obligation(
                     call.span,
@@ -975,6 +987,14 @@ impl LocalAccessContext<'_, '_> {
                     _ => None,
                 };
                 if !selected.is_some_and(opaque) {
+                    continue;
+                }
+                if selected.is_some_and(effectful)
+                    && file.ast.calls.iter().any(|call| {
+                        call.callee == member.span
+                            && self.lookup.contract_member_call_is_bound(file, call.callee)
+                    })
+                {
                     continue;
                 }
                 let called = file
@@ -1605,7 +1625,12 @@ impl LocalAccessContext<'_, '_> {
             if let Some(contracted) = self.contract_reads.get(symbol)
                 && !inside_non_component_function(file, call.callee, self.lookup)
             {
-                for (index, (name, via, declaration, kind)) in contracted.iter().enumerate() {
+                for (index, (name, via, declaration, kind, read_context)) in
+                    contracted.iter().enumerate()
+                {
+                    let (execution, read_unproven) = read_context
+                        .as_ref()
+                        .map_or((execution, false), |context| context.at_call(execution));
                     let contract_key = (
                         callee.path.clone(),
                         callee.start_byte,
@@ -1629,7 +1654,8 @@ impl LocalAccessContext<'_, '_> {
                             via: via.clone().into(),
                             origin: Some(declaration.clone()),
                             origin_context: via.clone().into(),
-                            uncertain: self.lookup.inside_possible_component(file, call.span),
+                            uncertain: read_unproven
+                                || self.lookup.inside_possible_component(file, call.span),
                             missing_jsx_census: missing_jsx_census(file, call.span, execution),
                             host_callback_timing: host_callback_timing(
                                 file,
@@ -1655,7 +1681,10 @@ impl LocalAccessContext<'_, '_> {
             if let Some(contracted) = self.contract_parameter_reads.get(symbol)
                 && !inside_non_component_function(file, call.callee, self.lookup)
             {
-                for (parameter, name, via, declaration) in contracted {
+                for (parameter, name, via, declaration, read_context) in contracted {
+                    let (execution, read_unproven) = read_context
+                        .as_ref()
+                        .map_or((execution, false), |context| context.at_call(execution));
                     let Some(argument) = call.arguments.get(*parameter) else {
                         // ADR 0232: with no argument at that position and no
                         // spread that could supply one, the caller passed no
@@ -1703,7 +1732,8 @@ impl LocalAccessContext<'_, '_> {
                             via: via.clone().into(),
                             origin: Some(declaration.clone()),
                             origin_context: via.clone().into(),
-                            uncertain: self.lookup.inside_possible_component(file, call.span),
+                            uncertain: read_unproven
+                                || self.lookup.inside_possible_component(file, call.span),
                             missing_jsx_census: missing_jsx_census(file, call.span, execution),
                             host_callback_timing: host_callback_timing(
                                 file,

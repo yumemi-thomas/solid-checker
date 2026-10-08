@@ -247,10 +247,52 @@ fn unknown_runtime_kind_normalizes_without_negative_claims() {
 }
 
 #[test]
+fn composing_an_accepted_read_never_invents_call_context_or_a_lower_bound() {
+    let context = solid_reactive_ir::ContractReadContext {
+        count: Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(0),
+            max: Some(UpperBound::Finite(1)),
+        },
+        tracking: Tracking::AmbientAtExecution,
+        at: Some(Event::Call),
+        schedule: Some(Schedule::SameStack),
+        trigger: Some(Trigger::Event(Event::Call)),
+        guarded: false,
+    };
+    let summary = ContractExport {
+        kind: "function".into(),
+        reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+            execution: Some(context),
+            kind: "accessor".into(),
+            label: "dependency-state".into(),
+            parameter: None,
+            path: None,
+            composed_owner: None,
+            composed_from: None,
+        }]),
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution_for_package("package", ["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    let id = &export.call.claims().reads.items()[0];
+    let read = export.operation(&id.0).unwrap();
+    assert_eq!(read.cardinality.min, Some(0));
+    assert_eq!(read.tracking, Tracking::Unknown);
+    assert_eq!(read.at, None);
+    assert_eq!(read.schedule, None);
+}
+
+#[test]
 fn inferred_normalization_keeps_unknowns_local_and_emits_only_open_proposals() {
     let summary = ContractExport {
         kind: "function".into(),
         reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+            execution: None,
             kind: "parameter".into(),
             label: String::new(),
             parameter: Some(0),
@@ -302,6 +344,7 @@ fn owner_requirement_summary(
     ContractExport {
         kind: "function".into(),
         reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+            execution: None,
             kind: "accessor".into(),
             label: String::new(),
             parameter: None,
@@ -814,6 +857,7 @@ fn only_a_parameter_member_read_description_proposes_a_reads_closure() {
         .unwrap()
     };
     let member = normalize(summary(ContractReactiveRead {
+        execution: None,
         kind: "parameter-member".into(),
         label: String::new(),
         parameter: Some(0),
@@ -840,6 +884,7 @@ fn only_a_parameter_member_read_description_proposes_a_reads_closure() {
         (
             "owned accessor",
             ContractReactiveRead {
+                execution: None,
                 kind: "accessor".into(),
                 label: "count".into(),
                 parameter: None,
@@ -851,6 +896,7 @@ fn only_a_parameter_member_read_description_proposes_a_reads_closure() {
         (
             "composed from a sibling export",
             ContractReactiveRead {
+                execution: None,
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(0),
@@ -1458,6 +1504,7 @@ fn parameter_indexes_outside_the_normalized_limit_are_refused_not_clamped() {
     let summary = ContractExport {
         kind: "function".into(),
         reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+            execution: None,
             kind: "parameter".into(),
             label: String::new(),
             parameter: Some(usize::MAX),

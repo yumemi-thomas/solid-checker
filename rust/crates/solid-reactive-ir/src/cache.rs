@@ -566,8 +566,8 @@ pub(crate) struct LocalAccessSymbolState {
     /// proof folded into `ssr_client_bare` / `server_rendering_unresolved`, so
     /// a fixed import elsewhere invalidates every file reading this source.
     pub(crate) async_options: crate::source_discovery::AsyncSourceOptions,
-    pub(crate) contract_reads: Option<Vec<(String, String, Location, String)>>,
-    pub(crate) contract_parameter_reads: Option<Vec<(usize, String, String, Location)>>,
+    pub(crate) contract_reads: Option<Vec<crate::ContractReadSite>>,
+    pub(crate) contract_parameter_reads: Option<Vec<crate::ContractParameterReadSite>>,
     pub(crate) source_kind: Option<ReactiveSourceKind>,
     pub(crate) prop_source: Option<(
         SymbolId,

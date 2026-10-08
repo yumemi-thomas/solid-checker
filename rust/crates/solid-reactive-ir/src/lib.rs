@@ -1638,6 +1638,9 @@ pub struct ComposedReactiveRead {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractReactiveRead {
+    /// Accepted operation context. Inferred syntax-only rows carry `None`:
+    /// absence cannot establish cardinality, tracking or execution timing.
+    pub execution: Option<ContractReadContext>,
     pub kind: String,
     pub label: String,
     pub parameter: Option<usize>,
@@ -1680,6 +1683,48 @@ pub struct ContractReactiveRead {
     /// export's own evidence; provenance may only ever *add* a discharge
     /// route.
     pub composed_from: Option<ComposedReactiveRead>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ContractReadContext {
+    pub count: contract_semantics::Cardinality,
+    pub tracking: contract_semantics::Tracking,
+    pub at: Option<contract_semantics::Event>,
+    pub schedule: Option<contract_semantics::Schedule>,
+    pub trigger: Option<contract_semantics::Trigger>,
+    pub guarded: bool,
+}
+
+pub(crate) type ContractReadSite = (
+    String,
+    String,
+    Location,
+    String,
+    Option<ContractReadContext>,
+);
+pub(crate) type ContractParameterReadSite =
+    (usize, String, String, Location, Option<ContractReadContext>);
+
+impl ContractReadContext {
+    /// The read runs in the caller's execution role; the contract's count and
+    /// timing decide whether it is a proven read there.
+    pub(crate) fn at_call(&self, caller: ExecutionRole) -> (ExecutionRole, bool) {
+        use contract_semantics::{CardinalityScope, Event, Schedule, Trigger};
+        if caller == ExecutionRole::DiscardedRendering {
+            return (caller, false);
+        }
+        let during_call = self.at == Some(Event::Call)
+            && self.schedule == Some(Schedule::SameStack)
+            && matches!(self.trigger, Some(Trigger::Event(Event::Call)));
+        let guaranteed = self.count.scope == Some(CardinalityScope::Call)
+            && self.count.min.is_some_and(|min| min >= 1)
+            && !self.guarded;
+        // ADR 0254: the read runs in the caller's context, as every contract
+        // read always has; `strictRead: cleared` (ADR 0247) is the explicit
+        // way to say a package cleared it. What the count adds is whether the
+        // read happens at all: an optional or later read is not a proven one.
+        (caller, !during_call || !guaranteed)
+    }
 }
 
 /// When a `tracked` callback row runs, relative to the export returning.
@@ -2396,6 +2441,7 @@ fn push_unique_summary_read(reads: &mut Vec<SummaryRead>, read: SummaryRead) {
         existing.display == read.display
             && existing.origin == read.origin
             && existing.declaration == read.declaration
+            && existing.contract_read_context == read.contract_read_context
     }) {
         reads.push(read);
     }
@@ -3098,6 +3144,7 @@ mod tests {
 
     fn summary_read(symbol: &str, display: &str, start: u64) -> SummaryRead {
         SummaryRead {
+            contract_read_context: None,
             symbol: symbol.into(),
             display: display.into(),
             kind: Some("accessor".into()),

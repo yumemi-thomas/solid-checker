@@ -259,6 +259,8 @@ docs/package-contract-v2/phase21/*measurement.json
 # Callback-result provenance consumer fixture.
 !fixtures/reactive-ir/package-callback-result-consumer/node_modules/
 !fixtures/reactive-ir/package-callback-result-consumer/node_modules/**
+!fixtures/reactive-ir/package-member-receiver-consumer/node_modules/
+!fixtures/reactive-ir/package-member-receiver-consumer/node_modules/**
 !fixtures/reactive-ir/package-tracked-optional-callback-consumer/node_modules/
 !fixtures/reactive-ir/package-tracked-optional-callback-consumer/node_modules/**
 !fixtures/reactive-ir/package-mandatory-first-compute-consumer/node_modules/

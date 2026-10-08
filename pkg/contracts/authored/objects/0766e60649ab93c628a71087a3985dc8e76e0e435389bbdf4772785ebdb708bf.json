@@ -122,7 +122,72 @@
                 {
                   "name": "notification",
                   "value": {
-                    "kind": "callable"
+                    "kind": "effectful-callable",
+                    "call": {
+                      "operations": [
+                        {
+                          "id": "notification-read",
+                          "kind": "read",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "ambient-at-execution",
+                          "count": {
+                            "min": 0,
+                            "max": 1,
+                            "scope": "call"
+                          },
+                          "inputs": [
+                            {
+                              "kind": "reactive",
+                              "role": "accessor",
+                              "resource": "notification"
+                            }
+                          ],
+                          "owner": {
+                            "source": "ambient-at-execution"
+                          }
+                        },
+                        {
+                          "id": "notification-return",
+                          "kind": "return",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "untracked",
+                          "count": {
+                            "min": 1,
+                            "max": 1,
+                            "scope": "call"
+                          },
+                          "output": {
+                            "kind": "plain"
+                          }
+                        }
+                      ],
+                      "reads": [
+                        "notification-read"
+                      ],
+                      "returns": [
+                        "notification-return"
+                      ],
+                      "creates": [],
+                      "callbacks": [],
+                      "closed": [
+                        "reads",
+                        "returns",
+                        "creates",
+                        "callbacks"
+                      ]
+                    }
                   }
                 },
                 {

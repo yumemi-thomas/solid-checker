@@ -1,5 +1,13 @@
 # Precision backlog
 
+## Receiver members and optional reads (2026-10-08)
+
+ADR 0254: `obj.member()` on an exact `const obj = factory()` receiver uses the
+member's stated graph; an optional, guarded, later or untimed contract read is
+unproven rather than proven. Still open: a cast receiver or wrapped callee is
+an obligation rather than a proven call; tuple indexing (`t[1]()`) is not
+bound; `UnknownObjectMember`'s obligation now sits at the factory call.
+
 ## Callback-result provenance (2026-10-08, ADR 0253)
 
 An authored callback-result census separates the package's finite uses of a
