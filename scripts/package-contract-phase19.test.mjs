@@ -362,7 +362,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 195 adds package-captured-callable-consumer's hand-stated document,
       // ADR 0256's pin of returned-graph captures.
-      stableMainDocuments: 195,
+      //
+      // 199 adds the four package-prototype-*-consumer hand-stated documents,
+      // ADR 0258's pins of exact constructor-instance prototypes.
+      stableMainDocuments: 199,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

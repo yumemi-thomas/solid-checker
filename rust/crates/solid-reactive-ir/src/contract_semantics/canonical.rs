@@ -1376,6 +1376,31 @@ impl CanonicalWriter {
             // ADR 0146. Appended; no document before it carries the tag.
             ValueShape::ReadValue => self.u8(22),
             // Appended; no old shape or optional-field stream changes.
+            ValueShape::PrototypeInstance {
+                members,
+                population,
+            } => {
+                // Appended tag: all preexisting values retain their byte stream.
+                self.u8(27);
+                self.u8(match population {
+                    super::PrototypePopulation::Opaque => 0,
+                    super::PrototypePopulation::Values => 1,
+                    super::PrototypePopulation::Entries => 2,
+                });
+                self.sequence(members, |writer, member| {
+                    writer.text(&member.name);
+                    writer.u8(match member.kind {
+                        super::PrototypeMemberKind::Method => 0,
+                        super::PrototypeMemberKind::Getter => 1,
+                        super::PrototypeMemberKind::Iterator => 2,
+                    });
+                    writer.sequence(&member.tracks, |writer, track| {
+                        writer.text(&track.cache);
+                        writer.option(track.argument.as_ref(), |writer, index| writer.u16(*index));
+                        writer.option(track.shared.as_ref(), |writer, key| writer.text(key));
+                    });
+                });
+            }
             ValueShape::LazyGetterObject { keys, from } => {
                 self.u8(26);
                 self.sequence(keys, |writer, key| writer.text(key));

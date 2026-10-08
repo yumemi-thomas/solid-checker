@@ -347,6 +347,19 @@ fn leaf_contract_registration_wording(
 }
 
 fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> FindingWording {
+    if matches!(
+        operation.kind,
+        LeafOwnerOperationKind::ObserverCacheTracking
+    ) {
+        let member = operation.via.as_deref().unwrap_or("prototype member");
+        return FindingWording::new(Rule::LeafOwnerForbiddenCall.metadata(),
+            format!("{member} performs observer-cache tracking inside {}; a missing per-key signal requires child creation and a retained signal requires cleanup registration, and this leaf owner forbids both paths, so Solid throws in dev", operation.owner),
+            format!("Read the collection in JSX or a children-capable tracked computation instead of inside {}.", operation.owner))
+            .with_evidence(vec![EvidenceStep {
+                message: "the exact new-instance contract states a getObserver-gated per-key cache recipe; the observer is present at this synchronous invocation".into(),
+                location: Some(operation.location.clone()),
+            }]);
+    }
     if operation.through_contract
         && let Some(export) = &operation.via
     {
@@ -386,6 +399,7 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
                 operation.owner
             ),
         ),
+        LeafOwnerOperationKind::ObserverCacheTracking => unreachable!("handled above"),
         LeafOwnerOperationKind::UnresolvedCallback => (
             Rule::ReactiveDispatchUnresolved,
             format!(

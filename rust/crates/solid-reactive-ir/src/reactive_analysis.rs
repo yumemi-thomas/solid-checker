@@ -234,6 +234,8 @@ pub(crate) fn collect_project<'facts>(
     timings.local_access_reused_files = local_access.reused_files;
     timings.local_access_recomputed_files = local_access.recomputed_files;
     let LocalAccessResult {
+        prototype_recipes_observed: _,
+        prototype_leaf_operations,
         reads,
         writes,
         action_invocations,
@@ -242,6 +244,7 @@ pub(crate) fn collect_project<'facts>(
         write_action_obligations,
         dispatch_obligations,
     } = local_access.result;
+    draft.leaf_operations.extend(prototype_leaf_operations);
     draft.reads = reads
         .into_iter()
         .map(|read| (*read).clone())

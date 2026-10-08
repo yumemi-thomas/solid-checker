@@ -94,6 +94,9 @@ pub(super) fn props_root_is_current(
     !member_written && !escapes
 }
 
+#[path = "prototype_instance.rs"]
+mod prototype_instance;
+
 pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) facts: &'a ProjectFacts,
     pub(crate) lookup: &'a SemanticLookup<'facts>,
@@ -206,7 +209,23 @@ impl LocalAccessContext<'_, '_> {
             retained_source_paths,
             global_async_context_unchanged,
         } = reuse;
+        let has_prototype_recipes = self
+            .contract_returns
+            .values()
+            .any(|(returned, _)| returned.prototype.is_some());
+        let had_prototype_recipes = cache.as_deref().is_some_and(|cache| {
+            cache
+                .aggregate
+                .as_ref()
+                .is_some_and(|result| result.prototype_recipes_observed)
+                || cache
+                    .files
+                    .values()
+                    .any(|cached| cached.contribution.prototype_recipes_observed)
+        });
         if aggregate_reusable
+            && !has_prototype_recipes
+            && !had_prototype_recipes
             && let Some(cached) = cache.as_deref().and_then(|cache| cache.aggregate.as_ref())
         {
             return LocalAccessBuild {
@@ -257,6 +276,8 @@ impl LocalAccessContext<'_, '_> {
             for file in &self.facts.files {
                 if let Some(cached) = cache.files.get(file.path.as_str())
                     && exact_typescript_delta
+                    && !has_prototype_recipes
+                    && !had_prototype_recipes
                     && self.cached_matches(
                         file,
                         cached,
@@ -1589,6 +1610,7 @@ impl LocalAccessContext<'_, '_> {
 
     pub(crate) fn discover(&self, file: &solid_facts::FileFacts) -> LocalAccessResult {
         let mut result = LocalAccessResult::default();
+        self.prototype_instance_accesses(file, &mut result);
         self.lazy_getter_obligations(file, &mut result);
         self.opaque_member_obligations(file, &mut result);
         self.returned_callable_obligations(file, &mut result);
@@ -2623,6 +2645,10 @@ pub(crate) fn append_local_access_result(
     target: &mut LocalAccessResult,
     source: &LocalAccessResult,
 ) {
+    target.prototype_recipes_observed |= source.prototype_recipes_observed;
+    target
+        .prototype_leaf_operations
+        .extend(source.prototype_leaf_operations.iter().cloned());
     target.reads.extend(source.reads.iter().cloned());
     target.writes.extend(source.writes.iter().cloned());
     target
@@ -2644,6 +2670,10 @@ pub(crate) fn append_local_access_result_owned(
     target: &mut LocalAccessResult,
     source: LocalAccessResult,
 ) {
+    target.prototype_recipes_observed |= source.prototype_recipes_observed;
+    target
+        .prototype_leaf_operations
+        .extend(source.prototype_leaf_operations);
     target.reads.extend(source.reads);
     target.writes.extend(source.writes);
     target.action_invocations.extend(source.action_invocations);

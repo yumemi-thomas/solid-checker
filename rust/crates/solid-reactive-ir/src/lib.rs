@@ -511,6 +511,10 @@ pub struct LeafOwnerOperation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind", content = "primitive")]
 pub enum LeafOwnerOperationKind {
+    /// A present observer's per-key tracking either creates a missing signal
+    /// or reaches mandatory cleanup on the retained one. Both paths require
+    /// a children/cleanup-capable owner; this states neither cache state.
+    ObserverCacheTracking,
     Cleanup,
     Flush,
     Primitive(String),
@@ -1019,6 +1023,9 @@ const fn is_false(value: &bool) -> bool {
 }
 
 fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static str> {
+    if returned.kind != crate::contracts::PROTOTYPE_INSTANCE && returned.prototype.is_some() {
+        return Err("a prototype recipe requires its own return kind");
+    }
     match returned.kind.as_str() {
         "accessor" | "store-path" => {
             if returned.label.is_empty() || returned.parameter.is_some() {
@@ -1075,6 +1082,19 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 || !returned.properties.is_empty()
             {
                 return Err("a relational return requires a parameter only");
+            }
+        }
+        crate::contracts::PROTOTYPE_INSTANCE => {
+            if returned
+                .prototype
+                .as_ref()
+                .is_none_or(|recipe| recipe.members.is_empty())
+                || !returned.label.is_empty()
+                || returned.parameter.is_some()
+                || !returned.elements.is_empty()
+                || !returned.properties.is_empty()
+            {
+                return Err("a prototype instance requires a projected member recipe only");
             }
         }
         crate::contracts::LAZY_GETTER_OBJECT => {
@@ -1951,6 +1971,9 @@ pub struct ContractReturn {
     pub parameter: Option<usize>,
     pub elements: Vec<Option<ContractReturn>>,
     pub properties: BTreeMap<String, ContractReturn>,
+    /// Receipt-projected recipe only. Generation never proposes this shape.
+    #[serde(skip)]
+    pub prototype: Option<crate::contract_semantics::PrototypeInstanceRecipe>,
 }
 
 impl PackageContract {
@@ -3102,6 +3125,7 @@ mod tests {
         let leaf = ContractReturn {
             kind: "accessor".into(),
             label: "active".into(),
+            prototype: None,
             ..ContractReturn::default()
         };
         let structured = ContractReturn {
@@ -3110,14 +3134,17 @@ mod tests {
                 Some(ContractReturn {
                     kind: "store-path".into(),
                     label: "query".into(),
+                    prototype: None,
                     ..ContractReturn::default()
                 }),
                 Some(ContractReturn {
                     kind: "object".into(),
                     properties: BTreeMap::from([("active".into(), leaf.clone())]),
+                    prototype: None,
                     ..ContractReturn::default()
                 }),
             ],
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&structured).is_ok());
@@ -3125,6 +3152,7 @@ mod tests {
         let argument = ContractReturn {
             kind: "argument".into(),
             parameter: Some(0),
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&argument).is_ok());
@@ -3132,6 +3160,7 @@ mod tests {
         let callback_result = ContractReturn {
             kind: "callback-result".into(),
             parameter: Some(0),
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&callback_result).is_ok());
@@ -3139,6 +3168,7 @@ mod tests {
         let callback_result_function = ContractReturn {
             kind: "callback-result-function".into(),
             parameter: Some(0),
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&callback_result_function).is_ok());
@@ -3147,6 +3177,7 @@ mod tests {
             kind: "object".into(),
             label: "invalid".into(),
             properties: BTreeMap::from([("active".into(), leaf)]),
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&mixed).is_err());

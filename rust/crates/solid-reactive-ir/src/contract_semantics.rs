@@ -2487,6 +2487,15 @@ pub enum ValueShape {
     /// `() => count()`. Valid only as an item of a described callable's
     /// `returns` whose `reads` is not empty (`validate::normalize_described_callable`).
     ReadValue,
+    /// Authored-only fresh instance returned by an exact exported constructor.
+    /// Members state the audited getObserver-gated TriggerCache recipe, not an
+    /// unconditional reactive brand. Iterator tracks run on first resumption.
+    /// Each cache is local to this one instance; argument and shared keys are
+    /// distinct. A missing member never states an empty call graph.
+    PrototypeInstance {
+        members: Vec<PrototypeMember>,
+        population: PrototypePopulation,
+    },
     /// Authored Get recipe for a fresh static object. Exact named keys, or
     /// keys of the factory argument at `from`; these alternatives are exclusive.
     /// An unobserved first Get returns plain data; an observed Get creates an
@@ -2502,6 +2511,47 @@ pub enum ValueShape {
         keys: Vec<String>,
         from: Option<u16>,
     },
+}
+
+/// Constructor input protocol. Opaque population admits only the zero-argument
+/// slice. Values iterate one input; entries additionally spread every entry.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PrototypePopulation {
+    Opaque,
+    Values,
+    Entries,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PrototypeInstanceRecipe {
+    pub members: Vec<PrototypeMember>,
+    pub population: PrototypePopulation,
+}
+
+/// One exact prototype dispatch. `@@iterator` names the well-known iteration
+/// protocol, never a string-named property or an arbitrary computed expression.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PrototypeMember {
+    pub name: String,
+    pub kind: PrototypeMemberKind,
+    pub tracks: Vec<PrototypeTrack>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PrototypeMemberKind {
+    Method,
+    Getter,
+    Iterator,
+}
+
+/// TriggerCache.track's complete conditional behavior: absent observer does
+/// nothing; present observer creates a signal if missing, always registers
+/// cleanup, and always reads the signal. Signal construction alone is optional.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PrototypeTrack {
+    pub cache: String,
+    pub argument: Option<u16>,
+    pub shared: Option<String>,
 }
 
 /// The audited static-store cache is an ordinary object, not a Map or a

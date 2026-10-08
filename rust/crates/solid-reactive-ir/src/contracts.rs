@@ -692,6 +692,7 @@ fn project_return(
     {
         return ContractClaim::Known(Some(ContractReturn {
             kind: RETURNED_CALLABLE.into(),
+            prototype: None,
             ..ContractReturn::default()
         }));
     }
@@ -763,13 +764,30 @@ fn project_return(
                 .is_none()
         })
         .count();
+    if returns.iter().any(|returned| returned.prototype.is_some())
+        && knowledge.items().iter().any(|id| {
+            export.operation(&id.0).is_none_or(|operation| {
+                operation.kind != OperationKind::Return
+                    || operation.guard.is_some()
+                    || operation.schedule != Some(Schedule::SameStack)
+                    || operation.cardinality.min != Some(1)
+                    || operation.cardinality.max
+                        != Some(crate::contract_semantics::UpperBound::Finite(1))
+            })
+        })
+    {
+        open.insert(ClaimDomain::Returns);
+        return ContractClaim::Open;
+    }
     let lazy_recipe = |returned: &ContractReturn| {
-        returned.kind == LAZY_GETTER_OBJECT
-            || returned
-                .elements
-                .iter()
-                .flatten()
-                .any(|item| item.kind == LAZY_GETTER_OBJECT)
+        matches!(
+            returned.kind.as_str(),
+            LAZY_GETTER_OBJECT | PROTOTYPE_INSTANCE
+        ) || returned
+            .elements
+            .iter()
+            .flatten()
+            .any(|item| item.kind == LAZY_GETTER_OBJECT)
     };
     if returns.iter().any(lazy_recipe)
         && (!knowledge.is_closed() || dropped > 0 || returns.len() != 1)
@@ -837,12 +855,14 @@ fn project_member_shape(shape: &ValueShape) -> Option<ContractReturn> {
     match shape {
         ValueShape::Callable | ValueShape::Unknown => Some(ContractReturn {
             kind: OPAQUE_MEMBER.into(),
+            prototype: None,
             ..ContractReturn::default()
         }),
         // ADR 0235: its effects are projected beside the export
         // ([`project_returned_member_effects`]), keyed by this member.
         ValueShape::EffectfulCallable(_) => Some(ContractReturn {
             kind: EFFECTFUL_MEMBER.into(),
+            prototype: None,
             ..ContractReturn::default()
         }),
         _ => project_return_shape(shape),
@@ -930,6 +950,7 @@ fn project_returned_callable_member_shape(shape: &ValueShape) -> Option<Contract
     ) {
         return Some(ContractReturn {
             kind: OPAQUE_MEMBER.into(),
+            prototype: None,
             ..ContractReturn::default()
         });
     }
@@ -1168,6 +1189,7 @@ fn capture_context_supported(export: &crate::contract_semantics::ExportSemantics
 
 /// The [`ContractReturn::kind`] of an opaque returned member (ADR 0234).
 pub(crate) const OPAQUE_MEMBER: &str = "opaque-callable";
+pub(crate) const PROTOTYPE_INSTANCE: &str = "prototype-instance";
 pub(crate) const LAZY_GETTER_OBJECT: &str = "lazy-getter-object";
 
 fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
@@ -1183,16 +1205,19 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
                         .map(|value| (member.name.clone(), value))
                 })
                 .collect(),
+            prototype: None,
             ..ContractReturn::default()
         }),
         ValueShape::Reactive { .. } => Some(ContractReturn {
             kind: "accessor".into(),
             label: "normalized reactive result".into(),
+            prototype: None,
             ..ContractReturn::default()
         }),
         ValueShape::Store { .. } => Some(ContractReturn {
             kind: "store-path".into(),
             label: "normalized store result".into(),
+            prototype: None,
             ..ContractReturn::default()
         }),
         // ADR 0109. Carries the caller's argument index and *no* label: this is
@@ -1201,11 +1226,13 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         ValueShape::MergedProps { from } => Some(ContractReturn {
             kind: "merged-props".into(),
             parameter: Some(usize::from(*from)),
+            prototype: None,
             ..ContractReturn::default()
         }),
         ValueShape::Parameter { index, .. } => Some(ContractReturn {
             kind: "argument".into(),
             parameter: Some(usize::from(*index)),
+            prototype: None,
             ..ContractReturn::default()
         }),
         // ADR 0115: a fresh array of the caller's arguments is a tuple of
@@ -1218,10 +1245,12 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
                     Some(ContractReturn {
                         kind: "argument".into(),
                         parameter: Some(usize::from(*index)),
+                        prototype: None,
                         ..ContractReturn::default()
                     })
                 })
                 .collect(),
+            prototype: None,
             ..ContractReturn::default()
         }),
         // ADR 0177: a tuple or object whose member enumeration is not closed
@@ -1233,6 +1262,7 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
             Some(ContractReturn {
                 kind: "tuple".into(),
                 elements: items.iter().map(project_member_shape).collect(),
+                prototype: None,
                 ..ContractReturn::default()
             })
         }
@@ -1252,6 +1282,7 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
             (!properties.is_empty()).then_some(ContractReturn {
                 kind: "object".into(),
                 properties,
+                prototype: None,
                 ..ContractReturn::default()
             })
         }
@@ -1267,11 +1298,23 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         ValueShape::DescribedCallable(call) if !call.reads.is_empty() => Some(ContractReturn {
             kind: "accessor".into(),
             label: "described callable read".into(),
+            prototype: None,
             ..ContractReturn::default()
         }),
         ValueShape::DescribedCallable(_) => None,
         // ADR 0146: only ever an item of a described callable's returns.
         ValueShape::ReadValue => None,
+        ValueShape::PrototypeInstance {
+            members,
+            population,
+        } => Some(ContractReturn {
+            kind: PROTOTYPE_INSTANCE.into(),
+            prototype: Some(crate::contract_semantics::PrototypeInstanceRecipe {
+                members: members.clone(),
+                population: *population,
+            }),
+            ..ContractReturn::default()
+        }),
         ValueShape::LazyGetterObject { keys, from } => Some(ContractReturn {
             kind: LAZY_GETTER_OBJECT.into(),
             parameter: from.map(usize::from),
@@ -1282,11 +1325,13 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
                         key.clone(),
                         ContractReturn {
                             kind: OPAQUE_MEMBER.into(),
+                            prototype: None,
                             ..ContractReturn::default()
                         },
                     )
                 })
                 .collect(),
+            prototype: None,
             ..ContractReturn::default()
         }),
         ValueShape::Unknown
@@ -3033,8 +3078,10 @@ mod owner_requirement_projection_tests {
                     elements: vec![Some(ContractReturn {
                         kind: "argument".into(),
                         parameter: Some(1),
+                        prototype: None,
                         ..ContractReturn::default()
                     })],
+                    prototype: None,
                     ..ContractReturn::default()
                 })),
                 false
@@ -4760,6 +4807,7 @@ fn contract_export_function(
             parameter: None,
             elements: Vec::new(),
             properties: BTreeMap::new(),
+            prototype: None,
         })
     });
     let mut callback_summary = callbacks.to_vec();

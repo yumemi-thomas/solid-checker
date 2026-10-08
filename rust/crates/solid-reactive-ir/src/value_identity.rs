@@ -243,9 +243,11 @@ mod tests {
                     "value".into(),
                     crate::ContractReturn {
                         kind: "accessor".into(),
+                        prototype: None,
                         ..Default::default()
                     },
                 )]),
+                prototype: None,
                 ..Default::default()
             };
             assert_eq!(

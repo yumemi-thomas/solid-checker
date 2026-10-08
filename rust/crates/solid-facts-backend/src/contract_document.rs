@@ -1216,6 +1216,31 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
         }
         // ADR 0146: a shorthand, like `undefined`, with a detailed spelling.
         ValueShape::ReadValue => json!("read-value"),
+        ValueShape::PrototypeInstance {
+            members,
+            population,
+        } => json!({
+            "kind": "prototype-instance",
+            "population": match population {
+                solid_reactive_ir::contract_semantics::PrototypePopulation::Opaque => "opaque",
+                solid_reactive_ir::contract_semantics::PrototypePopulation::Values => "values",
+                solid_reactive_ir::contract_semantics::PrototypePopulation::Entries => "entries",
+            },
+            "members": members.iter().map(|member| {
+                let kind = match member.kind {
+                    solid_reactive_ir::contract_semantics::PrototypeMemberKind::Method => "method",
+                    solid_reactive_ir::contract_semantics::PrototypeMemberKind::Getter => "getter",
+                    solid_reactive_ir::contract_semantics::PrototypeMemberKind::Iterator => "iterator",
+                };
+                let tracks = member.tracks.iter().map(|track| {
+                    let mut value = json!({"cache": track.cache});
+                    if let Some(argument) = track.argument { value["argument"] = json!(argument); }
+                    if let Some(shared) = &track.shared { value["shared"] = json!(shared); }
+                    value
+                }).collect::<Vec<_>>();
+                json!({"name": member.name, "kind": kind, "tracks": tracks})
+            }).collect::<Vec<_>>()
+        }),
         ValueShape::LazyGetterObject { keys, from } => {
             let mut value = json!({"kind": "lazy-getter-object", "keys": keys});
             if let Some(from) = from {
@@ -2372,6 +2397,40 @@ enum WireValueKind {
     RefApplication,
 }
 
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum WirePrototypePopulation {
+    Opaque,
+    Values,
+    Entries,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WirePrototypeMember {
+    name: String,
+    kind: WirePrototypeMemberKind,
+    tracks: Vec<WirePrototypeTrack>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum WirePrototypeMemberKind {
+    Method,
+    Getter,
+    Iterator,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WirePrototypeTrack {
+    cache: String,
+    #[serde(default)]
+    argument: Option<u16>,
+    #[serde(default)]
+    shared: Option<String>,
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 enum WireValueNode {
@@ -2465,6 +2524,10 @@ enum WireValueNode {
     },
     /// ADR 0146. Carries no field, as `undefined` does not.
     ReadValue {},
+    PrototypeInstance {
+        members: Vec<WirePrototypeMember>,
+        population: WirePrototypePopulation,
+    },
     LazyGetterObject {
         keys: Vec<String>,
         #[serde(default)]
@@ -3898,6 +3961,52 @@ fn expand_value_node(
         }),
         WireValueNode::Undefined {} => Ok(ValueShape::Undefined),
         WireValueNode::ReadValue {} => Ok(ValueShape::ReadValue),
+        WireValueNode::PrototypeInstance {
+            members,
+            population,
+        } => Ok(ValueShape::PrototypeInstance {
+            population: match population {
+                WirePrototypePopulation::Opaque => {
+                    solid_reactive_ir::contract_semantics::PrototypePopulation::Opaque
+                }
+                WirePrototypePopulation::Values => {
+                    solid_reactive_ir::contract_semantics::PrototypePopulation::Values
+                }
+                WirePrototypePopulation::Entries => {
+                    solid_reactive_ir::contract_semantics::PrototypePopulation::Entries
+                }
+            },
+            members: members
+                .iter()
+                .map(
+                    |member| solid_reactive_ir::contract_semantics::PrototypeMember {
+                        name: member.name.clone(),
+                        kind: match member.kind {
+                            WirePrototypeMemberKind::Method => {
+                                solid_reactive_ir::contract_semantics::PrototypeMemberKind::Method
+                            }
+                            WirePrototypeMemberKind::Getter => {
+                                solid_reactive_ir::contract_semantics::PrototypeMemberKind::Getter
+                            }
+                            WirePrototypeMemberKind::Iterator => {
+                                solid_reactive_ir::contract_semantics::PrototypeMemberKind::Iterator
+                            }
+                        },
+                        tracks: member
+                            .tracks
+                            .iter()
+                            .map(
+                                |track| solid_reactive_ir::contract_semantics::PrototypeTrack {
+                                    cache: track.cache.clone(),
+                                    argument: track.argument,
+                                    shared: track.shared.clone(),
+                                },
+                            )
+                            .collect(),
+                    },
+                )
+                .collect(),
+        }),
         WireValueNode::LazyGetterObject { keys, from } => Ok(ValueShape::LazyGetterObject {
             keys: keys.clone(),
             from: *from,
@@ -4029,6 +4138,39 @@ fn expand_capabilities(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn prototype_instance_round_trips_binds_digest_and_refuses_certification() {
+        let bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/reactive-ir/package-prototype-instance-consumer/node_modules/reactive-package/solid-reactivity.json"
+        ));
+        let kept = normalized(bytes);
+        let encoded = encode(&kept, &SidecarDigests::default(), true).unwrap();
+        assert_eq!(normalized(&encoded), kept);
+        let Err(refusal) = solid_reactive_ir::contract_semantics::certification::proof_policy_2()
+            .inspect_candidates(&kept)
+        else {
+            panic!("prototype recipe certified without a census")
+        };
+        assert!(refusal.to_string().contains("authored-only"));
+        let mut document: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        let output = &mut document["summaries"]["set-instance"]["call"]["operations"][0]["output"];
+        output["members"][0]["tracks"][0]["cache"] = json!("other-cache");
+        let changed = normalized(&serde_json::to_vec(&document).unwrap());
+        assert_ne!(changed.semantic_digest(), kept.semantic_digest());
+        document["summaries"]["set-instance"]["call"]["operations"][0]["output"]["members"][0]["extra"] =
+            json!(true);
+        assert!(decode(&serde_json::to_vec(&document).unwrap()).is_err());
+        let mut nested: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        let output = &mut nested["summaries"]["set-instance"]["call"]["operations"][0]["output"];
+        *output = json!({"kind": "tuple", "closed": ["tuple-items"], "items": [output.clone()]});
+        // A prototype-instance value nested in a tuple is refused, whether the
+        // wire decoder or normalization is the stage that refuses it.
+        assert!(
+            decode(&serde_json::to_vec(&nested).unwrap())
+                .map_or(true, |document| document.normalize().is_err())
+        );
+    }
     use super::*;
 
     const MINIMAL: &[u8] = include_bytes!(concat!(

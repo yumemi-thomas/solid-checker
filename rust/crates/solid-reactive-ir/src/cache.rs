@@ -538,6 +538,8 @@ pub(crate) struct LateStageFileInput {
 
 #[derive(Clone, Default)]
 pub(crate) struct LocalAccessResult {
+    pub(crate) prototype_recipes_observed: bool,
+    pub(crate) prototype_leaf_operations: Vec<crate::LeafOwnerOperation>,
     pub(crate) reads: Vec<Arc<ReactiveRead>>,
     pub(crate) writes: Vec<Arc<ReactiveWrite>>,
     pub(crate) action_invocations: Vec<Arc<ActionInvocation>>,

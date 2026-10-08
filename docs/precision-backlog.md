@@ -28698,3 +28698,14 @@ computed keys, prototype setters and nonliteral values remain fail closed.
 The authored pointer lower bound is blocked by alias overwrites: callable
 `onDown` alone does not prove an effective handler if a later `ondown` is
 undefined. Arbitrary event-map callback keys remain open (B-dictionary).
+
+
+## Exact constructor-instance prototypes (2026-10-09, ADR 0258)
+
+Research patch only: ReactiveSet/ReactiveMap getObserver-gated read members can
+bind to exact immutable new-instance receivers through the binder. A present
+tracked-effect leaf proves a forbidden signal-or-cleanup path. Unknown observer,
+escaped receivers, class/instance mutation, wrappers, unsupported members and
+stored iterator resumption remain uncertifiable. union's created-owner iteration
+and dynamic constructor iterable population stay open. No compiler/checker or
+runtime result has been observed and no snapshot/receipt has been generated.

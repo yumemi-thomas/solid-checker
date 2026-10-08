@@ -4366,9 +4366,11 @@ mod tests {
                 "member".into(),
                 crate::ContractReturn {
                     kind: crate::contracts::EFFECTFUL_MEMBER.into(),
+                    prototype: None,
                     ..crate::ContractReturn::default()
                 },
             )]),
+            prototype: None,
             ..crate::ContractReturn::default()
         };
         for (source, stable) in [

@@ -5344,6 +5344,7 @@
       "package": "@solid-primitives/map",
       "version": "1.0.0-next.2",
       "export": "ReactiveMap",
+      "prototypeInstanceProbeDigest": "b3eaa129c78ebaf37c3823925b7419d970220e015320c85dce4752726db6cb95",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -5361,15 +5362,207 @@
       "artifacts": [
         "dist/index.js"
       ],
-      "rule": "strict-read-untracked",
+      "rule": "leaf-owner-forbidden-call",
       "verdict": "passed",
       "misuse": [
         {
-          "code": "STRICT_READ_UNTRACKED",
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
           "site": {
             "file": "case",
-            "line": 5,
-            "column": 44
+            "line": 6,
+            "column": 54
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/.solid-checker-authored-probes/_solid-primitives_map_1.0.0-next.2_ReactiveMap/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+map@1.0.0-next.2",
+      "package": "@solid-primitives/map",
+      "version": "1.0.0-next.2",
+      "export": "ReactiveMap",
+      "label": "get",
+      "prototypeInstanceProbeDigest": "e94f8044793ca7aeb1ed8af10b8ad1f204f1b30cb57833f1027ab8aaef91b5e4",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 54
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/.solid-checker-authored-probes/_solid-primitives_map_1.0.0-next.2_ReactiveMap_get/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+map@1.0.0-next.2",
+      "package": "@solid-primitives/map",
+      "version": "1.0.0-next.2",
+      "export": "ReactiveMap",
+      "label": "iteration",
+      "prototypeInstanceProbeDigest": "89ecc393e3055a941fae702cd16e0e415b954aa36b543b7914f7863db06cb011",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 47
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/.solid-checker-authored-probes/_solid-primitives_map_1.0.0-next.2_ReactiveMap_iteration/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+map@1.0.0-next.2",
+      "package": "@solid-primitives/map",
+      "version": "1.0.0-next.2",
+      "export": "ReactiveMap",
+      "label": "size",
+      "prototypeInstanceProbeDigest": "174a1bcc1af3d0d4444def54a8e383bc7daf2545ba26910b483a575e57987d66",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 54
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/.solid-checker-authored-probes/_solid-primitives_map_1.0.0-next.2_ReactiveMap_size/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+map@1.0.0-next.2",
+      "package": "@solid-primitives/map",
+      "version": "1.0.0-next.2",
+      "export": "ReactiveMap",
+      "label": "values",
+      "prototypeInstanceProbeDigest": "ceaf53c086d7322dff548a4170dbfc551e18efdd80904d8f9267ed6b3e70fc59",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 63
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/.solid-checker-authored-probes/_solid-primitives_map_1.0.0-next.2_ReactiveMap_values/main.tsx",
+            "line": 8,
+            "column": 32
           }
         }
       ],
@@ -10929,6 +11122,189 @@
             "file": "case",
             "line": 5,
             "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+set@1.0.0-next.2",
+      "package": "@solid-primitives/set",
+      "version": "1.0.0-next.2",
+      "export": "ReactiveSet",
+      "prototypeInstanceProbeDigest": "ce85cff43b83bca4f0d8cc15c76eef91cb8f30eeb9c918f658515829eadfde43",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 54
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/set-ReactiveSet-leaf-owner-browser/.solid-checker-authored-probes/_solid-primitives_set_1.0.0-next.2_ReactiveSet/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+set@1.0.0-next.2",
+      "package": "@solid-primitives/set",
+      "version": "1.0.0-next.2",
+      "export": "ReactiveSet",
+      "label": "iteration",
+      "prototypeInstanceProbeDigest": "bc1fb6fcdb5aed7d8ce4d0beba0538e88f4cfdaf6947af5d05e748b7af6c1a22",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 47
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/set-ReactiveSet-leaf-owner-browser/.solid-checker-authored-probes/_solid-primitives_set_1.0.0-next.2_ReactiveSet_iteration/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+set@1.0.0-next.2",
+      "package": "@solid-primitives/set",
+      "version": "1.0.0-next.2",
+      "export": "ReactiveSet",
+      "label": "size",
+      "prototypeInstanceProbeDigest": "02491b05e93d5f4343c3132a29656df7905e4b15fd4ee15f1a6015a7949e3613",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 54
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/set-ReactiveSet-leaf-owner-browser/.solid-checker-authored-probes/_solid-primitives_set_1.0.0-next.2_ReactiveSet_size/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+set@1.0.0-next.2",
+      "package": "@solid-primitives/set",
+      "version": "1.0.0-next.2",
+      "export": "ReactiveSet",
+      "label": "values",
+      "prototypeInstanceProbeDigest": "d50b65db2e5af78a4b6f50d24e268030997b751597ddf3f07a66b3eb348b69fe",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 63
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/set-ReactiveSet-leaf-owner-browser/.solid-checker-authored-probes/_solid-primitives_set_1.0.0-next.2_ReactiveSet_values/main.tsx",
+            "line": 8,
+            "column": 32
           }
         }
       ],

@@ -16845,6 +16845,7 @@ export const value = phantom;
                                                 parameter: Some(usize::from(
                                                     export == "second" && forged != Some(export),
                                                 )),
+                                                prototype: None,
                                                 ..ContractReturn::default()
                                             }))
                                         },

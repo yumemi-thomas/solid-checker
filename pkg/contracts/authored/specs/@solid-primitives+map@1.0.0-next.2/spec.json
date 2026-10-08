@@ -22,24 +22,13 @@
   "hostFreeIdentity": "identity.host-free.json",
   "exports": {
     "ReactiveMap": {
-      "hostFree": {
-        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:24-33. Identical constructor: creates two native TriggerCache maps and populates with native super.set, not the overriding methods. TriggerCache constructor dist/index.js:34-38 is host independent. No signal or observer read occurs at construction. callbacks/returns stay open; the different server dirty methods are not described by this constructor claim. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:34-38 (constructor creates only a native map). Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
-        "minZero": [],
-        "closed": [
-          "reads",
-          "creates"
-        ],
-        "closures": {
-          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:24-33. Identical constructor: creates two native TriggerCache maps and populates with native super.set, not the overriding methods. TriggerCache constructor dist/index.js:34-38 is host independent. No signal or observer read occurs at construction. callbacks/returns stay open; the different server dirty methods are not described by this constructor claim. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:34-38 (constructor creates only a native map). Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
-          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:24-33. Identical constructor: creates two native TriggerCache maps and populates with native super.set, not the overriding methods. TriggerCache constructor dist/index.js:34-38 is host independent. No signal or observer read occurs at construction. callbacks/returns stay open; the different server dirty methods are not described by this constructor claim. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:34-38 (constructor creates only a native map). Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain."
-        }
-      },
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:29-41 \u2014 Constructor invokes the supplied entries iterator, populates via native super.set, and creates only native TriggerCache maps. TriggerCache constructor: trigger/dist/index.js:36-38. Nested entry spreading and inherited instance methods keep callbacks and returns OPEN.",
-      "rule": "strict-read-untracked",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - Exact fresh constructor instance with observer-gated prototype dispatch. Constructor iterable callbacks remain open.",
+      "rule": "leaf-owner-forbidden-call",
       "call": {
         "closed": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
         "reads": [],
         "creates": [],
@@ -73,13 +62,149 @@
               "source": "ambient-at-execution"
             },
             "protocol": "iterate"
+          },
+          {
+            "id": "instance",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "prototype-instance",
+              "members": [
+                {
+                  "name": "has",
+                  "kind": "method",
+                  "tracks": [
+                    {
+                      "cache": "keys",
+                      "argument": 0
+                    }
+                  ]
+                },
+                {
+                  "name": "get",
+                  "kind": "method",
+                  "tracks": [
+                    {
+                      "cache": "values",
+                      "argument": 0
+                    }
+                  ]
+                },
+                {
+                  "name": "size",
+                  "kind": "getter",
+                  "tracks": [
+                    {
+                      "cache": "keys",
+                      "shared": "structural-keys"
+                    }
+                  ]
+                },
+                {
+                  "name": "keys",
+                  "kind": "iterator",
+                  "tracks": [
+                    {
+                      "cache": "keys",
+                      "shared": "structural-keys"
+                    }
+                  ]
+                },
+                {
+                  "name": "values",
+                  "kind": "iterator",
+                  "tracks": [
+                    {
+                      "cache": "values",
+                      "shared": "structural-values"
+                    }
+                  ]
+                },
+                {
+                  "name": "entries",
+                  "kind": "iterator",
+                  "tracks": [
+                    {
+                      "cache": "keys",
+                      "shared": "structural-keys"
+                    },
+                    {
+                      "cache": "values",
+                      "shared": "structural-values"
+                    }
+                  ]
+                },
+                {
+                  "name": "@@iterator",
+                  "kind": "iterator",
+                  "tracks": [
+                    {
+                      "cache": "keys",
+                      "shared": "structural-keys"
+                    },
+                    {
+                      "cache": "values",
+                      "shared": "structural-values"
+                    }
+                  ]
+                }
+              ],
+              "population": "entries"
+            }
           }
+        ],
+        "returns": [
+          "instance"
         ]
       },
       "closures": {
-        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:29-41 \u2014 Constructor invokes the supplied entries iterator, populates via native super.set, and creates only native TriggerCache maps. TriggerCache constructor: trigger/dist/index.js:36-38. Nested entry spreading and inherited instance methods keep callbacks and returns OPEN.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:29-41 \u2014 Constructor invokes the supplied entries iterator, populates via native super.set, and creates only native TriggerCache maps. TriggerCache constructor: trigger/dist/index.js:36-38. Nested entry spreading and inherited instance methods keep callbacks and returns OPEN."
-      }
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - The constructor creates only native caches, reads no signal, and returns its exact new instance. Iterable population and later protocols are not made empty.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - The constructor creates only native caches, reads no signal, and returns its exact new instance. Iterable population and later protocols are not made empty.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - The constructor creates only native caches, reads no signal, and returns its exact new instance. Iterable population and later protocols are not made empty."
+      },
+      "prototypeClosures": {
+        "instance.has": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - Per-instance cache identity and one key selector. No observer exits before cache lookup; observer presence guarantees signal-or-cleanup work and the eventual signal read. Iterator effects occur at first resumption.",
+        "instance.get": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - Per-instance cache identity and one key selector. No observer exits before cache lookup; observer presence guarantees signal-or-cleanup work and the eventual signal read. Iterator effects occur at first resumption.",
+        "instance.size": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - Per-instance cache identity and one key selector. No observer exits before cache lookup; observer presence guarantees signal-or-cleanup work and the eventual signal read. Iterator effects occur at first resumption.",
+        "instance.keys": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - Per-instance cache identity and one key selector. No observer exits before cache lookup; observer presence guarantees signal-or-cleanup work and the eventual signal read. Iterator effects occur at first resumption.",
+        "instance.values": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - Per-instance cache identity and one key selector. No observer exits before cache lookup; observer presence guarantees signal-or-cleanup work and the eventual signal read. Iterator effects occur at first resumption.",
+        "instance.entries": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - Per-instance cache identity and one key selector. No observer exits before cache lookup; observer presence guarantees signal-or-cleanup work and the eventual signal read. Iterator effects occur at first resumption.",
+        "instance.@@iterator": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - Per-instance cache identity and one key selector. No observer exits before cache lookup; observer presence guarantees signal-or-cleanup work and the eventual signal read. Iterator effects occur at first resumption."
+      },
+      "probes": [
+        {
+          "label": "size",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - size tracks the shared structural key."
+        },
+        {
+          "label": "values",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - values starts tracking on first next(), not when creating the generator."
+        },
+        {
+          "label": "iteration",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - implicit iteration resumes the exact instance iterator."
+        },
+        {
+          "label": "get",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/map/dist/index.js:25-67; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/map-ReactiveMap-top-level-read/node_modules/@solid-primitives/trigger/dist/index.js:47-61 - get tracks the separate value cache."
+        }
+      ]
     },
     "ReactiveWeakMap": {
       "hostFree": {

@@ -54,6 +54,7 @@ import { propertyGetProbeDigest, validatePropertyGets } from "./lib/property-get
 import { strictReadProbeDigest, strictReadWireCall, validateStrictReads } from "./lib/strict-read-contracts.mjs";
 
 import { callbackResultProbeDigest, validateCallbackResults } from "./lib/callback-result-contracts.mjs";
+import { prototypeInstanceProbeDigest, validatePrototypeInstances } from "./lib/prototype-instance-contracts.mjs";
 import { lazyGetterProbeDigest, validateLazyGetters } from "./lib/lazy-getter-contracts.mjs";
 import { captureProbeDigest, validateCaptures } from "./lib/capture-contracts.mjs";
 
@@ -157,6 +158,7 @@ function validateClosures(where, claim, nested = false) {
   validateStrictReads(where, claim);
   validateCallbackResults(where, claim);
   validateLazyGetters(where, claim);
+  validatePrototypeInstances(where, claim);
   const closed = claim.call?.closed ?? [];
   const closures = claim.closures ?? {};
   for (const domain of closed) {
@@ -223,6 +225,7 @@ function hostFreeClaim(where, claim) {
     returnedClosures: hostFree.returnedClosures ?? claim.returnedClosures,
     resultClosures: hostFree.resultClosures ?? (hostFree.call ? undefined : claim.resultClosures),
     lazyGetterClosures: hostFree.lazyGetterClosures ?? (hostFree.call ? undefined : claim.lazyGetterClosures),
+    prototypeClosures: hostFree.prototypeClosures ?? (hostFree.call ? undefined : claim.prototypeClosures),
     captureClosures: hostFree.captureClosures ?? (hostFree.call ? undefined : claim.captureClosures) };
   validateMemberClosures(`${where} (host-free)`, derived);
   validateReturnedClosures(`${where} (host-free)`, derived);
@@ -403,6 +406,11 @@ function probe(browser) {
       return [entry.id, returnedCallableProbeDigest(spec, entry.export, pair,
         entry.misuse, entry.correct, certifiedCases(spec))];
     }));
+    const prototypeDigests = new Map(cases.map(entry => {
+      const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
+      return [entry.id, prototypeInstanceProbeDigest(spec, entry.export, pair,
+        entry.misuse, entry.correct, certifiedCases(spec))];
+    }));
     const lazyGetterDigests = new Map(cases.map(entry => {
       const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
       return [entry.id, lazyGetterProbeDigest(spec, entry.export, pair,
@@ -431,6 +439,7 @@ function probe(browser) {
       const callbackResultDigest = callbackResultDigests.get(row.id);
       const lazyGetterDigest = lazyGetterDigests.get(row.id);
       const captureDigest = captureDigests.get(row.id);
+      const prototypeDigest = prototypeDigests.get(row.id);
       results.push({ spec: spec.name, package: spec.package, version: spec.version, export: row.export,
         ...(label ? { label } : {}),
         ...(probeDigest ? { propertyGetProbeDigest: probeDigest } : {}),
@@ -439,6 +448,7 @@ function probe(browser) {
         ...(callbackResultDigest ? { callbackResultProbeDigest: callbackResultDigest } : {}),
         ...(lazyGetterDigest ? { lazyGetterProbeDigest: lazyGetterDigest } : {}),
         ...(captureDigest ? { captureProbeDigest: captureDigest } : {}),
+        ...(prototypeDigest ? { prototypeInstanceProbeDigest: prototypeDigest } : {}),
         solidRuntime: identity.runtime, artifacts: identity.artifacts, rule: row.rule,
         verdict: row.runtime === "detected" ? "passed" : row.runtime,
         misuse: (row.misuse.diagnostics ?? []).map(({ code, site }) => ({ code, site })),
@@ -502,6 +512,9 @@ function passed(spec, name) {
     const callbackResultDigest = callbackResultProbeDigest(spec, name, pair,
       readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
+    const prototypeDigest = prototypeInstanceProbeDigest(spec, name, pair,
+      readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
+      readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
     const lazyGetterDigest = lazyGetterProbeDigest(spec, name, pair,
       readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
@@ -516,7 +529,8 @@ function passed(spec, name) {
       && (!returnedDigest || row.returnedCallableProbeDigest === returnedDigest)
       && (!callbackResultDigest || row.callbackResultProbeDigest === callbackResultDigest)
       && (!lazyGetterDigest || row.lazyGetterProbeDigest === lazyGetterDigest)
-      && (!captureDigest || row.captureProbeDigest === captureDigest));
+      && (!captureDigest || row.captureProbeDigest === captureDigest)
+      && (!prototypeDigest || row.prototypeInstanceProbeDigest === prototypeDigest));
   });
 }
 

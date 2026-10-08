@@ -6745,6 +6745,7 @@ mod dispatch_identity_tests {
             returns: ContractClaim::Known(Some(ContractReturn {
                 kind: "argument".into(),
                 parameter: Some(0),
+                prototype: None,
                 ..Default::default()
             })),
             ..Default::default()
@@ -6763,12 +6764,14 @@ mod dispatch_identity_tests {
             summary.returns = ContractClaim::Known(Some(ContractReturn {
                 kind: kind.into(),
                 parameter: Some(0),
+                prototype: None,
                 ..Default::default()
             }));
             assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
         }
         summary.returns = ContractClaim::Known(Some(ContractReturn {
             kind: "argument".into(),
+            prototype: None,
             ..Default::default()
         }));
         assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
@@ -10369,6 +10372,7 @@ mod open_owner_requirement_tests {
     fn opening_returns_keeps_the_described_return() {
         let accessor = solid_reactive_ir::ContractReturn {
             kind: "accessor".into(),
+            prototype: None,
             ..solid_reactive_ir::ContractReturn::default()
         };
         let mut summary = function(ContractClaim::Known(vec![]));

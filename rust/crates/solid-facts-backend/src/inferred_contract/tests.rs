@@ -1268,6 +1268,7 @@ fn an_open_returns_claim_publishes_its_retained_return_as_an_item() {
         open_return: Some(solid_reactive_ir::ContractReturn {
             kind: "accessor".into(),
             label: "memo".into(),
+            prototype: None,
             ..solid_reactive_ir::ContractReturn::default()
         }),
         async_behavior: ContractClaim::Known(String::new()),

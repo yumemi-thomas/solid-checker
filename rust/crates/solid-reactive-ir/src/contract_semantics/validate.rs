@@ -54,6 +54,12 @@ pub(super) fn normalize(mut proposal: ContractProposal) -> Result<NormalizedCont
             validate_export_identity(&case.id, &case.entrypoint, name, &export.identity)?;
             normalize_call(&mut export.call, &format!("case {} export {name}", case.id))?;
             let resources = resource_map(&export.call.resources);
+            if contains_prototype_instances(&export.shape) {
+                return contradiction(
+                    "export shape",
+                    "prototype instances require a constructor return",
+                );
+            }
             if contains_lazy_getters(&export.shape) {
                 return contradiction(
                     "export shape",
@@ -597,6 +603,20 @@ fn normalize_operation(
     }
     validate_cardinality(&operation.cardinality, &op_path)?;
     normalize_owner(&mut operation.owner, resources, &op_path)?;
+    if operation.inputs.iter().any(contains_prototype_instances) {
+        return contradiction(&op_path, "prototype instances cannot be operation inputs");
+    }
+    if let Some(output) = operation.output.as_ref()
+        && contains_prototype_instances(output)
+        && (nested
+            || operation.kind != OperationKind::Return
+            || !matches!(output, ValueShape::PrototypeInstance { .. }))
+    {
+        return contradiction(
+            &op_path,
+            "prototype instances require a whole constructor return",
+        );
+    }
     if operation.inputs.iter().any(contains_lazy_getters) {
         return contradiction(&op_path, "lazy getters cannot be operation inputs");
     }
@@ -613,7 +633,15 @@ fn normalize_operation(
         normalize_value(input, resources, &format!("{op_path}.input.{index}"))?;
     }
     if let Some(output) = &mut operation.output {
-        if let ValueShape::ReturnedCallable { call, members } = output {
+        if let ValueShape::PrototypeInstance { members, .. } = output {
+            if operation.kind != OperationKind::Return || nested {
+                return contradiction(
+                    format!("{op_path}.output"),
+                    "prototype instances require a whole constructor return",
+                );
+            }
+            normalize_prototype_members(members, &format!("{op_path}.output"))?;
+        } else if let ValueShape::ReturnedCallable { call, members } = output {
             if operation.kind != OperationKind::Return || nested {
                 return contradiction(
                     format!("{op_path}.output"),
@@ -1382,6 +1410,79 @@ fn direct_lazy_getter_output(value: &ValueShape) -> bool {
     }
 }
 
+fn contains_prototype_instances(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::PrototypeInstance { .. } => true,
+        ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+            items.items().iter().any(contains_prototype_instances)
+        }
+        ValueShape::Object(items) => items
+            .items()
+            .iter()
+            .any(|item| contains_prototype_instances(&item.value)),
+        ValueShape::Array { element, .. }
+        | ValueShape::Promise(element)
+        | ValueShape::AsyncIterable(element) => contains_prototype_instances(element),
+        _ => false,
+    }
+}
+
+fn normalize_prototype_members(
+    members: &mut [PrototypeMember],
+    path: &str,
+) -> Result<(), ModelError> {
+    if members.is_empty() {
+        return contradiction(path, "a prototype recipe must state at least one member");
+    }
+    for member in members.iter_mut() {
+        require_text(&member.name, "prototype member")?;
+        if member.name != "@@iterator"
+            && !member.name.chars().enumerate().all(|(index, ch)| {
+                ch == '_'
+                    || ch == '$'
+                    || ch.is_ascii_alphabetic()
+                    || (index > 0 && ch.is_ascii_digit())
+            })
+        {
+            return contradiction(
+                path,
+                "prototype members require exact identifier keys or @@iterator",
+            );
+        }
+        if matches!(
+            member.name.as_str(),
+            "constructor" | "prototype" | "__proto__"
+        ) || (member.name == "@@iterator" && member.kind != PrototypeMemberKind::Iterator)
+            || member.tracks.is_empty()
+        {
+            return contradiction(
+                path,
+                "invalid prototype member or omitted tracking behavior",
+            );
+        }
+        for track in &member.tracks {
+            require_text(&track.cache, "instance cache")?;
+            if track.argument.is_some() == track.shared.is_some()
+                || (member.kind != PrototypeMemberKind::Method && track.argument.is_some())
+            {
+                return contradiction(path, "a cache key is one argument or one shared identity");
+            }
+            if let Some(shared) = &track.shared {
+                require_text(shared, "shared cache key")?;
+            }
+        }
+        member.tracks.sort();
+        if member.tracks.windows(2).any(|pair| pair[0] == pair[1]) {
+            return contradiction(path, "duplicate prototype track");
+        }
+    }
+    members.sort_by(|left, right| left.name.cmp(&right.name));
+    if members.windows(2).any(|pair| pair[0].name == pair[1].name) {
+        return contradiction(path, "duplicate prototype member");
+    }
+    Ok(())
+}
+
 fn normalize_value(
     value: &mut ValueShape,
     resources: &BTreeMap<ResourceId, ResourceInfo>,
@@ -1422,6 +1523,12 @@ fn normalize_value(
             return contradiction(
                 path,
                 "a returned callable is valid only as the whole output of a factory return",
+            );
+        }
+        ValueShape::PrototypeInstance { .. } => {
+            return contradiction(
+                path,
+                "prototype instances require a whole constructor return",
             );
         }
         ValueShape::LazyGetterObject { keys, from } => {
@@ -2506,6 +2613,7 @@ fn visit_closed_value(
         | ValueShape::DescribedCallable(_)
         | ValueShape::EffectfulCallable(_)
         | ValueShape::ReturnedCallable { .. }
+        | ValueShape::PrototypeInstance { .. }
         | ValueShape::LazyGetterObject { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
@@ -2920,6 +3028,7 @@ fn open_value_closure(
         | ValueShape::DescribedCallable(_)
         | ValueShape::EffectfulCallable(_)
         | ValueShape::ReturnedCallable { .. }
+        | ValueShape::PrototypeInstance { .. }
         | ValueShape::LazyGetterObject { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
@@ -2954,6 +3063,7 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::DescribedCallable(_)
         | ValueShape::EffectfulCallable(_)
         | ValueShape::ReturnedCallable { .. }
+        | ValueShape::PrototypeInstance { .. }
         | ValueShape::LazyGetterObject { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
@@ -3200,6 +3310,48 @@ fn normalize_callback_results(
 
 #[cfg(test)]
 mod lazy_getter_tests {
+
+    fn member(name: &str) -> PrototypeMember {
+        PrototypeMember {
+            name: name.into(),
+            kind: PrototypeMemberKind::Method,
+            tracks: vec![PrototypeTrack {
+                cache: "keys".into(),
+                argument: Some(0),
+                shared: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn prototype_members_sort_and_reject_duplicate_or_ambiguous_keys() {
+        let mut members = vec![member("has"), member("get")];
+        normalize_prototype_members(&mut members, "fixture").unwrap();
+        assert_eq!(members[0].name, "get");
+        assert!(
+            normalize_prototype_members(&mut [member("has"), member("has")], "fixture").is_err()
+        );
+        let mut ambiguous = member("has");
+        ambiguous.tracks[0].shared = Some("structural".into());
+        assert!(normalize_prototype_members(&mut [ambiguous], "fixture").is_err());
+        let mut getter = member("size");
+        getter.kind = PrototypeMemberKind::Getter;
+        assert!(normalize_prototype_members(&mut [getter], "fixture").is_err());
+        assert!(normalize_prototype_members(&mut [], "fixture").is_err());
+    }
+
+    #[test]
+    fn only_a_whole_return_can_hold_the_recipe() {
+        let value = ValueShape::PrototypeInstance {
+            members: vec![member("has")],
+            population: PrototypePopulation::Values,
+        };
+        assert!(contains_prototype_instances(&value));
+        assert!(contains_prototype_instances(&ValueShape::Tuple(
+            KnowledgeSet::Complete(vec![value])
+        )));
+        assert!(!contains_prototype_instances(&ValueShape::Plain));
+    }
     use super::*;
 
     #[test]

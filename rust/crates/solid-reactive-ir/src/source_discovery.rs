@@ -150,6 +150,7 @@ fn effective_call_return(
                     })
                 })
                 .collect(),
+            prototype: None,
             ..returned.clone()
         });
     }
@@ -163,6 +164,7 @@ fn effective_call_return(
                         .map(|value| (name.clone(), value))
                 })
                 .collect(),
+            prototype: None,
             ..returned.clone()
         });
     }
@@ -532,10 +534,12 @@ fn effective_inner_call_return(
                 Some(ContractReturn {
                     kind: kind.into(),
                     label: "wrapped reactive value".into(),
+                    prototype: None,
                     ..ContractReturn::default()
                 }),
                 None,
             ],
+            prototype: None,
             ..ContractReturn::default()
         });
     }
@@ -545,6 +549,7 @@ fn effective_inner_call_return(
         .then(|| ContractReturn {
             kind: kind.into(),
             label: "wrapped reactive value".into(),
+            prototype: None,
             ..ContractReturn::default()
         })
 }
@@ -589,6 +594,7 @@ fn effective_returned_callable_call(
     let relation = ContractReturn {
         kind: "callback-result".into(),
         parameter: returned.parameter,
+        prototype: None,
         ..ContractReturn::default()
     };
     effective_call_return(&relation, factory_call, context, depth - 1).map(|returned| {

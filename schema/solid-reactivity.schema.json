@@ -666,6 +666,7 @@
         { "$ref": "#/$defs/describedCallableValue" },
         { "$ref": "#/$defs/effectfulCallableValue" },
         { "$ref": "#/$defs/returnedCallableValue" },
+        { "$ref": "#/$defs/prototypeInstanceValue" },
         { "$ref": "#/$defs/lazyGetterObjectValue" },
         { "$ref": "#/$defs/actionValue" },
         { "$ref": "#/$defs/componentValue" },
@@ -834,6 +835,102 @@
       "properties": {
         "kind": { "const": "invocation-result" },
         "parameter": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "prototypeInstanceValue": {
+      "description": "Authored-only exact constructor instance; getObserver-gated per-instance TriggerCache reads and cleanup, with iterator work on first resumption. Missing members remain unknown.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "members",
+        "population"
+      ],
+      "properties": {
+        "kind": {
+          "const": "prototype-instance"
+        },
+        "population": {
+          "enum": [
+            "opaque",
+            "values",
+            "entries"
+          ]
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "kind",
+              "tracks"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "enum": [
+                  "method",
+                  "getter",
+                  "iterator"
+                ]
+              },
+              "tracks": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "cache"
+                  ],
+                  "properties": {
+                    "cache": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "argument": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "shared": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "oneOf": [
+                    {
+                      "required": [
+                        "argument"
+                      ],
+                      "not": {
+                        "required": [
+                          "shared"
+                        ]
+                      }
+                    },
+                    {
+                      "required": [
+                        "shared"
+                      ],
+                      "not": {
+                        "required": [
+                          "argument"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     },
     "lazyGetterObjectValue": {

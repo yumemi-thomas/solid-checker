@@ -775,6 +775,7 @@ fn callback_argument_contracts(
             Some(ContractReturn {
                 kind: "accessor".into(),
                 label: display.to_string(),
+                prototype: None,
                 ..ContractReturn::default()
             })
         })
@@ -4193,6 +4194,7 @@ impl StructuredReturnDiscovery<'_, '_> {
             return Some(ContractReturn {
                 kind: "argument".into(),
                 parameter: Some(parameter),
+                prototype: None,
                 ..ContractReturn::default()
             });
         }
@@ -4247,6 +4249,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                         })
                     })
                     .collect(),
+                prototype: None,
                 ..returned.clone()
             }),
             "object" => Some(ContractReturn {
@@ -4258,6 +4261,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                             .map(|property| (name.clone(), property))
                     })
                     .collect(),
+                prototype: None,
                 ..returned.clone()
             }),
             _ => Some(returned.clone()),
@@ -4293,6 +4297,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         let relation = ContractReturn {
             kind: "callback-result".into(),
             parameter: returned.parameter,
+            prototype: None,
             ..ContractReturn::default()
         };
         self.instantiate_return(file, factory_call, &relation, fallback_label, depth - 1)
@@ -4401,6 +4406,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         reactive.then(|| ContractReturn {
             kind: "store-path".into(),
             label: fallback_label.into(),
+            prototype: None,
             ..ContractReturn::default()
         })
     }
@@ -4498,6 +4504,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                     "accessor".into()
                 },
                 label: fallback_label.into(),
+                prototype: None,
                 ..ContractReturn::default()
             });
         }
@@ -4665,6 +4672,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 .map(|_| ContractReturn {
                     kind: "store-path".into(),
                     label: fallback_label.into(),
+                    prototype: None,
                     ..ContractReturn::default()
                 })
         }?;
@@ -4706,6 +4714,7 @@ impl StructuredReturnDiscovery<'_, '_> {
             "store-path" => Some(ContractReturn {
                 kind: "store-path".into(),
                 label: fallback_label.into(),
+                prototype: None,
                 ..ContractReturn::default()
             }),
             _ => None,
@@ -5086,6 +5095,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 return Some(ContractReturn {
                     kind: "object".into(),
                     properties,
+                    prototype: None,
                     ..ContractReturn::default()
                 });
             }
@@ -5115,6 +5125,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 return Some(ContractReturn {
                     kind: "accessor".into(),
                     label: fallback_label.into(),
+                    prototype: None,
                     ..ContractReturn::default()
                 });
             }
@@ -5175,6 +5186,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                         "accessor".into()
                     },
                     label: fallback_label.into(),
+                    prototype: None,
                     ..ContractReturn::default()
                 });
             }
@@ -5184,6 +5196,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 return Some(ContractReturn {
                     kind: "accessor".into(),
                     label: fallback_label.into(),
+                    prototype: None,
                     ..ContractReturn::default()
                 });
             }
@@ -5209,6 +5222,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                         "accessor".into()
                     },
                     label: fallback_label.into(),
+                    prototype: None,
                     ..ContractReturn::default()
                 });
             }
@@ -5229,6 +5243,7 @@ impl StructuredReturnDiscovery<'_, '_> {
             return Some(ContractReturn {
                 kind: "store-path".into(),
                 label: fallback_label.into(),
+                prototype: None,
                 ..ContractReturn::default()
             });
         }
@@ -5247,6 +5262,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 "accessor".into()
             },
             label: fallback_label.to_owned(),
+            prototype: None,
             ..ContractReturn::default()
         }
     }
@@ -5286,6 +5302,7 @@ fn discover_structured_returns(
                     return Some(ContractReturn {
                         kind: "tuple".into(),
                         elements,
+                        prototype: None,
                         ..ContractReturn::default()
                     });
                 }
@@ -5304,6 +5321,7 @@ fn discover_structured_returns(
                     return Some(ContractReturn {
                         kind: "object".into(),
                         properties,
+                        prototype: None,
                         ..ContractReturn::default()
                     });
                 }

@@ -1,8 +1,7 @@
-import { createMemo, createSignal } from "solid-js";
+import { createTrackedEffect } from "solid-js";
 import { ReactiveMap } from "@solid-primitives/map";
+
 export default function App() {
-  const [value] = createSignal(0);
-  const entries = { *[Symbol.iterator]() { value(); } };
-  createMemo(() => new ReactiveMap(entries));
-  return document.createElement("p");
+  const collection = new ReactiveMap<number, string>([[1, "one"]]);
+  return <p>{String(collection.has(1))}</p>;
 }
