@@ -311,6 +311,19 @@ impl ProofPolicy2 {
 
         for artifact in &mut artifact_cases {
             for (export_name, export) in &mut artifact.exports {
+                // ADR 0235: no census proves what a returned member's call
+                // does; only an authored, probed contract states it.
+                if export.call.operations.iter().any(|operation| {
+                    operation
+                        .output
+                        .as_ref()
+                        .is_some_and(holds_effectful_member)
+                }) {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "an effectful callable member is not certifiable".into(),
+                    });
+                }
                 inventory_export_facts(
                     &artifact.id,
                     export_name,
@@ -732,6 +745,8 @@ fn inventory_value_shape(
         // ADR 0145: exact, with no child shape of its own to inventory. The
         // one fact its root pushes above is the whole claim.
         | ValueShape::DescribedCallable(_)
+        // ADR 0235: refused before inventory (`inspect_candidates`).
+        | ValueShape::EffectfulCallable(_)
         | ValueShape::ReadValue
         | ValueShape::Callable
         | ValueShape::Reactive { .. }
@@ -766,9 +781,10 @@ const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability 
     match shape {
         // ADR 0145: the claim is that the value is invoked, and what that does,
         // so the demand asserts callability; the census proves the rest.
-        ValueShape::Callable | ValueShape::Component | ValueShape::DescribedCallable(_) => {
-            DemandedCallability::Callable
-        }
+        ValueShape::Callable
+        | ValueShape::Component
+        | ValueShape::DescribedCallable(_)
+        | ValueShape::EffectfulCallable(_) => DemandedCallability::Callable,
         ValueShape::Plain => DemandedCallability::NonCallable,
         ValueShape::Unknown
         | ValueShape::Parameter { .. }
@@ -1957,6 +1973,22 @@ const fn manifest() -> PolicyManifest {
                 explicit_trust_store_chain_required: true,
             },
         },
+    }
+}
+
+/// Whether a returned tuple or object carries an effectful callable member
+/// (ADR 0235).
+fn holds_effectful_member(output: &ValueShape) -> bool {
+    match output {
+        ValueShape::Tuple(items) => items
+            .items()
+            .iter()
+            .any(|item| matches!(item, ValueShape::EffectfulCallable(_))),
+        ValueShape::Object(properties) => properties
+            .items()
+            .iter()
+            .any(|property| matches!(property.value, ValueShape::EffectfulCallable(_))),
+        _ => false,
     }
 }
 

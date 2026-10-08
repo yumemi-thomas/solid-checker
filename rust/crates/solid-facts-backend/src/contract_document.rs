@@ -1123,6 +1123,11 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
         // ADR 0152: `callbacks` is written only when it names an item, so every
         // document stating a described callable that invokes nothing keeps its
         // bytes; absent, it reads as ADR 0145's `callbacks: []`.
+        // ADR 0235.
+        ValueShape::EffectfulCallable(call) => json!({
+            "kind": "effectful-callable",
+            "call": compact_call(call, ids)?,
+        }),
         ValueShape::DescribedCallable(call) => {
             let mut node = json!({
                 "kind": "described-callable",
@@ -2345,6 +2350,11 @@ enum WireValueNode {
     },
     /// ADR 0146. Carries no field, as `undefined` does not.
     ReadValue {},
+    /// ADR 0235: a returned member's own call graph, in the export's id
+    /// namespace. Additive to `schemaVersion: 1`.
+    EffectfulCallable {
+        call: Box<WireCall>,
+    },
     Action {
         #[serde(default)]
         transition: Option<String>,
@@ -3692,6 +3702,9 @@ fn expand_value_node(
         }),
         WireValueNode::Undefined {} => Ok(ValueShape::Undefined),
         WireValueNode::ReadValue {} => Ok(ValueShape::ReadValue),
+        WireValueNode::EffectfulCallable { call } => Ok(ValueShape::EffectfulCallable(Box::new(
+            expand_call(Some(call), ids)?,
+        ))),
         WireValueNode::DescribedCallable {
             reads,
             returns,
@@ -4341,6 +4354,93 @@ mod tests {
             .is_err(),
             "an unknown event spelling is refused, not ignored"
         );
+    }
+
+    /// ADR 0235: an `effectful-callable` member round-trips with its own
+    /// call graph in the export's id namespace, names the export's resources,
+    /// moves the digest, and is refused anywhere but directly inside a
+    /// returned tuple or object.
+    #[test]
+    fn an_effectful_callable_member_round_trips_and_is_refused_elsewhere() {
+        let document = |call: &str| {
+            format!(
+                r#"{{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{{"name":"consumer","version":"1.0.0","integrity":"sha512:test","manifest":{{"path":"package.json","sha256":"{a}"}}}},"summaries":{{"fn":{{"shape":"callable","call":{call}}}}},"entrypoints":{{".":{{"artifact":{{"path":"dist/index.js","sha256":"{b}","closureSha256":"{c}"}},"declarations":{{"path":"dist/index.d.ts","sha256":"{d}"}},"exports":{{"make":"fn"}}}}}},"sidecars":{{}}}}"#,
+                a = "a".repeat(64),
+                b = "b".repeat(64),
+                c = "c".repeat(64),
+                d = "d".repeat(64),
+            )
+            .into_bytes()
+        };
+        let at_call = r#""trigger":{"event":"call"},"at":{"event":"call","schedule":"same-stack"}"#;
+        let member = |read_id: &str, resource: &str| {
+            format!(
+                r#"{{"kind":"effectful-callable","call":{{"closed":["reads","returns"],"reads":["{read_id}"],"returns":["start-return"],"operations":[{{"id":"{read_id}","kind":"read",{at_call},"tracking":"ambient-at-execution","owner":{{"source":"ambient-at-execution"}},"count":{{"min":1,"max":1,"scope":"call"}},"inputs":[{{"kind":"reactive","role":"accessor","resource":"{resource}"}}]}},{{"id":"start-return","kind":"return",{at_call},"tracking":"untracked","count":{{"min":0,"max":"many","scope":"call"}},"output":"undefined"}}]}}}}"#
+            )
+        };
+        let outer = |output: &str| {
+            format!(
+                r#"{{"closed":["returns"],"returns":["return"],"resources":[{{"id":"running","kind":"reactive-source"}}],"operations":[{{"id":"return","kind":"return",{at_call},"tracking":"untracked","count":{{"min":0,"max":"many","scope":"call"}},"output":{output}}}]}}"#
+            )
+        };
+        let tuple = |member: &str| {
+            format!(
+                r#"{{"kind":"tuple","closed":["items"],"items":[{{"kind":"reactive","role":"accessor","resource":"running"}},{member}]}}"#
+            )
+        };
+        let kept = normalized(&document(&outer(&tuple(&member("start-read", "running")))));
+        let encoded = encode(&kept, &SidecarDigests::default(), true).unwrap();
+        assert!(String::from_utf8_lossy(&encoded).contains("effectful-callable"));
+        assert_eq!(
+            normalized(&encoded),
+            kept,
+            "the member survives the round trip"
+        );
+        let opaque = normalized(&document(&outer(&tuple(r#""callable""#))));
+        assert_ne!(opaque.semantic_digest(), kept.semantic_digest());
+        // No census proves what a member's call does: certification refuses.
+        let Err(refused) = solid_reactive_ir::contract_semantics::certification::proof_policy_2()
+            .inspect_candidates(&kept)
+        else {
+            panic!("certification refuses an effectful member");
+        };
+        assert!(refused.to_string().contains("not certifiable"), "{refused}");
+        for (call, needle) in [
+            // The whole output of a return.
+            (
+                outer(&member("start-read", "running")),
+                "member of a returned tuple or object",
+            ),
+            // An operation input.
+            (
+                outer(&tuple(r#""callable""#)).replace(
+                    r#""output":"#,
+                    &format!(
+                        r#""inputs":[{}],"output":"#,
+                        member("start-read", "running")
+                    ),
+                ),
+                "member of a returned tuple or object",
+            ),
+            // An operation id the export already uses.
+            (
+                outer(&tuple(&member("return", "running"))),
+                "duplicate operation",
+            ),
+            // A resource neither it nor the export declares.
+            (
+                outer(&tuple(&member("start-read", "elsewhere"))),
+                "missing resource",
+            ),
+        ] {
+            let refused = decode(&document(&call))
+                .and_then(|decoded| decoded.normalize())
+                .expect_err("the shape is refused");
+            assert!(
+                refused.to_string().contains(needle),
+                "{needle:?}: {refused}"
+            );
+        }
     }
 
     /// ADR 0153 part 3: `contextPremises` survives the round trip, puts the

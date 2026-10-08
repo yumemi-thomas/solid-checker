@@ -1,5 +1,20 @@
 # Precision backlog
 
+## A returned member may state what calling it does (2026-10-08)
+
+ADR 0235: a new contract value, `effectful-callable`, gives a member of a
+returned tuple or object its own call graph. A `const`-destructured member
+call is bound to it; certification refuses the shape.
+
+- **Gained:** `createRAF`'s `start()` in a component body is a proven
+  `strict-read-untracked` violation (Chrome: STRICT_READ_UNTRACKED).
+  Primitives ledger, browser: 21 report correctly (was 20). No correct-twin
+  violation on any host.
+- **Coverage:** new fixture `package-effectful-member-consumer`; nothing else
+  moves.
+- **Open:** captured parameters, write policies, the date setters, members
+  reached through the undestructured value.
+
 ## Calling an opaque returned member is a proof obligation (2026-10-08)
 
 ADR 0234: a `callable` or `unknown` member of a returned tuple or object is now

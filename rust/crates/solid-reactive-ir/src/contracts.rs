@@ -252,6 +252,7 @@ pub fn project_export_semantics(
         iterated_parameters: BTreeSet::new(),
         result_access_parameters: BTreeSet::new(),
         returned_invocations: project_returned_invocations(export),
+        returned_member_effects: project_returned_member_effects(export),
         // A projected dependency export has no body here to walk.
         merged_props_return: None,
         // The projection alone states no acceptance identity;
@@ -736,8 +737,78 @@ fn project_member_shape(shape: &ValueShape) -> Option<ContractReturn> {
             kind: OPAQUE_MEMBER.into(),
             ..ContractReturn::default()
         }),
+        // ADR 0235: its effects are projected beside the export
+        // ([`project_returned_member_effects`]), keyed by this member.
+        ValueShape::EffectfulCallable(_) => Some(ContractReturn {
+            kind: EFFECTFUL_MEMBER.into(),
+            ..ContractReturn::default()
+        }),
         _ => project_return_shape(shape),
     }
+}
+
+/// The [`ContractReturn::kind`] of a returned member with described effects
+/// (ADR 0235).
+pub(crate) const EFFECTFUL_MEMBER: &str = "effectful-callable";
+
+/// ADR 0235: each `effectful-callable` member of a returned tuple or object,
+/// projected as the export one call of it would be, with the export's
+/// resources in scope. Keyed by tuple index or property name; a member two
+/// return operations disagree about is left out, so its calls stay
+/// obligations.
+fn project_returned_member_effects(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> BTreeMap<String, ContractExport> {
+    let mut effects = BTreeMap::<String, Option<ContractExport>>::new();
+    let Some(returns) = export.operation_claim(ClaimDomain::Returns) else {
+        return BTreeMap::new();
+    };
+    let mut record = |key: String, call: &crate::contract_semantics::CallSemantics| {
+        let mut call = call.clone();
+        call.resources.extend(export.call.resources.iter().cloned());
+        let member = crate::contract_semantics::ExportSemantics {
+            identity: export.identity.clone(),
+            shape: ValueShape::Callable,
+            stability: export.stability,
+            call,
+        };
+        let projected = project_export_semantics(&member);
+        effects
+            .entry(key)
+            .and_modify(|existing| {
+                if existing.as_ref() != Some(&projected) {
+                    *existing = None;
+                }
+            })
+            .or_insert(Some(projected));
+    };
+    for operation in returns
+        .items()
+        .iter()
+        .filter_map(|id| export.operation(&id.0))
+    {
+        match &operation.output {
+            Some(ValueShape::Tuple(items)) => {
+                for (index, item) in items.items().iter().enumerate() {
+                    if let ValueShape::EffectfulCallable(call) = item {
+                        record(index.to_string(), call);
+                    }
+                }
+            }
+            Some(ValueShape::Object(properties)) => {
+                for property in properties.items() {
+                    if let ValueShape::EffectfulCallable(call) = &property.value {
+                        record(property.name.clone(), call);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    effects
+        .into_iter()
+        .filter_map(|(key, effect)| effect.map(|effect| (key, effect)))
+        .collect()
 }
 
 /// The [`ContractReturn::kind`] of an opaque returned member (ADR 0234).
@@ -745,6 +816,8 @@ pub(crate) const OPAQUE_MEMBER: &str = "opaque-callable";
 
 fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
     match shape {
+        // ADR 0235: valid only as a member, projected there.
+        ValueShape::EffectfulCallable(_) => None,
         ValueShape::Reactive { .. } => Some(ContractReturn {
             kind: "accessor".into(),
             label: "normalized reactive result".into(),
@@ -3374,6 +3447,7 @@ fn resolve_contract_imports_inner(
         &mut by_symbol,
         &mut missing_exports,
     );
+    bind_returned_member_effects(facts, entities, &mut bindings, &mut by_symbol);
     ResolvedContracts {
         bindings,
         by_symbol,
@@ -3750,6 +3824,7 @@ fn contract_export_function(
         result_access_parameters: BTreeSet::new(),
         // ADR 0152: a projection of an accepted contract only.
         returned_invocations: BTreeSet::new(),
+        returned_member_effects: BTreeMap::new(),
     }
 }
 
@@ -5414,5 +5489,87 @@ mod export_kind_proof_tests {
                 ValueShape::Object(KnowledgeSet::Unknown),
             ])
         )));
+    }
+}
+
+/// ADR 0235: a destructured `effectful-callable` member of a contracted
+/// call's return is a callee with its own summary, so every rule reads a call
+/// of it as it reads a call of an export. Only `const` destructuring of the
+/// call itself binds; anything else keeps ADR 0234's obligations.
+fn bind_returned_member_effects(
+    facts: &ProjectFacts,
+    entities: &EntitySymbols,
+    bindings: &mut Vec<ResolvedContractBinding>,
+    by_symbol: &mut HashMap<SymbolId, ResolvedContractBinding>,
+) {
+    let mut members = Vec::new();
+    for file in &facts.files {
+        for binding in file.ast.bindings.iter().filter(|binding| binding.immutable) {
+            let Some(initializer) = binding.initializer else {
+                continue;
+            };
+            let initializer = file.ast.peel_ts_sugar_span(initializer);
+            let Some(call) = file.ast.calls.iter().find(|call| call.span == initializer) else {
+                continue;
+            };
+            let Some(contracted) = entities
+                .get(&location(
+                    file.path.shared(),
+                    file.ast.peel_ts_sugar_span(call.callee),
+                ))
+                .and_then(|symbol| by_symbol.get(symbol))
+            else {
+                continue;
+            };
+            let effects = &contracted.summary.returned_member_effects;
+            if effects.is_empty() {
+                continue;
+            }
+            let slots = match binding.shape {
+                solid_facts::ast::BindingShape::Array => binding
+                    .array_slots
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, slot)| {
+                        slot.as_ref().map(|slot| (index.to_string(), slot.span))
+                    })
+                    .collect::<Vec<_>>(),
+                solid_facts::ast::BindingShape::Object => binding
+                    .object_slots
+                    .iter()
+                    .map(|slot| (slot.property.to_string(), slot.local.span))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            for (key, span) in slots {
+                let Some(summary) = effects.get(&key) else {
+                    continue;
+                };
+                let slot_location = location(file.path.shared(), span);
+                let Some(symbol) = entities.get(&slot_location).cloned() else {
+                    continue;
+                };
+                members.push(ResolvedContractBinding {
+                    local_name: file.source_text(span).unwrap_or_default().to_owned(),
+                    imported_name: format!("{}[{key}]", contracted.imported_name),
+                    package_name: contracted.package_name.clone(),
+                    symbol: symbol.clone(),
+                    runtime_identity: contracted.runtime_identity.clone(),
+                    // `contract_declared_state` reads the `[key]` suffix: a
+                    // member's reads are the caller's, not the package's.
+                    contract_location: Location {
+                        path: format!("{}[{key}]", contracted.contract_location.path).into(),
+                        ..contracted.contract_location.clone()
+                    },
+                    summary: summary.clone(),
+                });
+            }
+        }
+    }
+    for member in members {
+        if !by_symbol.contains_key(&member.symbol) {
+            bindings.push(member.clone());
+            by_symbol.insert(member.symbol.clone(), member);
+        }
     }
 }

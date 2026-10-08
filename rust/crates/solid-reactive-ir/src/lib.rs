@@ -1453,6 +1453,11 @@ pub struct ContractExport {
     /// (`execution_role::contract_returned_invoker_callback_role`). Empty for
     /// every locally inferred summary: never encoded, and a projection only.
     pub returned_invocations: BTreeSet<usize>,
+    /// ADR 0235: what one call of each returned member does, by member key
+    /// (a tuple index, or an object property name), for members an accepted
+    /// contract states as `effectful-callable`. A destructured member's call
+    /// is bound to its entry like a call of an export. Projection only.
+    pub returned_member_effects: BTreeMap<String, ContractExport>,
     /// ADR 0109: the parameter whose reactivity a props merge this export
     /// returns carries, when the generator's own walk cleared the body
     /// ([`crate::returns_walk::MergedPropsReturns`]).
@@ -2843,6 +2848,13 @@ fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
 /// the project's own source.
 pub(crate) fn contract_declared_state(declaration: &Location) -> bool {
     let path = declaration.path.as_ref();
+    // ADR 0235: a returned member's effects (`<export location>[<key>]`).
+    // When it runs is the caller's choice -- `start()` in a click handler
+    // reads nothing untracked -- so its read is the call site's, not the
+    // package's implementation.
+    if path.ends_with(']') {
+        return false;
+    }
     path.starts_with("accepted:")
         || path
             .split_once('#')

@@ -615,6 +615,7 @@
         { "$ref": "#/$defs/invocationResultValue" },
         { "$ref": "#/$defs/undefinedValue" },
         { "$ref": "#/$defs/describedCallableValue" },
+        { "$ref": "#/$defs/effectfulCallableValue" },
         { "$ref": "#/$defs/actionValue" },
         { "$ref": "#/$defs/componentValue" },
         { "$ref": "#/$defs/cleanupValue" },
@@ -782,6 +783,16 @@
       "properties": {
         "kind": { "const": "invocation-result" },
         "parameter": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "effectfulCallableValue": {
+      "description": "ADR 0235. A callable the export hands back as a member of a returned tuple or object, with what one call of it does: its own call graph, whose operations share the export's id namespace and may name the export's resources. Valid only as a direct member of a `return` operation's tuple or object output; never nested; refused by certification.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "call"],
+      "properties": {
+        "kind": { "const": "effectful-callable" },
+        "call": { "$ref": "#/$defs/call" }
       }
     },
     "describedCallableValue": {

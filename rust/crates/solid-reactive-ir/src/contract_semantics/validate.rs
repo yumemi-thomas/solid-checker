@@ -161,6 +161,21 @@ fn validate_artifact_guard(
 }
 
 fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError> {
+    normalize_call_in(call, path, None)
+}
+
+/// The resources and operation ids of the export a nested call belongs to
+/// (ADR 0235): it may name the former and must not reuse the latter.
+type OuterScope<'a> = (
+    &'a BTreeMap<ResourceId, ResourceInfo>,
+    &'a BTreeSet<OperationId>,
+);
+
+fn normalize_call_in(
+    call: &mut CallSemantics,
+    path: &str,
+    outer: Option<OuterScope<'_>>,
+) -> Result<(), ModelError> {
     normalize_knowledge(&mut call.claims.callbacks, &format!("{path}.callbacks"))?;
     normalize_knowledge(&mut call.claims.reads, &format!("{path}.reads"))?;
     normalize_knowledge(&mut call.claims.writes, &format!("{path}.writes"))?;
@@ -191,7 +206,17 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
         validate_resource_local(resource, path)?;
     }
     call.resources.sort_by(|left, right| left.id.cmp(&right.id));
-    let resources = resource_map(&call.resources);
+    let mut resources = resource_map(&call.resources);
+    if let Some((outer_resources, _)) = outer {
+        for (id, info) in outer_resources {
+            if resources.insert(id.clone(), info.clone()).is_some() {
+                return Err(ModelError::DuplicateIdentity {
+                    kind: "resource",
+                    id: id.0.clone(),
+                });
+            }
+        }
+    }
     for resource in &call.resources {
         if let Some(lifetime) = &resource.lifetime {
             validate_lifetime(
@@ -206,7 +231,9 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
     let mut operation_ids = BTreeSet::new();
     for operation in &call.operations {
         require_text(&operation.id.0, "operation id")?;
-        if !operation_ids.insert(operation.id.clone()) {
+        if !operation_ids.insert(operation.id.clone())
+            || outer.is_some_and(|(_, outer_operations)| outer_operations.contains(&operation.id))
+        {
             return Err(ModelError::DuplicateIdentity {
                 kind: "operation",
                 id: operation.id.0.clone(),
@@ -214,7 +241,7 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
         }
     }
     for operation in &mut call.operations {
-        normalize_operation(operation, &operation_ids, &resources, path)?;
+        normalize_operation(operation, &operation_ids, &resources, path, outer.is_some())?;
     }
     call.operations
         .sort_by(|left, right| left.id.cmp(&right.id));
@@ -426,6 +453,7 @@ fn normalize_operation(
     operations: &BTreeSet<OperationId>,
     resources: &BTreeMap<ResourceId, ResourceInfo>,
     path: &str,
+    nested: bool,
 ) -> Result<(), ModelError> {
     let op_path = format!("{path}.operation.{}", operation.id.0);
     if let Some(guard) = &mut operation.guard {
@@ -458,6 +486,24 @@ fn normalize_operation(
                 );
             }
             normalize_described_callable(call, &format!("{op_path}.output"))?;
+        } else if operation.kind == OperationKind::Return {
+            // ADR 0235: a member of a returned tuple or object may carry its
+            // own call graph. Lifted out, the container normalizes as
+            // before; each member's graph normalizes in the export's scope.
+            let out_path = format!("{op_path}.output");
+            let lifted = lift_effectful_members(output);
+            normalize_value(output, resources, &out_path)?;
+            for (member, mut call) in lifted {
+                let member_path = format!("{out_path}.member.{member}");
+                if nested {
+                    return contradiction(
+                        member_path,
+                        "an effectful callable cannot return another effectful callable",
+                    );
+                }
+                normalize_call_in(&mut call, &member_path, Some((resources, operations)))?;
+                restore_effectful_member(output, &member, call);
+            }
         } else {
             normalize_value(output, resources, &format!("{op_path}.output"))?;
         }
@@ -977,6 +1023,86 @@ pub(super) fn normalize_described_callable(
     Ok(())
 }
 
+/// Where an effectful callable sits in a returned container: its tuple index
+/// or object property name.
+enum EffectfulMember {
+    Item(usize),
+    Property(String),
+}
+
+impl std::fmt::Display for EffectfulMember {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Item(index) => write!(formatter, "{index}"),
+            Self::Property(name) => formatter.write_str(name),
+        }
+    }
+}
+
+/// Takes every effectful callable out of `output`'s direct tuple items or
+/// object properties, leaving `callable` in its place (ADR 0235).
+fn lift_effectful_members(output: &mut ValueShape) -> Vec<(EffectfulMember, Box<CallSemantics>)> {
+    let mut lifted = Vec::new();
+    match output {
+        ValueShape::Tuple(KnowledgeSet::Complete(items) | KnowledgeSet::Partial(items)) => {
+            for (index, item) in items.iter_mut().enumerate() {
+                if matches!(item, ValueShape::EffectfulCallable(_))
+                    && let ValueShape::EffectfulCallable(call) =
+                        std::mem::replace(item, ValueShape::Callable)
+                {
+                    lifted.push((EffectfulMember::Item(index), call));
+                }
+            }
+        }
+        ValueShape::Object(
+            KnowledgeSet::Complete(properties) | KnowledgeSet::Partial(properties),
+        ) => {
+            for property in properties.iter_mut() {
+                if matches!(property.value, ValueShape::EffectfulCallable(_))
+                    && let ValueShape::EffectfulCallable(call) =
+                        std::mem::replace(&mut property.value, ValueShape::Callable)
+                {
+                    lifted.push((EffectfulMember::Property(property.name.clone()), call));
+                }
+            }
+        }
+        _ => {}
+    }
+    lifted
+}
+
+/// Puts a normalized effectful callable back where it was lifted from.
+fn restore_effectful_member(
+    output: &mut ValueShape,
+    member: &EffectfulMember,
+    call: Box<CallSemantics>,
+) {
+    match (output, member) {
+        (
+            ValueShape::Tuple(KnowledgeSet::Complete(items) | KnowledgeSet::Partial(items)),
+            EffectfulMember::Item(index),
+        ) => {
+            if let Some(item) = items.get_mut(*index) {
+                *item = ValueShape::EffectfulCallable(call);
+            }
+        }
+        (
+            ValueShape::Object(
+                KnowledgeSet::Complete(properties) | KnowledgeSet::Partial(properties),
+            ),
+            EffectfulMember::Property(name),
+        ) => {
+            if let Some(property) = properties
+                .iter_mut()
+                .find(|property| &property.name == name)
+            {
+                property.value = ValueShape::EffectfulCallable(call);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn normalize_value(
     value: &mut ValueShape,
     resources: &BTreeMap<ResourceId, ResourceInfo>,
@@ -1003,6 +1129,14 @@ fn normalize_value(
             return contradiction(
                 path,
                 "a described callable is valid only as the whole output of a return operation",
+            );
+        }
+        // ADR 0235: lifted out of a return's tuple or object before this
+        // walk; anywhere else it states a call graph no consumer binds.
+        ValueShape::EffectfulCallable(_) => {
+            return contradiction(
+                path,
+                "an effectful callable is valid only as a member of a returned tuple or object",
             );
         }
         ValueShape::ReadValue => {
@@ -2063,6 +2197,7 @@ fn visit_closed_value(
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
         | ValueShape::DescribedCallable(_)
+        | ValueShape::EffectfulCallable(_)
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
@@ -2474,6 +2609,7 @@ fn open_value_closure(
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
         | ValueShape::DescribedCallable(_)
+        | ValueShape::EffectfulCallable(_)
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
@@ -2505,6 +2641,7 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::InvocationResult { .. }
         | ValueShape::Undefined
         | ValueShape::DescribedCallable(_)
+        | ValueShape::EffectfulCallable(_)
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}

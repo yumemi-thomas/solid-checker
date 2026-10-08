@@ -328,7 +328,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 183 adds package-event-props-consumer's hand-stated document, ADR
       // 0207's pin of an `event-handler-props` callback item.
-      stableMainDocuments: 183,
+      //
+      // 184 adds package-effectful-member-consumer's hand-stated document,
+      // ADR 0235's pin of an `effectful-callable` member.
+      stableMainDocuments: 184,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

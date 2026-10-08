@@ -2355,6 +2355,14 @@ pub enum ValueShape {
     Action {
         transition: Option<ResourceId>,
     },
+    /// ADR 0235: a callable the export returns as a member of a tuple or
+    /// object, with what one call of it does: its own call graph. Its
+    /// operations share the export's id namespace (distinct from the
+    /// export's own), and it may name the export's resources, which is how
+    /// it states that `start` reads the signal its constructor created. Valid
+    /// only as a direct member of a `return` operation's tuple or object
+    /// output, never nested.
+    EffectfulCallable(Box<CallSemantics>),
     Component,
     Cleanup {
         resource: Option<ResourceId>,

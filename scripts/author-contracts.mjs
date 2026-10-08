@@ -76,6 +76,37 @@ const option = name => { const index = rest.indexOf(name); return index >= 0 ? r
 /** The claim domains a call may list operations in (schema `$defs/call`). */
 const CLAIM_DOMAINS = ["callbacks", "reads", "writes", "creates", "invalidates", "throws", "returns", "cleanups", "disposals", "computations"];
 
+/**
+ * ADR 0235: the `effectful-callable` members of a claim's returned tuples and
+ * objects, keyed `<return operation>.<index or property>`.
+ */
+function effectfulMembers(call) {
+  const members = new Map();
+  for (const operation of call?.operations ?? []) {
+    if (operation.kind !== "return" || !operation.output || typeof operation.output !== "object") continue;
+    const output = operation.output;
+    const entries = output.kind === "tuple" ? (output.items ?? []).map((item, index) => [String(index), item])
+      : output.kind === "object" ? Object.entries(output.properties ?? {}) : [];
+    for (const [key, member] of entries)
+      if (member?.kind === "effectful-callable") members.set(`${operation.id}.${key}`, member.call);
+  }
+  return members;
+}
+
+/**
+ * ADR 0235: each closed domain of a member's own call graph needs a citation
+ * in the spec's `memberClosures[<member key>][<domain>]`, exactly as the
+ * export's `closures`; an open domain may not carry an empty list.
+ */
+function validateMemberClosures(where, claim) {
+  const members = effectfulMembers(claim.call);
+  const cited = claim.memberClosures ?? {};
+  for (const key of Object.keys(cited))
+    assert(members.has(key), `${where}: memberClosures names ${key}, which is no effectful-callable member`);
+  for (const [key, call] of members)
+    validateClosures(`${where} member ${key}`, { call, closures: cited[key] ?? {} });
+}
+
 function validateClosures(where, claim) {
   const closed = claim.call?.closed ?? [];
   const closures = claim.closures ?? {};
@@ -150,6 +181,7 @@ const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("
   for (const [name, claim] of Object.entries(spec.exports)) {
     validatePropertyGets(claim.call);
     validateClosures(`${spec.package}@${spec.version}#${name}`, claim);
+    validateMemberClosures(`${spec.package}@${spec.version}#${name}`, claim);
     validateCreatedOwners(`${spec.package}@${spec.version}#${name}`, claim.call);
     hostFreeClaim(`${spec.package}@${spec.version}#${name}`, claim);
   }

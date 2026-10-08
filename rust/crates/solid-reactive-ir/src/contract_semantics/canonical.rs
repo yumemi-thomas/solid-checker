@@ -1254,6 +1254,11 @@ impl CanonicalWriter {
             }
             // ADR 0146. Appended; no document before it carries the tag.
             ValueShape::ReadValue => self.u8(22),
+            // ADR 0235. Appended; no document before it carries the tag.
+            ValueShape::EffectfulCallable(call) => {
+                self.u8(24);
+                self.call(call);
+            }
         }
     }
 

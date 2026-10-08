@@ -813,7 +813,14 @@ impl LocalAccessContext<'_, '_> {
         file: &solid_facts::FileFacts,
         result: &mut LocalAccessResult,
     ) {
-        let opaque = |returned: &ContractReturn| returned.kind == crate::contracts::OPAQUE_MEMBER;
+        // ADR 0235: a member with described effects is opaque everywhere a
+        // call of it is not bound to those effects.
+        let opaque = |returned: &ContractReturn| {
+            returned.kind == crate::contracts::OPAQUE_MEMBER
+                || returned.kind == crate::contracts::EFFECTFUL_MEMBER
+        };
+        let effectful =
+            |returned: &ContractReturn| returned.kind == crate::contracts::EFFECTFUL_MEMBER;
         let holds_opaque = |returned: &ContractReturn| {
             returned.elements.iter().flatten().any(opaque)
                 || returned.properties.values().any(opaque)
@@ -830,7 +837,9 @@ impl LocalAccessContext<'_, '_> {
                 uncertain: true,
             };
         // Declarations of destructured opaque members, with the export.
-        let mut members = HashMap::<solid_facts::core::Span, String>::new();
+        // With the export, and whether a direct call of it is bound to
+        // described effects (`bind_returned_member_effects`: `const` only).
+        let mut members = HashMap::<solid_facts::core::Span, (String, bool)>::new();
         let mut destructured = HashSet::<solid_facts::core::Span>::new();
         for binding in &file.ast.bindings {
             let Some(initializer) = binding.initializer else {
@@ -858,19 +867,19 @@ impl LocalAccessContext<'_, '_> {
                         if let (Some(slot), Some(member)) = (slot, member)
                             && opaque(member)
                         {
-                            members.insert(slot.span, export.clone());
+                            let bound = binding.immutable && effectful(member);
+                            members.insert(slot.span, (export.clone(), bound));
                         }
                     }
                 }
                 solid_facts::ast::BindingShape::Object if returned.kind == "object" => {
                     destructured.insert(call.span);
                     for slot in &binding.object_slots {
-                        if returned
-                            .properties
-                            .get(slot.property.as_str())
-                            .is_some_and(opaque)
+                        if let Some(member) = returned.properties.get(slot.property.as_str())
+                            && opaque(member)
                         {
-                            members.insert(slot.local.span, export.clone());
+                            let bound = binding.immutable && effectful(member);
+                            members.insert(slot.local.span, (export.clone(), bound));
                         }
                     }
                 }
@@ -1001,7 +1010,7 @@ impl LocalAccessContext<'_, '_> {
             if identifier.role != solid_facts::ast::IdentifierRole::Reference {
                 continue;
             }
-            let Some(export) = file
+            let Some((export, bound)) = file
                 .ast
                 .reference_declaration(identifier.span)
                 .and_then(|declaration| members.get(&declaration))
@@ -1009,7 +1018,7 @@ impl LocalAccessContext<'_, '_> {
                 continue;
             };
             if let Some(call) = callees.get(&identifier.span) {
-                if !inside_non_component_function(file, identifier.span, self.lookup) {
+                if !*bound && !inside_non_component_function(file, identifier.span, self.lookup) {
                     result.dispatch_obligations.push(obligation(
                         *call,
                         export,
