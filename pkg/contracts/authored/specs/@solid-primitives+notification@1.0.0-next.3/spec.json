@@ -1,0 +1,214 @@
+{
+  "package": "@solid-primitives/notification",
+  "version": "1.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createNotification": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "call": {
+        "operations": [
+          {
+            "id": "create-notification",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "notification"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "show",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "close",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "notification",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "supported",
+                  "value": {
+                    "kind": "plain"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-notification"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "notification",
+            "kind": "reactive-source"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification is only callable across the union: unsupported path has no signal. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification is only callable across the union: unsupported path has no signal. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification is only callable across the union: unsupported path has no signal. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification is only callable across the union: unsupported path has no signal. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        }
+      ]
+    },
+    "isNotificationSupported": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [],
+        "reads": [],
+        "callbacks": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Native window membership and isServer are non-reactive under P1; one synchronous boolean return, no reactive allocation or callable invocation.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Native window membership and isServer are non-reactive under P1; one synchronous boolean return, no reactive allocation or callable invocation.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Native window membership and isServer are non-reactive under P1; one synchronous boolean return, no reactive allocation or callable invocation.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Native window membership and isServer are non-reactive under P1; one synchronous boolean return, no reactive allocation or callable invocation."
+      }
+    }
+  }
+}

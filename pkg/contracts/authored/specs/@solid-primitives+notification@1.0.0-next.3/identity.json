@@ -1,0 +1,77 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/notification",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-2/8+AQb9k7mXhu38p2TCxosKbllnDND4Z/avIDwl1XkU8vwOlWlv4+uVPuDo+IF8XmYWULwW1wkmxEqTyCNfYQ==",
+      "snapshotRoot": "sha256:9caa6e9f876e158072507e2eb6ff593d3f797c95a876f78788c603e6856976c6",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "b3c4c50eefe486b83d35ad9f2773d569917b0a316eaff9675f24c96ffed8927a",
+                  "path": "./dist/index.js",
+                  "sha256": "87cc4e8f9f0a50068ca28bbc22a90128b9331516942be07329a3f8cb549ba0dc"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "d00fdadb6b8208a31e46f9ef723a79b7836955844be435112acbd7a23661e712"
+                },
+                "exports": {
+                  "createNotification": "summary-693ffadeab38f34a5f4eea475cb0112a04f21696b4814c7c42e407fe706093bd",
+                  "createNotificationPermission": "summary-3086e79cf6cd5edf60194de4e7ebe995d76da74553f433b15c7d3988c2affaf5",
+                  "isNotificationSupported": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "makeNotification": "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-2/8+AQb9k7mXhu38p2TCxosKbllnDND4Z/avIDwl1XkU8vwOlWlv4+uVPuDo+IF8XmYWULwW1wkmxEqTyCNfYQ==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "8993105fb922aa0879f8e37054f1921ff40ee4eceb7713192db1ba71e99c07f8"
+          },
+          "name": "@solid-primitives/notification",
+          "version": "1.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-693ffadeab38f34a5f4eea475cb0112a04f21696b4814c7c42e407fe706093bd": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-3086e79cf6cd5edf60194de4e7ebe995d76da74553f433b15c7d3988c2affaf5": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

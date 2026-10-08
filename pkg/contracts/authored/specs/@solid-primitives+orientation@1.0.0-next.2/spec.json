@@ -1,0 +1,199 @@
+{
+  "package": "@solid-primitives/orientation",
+  "version": "1.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createOrientation": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:82-98 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "call": {
+        "operations": [
+          {
+            "id": "create-angle",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "angle"
+            ]
+          },
+          {
+            "id": "create-type",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "type"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "angle",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "angle"
+                  }
+                },
+                {
+                  "name": "type",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "type"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-angle",
+          "create-type"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "reads": [],
+        "callbacks": [],
+        "resources": [
+          {
+            "id": "angle",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "type",
+            "kind": "reactive-source"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:82-98; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:20-60 \u2014 Two literal signals, one registered native-listener cleanup, exact angle/type object; native screen/window reads follow P1, no caller callback.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:82-98; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:20-60 \u2014 Two literal signals, one registered native-listener cleanup, exact angle/type object; native screen/window reads follow P1, no caller callback.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:82-98; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:20-60 \u2014 Two literal signals, one registered native-listener cleanup, exact angle/type object; native screen/window reads follow P1, no caller callback.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:82-98; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:20-60 \u2014 Two literal signals, one registered native-listener cleanup, exact angle/type object; native screen/window reads follow P1, no caller callback.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:82-98; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/orientation-createOrientation-module-scope/node_modules/@solid-primitives/orientation/dist/index.js:20-60 \u2014 Two literal signals, one registered native-listener cleanup, exact angle/type object; native screen/window reads follow P1, no caller callback."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "type-read",
+          "rule": "strict-read-untracked",
+          "why": "Returned signal read in the component strict-read window versus the same read in JSX."
+        },
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "Same ownerless call as module scope, triggered after capture starts. Correct twin restores the captured component owner; no returned value is read.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        }
+      ]
+    }
+  }
+}

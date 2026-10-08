@@ -1,0 +1,72 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/spring",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-CiEgYEu4kyPitDOkLGUd/yTi3wRFguiNIu2ctcuX7mMkCr/4tp3sqLUmIzcDzxK4UaSiJst0pzyo0Seq6R6qdQ==",
+      "snapshotRoot": "sha256:04314c07fe88a06d75547aca78838fd5dde4bb22a59d689089dd32639dfd1fcd",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "2894f4469453ff3cf7de44409b9e509287bff49bbfb309ddf71cef7fa15b4b75",
+                  "path": "./dist/index.js",
+                  "sha256": "fc62467e30af52043436c8b7bde503e02299c68ed72eb8cf8a6dfd08e3f13597"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "2615901506233e39d486e7dd08d56379e7a7b436e8b1a5c7da8ea6e48f9ad58b"
+                },
+                "exports": {
+                  "createDerivedSpring": "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055",
+                  "createSpring": "summary-9103ec5865ab2cbded5e0142d95bc1f6819bc15c4549c821ba4486e44884e39b",
+                  "makeSpring": "summary-5529f7cf00baa98943da91fde915043fbc2e268b51a7cd06b3216b5e74e2acad"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-CiEgYEu4kyPitDOkLGUd/yTi3wRFguiNIu2ctcuX7mMkCr/4tp3sqLUmIzcDzxK4UaSiJst0pzyo0Seq6R6qdQ==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "17cf47ed358b6027430d4a21c8b554640888ad5029c7dfe223682f71614b4f12"
+          },
+          "name": "@solid-primitives/spring",
+          "version": "1.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9103ec5865ab2cbded5e0142d95bc1f6819bc15c4549c821ba4486e44884e39b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-5529f7cf00baa98943da91fde915043fbc2e268b51a7cd06b3216b5e74e2acad": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

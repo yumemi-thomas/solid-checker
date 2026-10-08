@@ -1,0 +1,236 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "08ed618077e1386d015fbf6851f0556bb6e7c779ff6cd59e986a301eb5322bbc",
+            "path": "./dist/index.js",
+            "sha256": "363da5fa709e7bd12e7d3937eb89c76f69775d9620ea04ba98cc5c46763af3ae"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "225b0c4a85c7f58be17d031428e951e129def1cbecf0c22971880b86390c1874"
+          },
+          "exports": {
+            "createPermission": "authored-createPermission"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-A72TtCSGZG6X05W4ROczf2j/ERy+3WSzPNACDwN2wiyuo1ijGVN1ZElGllBDC9dHXUx6kViTl6LZgVuoOnzR+w==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "d797890590b62bc5f7506c3db5dd8308c4e2899ad05decbcf5cda467ebfd2107"
+    },
+    "name": "@solid-primitives/permission",
+    "version": "2.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createPermission": {
+      "call": {
+        "operations": [
+          {
+            "id": "create-permission",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "permission"
+            ]
+          },
+          {
+            "id": "create-status",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "status"
+            ]
+          },
+          {
+            "id": "status-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "status-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "status-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "status"
+              }
+            ],
+            "owner": {
+              "source": "created",
+              "resource": "status-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "status-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "permission"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-permission",
+          "create-status"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "computations": [
+          "status-effect"
+        ],
+        "reads": [
+          "status-read"
+        ],
+        "callbacks": [],
+        "resources": [
+          {
+            "id": "permission",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "status",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "status-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

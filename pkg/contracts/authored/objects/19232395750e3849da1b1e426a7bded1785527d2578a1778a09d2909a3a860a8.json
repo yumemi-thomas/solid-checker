@@ -1,0 +1,545 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "f615ec1bfa5de50a16f70db8345803800b8962eaf5d3c8358062cc3fcc13a722",
+            "path": "./dist/index.js",
+            "sha256": "d5ab2cab4383ea4bbe6b7493023b4ba0ce7192d9516ca4ea715fb5126d47a29e"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "09c42ed2b0072e7091c10cb73d284025cbf698bd2af07c88262c72b497c23021"
+          },
+          "exports": {
+            "DirectionX": "open-plain",
+            "DirectionY": "open-plain",
+            "Occurrence": "open-plain",
+            "createIntersectionObserver": "authored-createIntersectionObserver",
+            "createViewportObserver": "open-callable",
+            "createVisibilityObserver": "authored-createVisibilityObserver",
+            "getDirection": "open-callable",
+            "getOccurrence": "open-callable",
+            "makeIntersectionObserver": "open-callable",
+            "withDirection": "open-callable",
+            "withOccurrence": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-aov3naMTab/bRnXSKRlxedeQmlswLnM+3jPTCdKWJ21NZD4QHSNE2mEiybI3gvVnwqwvY1Ad5jKrSpwBHb9SVw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "91bc2a6763b33e7f89b3c84b6c0529cf0f25076d20af12dfe45b2659f79d6d94"
+    },
+    "name": "@solid-primitives/intersection-observer",
+    "version": "3.0.0-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-plain": {
+      "call": {},
+      "shape": "plain"
+    },
+    "authored-createIntersectionObserver": {
+      "call": {
+        "operations": [
+          {
+            "id": "create-entries",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "entries"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "elements-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "elements-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "options-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "store",
+                  "resource": "entries"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "elements",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "elements-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "elements-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-initial",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "options-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "options-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-entries"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "computations": [
+          "elements-effect",
+          "options-effect"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "elements"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "options-initial"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "options-compute"
+          }
+        ],
+        "resources": [
+          {
+            "id": "entries",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "elements-effect-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "options-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createVisibilityObserver": {
+      "call": {
+        "operations": [
+          {
+            "id": "create-visible",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "visible"
+            ]
+          },
+          {
+            "id": "visibility-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 2,
+              "max": 2,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "element-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "element-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "visible"
+            }
+          },
+          {
+            "id": "element-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "element-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "element-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-visible"
+        ],
+        "cleanups": [
+          "visibility-cleanups"
+        ],
+        "computations": [
+          "element-effect"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "element-compute"
+          }
+        ],
+        "resources": [
+          {
+            "id": "visible",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "element-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "cleanups"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

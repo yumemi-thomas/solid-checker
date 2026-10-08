@@ -19,3 +19,19 @@
 - Primitives ledger, browser: 26 report correctly (was 21). Seven more prove
   the misuse while their correct twin keeps an open domain. No correct twin
   on any host has a violation.
+
+## Slice 3b
+
+- Specs: `devices`, `intersection-observer`, `notification`,
+  `orientation`, `permission`, `range`, `selection`, `sensors`, `spring` and
+  `tween`. 43 probe pairs pass in Chrome; `mapRange` and `createTween` do not
+  ship (one pair each warned unattributed).
+- Three ledger cases are split by host, as the timer case was (ADR 0229):
+  `devices`, `permission` and `sensors` `createBattery` at module scope.
+  Their `uncertifiable` expectation came from certified summaries whose
+  `isServer` early return made every owner count `min: 0`. In the browser
+  build the registration always happens, and Chrome raises NO_OWNER_CLEANUP
+  (and NO_OWNER_EFFECT for `createPermission`). The browser half expects
+  the violation; none and node stay uncertifiable.
+- Primitives ledger, browser: 36 report correctly (was 26), out of 127 cases.
+  No correct twin on any host has a violation.

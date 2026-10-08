@@ -1,0 +1,96 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/intersection-observer",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-aov3naMTab/bRnXSKRlxedeQmlswLnM+3jPTCdKWJ21NZD4QHSNE2mEiybI3gvVnwqwvY1Ad5jKrSpwBHb9SVw==",
+      "snapshotRoot": "sha256:3faac52543542f3934324b1c011e21d45970658e7156aa10e72eb3af85e43b86",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "f615ec1bfa5de50a16f70db8345803800b8962eaf5d3c8358062cc3fcc13a722",
+                  "path": "./dist/index.js",
+                  "sha256": "d5ab2cab4383ea4bbe6b7493023b4ba0ce7192d9516ca4ea715fb5126d47a29e"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "09c42ed2b0072e7091c10cb73d284025cbf698bd2af07c88262c72b497c23021"
+                },
+                "exports": {
+                  "DirectionX": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "DirectionY": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "Occurrence": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "createIntersectionObserver": "summary-3a41e441e7853e711878346bb361cfd86b86295a7744470f44c47b9fa7a74f42",
+                  "createViewportObserver": "summary-b2ffe892ddd558cb4ddba91669939c14a62477dd8b23fc736ab9a9415cc86612",
+                  "createVisibilityObserver": "summary-16accc46ed55d9d3bd3b061159e4d06e6c1d94ca28f7ab410c7fd96c2d05ed73",
+                  "getDirection": "summary-9e802f910d7f1e65f11a35e10076fc358bb12f49af03b3238193210bb1a6a620",
+                  "getOccurrence": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "makeIntersectionObserver": "summary-f370001b42adc868264a5c78827f426eb8d2458c76f2cd9da91a8a92e85edaf5",
+                  "withDirection": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "withOccurrence": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-aov3naMTab/bRnXSKRlxedeQmlswLnM+3jPTCdKWJ21NZD4QHSNE2mEiybI3gvVnwqwvY1Ad5jKrSpwBHb9SVw==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "91bc2a6763b33e7f89b3c84b6c0529cf0f25076d20af12dfe45b2659f79d6d94"
+          },
+          "name": "@solid-primitives/intersection-observer",
+          "version": "3.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-3a41e441e7853e711878346bb361cfd86b86295a7744470f44c47b9fa7a74f42": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b2ffe892ddd558cb4ddba91669939c14a62477dd8b23fc736ab9a9415cc86612": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-16accc46ed55d9d3bd3b061159e4d06e6c1d94ca28f7ab410c7fd96c2d05ed73": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9e802f910d7f1e65f11a35e10076fc358bb12f49af03b3238193210bb1a6a620": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-f370001b42adc868264a5c78827f426eb8d2458c76f2cd9da91a8a92e85edaf5": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

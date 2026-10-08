@@ -1,0 +1,300 @@
+{
+  "package": "@solid-primitives/range",
+  "version": "1.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "repeat": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "length-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "length-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "times-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "length-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "length-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "computations": [
+          "length-memo"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "times-compute"
+          }
+        ],
+        "resources": [
+          {
+            "id": "length-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 \u2014 Exactly one direct onCleanup at construction. Later returned mapper creates roots and invokes caller code, so other domains are not closed."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        },
+        {
+          "label": "times-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "times runs in the created memo at construction; ordinary signal writes throw there."
+        }
+      ]
+    },
+    "mapRange": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "call": {
+        "operations": [
+          {
+            "id": "initial-step",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "initial-step"
+          }
+        ],
+        "closed": [
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 \u2014 Exactly one direct onCleanup at construction. Later returned mapper creates roots and invokes caller code, so other domains are not closed."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        },
+        {
+          "label": "initial-step",
+          "rule": "strict-read-untracked",
+          "why": "getStep is invoked before onCleanup in the ambient component body; the correct constant callback has no reactive read."
+        }
+      ]
+    }
+  }
+}

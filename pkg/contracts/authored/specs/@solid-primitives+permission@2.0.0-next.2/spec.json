@@ -1,0 +1,250 @@
+{
+  "package": "@solid-primitives/permission",
+  "version": "2.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createPermission": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/permission/dist/index.js:11-40 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "call": {
+        "operations": [
+          {
+            "id": "create-permission",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "permission"
+            ]
+          },
+          {
+            "id": "create-status",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "status"
+            ]
+          },
+          {
+            "id": "status-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "status-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "status-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "status"
+              }
+            ],
+            "owner": {
+              "source": "created",
+              "resource": "status-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "status-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "permission"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-permission",
+          "create-status"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "computations": [
+          "status-effect"
+        ],
+        "reads": [
+          "status-read"
+        ],
+        "callbacks": [],
+        "resources": [
+          {
+            "id": "permission",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "status",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "status-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/permission/dist/index.js:11-40 \u2014 Browser P1 has navigator. Exactly two ownedWrite signals, one split effect whose tracked compute reads status, one onCleanup, and the permission accessor. The getUserMedia patch contains no caller export-argument invocation.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/permission/dist/index.js:11-40 \u2014 Browser P1 has navigator. Exactly two ownedWrite signals, one split effect whose tracked compute reads status, one onCleanup, and the permission accessor. The getUserMedia patch contains no caller export-argument invocation.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/permission/dist/index.js:11-40 \u2014 Browser P1 has navigator. Exactly two ownedWrite signals, one split effect whose tracked compute reads status, one onCleanup, and the permission accessor. The getUserMedia patch contains no caller export-argument invocation.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/permission/dist/index.js:11-40 \u2014 Browser P1 has navigator. Exactly two ownedWrite signals, one split effect whose tracked compute reads status, one onCleanup, and the permission accessor. The getUserMedia patch contains no caller export-argument invocation.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/permission/dist/index.js:11-40 \u2014 Browser P1 has navigator. Exactly two ownedWrite signals, one split effect whose tracked compute reads status, one onCleanup, and the permission accessor. The getUserMedia patch contains no caller export-argument invocation."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "Same ownerless call as module scope, triggered after capture starts. Correct twin restores the captured component owner; no returned value is read.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        }
+      ]
+    }
+  }
+}

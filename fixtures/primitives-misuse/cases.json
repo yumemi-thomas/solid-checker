@@ -1544,9 +1544,24 @@
       "kind": "uncertifiable",
       "hosts": [
         "none",
+        "node"
+      ],
+      "why": "No authored contract covers the none or node host, and the certified summary these hosts once had stated owner requirements whose every count is `min: 0` (an `isServer` early return; ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "misuse": "import { createDevices } from \"@solid-primitives/devices\";\n\ncreateDevices();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createDevices } from \"@solid-primitives/devices\";\n\ncreateRoot(dispose => {\n  createDevices();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "devices-createDevices-module-scope-browser",
+      "package": "@solid-primitives/devices",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createDevices",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
         "browser"
       ],
-      "why": "The certified summary of createDevices states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "why": "In the browser build `isServer` is false, so createDevices always registers its work on the ambient owner; the authored contract states that, and Chrome on rc.13 raises NO_OWNER_CLEANUP for this call. Called at module scope there is no owner, so it is never disposed.",
       "misuse": "import { createDevices } from \"@solid-primitives/devices\";\n\ncreateDevices();\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createDevices } from \"@solid-primitives/devices\";\n\ncreateRoot(dispose => {\n  createDevices();\n  return dispose;\n});\n"
     },
@@ -1706,9 +1721,24 @@
       "kind": "uncertifiable",
       "hosts": [
         "none",
+        "node"
+      ],
+      "why": "No authored contract covers the none or node host, and the certified summary these hosts once had stated owner requirements whose every count is `min: 0` (an `isServer` early return; ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "misuse": "import { createPermission } from \"@solid-primitives/permission\";\n\ncreatePermission(\"camera\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createPermission } from \"@solid-primitives/permission\";\n\ncreateRoot(dispose => {\n  createPermission(\"camera\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "permission-createPermission-module-scope-browser",
+      "package": "@solid-primitives/permission",
+      "version": "2.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createPermission",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
         "browser"
       ],
-      "why": "The certified summary of createPermission states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "why": "In the browser build `isServer` is false, so createPermission always registers its work on the ambient owner; the authored contract states that, and Chrome on rc.13 raises NO_OWNER_EFFECT and NO_OWNER_CLEANUP for this call. Called at module scope there is no owner, so it is never disposed.",
       "misuse": "import { createPermission } from \"@solid-primitives/permission\";\n\ncreatePermission(\"camera\");\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createPermission } from \"@solid-primitives/permission\";\n\ncreateRoot(dispose => {\n  createPermission(\"camera\");\n  return dispose;\n});\n"
     },
@@ -1839,9 +1869,24 @@
       "kind": "uncertifiable",
       "hosts": [
         "none",
+        "node"
+      ],
+      "why": "No authored contract covers the none or node host, and the certified summary these hosts once had stated owner requirements whose every count is `min: 0` (an `isServer` early return; ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "misuse": "import { createBattery } from \"@solid-primitives/sensors\";\n\ncreateBattery();\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createBattery } from \"@solid-primitives/sensors\";\n\ncreateRoot(dispose => {\n  createBattery();\n  return dispose;\n});\n"
+    },
+    {
+      "id": "sensors-createBattery-module-scope-browser",
+      "package": "@solid-primitives/sensors",
+      "version": "1.0.0-next.3",
+      "entrypoint": ".",
+      "export": "createBattery",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
         "browser"
       ],
-      "why": "The certified summary of createBattery states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "why": "In the browser build `isServer` is false, so createBattery always registers its work on the ambient owner; the authored contract states that, and Chrome on rc.13 raises NO_OWNER_CLEANUP for this call. Called at module scope there is no owner, so it is never disposed.",
       "misuse": "import { createBattery } from \"@solid-primitives/sensors\";\n\ncreateBattery();\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createBattery } from \"@solid-primitives/sensors\";\n\ncreateRoot(dispose => {\n  createBattery();\n  return dispose;\n});\n"
     },

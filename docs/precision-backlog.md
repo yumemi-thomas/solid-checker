@@ -7,6 +7,11 @@ Browser ledger: 26 report correctly (was 21); seven more prove the misuse
 with an open domain on the correct twin; no correct-twin violation on any
 host. `createPagination` and `createDropzone` do not ship (pairs failed).
 
+Slice 3b: ten more packages. Browser ledger: 36 report correctly (was 26) of
+127 cases, after splitting three module-scope cases by host (Chrome raises the
+missing-owner warning in the browser build). `mapRange` and `createTween` do
+not ship.
+
 ## A returned member may state what calling it does (2026-10-08)
 
 ADR 0235: a new contract value, `effectful-callable`, gives a member of a
