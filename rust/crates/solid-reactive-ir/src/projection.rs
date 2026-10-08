@@ -1226,7 +1226,7 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // requirements: when the leaf owner's call site cannot be proven
             // owned (exported helper, conditional owner), the finding is a
             // proof obligation, not a proven runtime violation.
-            if operation.uncertain {
+            if operation.uncertain || operation.possible {
                 finding.kind = "uncertifiable".into();
             }
         }

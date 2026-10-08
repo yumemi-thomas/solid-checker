@@ -494,6 +494,11 @@ pub struct LeafOwnerOperation {
     /// violation.
     #[serde(default)]
     pub uncertain: bool,
+    /// The registration may not happen at this call: the accepted contract
+    /// states it with `min: 0` (an early return the contract cannot express
+    /// as a guard). Projected as uncertifiable, like [`Self::uncertain`].
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub possible: bool,
     /// The exactly-resolved helper the operation is reached through: the
     /// operation sits in the helper's synchronous extent and the helper is
     /// called from this leaf scope, so it executes here. The finding anchors
@@ -1250,10 +1255,12 @@ pub struct ContractExport {
     /// from or encoded into a package-contract document.
     pub open_return: Option<ContractReturn>,
     /// ADR 0179: the owner registrations this export makes on its caller's
-    /// owner, at the call and on the same stack, on every call:
-    /// `ambient-at-call`, call-scoped, `min >= 1`. Inside a leaf owner each is
-    /// a forbidden operation the runtime throws on. A guarded one keeps its
-    /// guard and counts only at a call where the guard holds (ADR 0223).
+    /// owner, at the call and on the same stack: `ambient-at-call`,
+    /// call-scoped. Inside a leaf owner each is a forbidden operation the
+    /// runtime throws on. `guaranteed` when it happens on every call
+    /// (`min >= 1`); otherwise it may not happen (`min: 0`) and the leaf
+    /// finding is a proof obligation. A guarded one keeps its guard and
+    /// counts only at a call where the guard holds (ADR 0223).
     /// Projected from an accepted document only; empty for a local summary.
     pub leaf_forbidden_operations: Vec<ContractOwnerRequirement>,
     /// ADR 0207: the accepted contract's `event-handler-props` items, each

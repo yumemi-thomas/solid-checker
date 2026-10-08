@@ -12,7 +12,7 @@ halts reactivity.
 | `listen()` inside `createTrackedEffect` | `SC3001 leaf-owner-forbidden-call` violation | a cleanup on every call |
 | `startTickerAlways()` inside `createTrackedEffect` | violation | a computation on every call |
 | `listen()` inside an owner-backed `onSettled` | violation | the same leaf owner |
-| `startTicker()` inside `createTrackedEffect` | no violation (the callback stays unresolved) | it only may register |
+| `startTicker()` inside `createTrackedEffect` | `SC3001 leaf-owner-forbidden-call` uncertifiable (ADR 0231) | it only may register (`min: 0`): a proof obligation |
 | `startTickerSilent()` inside `createTrackedEffect` | no violation (the callback stays unresolved) | it registers nothing |
 | `queueMicrotask(() => listen())` inside `createTrackedEffect` | no leaf finding; `SC4001 missing-owner` | the microtask runs later on an empty stack, with no owner |
 | `listen()`, `startTickerAlways()` in a component body | none | a normal owner |

@@ -176,6 +176,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: false,
+                        possible: false,
                         via: Some(via.clone()),
                     });
                 }
@@ -190,6 +191,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     fix: None,
                     call_site_gate,
                     uncertain: true,
+                    possible: false,
                     via: None,
                 });
                 continue;
@@ -217,6 +219,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 fix: None,
                 call_site_gate,
                 uncertain: true,
+                possible: false,
                 via: None,
             });
             continue;
@@ -237,8 +240,10 @@ pub(super) fn leaf_owner_operations_for_file(
                 call_primitive_name(callback_file, call, entities, symbol_names, dialect);
             let Some(primitive) = primitive else {
                 // ADR 0179: a package export whose accepted contract states a
-                // registration on its caller's owner, at the call and on every
-                // call, performs it here -- inside the leaf scope.
+                // registration on its caller's owner, at the call, performs it
+                // here -- inside the leaf scope. On every call it is a
+                // violation; with `min: 0` it may not happen, a proof
+                // obligation (ADR 0231).
                 if let Some(registrations) = lookup
                     .callee_symbol(callback_file, call.callee)
                     .and_then(|symbol| lookup.contract_leaf_forbidden_operations(symbol))
@@ -251,11 +256,14 @@ pub(super) fn leaf_owner_operations_for_file(
                     for registration in registrations {
                         // ADR 0223: a guarded registration is a forbidden
                         // operation only where its guard holds at this call.
-                        if crate::owners::owner_requirement_at_call(registration, call)
-                            != Some(true)
-                        {
+                        // Where it may hold, or the contract states `min: 0`,
+                        // the registration may happen: a proof obligation
+                        // (ADR 0231), never silence.
+                        let Some(guaranteed) =
+                            crate::owners::owner_requirement_at_call(registration, call)
+                        else {
                             continue;
-                        }
+                        };
                         operations.push(LeafOwnerOperation {
                             through_contract: true,
                             kind: match registration.operation {
@@ -269,6 +277,7 @@ pub(super) fn leaf_owner_operations_for_file(
                             fix: None,
                             call_site_gate: call_site_gate.clone(),
                             uncertain: false,
+                            possible: !guaranteed,
                             via: Some(via.clone()),
                         });
                     }
@@ -304,6 +313,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: false,
+                        possible: false,
                         via: Some(via.clone()),
                     });
                 }
@@ -316,6 +326,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: true,
+                        possible: false,
                         via: Some(via),
                     });
                 }
@@ -344,6 +355,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 fix,
                 call_site_gate: call_site_gate.clone(),
                 uncertain: false,
+                possible: false,
                 via: None,
             });
         }

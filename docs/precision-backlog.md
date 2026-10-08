@@ -1,5 +1,17 @@
 # Precision backlog
 
+## A possible package registration in a leaf owner is a proof obligation (2026-10-08)
+
+ADR 0231: a contract registration stated with `min: 0`, or behind a guard the
+call does not settle, inside a leaf owner is now `leaf-owner-forbidden-call`
+uncertifiable. It used to fall through to `reactive-dispatch-unresolved`.
+
+- **Moved:** one coverage finding (`package-leaf-registration-consumer`,
+  `startTicker()` in `createTrackedEffect`); five primitives-ledger
+  case-host pairs now name the right rule. No correct twin gained a finding.
+- **Open:** `createShortcut` cannot reach a violation without a "non-empty
+  array" guard in the contract format.
+
 ## An authored contract may state a host-free claim (2026-10-08)
 
 ADR 0230: a spec may carry host-free cases (conditions `import` only) for runs
@@ -20,12 +32,9 @@ skip to `min: 0`; domains close only with server-path citations.
   nothing on rc.13 (`tryOnCleanup` registers nothing without an owner, by the
   package's design), so that case is replaced by a leaf-owner one, which
   Chrome flags (CLEANUP_IN_FORBIDDEN_SCOPE).
-- **Open, checker recall:** for that leaf-owner misuse the checker reports
-  `reactive-dispatch-unresolved` (uncertifiable) on every host, not the
-  violation Chrome shows. The claim states the cleanups with `min: 0` (an
-  empty key list registers none), an `unconstrained` owner and
-  `requiresCleanup: required`. `createTimer`'s leaf-owner case, whose cleanup
-  has `min: 1`, is proven on the browser host. Not yet investigated.
+- **Checker recall:** that leaf-owner misuse was reported
+  `reactive-dispatch-unresolved`; ADR 0231 makes it `leaf-owner-forbidden-call`
+  uncertifiable.
 
 ## Solid Primitives batch 2 (2026-10-08)
 

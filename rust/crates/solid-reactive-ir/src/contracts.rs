@@ -955,11 +955,13 @@ fn project_guaranteed_callback_parameters(
 }
 
 /// ADR 0179: the owner registrations an accepted export makes on its
-/// caller's owner on every call, synchronously at the call: each operation in
-/// `creates`, `cleanups` or `computations` that imposes an owner requirement
+/// caller's owner, synchronously at the call: each operation in `creates`,
+/// `cleanups` or `computations` that imposes an owner requirement
 /// ([`Operation::imposes_owner_requirement`]), takes the owner current at the
-/// call (`ambient-at-call`), is unguarded, is triggered by and runs at the
-/// call on the same stack, and is counted per call with `min >= 1`.
+/// call (`ambient-at-call`), is triggered by and runs at the call on the same
+/// stack, and is counted per call. `guaranteed` when `min >= 1`; a `min: 0`
+/// registration may not happen (ADR 0231) and is kept unguaranteed, unless a
+/// guaranteed one of the same kind and guard already covers it.
 ///
 /// Stricter than [`project_owner_requirements`]' `guaranteed`, which answers
 /// the missing-owner question and reads the count alone: a leaf owner forbids
@@ -1009,7 +1011,7 @@ fn project_leaf_forbidden_operations(
                 && operation.at == Some(Event::Call)
                 && operation.schedule == Some(Schedule::SameStack)
                 && operation.cardinality.scope == Some(CardinalityScope::Call)
-                && operation.cardinality.min.is_some_and(|min| min >= 1))
+                && operation.cardinality.min.is_some())
             {
                 continue;
             }
@@ -1021,7 +1023,7 @@ fn project_leaf_forbidden_operations(
             };
             let registration = ContractOwnerRequirement {
                 operation: kind,
-                guaranteed: true,
+                guaranteed: operation.cardinality.min.is_some_and(|min| min >= 1),
                 guard: operation.guard.clone(),
             };
             if !operations.contains(&registration) {
@@ -1029,6 +1031,17 @@ fn project_leaf_forbidden_operations(
             }
         }
     }
+    // A guaranteed registration of the same kind and guard already says
+    // everything the unguaranteed one could.
+    let covered = operations
+        .iter()
+        .filter(|registration| registration.guaranteed)
+        .map(|registration| (registration.operation, registration.guard.clone()))
+        .collect::<Vec<_>>();
+    operations.retain(|registration| {
+        registration.guaranteed
+            || !covered.contains(&(registration.operation, registration.guard.clone()))
+    });
     operations.sort_by_key(|registration| {
         format!("{:?} {:?}", registration.operation, registration.guard)
     });
@@ -1213,9 +1226,32 @@ mod owner_requirement_projection_tests {
                 OwnerRequirementOperation::Effect
             ]
         );
-        assert!(
-            project(vec![requiring("cleanup", OperationKind::Cleanup, 0)]).is_empty(),
+        // ADR 0231: one that may not happen is kept, unguaranteed.
+        let possible = |operations: Vec<Operation>| {
+            let mut claims = claims();
+            claims.cleanups = KnowledgeSet::Partial(
+                operations
+                    .iter()
+                    .map(|operation| operation.id.clone())
+                    .collect(),
+            );
+            super::project_leaf_forbidden_operations(&export(claims, operations, Vec::new()))
+                .into_iter()
+                .map(|registration| (registration.operation, registration.guaranteed))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            possible(vec![requiring("cleanup", OperationKind::Cleanup, 0)]),
+            vec![(OwnerRequirementOperation::Cleanup, false)],
             "a registration that may not happen"
+        );
+        assert_eq!(
+            possible(vec![
+                requiring("always", OperationKind::Cleanup, 1),
+                requiring("maybe", OperationKind::Cleanup, 0),
+            ]),
+            vec![(OwnerRequirementOperation::Cleanup, true)],
+            "a guaranteed one covers the possible one"
         );
         let mut later = requiring("cleanup", OperationKind::Cleanup, 1);
         later.owner.source = OwnerSource::AmbientAtExecution;

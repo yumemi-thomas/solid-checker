@@ -295,10 +295,17 @@ fn leaf_contract_registration_wording(
         LeafOwnerOperationKind::Cleanup => "a cleanup",
         _ => "a reactive computation",
     };
-    let mut message = format!(
-        "{export}() registers {registration} on its caller's owner at this call, which is inside {}, a leaf owner that forbids it; Solid throws here in dev",
-        operation.owner
-    );
+    let mut message = if operation.possible {
+        format!(
+            "{export}() may register {registration} on its caller's owner at this call, which is inside {}, a leaf owner that forbids it; its accepted contract states the registration on some calls, not every call, so where it happens Solid throws in dev and the finding is a proof obligation",
+            operation.owner
+        )
+    } else {
+        format!(
+            "{export}() registers {registration} on its caller's owner at this call, which is inside {}, a leaf owner that forbids it; Solid throws here in dev",
+            operation.owner
+        )
+    };
     let hint = format!(
         "Call {export}() in the component body (or another owning scope) instead of inside {}.",
         operation.owner
@@ -306,7 +313,12 @@ fn leaf_contract_registration_wording(
     let mut evidence = vec![
         EvidenceStep {
             message: format!(
-                "the accepted contract for {export} states {registration} on the caller's owner, at the call, on every call"
+                "the accepted contract for {export} states {registration} on the caller's owner, at the call, {}",
+                if operation.possible {
+                    "on some calls (min 0)"
+                } else {
+                    "on every call"
+                }
             ),
             location: Some(operation.location.clone()),
         },
