@@ -1,0 +1,81 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/timer",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-+nDGvEk/9d+uC6hrjuDpKH393hWR9tMhHfFso9qKa3/Q2xdoKXHvH+gmslP01/HBs2OGwPkriHxg892gFbJ6Kg==",
+      "snapshotRoot": "sha256:f9d4af8b5a65c1b7ffbb8c8e0fd47b49f7f88424de68c009d49fffb0a517cf12",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "e1c01013135c1b43d915a583d587e4409e5f16d3fd031474af9e37a9ddf5efd0",
+                  "path": "./dist/index.js",
+                  "sha256": "3c5f1fc3eec2b1fe89cf37f8ad500edd3631b24c7fa50e0aee547de1ca4c4373"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "6d63f84278aebb4756d1d608cead749ae35bd1faf988ea047ffda85be3699799"
+                },
+                "exports": {
+                  "createIntervalCounter": "summary-6ff70fdd230d2309ab3ea40252cd6870c28d7c93d61058eabe5b608982e7be0c",
+                  "createPolled": "summary-b3b006d29178c7e547048e647033c1846cb064afdd0075a32a4c05aaa7edf1f5",
+                  "createTimeoutLoop": "summary-779c8826f94294cc98f6187558af79141947a634b80dbfd8b05379bae9a75ce7",
+                  "createTimer": "summary-4015c8dbddb108878227f57c034a14ffb75a3f0816543c7dd41b506eb52eef2c",
+                  "makeTimer": "summary-a2cc2050cdf991b2ecbf92dc2cbc51515b0102e5905782e03f578b11bb336936"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-+nDGvEk/9d+uC6hrjuDpKH393hWR9tMhHfFso9qKa3/Q2xdoKXHvH+gmslP01/HBs2OGwPkriHxg892gFbJ6Kg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "b029e0b5443615ce0d310bd6cdd9ab59ee5859ac5057122458beba1fc72803b0"
+          },
+          "name": "@solid-primitives/timer",
+          "version": "1.4.5-next.1"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-6ff70fdd230d2309ab3ea40252cd6870c28d7c93d61058eabe5b608982e7be0c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b3b006d29178c7e547048e647033c1846cb064afdd0075a32a4c05aaa7edf1f5": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-779c8826f94294cc98f6187558af79141947a634b80dbfd8b05379bae9a75ce7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-4015c8dbddb108878227f57c034a14ffb75a3f0816543c7dd41b506eb52eef2c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-a2cc2050cdf991b2ecbf92dc2cbc51515b0102e5905782e03f578b11bb336936": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

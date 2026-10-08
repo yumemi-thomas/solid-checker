@@ -8,9 +8,19 @@
 //       write pkg/contracts/authored/{index.json,objects/**} and embedded.rs
 //   bun scripts/author-contracts.mjs check
 //       fail if the written tier is not what `build` would write
-//   bun scripts/author-contracts.mjs identity --spec <spec> --install <dir> --proposal <file>
+//   bun scripts/author-contracts.mjs identity --spec <spec> --install <dir> --proposal <file> [--host-free]
 //       write the spec's identity.json from a `contract generate --host browser`
-//       proposal (ADR 0207)
+//       proposal (ADR 0207), or with --host-free its identity.host-free.json
+//       from a proposal generated with no --host (ADR 0230)
+//
+// A spec may also name `hostFreeIdentity`, the version's host-free artifact
+// cases (a proposal generated with no `--host`, conditions `import` only),
+// for runs that declare no host (ADR 0230). An export's `hostFree` states
+// its claim there as a weakening of the probed browser claim: the operations
+// it lists in `minZero` may not run at all (the server build's `isServer`
+// early return), every other part is the browser claim's, and a domain is
+// closed only where `hostFree` closes it with its own citations. It ships
+// only when the browser claim's pairs passed.
 //
 // A spec named `<package>@<version>+<label>` with `patchedInstall` in its
 // spec.json is about one patched install (ADR 0208): its identity is that
@@ -100,6 +110,38 @@ function validateCreatedOwners(where, value) {
   for (const item of Object.values(value)) validateCreatedOwners(where, item);
 }
 
+/**
+ * ADR 0230: the host-free claim of one export, derived from its browser claim.
+ * The operations `minZero` names get `count.min: 0`, because on the server
+ * build they may not run. Nothing else about any operation changes. A domain
+ * is closed only where `hostFree.closed` says so, each with its own citation
+ * (`hostFree.closures`), and a domain left open loses an empty list, which
+ * the decoder refuses. Returns undefined for an export with no `hostFree`.
+ */
+function hostFreeClaim(where, claim) {
+  const hostFree = claim.hostFree;
+  if (!hostFree) return undefined;
+  assert(typeof hostFree.why === "string" && hostFree.why.length > 0, `${where}: hostFree needs a why`);
+  const call = structuredClone(claim.call);
+  const operations = new Map((call.operations ?? []).map(operation => [operation.id, operation]));
+  for (const id of hostFree.minZero ?? []) {
+    const operation = operations.get(id);
+    assert(operation, `${where}: hostFree.minZero names no operation ${id}`);
+    assert(operation.count, `${where}: hostFree.minZero operation ${id} states no count`);
+    operation.count = { ...operation.count, min: 0 };
+  }
+  call.closed = [...(hostFree.closed ?? [])];
+  for (const domain of call.closed)
+    assert((claim.call.closed ?? []).includes(domain), `${where}: hostFree closes ${domain}, which the browser claim leaves open`);
+  for (const domain of CLAIM_DOMAINS)
+    if (Array.isArray(call[domain]) && call[domain].length === 0 && !call.closed.includes(domain)) delete call[domain];
+  if (call.closed.length === 0) delete call.closed;
+  const derived = { call, closures: hostFree.closures ?? {} };
+  validateClosures(`${where} (host-free)`, derived);
+  validateCreatedOwners(`${where} (host-free)`, call);
+  return derived;
+}
+
 // A directory whose name starts with `_` holds probe pairs that several specs
 // share (`"pairs"` in spec.json, relative to the spec); it is not a spec.
 const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("_")).sort().map(name => {
@@ -109,6 +151,7 @@ const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("
     validatePropertyGets(claim.call);
     validateClosures(`${spec.package}@${spec.version}#${name}`, claim);
     validateCreatedOwners(`${spec.package}@${spec.version}#${name}`, claim.call);
+    hostFreeClaim(`${spec.package}@${spec.version}#${name}`, claim);
   }
   // ADR 0208: a spec about one patched install is named for its patch.
   const base = `${spec.package.replace("/", "+")}@${spec.version}`;
@@ -124,6 +167,17 @@ function certifiedCases(spec) {
   assert(spec.identity, `${spec.name}: spec.json names no identity`);
   const identity = read(join(spec.directory, spec.identity));
   assert.equal(identity.format, 1, `${spec.name}: identity format`);
+  return identity.cases.map(entry => ({ ...entry, packageName: spec.package, packageVersion: spec.version }));
+}
+
+/** ADR 0230: the host-free artifact cases of one version, or none. */
+function hostFreeCases(spec) {
+  if (!spec.hostFreeIdentity) return [];
+  const identity = read(join(spec.directory, spec.hostFreeIdentity));
+  assert.equal(identity.format, 1, `${spec.name}: host-free identity format`);
+  for (const entry of identity.cases)
+    assert(!entry.exportConditions.some(condition => ["browser", "node", "worker", "deno"].includes(condition)),
+      `${spec.name}: a host-free case names a host condition`);
   return identity.cases.map(entry => ({ ...entry, packageName: spec.package, packageVersion: spec.version }));
 }
 
@@ -366,7 +420,7 @@ function snapshotRoot(directory, name, version) {
  */
 function identity() {
   const only = option("--spec"), install = option("--install"), proposalPath = option("--proposal");
-  assert(only && install && proposalPath, "usage: author-contracts.mjs identity --spec <spec> --install <dir> --proposal <file>");
+  assert(only && install && proposalPath, "usage: author-contracts.mjs identity --spec <spec> --install <dir> --proposal <file> [--host-free]");
   const spec = specs.find(candidate => candidate.name === only);
   assert(spec, `no spec ${only}`);
   const proposal = read(proposalPath);
@@ -397,11 +451,12 @@ function identity() {
         identityDocument: { ...proposal, entrypoints: { [entrypoint]: { cases: [artifactCase] } }, summaries }
       });
     }
-  writeFileSync(join(spec.directory, spec.identity ?? "identity.json"), json({ format: 1, cases }));
+  const file = rest.includes("--host-free") ? spec.hostFreeIdentity ?? "identity.host-free.json" : spec.identity ?? "identity.json";
+  writeFileSync(join(spec.directory, file), json({ format: 1, cases }));
   console.log(`${spec.name}: wrote ${cases.length} identity cases`);
 }
 
-function author(spec, bundle) {
+function author(spec, bundle, hostFree = false) {
   const document = caseDocument(bundle);
   const summaries = {};
   const shipped = [];
@@ -413,10 +468,11 @@ function author(spec, bundle) {
         const stability = typeof reference === "string" ? undefined : reference.stability;
         const { shape } = document.summaries[typeof reference === "string" ? reference : reference.summary];
         const claim = spec.exports[name];
+        const call = hostFree ? claim && hostFreeClaim(`${spec.name}#${name}`, claim)?.call : claim?.call;
         let id = `open-${shape}`;
-        if (claim && passed(spec, name)) {
+        if (call && passed(spec, name)) {
           id = `authored-${name}`;
-          summaries[id] = { call: claim.call, shape };
+          summaries[id] = { call, shape };
           shipped.push(name);
         } else summaries[id] = { call: {}, shape };
         artifactCase.exports[name] = stability ? { stability, summary: id } : id;
@@ -433,10 +489,10 @@ function build() {
   for (const spec of specs) {
     const integrity = Object.fromEntries(spec.solidRuntime.map(entry => [entry.name, entry]));
     assert.deepEqual(Object.keys(integrity).sort(), ["@solidjs/signals", "@solidjs/web", "solid-js"], `${spec.name}: solidRuntime`);
-    for (const bundle of certifiedCases(spec)) {
+    for (const [bundle, hostFree] of [...certifiedCases(spec).map(bundle => [bundle, false]), ...hostFreeCases(spec).map(bundle => [bundle, true])]) {
       const { snapshotRoot } = bundle;
       assert(snapshotRoot, `${spec.name}: no snapshotRoot for ${bundle.runtimeTarget}`);
-      const { document, shipped } = author(spec, bundle);
+      const { document, shipped } = author(spec, bundle, hostFree);
       if (shipped.length === 0) continue;
       const bytes = Buffer.from(json(document));
       const member = `objects/${sha256(bytes)}.json`;

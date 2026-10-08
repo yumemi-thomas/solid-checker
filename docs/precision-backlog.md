@@ -1,5 +1,17 @@
 # Precision backlog
 
+## An authored contract may state a host-free claim (2026-10-08)
+
+ADR 0230: a spec may carry host-free cases (conditions `import` only) for runs
+that declare no host. The tool derives the host-free claim from the probed
+browser claim, lowering only the counts of the operations the server build may
+skip to `min: 0`; domains close only with server-path citations.
+
+- **Gained (pilot, `createTimer`):** none host, `timer-createTimer-module-scope`
+  and `timer-createTimer-effect-apply` report `missing-owner` uncertifiable
+  with clean correct twins. Browser results unchanged.
+- **Open:** every other primitive export; the node host.
+
 ## Solid Primitives batch 2 (2026-10-08)
 
 ADR 0229 adds eight packages to the authored tier: `cursor`, `date`,
