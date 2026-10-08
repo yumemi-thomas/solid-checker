@@ -8593,6 +8593,7 @@
       "package": "@solid-primitives/scheduled",
       "version": "2.0.0-next.2",
       "export": "debounce",
+      "returnedCallableProbeDigest": "c3872a141129d7f90decda619d23e85607474643bf6b39da2e7454ffd93b21aa",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -8624,7 +8625,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/.solid-checker-authored-probes/_solid-primitives_scheduled_2.0.0-next.2_debounce/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read-browser/.solid-checker-authored-probes/_solid-primitives_scheduled_2.0.0-next.2_debounce/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -8638,6 +8639,7 @@
       "version": "2.0.0-next.2",
       "export": "debounce",
       "label": "dispatch",
+      "returnedCallableProbeDigest": "c6f9cb71ab1992124951e3f8a9cec1f7f7c0930261e45fd3a490466a6baec5a0",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -8664,6 +8666,44 @@
             "file": "case",
             "line": 8,
             "column": 36
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+scheduled@2.0.0-next.2",
+      "package": "@solid-primitives/scheduled",
+      "version": "2.0.0-next.2",
+      "export": "debounce",
+      "label": "returned-clear",
+      "returnedCallableProbeDigest": "1445b49784f7f2dca4b1945e34dc75e08ae7df7fe1d411213bf7f3758bbf3f2a",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 34
           }
         }
       ],
@@ -8705,7 +8745,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/.solid-checker-authored-probes/_solid-primitives_scheduled_2.0.0-next.2_scheduleIdle/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read-browser/.solid-checker-authored-probes/_solid-primitives_scheduled_2.0.0-next.2_scheduleIdle/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -8755,6 +8795,7 @@
       "package": "@solid-primitives/scheduled",
       "version": "2.0.0-next.2",
       "export": "throttle",
+      "returnedCallableProbeDigest": "a6aaa31f86dbd7cafca8f1063254a91b8a6593b633c5e47d65071f78c11bccd8",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -8786,7 +8827,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/.solid-checker-authored-probes/_solid-primitives_scheduled_2.0.0-next.2_throttle/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read-browser/.solid-checker-authored-probes/_solid-primitives_scheduled_2.0.0-next.2_throttle/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -8800,6 +8841,7 @@
       "version": "2.0.0-next.2",
       "export": "throttle",
       "label": "dispatch",
+      "returnedCallableProbeDigest": "1e36e9514e948e70bf4a38d60ea7cb5394342edd4877748cf12a48e1421cf8c8",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -8826,6 +8868,44 @@
             "file": "case",
             "line": 8,
             "column": 36
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+scheduled@2.0.0-next.2",
+      "package": "@solid-primitives/scheduled",
+      "version": "2.0.0-next.2",
+      "export": "throttle",
+      "label": "returned-clear",
+      "returnedCallableProbeDigest": "ec62d1ef8e74e2b3a6749ea7f475d6f7373ffd5b84c3ae556237a6c57dfa9390",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 34
           }
         }
       ],
@@ -10787,7 +10867,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/readingroom/frontend/.solid-checker-authored-probes/_solid-primitives_timer_1.4.5-next.1_createTimer_leaf/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read-browser/.solid-checker-authored-probes/_solid-primitives_timer_1.4.5-next.1_createTimer_leaf/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -10911,6 +10991,7 @@
       "package": "@solid-primitives/timer",
       "version": "1.4.5-next.1",
       "export": "makeTimer",
+      "returnedCallableProbeDigest": "147854200eaa92c92ee998f44cbf3f65f5014e54aa50a979ee41e64e93ac2ae1",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -10948,6 +11029,7 @@
       "version": "1.4.5-next.1",
       "export": "makeTimer",
       "label": "host-handler",
+      "returnedCallableProbeDigest": "36d8106dc48f3b75feb7ae6c296e4b5936fedcc86f20ef6ed31d7589c82def0e",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -10974,6 +11056,44 @@
             "file": "case",
             "line": 7,
             "column": 5
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "makeTimer",
+      "label": "returned-clear",
+      "returnedCallableProbeDigest": "82a4a6ff7ca1cb5b493187079d0bf0212f90508b7ba15a53cdade387cf990604",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 32
           }
         }
       ],

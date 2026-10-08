@@ -344,7 +344,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 189 adds package-strict-read-cleared-consumer's hand-stated document,
       // ADR 0247's pin of an explicit strict-read clearing.
-      stableMainDocuments: 189,
+      //
+      // 190 adds package-returned-callable-consumer's hand-stated document,
+      // ADR 0249's pin of a returned whole function.
+      stableMainDocuments: 190,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

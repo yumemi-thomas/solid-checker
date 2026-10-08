@@ -3132,3 +3132,72 @@ fn the_event_handler_member_class_is_every_unnamespaced_on_key() {
         assert!(!class.contains(key), "{key}");
     }
 }
+
+#[test]
+fn returned_callable_keeps_the_old_digest_and_hashes_its_graph_axes() {
+    // Frozen old document, independent of the new vocabulary.
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let mut old = call(
+        vec![read.clone(), write.clone()],
+        vec![
+            resource("owner", ResourceKind::Owner),
+            resource("cleanup", ResourceKind::Cleanup),
+        ],
+    );
+    old.edges = vec![OperationEdge {
+        kind: EdgeKind::Data,
+        from: read.id,
+        to: write.id,
+    }];
+    assert_eq!(
+        proposal_with(ValueShape::Plain, old)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+            .as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9"
+    );
+
+    let ret = operation("return", OperationKind::Return);
+    let mut read = operation("nested-read", OperationKind::Read);
+    read.tracking = Tracking::AmbientAtExecution;
+    read.inputs = vec![ValueShape::Reactive {
+        role: ReactiveRole::Accessor,
+        resource: Some(ResourceId("running".into())),
+        capabilities: KnowledgeSet::Unknown,
+    }];
+    let graph = call(vec![read], vec![]);
+    // Use an ordinary Operation literal already made by the test helper;
+    // no extra helper method is required on the production model.
+    let normalize = |graph: CallSemantics| {
+        let mut ret = ret.clone();
+        ret.output = Some(ValueShape::ReturnedCallable {
+            call: Some(Box::new(graph)),
+            members: vec![],
+        });
+        proposal_with(
+            ValueShape::Callable,
+            call(
+                vec![ret],
+                vec![resource("running", ResourceKind::ReactiveSource)],
+            ),
+        )
+        .normalize()
+        .unwrap()
+    };
+    let baseline = normalize(graph.clone());
+    let mut cleared = graph.clone();
+    cleared.operations[0].tracking = Tracking::Untracked;
+    cleared.operations[0].strict_read = Some(StrictRead::Cleared);
+    assert_ne!(
+        baseline.semantic_digest(),
+        normalize(cleared).semantic_digest()
+    );
+    let mut queued = graph;
+    queued.operations[0].schedule = Some(Schedule::Queued);
+    assert_ne!(
+        baseline.semantic_digest(),
+        normalize(queued).semantic_digest()
+    );
+}

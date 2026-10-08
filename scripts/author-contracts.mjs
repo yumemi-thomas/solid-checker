@@ -88,7 +88,8 @@ function effectfulMembers(call) {
     if (operation.kind !== "return" || !operation.output || typeof operation.output !== "object") continue;
     const output = operation.output;
     const entries = output.kind === "tuple" ? (output.items ?? []).map((item, index) => [String(index), item])
-      : output.kind === "object" ? Object.entries(output.properties ?? {}) : [];
+      : output.kind === "object" ? Object.entries(output.properties ?? {})
+      : output.kind === "returned-callable" ? (output.members ?? []).map(member => [member.name, member.value]) : [];
     for (const [key, member] of entries)
       if (member?.kind === "effectful-callable") members.set(`${operation.id}.${key}`, member.call);
   }
@@ -107,6 +108,40 @@ function validateMemberClosures(where, claim) {
     assert(members.has(key), `${where}: memberClosures names ${key}, which is no effectful-callable member`);
   for (const [key, call] of members)
     validateClosures(`${where} member ${key}`, { call, closures: cited[key] ?? {} });
+}
+
+/** Whole-return graph closures are distinct from the factory's closures. */
+function returnedCallables(call) {
+  return new Map((call?.operations ?? []).filter(operation =>
+    operation.kind === "return" && operation.output?.kind === "returned-callable")
+    .map(operation => [operation.id, operation.output]));
+}
+
+function validateReturnedClosures(where, claim) {
+  const returned = returnedCallables(claim.call);
+  const cited = claim.returnedClosures ?? {};
+  for (const key of Object.keys(cited))
+    assert(returned.get(key)?.call, `${where}: returnedClosures names ${key}, which has no returned graph`);
+  for (const [key, output] of returned) {
+    assert(!Object.hasOwn(output, "captures"), `${where}: captures are unsupported in this slice`);
+    if (!output.call) continue;
+    validateClosures(`${where} returned ${key}`, { call: output.call, closures: cited[key] ?? {} });
+    validateCreatedOwners(`${where} returned ${key}`, output.call);
+    validatePropertyGets(output.call);
+  }
+  for (const [key, call] of effectfulMembers(claim.call)) {
+    validateCreatedOwners(`${where} member ${key}`, call);
+    validatePropertyGets(call);
+  }
+}
+
+/** New shapes require fresh observations; old probe records cannot admit them. */
+function returnedCallableProbeDigest(spec, name, pair, misuse, correct, artifacts) {
+  const returned = [...returnedCallables(spec.exports[name]?.call)];
+  if (returned.length === 0) return undefined;
+  return sha256(JSON.stringify({ format: "returned-callable-probe-v1", returned,
+    package: spec.package, version: spec.version, solidRuntime: spec.solidRuntime,
+    pair, misuse, correct, artifacts }));
 }
 
 function validateClosures(where, claim) {
@@ -170,7 +205,11 @@ function hostFreeClaim(where, claim) {
   for (const domain of CLAIM_DOMAINS)
     if (Array.isArray(call[domain]) && call[domain].length === 0 && !call.closed.includes(domain)) delete call[domain];
   if (call.closed.length === 0) delete call.closed;
-  const derived = { call, closures: hostFree.closures ?? {} };
+  const derived = { call, closures: hostFree.closures ?? {},
+    memberClosures: hostFree.memberClosures ?? claim.memberClosures,
+    returnedClosures: hostFree.returnedClosures ?? claim.returnedClosures };
+  validateMemberClosures(`${where} (host-free)`, derived);
+  validateReturnedClosures(`${where} (host-free)`, derived);
   validateClosures(`${where} (host-free)`, derived);
   validateCreatedOwners(`${where} (host-free)`, call);
   return derived;
@@ -185,6 +224,7 @@ const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("
     validatePropertyGets(claim.call);
     validateClosures(`${spec.package}@${spec.version}#${name}`, claim);
     validateMemberClosures(`${spec.package}@${spec.version}#${name}`, claim);
+    validateReturnedClosures(`${spec.package}@${spec.version}#${name}`, claim);
     validateCreatedOwners(`${spec.package}@${spec.version}#${name}`, claim.call);
     hostFreeClaim(`${spec.package}@${spec.version}#${name}`, claim);
   }
@@ -332,6 +372,11 @@ function probe(browser) {
       return [entry.id, strictReadProbeDigest(spec, entry.export, pair,
         entry.misuse, entry.correct, certifiedCases(spec))];
     }));
+    const returnedDigests = new Map(cases.map(entry => {
+      const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
+      return [entry.id, returnedCallableProbeDigest(spec, entry.export, pair,
+        entry.misuse, entry.correct, certifiedCases(spec))];
+    }));
     const scratch = mkdtempSync(join(tmpdir(), "solid-checker-authored-"));
     // Bind the bytes handed to the ledger before execution. Re-reading a
     // changed pair after a run must never stamp old observations as new input.
@@ -351,10 +396,12 @@ function probe(browser) {
       const label = labels.get(row.id);
       const probeDigest = probeDigests.get(row.id);
       const strictReadDigest = strictReadDigests.get(row.id);
+      const returnedDigest = returnedDigests.get(row.id);
       results.push({ spec: spec.name, package: spec.package, version: spec.version, export: row.export,
         ...(label ? { label } : {}),
         ...(probeDigest ? { propertyGetProbeDigest: probeDigest } : {}),
         ...(strictReadDigest ? { strictReadProbeDigest: strictReadDigest } : {}),
+        ...(returnedDigest ? { returnedCallableProbeDigest: returnedDigest } : {}),
         solidRuntime: identity.runtime, artifacts: identity.artifacts, rule: row.rule,
         verdict: row.runtime === "detected" ? "passed" : row.runtime,
         misuse: (row.misuse.diagnostics ?? []).map(({ code, site }) => ({ code, site })),
@@ -412,11 +459,15 @@ function passed(spec, name) {
     const strictReadDigest = strictReadProbeDigest(spec, name, pair,
       readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
+    const returnedDigest = returnedCallableProbeDigest(spec, name, pair,
+      readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
+      readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
     return results.some(row => row.spec === spec.name && row.export === name
       && (row.label ?? undefined) === pair.label && row.verdict === "passed"
       && JSON.stringify(row.solidRuntime) === runtime
       && (!probeDigest || row.propertyGetProbeDigest === probeDigest)
-      && (!strictReadDigest || row.strictReadProbeDigest === strictReadDigest));
+      && (!strictReadDigest || row.strictReadProbeDigest === strictReadDigest)
+      && (!returnedDigest || row.returnedCallableProbeDigest === returnedDigest));
   });
 }
 

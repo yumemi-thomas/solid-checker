@@ -38,7 +38,10 @@ use crate::pipeline::parallel_slice_results;
 /// is proven non-callable, so its vacuous call-path domains may be closed.
 fn shape_may_be_callable(shape: &ValueShape) -> bool {
     match shape {
-        ValueShape::Callable | ValueShape::Component | ValueShape::Unknown => true,
+        ValueShape::Callable
+        | ValueShape::Component
+        | ValueShape::Unknown
+        | ValueShape::ReturnedCallable { .. } => true,
         ValueShape::Choice(members) => {
             !members.is_closed() || members.items().iter().any(shape_may_be_callable)
         }
@@ -253,6 +256,7 @@ pub fn project_export_semantics(
         result_access_parameters: BTreeSet::new(),
         returned_invocations: project_returned_invocations(export),
         returned_member_effects: project_returned_member_effects(export),
+        returned_callable_effects: project_returned_callable_effects(export),
         // A projected dependency export has no body here to walk.
         merged_props_return: None,
         // The projection alone states no acceptance identity;
@@ -632,6 +636,18 @@ fn project_return(
         .collect::<Vec<_>>();
     returns.sort_by(|left, right| format!("{left:?}").cmp(&format!("{right:?}")));
     returns.dedup();
+    if knowledge
+        .items()
+        .iter()
+        .filter_map(|id| export.operation(&id.0))
+        .any(|operation| matches!(operation.output, Some(ValueShape::ReturnedCallable { .. })))
+        && agreed_returned_callable(export).is_none()
+    {
+        return ContractClaim::Known(Some(ContractReturn {
+            kind: RETURNED_CALLABLE.into(),
+            ..ContractReturn::default()
+        }));
+    }
     // ADR 0113: a `plain` output carries no reactive capability, which is
     // exactly what `Known(None)` says of a function whose reactive analysis
     // described no return. A closed claim whose every return is plain is that
@@ -677,6 +693,7 @@ fn project_return(
                             | ValueShape::InvocationResult { .. }
                             | ValueShape::Undefined
                             | ValueShape::DescribedCallable(_)
+                            | ValueShape::ReturnedCallable { .. }
                     )
                 ) || matches!(
                     &operation.output,
@@ -806,6 +823,13 @@ fn project_returned_member_effects(
             })
             .or_insert(Some(projected));
     };
+    if let Some(ValueShape::ReturnedCallable { members, .. }) = agreed_returned_callable(export) {
+        for member in members {
+            if let ValueShape::EffectfulCallable(call) = &member.value {
+                record(member.name.clone(), call);
+            }
+        }
+    }
     for operation in returns
         .items()
         .iter()
@@ -835,6 +859,70 @@ fn project_returned_member_effects(
         .collect()
 }
 
+fn project_returned_callable_member_shape(shape: &ValueShape) -> Option<ContractReturn> {
+    if matches!(
+        shape,
+        ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Setter,
+            ..
+        }
+    ) {
+        return Some(ContractReturn {
+            kind: OPAQUE_MEMBER.into(),
+            ..ContractReturn::default()
+        });
+    }
+    project_member_shape(shape)
+}
+
+pub(crate) const RETURNED_CALLABLE: &str = "returned-callable";
+
+/// A graph binds only when every closed factory return states the same whole
+/// value. No union/guard selection, partial enumeration or dropped branch is
+/// treated as proof of the returned function's identity.
+fn agreed_returned_callable(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Option<&ValueShape> {
+    let returns = export.operation_claim(ClaimDomain::Returns)?;
+    if !returns.is_closed() || returns.items().is_empty() {
+        return None;
+    }
+    let mut agreed = None;
+    for id in returns.items() {
+        let operation = export.operation(&id.0)?;
+        let output = operation.output.as_ref()?;
+        if !matches!(output, ValueShape::ReturnedCallable { .. }) {
+            return None;
+        }
+        if agreed.is_some_and(|previous| previous != output) {
+            return None;
+        }
+        agreed = Some(output);
+    }
+    agreed
+}
+
+fn project_returned_callable_effects(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Option<Box<ContractExport>> {
+    let ValueShape::ReturnedCallable {
+        call: Some(call), ..
+    } = agreed_returned_callable(export)?
+    else {
+        return None;
+    };
+    let mut call = (**call).clone();
+    call.resources.extend(export.call.resources.iter().cloned());
+    Some(Box::new(project_export_semantics(
+        &crate::contract_semantics::ExportSemantics {
+            identity: export.identity.clone(),
+            shape: ValueShape::Callable,
+            stability: export.stability,
+            call,
+        },
+    )))
+}
+
 /// The [`ContractReturn::kind`] of an opaque returned member (ADR 0234).
 pub(crate) const OPAQUE_MEMBER: &str = "opaque-callable";
 
@@ -842,6 +930,17 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
     match shape {
         // ADR 0235: valid only as a member, projected there.
         ValueShape::EffectfulCallable(_) => None,
+        ValueShape::ReturnedCallable { members, .. } => Some(ContractReturn {
+            kind: RETURNED_CALLABLE.into(),
+            properties: members
+                .iter()
+                .filter_map(|member| {
+                    project_returned_callable_member_shape(&member.value)
+                        .map(|value| (member.name.clone(), value))
+                })
+                .collect(),
+            ..ContractReturn::default()
+        }),
         ValueShape::Reactive { .. } => Some(ContractReturn {
             kind: "accessor".into(),
             label: "normalized reactive result".into(),
@@ -1291,6 +1390,73 @@ mod owner_requirement_projection_tests {
             disposals: KnowledgeSet::Unknown,
             computations: KnowledgeSet::Unknown,
         }
+    }
+
+    #[test]
+    fn whole_return_graph_and_members_project_only_with_closed_agreement() {
+        let graph = CallSemantics::new(claims(), vec![], vec![], vec![], GuardPartition::default());
+        let mut returned = operation("return", OperationKind::Return, &[]);
+        returned.output = Some(ValueShape::ReturnedCallable {
+            call: Some(Box::new(graph.clone())),
+            members: vec![crate::contract_semantics::ObjectProperty {
+                name: "clear".into(),
+                value: ValueShape::EffectfulCallable(Box::new(graph)),
+            }],
+        });
+        let mut claims = claims();
+        claims.returns = KnowledgeSet::Complete(vec![returned.id.clone()]);
+        let factory = export(claims.clone(), vec![returned.clone()], vec![]);
+        let projected = project_export_semantics(&factory);
+        assert!(projected.returned_callable_effects.is_some());
+        assert!(projected.returned_member_effects.contains_key("clear"));
+        assert!(
+            projected
+                .returns
+                .known()
+                .and_then(Option::as_ref)
+                .is_some_and(|value| value.kind == super::RETURNED_CALLABLE)
+        );
+        let setter = ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Setter,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        };
+        assert_eq!(
+            super::project_returned_callable_member_shape(&setter)
+                .unwrap()
+                .kind,
+            super::OPAQUE_MEMBER,
+            "a setter member must never invent a read"
+        );
+        assert!(!projected.open_claims.contains(&ClaimDomain::Returns));
+
+        let mut other = returned.clone();
+        other.id = OperationId("other-return".into());
+        other.output = Some(ValueShape::ReturnedCallable {
+            call: None,
+            members: vec![],
+        });
+        claims.returns = KnowledgeSet::Complete(vec![returned.id.clone(), other.id.clone()]);
+        let ambiguous = project_export_semantics(&export(
+            claims.clone(),
+            vec![returned.clone(), other],
+            vec![],
+        ));
+        assert!(ambiguous.returned_callable_effects.is_none());
+        assert!(ambiguous.returned_member_effects.is_empty());
+        assert!(
+            ambiguous
+                .returns
+                .known()
+                .and_then(Option::as_ref)
+                .is_some_and(|value| value.kind == super::RETURNED_CALLABLE)
+        );
+
+        claims.returns = KnowledgeSet::Partial(vec![returned.id.clone()]);
+        let partial = project_export_semantics(&export(claims, vec![returned], vec![]));
+        assert!(partial.returned_callable_effects.is_none());
+        assert!(partial.returned_member_effects.is_empty());
+        assert!(partial.open_claims.contains(&ClaimDomain::Returns));
     }
 
     #[test]
@@ -2440,6 +2606,12 @@ pub(super) struct ResolvedContractBinding {
 pub(super) struct ResolvedContracts {
     pub(super) bindings: Vec<ResolvedContractBinding>,
     pub(super) by_symbol: HashMap<SymbolId, ResolvedContractBinding>,
+    /// Exact receiver-bound calls. Never attach a graph to a shared structural
+    /// member declaration or infer dispatch from a property spelling alone.
+    pub(super) callee_bindings: HashMap<Location, SymbolId>,
+    /// Successfully installed whole-function graphs; independent of names
+    /// and of ADR 0235's caller-controlled location suffix.
+    pub(super) returned_callable_bindings: HashSet<SymbolId>,
     pub(super) missing_exports: Vec<StaticDefect>,
     /// How binding answered per declaration, so a refusal is countable rather
     /// than merely silent. See [`crate::ContractBindingCounts`].
@@ -3509,9 +3681,21 @@ fn resolve_contract_imports_inner(
         &mut missing_exports,
     );
     bind_returned_member_effects(facts, entities, &mut bindings, &mut by_symbol);
+    let mut callee_bindings = HashMap::new();
+    let mut returned_callable_bindings = HashSet::new();
+    bind_returned_callable_effects(
+        facts,
+        entities,
+        &mut bindings,
+        &mut by_symbol,
+        &mut callee_bindings,
+        &mut returned_callable_bindings,
+    );
     ResolvedContracts {
         bindings,
         by_symbol,
+        callee_bindings,
+        returned_callable_bindings,
         missing_exports,
         counts,
     }
@@ -3886,6 +4070,7 @@ fn contract_export_function(
         // ADR 0152: a projection of an accepted contract only.
         returned_invocations: BTreeSet::new(),
         returned_member_effects: BTreeMap::new(),
+        returned_callable_effects: None,
     }
 }
 
@@ -5557,6 +5742,196 @@ mod export_kind_proof_tests {
 /// call's return is a callee with its own summary, so every rule reads a call
 /// of it as it reads a call of an export. Only `const` destructuring of the
 /// call itself binds; anything else keeps ADR 0234's obligations.
+/// Whole functions bind by exact immutable value identity. Function-object
+/// member calls get a distinct synthetic symbol per callee location, so two
+/// factory results never share a structural TypeScript member's summary.
+fn bind_returned_callable_effects(
+    facts: &ProjectFacts,
+    entities: &EntitySymbols,
+    bindings: &mut Vec<ResolvedContractBinding>,
+    by_symbol: &mut HashMap<SymbolId, ResolvedContractBinding>,
+    callees: &mut HashMap<Location, SymbolId>,
+    whole_bindings: &mut HashSet<SymbolId>,
+) {
+    let mut additions = Vec::new();
+    for file in &facts.files {
+        for binding in file.ast.bindings.iter().filter(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+        }) {
+            let Some(initializer) = binding.initializer else {
+                continue;
+            };
+            let initializer = file.ast.peel_ts_sugar_span(initializer);
+            let Some(factory) = file.ast.calls.iter().find(|call| call.span == initializer) else {
+                continue;
+            };
+            let Some(contracted) = entities
+                .get(&location(
+                    file.path.shared(),
+                    file.ast.peel_ts_sugar_span(factory.callee),
+                ))
+                .and_then(|symbol| by_symbol.get(symbol))
+            else {
+                continue;
+            };
+            let Some(Some(returned)) = contracted.summary.returns.known() else {
+                continue;
+            };
+            if returned.kind != RETURNED_CALLABLE {
+                continue;
+            }
+            let Some(root) = entities.get(&location(file.path.shared(), binding.names[0].span))
+            else {
+                continue;
+            };
+            if crate::value_identity::binding_has_write(file, entities, root) {
+                continue;
+            }
+            let instance = format!(
+                "{}@{}:{}",
+                contracted.contract_location.path, file.path, factory.span.start
+            );
+            let resolved =
+                |symbol: SymbolId, summary: ContractExport, suffix: &str| ResolvedContractBinding {
+                    local_name: file
+                        .source_text(binding.names[0].span)
+                        .unwrap_or_default()
+                        .to_owned(),
+                    imported_name: format!("{}[{suffix}]", contracted.imported_name),
+                    package_name: contracted.package_name.clone(),
+                    symbol,
+                    runtime_identity: contracted.runtime_identity.clone(),
+                    contract_location: Location {
+                        path: format!("{instance}[{suffix}]").into(),
+                        ..contracted.contract_location.clone()
+                    },
+                    summary,
+                };
+            if let Some(summary) = &contracted.summary.returned_callable_effects
+                && !by_symbol.contains_key(root)
+            {
+                whole_bindings.insert(root.clone());
+                additions.push(resolved(root.clone(), (**summary).clone(), "returned"));
+            }
+            // Members can be overwritten even when the function binding is
+            // const. Withhold all member graphs after mutation or an escape.
+            if !returned_callable_members_are_stable(file, entities, root) {
+                continue;
+            }
+            for call in &file.ast.calls {
+                let callee = file.ast.peel_ts_sugar_span(call.callee);
+                let Some(member) = file.ast.members.iter().find(|member| member.span == callee)
+                else {
+                    continue;
+                };
+                if file.ast.computed_members.contains(&member.span)
+                    || entities.get(&location(
+                        file.path.shared(),
+                        file.ast.peel_ts_sugar_span(member.object),
+                    )) != Some(root)
+                    || !file
+                        .ast
+                        .identifiers
+                        .iter()
+                        .any(|id| id.span == file.ast.peel_ts_sugar_span(member.object))
+                {
+                    continue;
+                }
+                let Some(key) = file.source_text(member.property) else {
+                    continue;
+                };
+                let summary = contracted
+                    .summary
+                    .returned_member_effects
+                    .get(key)
+                    .cloned()
+                    .or_else(|| {
+                        let member = returned.properties.get(key)?;
+                        if member.kind != "accessor" {
+                            return None;
+                        }
+                        Some(ContractExport {
+                            kind: "function".into(),
+                            reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+                                kind: "accessor".into(),
+                                label: member.label.clone(),
+                                parameter: None,
+                                path: None,
+                                composed_from: None,
+                                composed_owner: None,
+                            }]),
+                            callbacks: ContractClaim::Known(vec![]),
+                            owner_requirements: ContractClaim::Known(vec![]),
+                            returns: ContractClaim::Known(None),
+                            ..ContractExport::default()
+                        })
+                    });
+                let Some(summary) = summary else { continue };
+                let site = location(file.path.shared(), callee);
+                let symbol = SymbolId::from(format!(
+                    "returned-member:{}:{}:{}",
+                    file.path, callee.start, callee.end
+                ));
+                callees.insert(site, symbol.clone());
+                additions.push(resolved(symbol, summary, key));
+            }
+        }
+    }
+    for addition in additions {
+        if !by_symbol.contains_key(&addition.symbol) {
+            bindings.push(addition.clone());
+            by_symbol.insert(addition.symbol.clone(), addition);
+        }
+    }
+}
+
+pub(crate) fn returned_callable_members_are_stable(
+    file: &solid_facts::FileFacts,
+    entities: &EntitySymbols,
+    root: &SymbolId,
+) -> bool {
+    let is_root = |span| entities.get(&location(file.path.shared(), span)) == Some(root);
+    if file
+        .ast
+        .exports
+        .iter()
+        .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+        .any(|export| !export.type_only && is_root(export.local.span))
+    {
+        return false;
+    }
+    file.ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == solid_facts::ast::IdentifierRole::Reference)
+        .filter(|id| is_root(id.span))
+        .all(|id| {
+            let direct_call = file
+                .ast
+                .calls
+                .iter()
+                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == id.span);
+            let receiver = file
+                .ast
+                .members
+                .iter()
+                .any(|member| file.ast.peel_ts_sugar_span(member.object) == id.span);
+            (direct_call || receiver)
+                && !file
+                    .ast
+                    .assignments
+                    .iter()
+                    .any(|assignment| assignment.target.contains(id.span))
+                && !file
+                    .ast
+                    .deleted_targets
+                    .iter()
+                    .any(|target| target.contains(id.span))
+        })
+}
+
 fn bind_returned_member_effects(
     facts: &ProjectFacts,
     entities: &EntitySymbols,

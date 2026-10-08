@@ -856,7 +856,7 @@ impl LocalAccessContext<'_, '_> {
             else {
                 continue;
             };
-            if !holds_opaque(returned) {
+            if returned.kind == crate::contracts::RETURNED_CALLABLE || !holds_opaque(returned) {
                 continue;
             }
             let export = file.source_text(call.callee).unwrap_or_default().to_owned();
@@ -902,7 +902,7 @@ impl LocalAccessContext<'_, '_> {
             else {
                 continue;
             };
-            if !holds_opaque(returned) {
+            if returned.kind == crate::contracts::RETURNED_CALLABLE || !holds_opaque(returned) {
                 continue;
             }
             let export = file.source_text(call.callee).unwrap_or_default();
@@ -1035,9 +1035,206 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    /// A closed factory return enumerates a function, never permission to
+    /// call or pass it on. Successful bindings alone discharge direct calls;
+    /// no graph, mutable/unresolved bindings and every escape stay obligations.
+    fn returned_callable_obligations(
+        &self,
+        file: &solid_facts::FileFacts,
+        result: &mut LocalAccessResult,
+    ) {
+        let obligation = |span, callee: &str, context: &str| crate::StaticDefect {
+            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: callee.to_owned(),
+                member: None,
+            },
+            location: location(file.path.shared(), span),
+            analysis_context: context.to_owned(),
+            fixes: vec![],
+            uncertain: true,
+        };
+        let handlers = file
+            .ast
+            .jsx_elements
+            .iter()
+            .flat_map(|element| &element.attributes)
+            .filter(|attribute| {
+                file.source_text(attribute.local_name)
+                    .is_some_and(|name| name.starts_with("on"))
+            })
+            .filter_map(|attribute| attribute.expression)
+            .map(|span| file.ast.peel_ts_sugar_span(span))
+            .collect::<HashSet<_>>();
+        for factory in &file.ast.calls {
+            let Some((returned, _)) = self
+                .lookup
+                .callee_symbol(file, factory.callee)
+                .and_then(|symbol| self.contract_returns.get(symbol))
+            else {
+                continue;
+            };
+            if returned.kind != crate::contracts::RETURNED_CALLABLE || factory.result_discarded {
+                continue;
+            }
+            let export = file.source_text(factory.callee).unwrap_or_default();
+            let binding = file.ast.bindings.iter().find(|binding| {
+                binding
+                    .initializer
+                    .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == factory.span)
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+            });
+            let root = binding
+                .and_then(|binding| self.entities.at(file.path.as_str(), binding.names[0].span));
+            let Some((binding, root)) = binding.zip(root) else {
+                result.dispatch_obligations.push(obligation(
+                    factory.span,
+                    export,
+                    "the returned function is used without an exact immutable binding",
+                ));
+                continue;
+            };
+            if !binding.immutable
+                || crate::value_identity::binding_has_write(file, self.entities, root)
+            {
+                result.dispatch_obligations.push(obligation(
+                    factory.span,
+                    export,
+                    "a mutable returned function binding cannot establish its later dispatch",
+                ));
+            }
+            // Export declarations need no Reference identifier in the AST.
+            for exported in file
+                .ast
+                .exports
+                .iter()
+                .filter(|export| !export.type_only)
+                .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+                .filter(|export| !export.type_only)
+            {
+                if self.entities.at(file.path.as_str(), exported.local.span) == Some(root) {
+                    result.dispatch_obligations.push(obligation(
+                        exported.local.span,
+                        export,
+                        "exports a returned function whose future dispatch is not established",
+                    ));
+                }
+            }
+            // `{ f }` stores the function in an object. The binder records the
+            // exact declaration a shorthand refers to; that is an escape.
+            for property in file
+                .ast
+                .object_properties
+                .iter()
+                .filter(|property| property.shorthand_binding == Some(binding.names[0].span))
+            {
+                result.dispatch_obligations.push(obligation(
+                    property.span,
+                    export,
+                    "passes on a returned function whose future dispatch is not established",
+                ));
+            }
+            // Fail closed on references TypeFacts emitted no entity for (an
+            // array element, a shorthand property): a reference spelled like
+            // the binding inside the binding's scope, with no resolved
+            // symbol, may be this function escaping. The spelling only ever
+            // adds an obligation here; it never discharges one.
+            let name = file.source_text(binding.names[0].span).unwrap_or_default();
+            let scope = file
+                .ast
+                .functions
+                .iter()
+                .filter(|function| function.body.contains(binding.names[0].span))
+                .min_by_key(|function| function.body.end - function.body.start)
+                .map(|function| function.body);
+            for id in file
+                .ast
+                .identifiers
+                .iter()
+                .filter(|id| id.role == solid_facts::ast::IdentifierRole::Reference)
+                .filter(|id| match self.entities.at(file.path.as_str(), id.span) {
+                    Some(symbol) => symbol == root,
+                    None => {
+                        !name.is_empty()
+                            && file.source_text(id.span) == Some(name)
+                            && scope.is_none_or(|scope| scope.contains(id.span))
+                    }
+                })
+            {
+                let resolved = self.entities.at(file.path.as_str(), id.span).is_some();
+                if let Some(call) = file
+                    .ast
+                    .calls
+                    .iter()
+                    .find(|call| file.ast.peel_ts_sugar_span(call.callee) == id.span)
+                {
+                    // A bound call is discharged only where the graph is
+                    // instantiated: the callee must resolve to this exact
+                    // binding, wrappers included.
+                    let instantiated = resolved
+                        && self.lookup.returned_callable_is_bound(root.as_str())
+                        && self.lookup.callee_symbol(file, call.callee) == Some(root.as_str());
+                    if !instantiated {
+                        result.dispatch_obligations.push(obligation(
+                            call.span,
+                            export,
+                            "calls a returned function without a stated and bound call graph",
+                        ));
+                    }
+                    continue;
+                }
+                if let Some(member) = file
+                    .ast
+                    .members
+                    .iter()
+                    .find(|member| file.ast.peel_ts_sugar_span(member.object) == id.span)
+                {
+                    let computed = file.ast.computed_members.contains(&member.span);
+                    let selected = (!computed)
+                        .then(|| file.source_text(member.property))
+                        .flatten()
+                        .and_then(|key| returned.properties.get(key));
+                    let called = file
+                        .ast
+                        .calls
+                        .iter()
+                        .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span);
+                    if called && self.lookup.returned_member_is_bound(file, member.span) {
+                        continue;
+                    }
+                    // Reactive accessor calls also require a successful
+                    // instance-local binding. Unbound uses keep ADR 0234's
+                    // nested-function and event-handler exemptions.
+                    if selected.is_some()
+                        && ((called
+                            && inside_non_component_function(file, member.span, self.lookup))
+                            || (!called && handlers.contains(&member.span)))
+                    {
+                        continue;
+                    }
+                    result.dispatch_obligations.push(obligation(
+                        member.span,
+                        export,
+                        "reaches a function-object member without established dispatch",
+                    ));
+                    continue;
+                }
+                // Match ADR 0234 for passing the function as an on* value.
+                if !handlers.contains(&id.span) {
+                    result.dispatch_obligations.push(obligation(
+                        id.span,
+                        export,
+                        "passes on a returned function whose future dispatch is not established",
+                    ));
+                }
+            }
+        }
+    }
+
     pub(crate) fn discover(&self, file: &solid_facts::FileFacts) -> LocalAccessResult {
         let mut result = LocalAccessResult::default();
         self.opaque_member_obligations(file, &mut result);
+        self.returned_callable_obligations(file, &mut result);
         let mut seen = HashSet::new();
         let allowed = allowed_callback_spans(file, self.lookup);
         for call in &file.ast.calls {

@@ -6,15 +6,22 @@ function memberCalls(call) {
   return (call?.operations ?? []).flatMap(operation => {
     const output = operation.output;
     const entries = output?.kind === "tuple" ? (output.items ?? []).map((value, index) => [String(index), value])
-      : output?.kind === "object" ? Object.entries(output.properties ?? {}) : [];
+      : output?.kind === "object" ? Object.entries(output.properties ?? {})
+      : output?.kind === "returned-callable" ? (output.members ?? []).map(member => [member.name, member.value]) : [];
     return entries.filter(([, value]) => value?.kind === "effectful-callable")
       .map(([key, value]) => [`${operation.id}.${key}`, value.call]);
   });
 }
 
+function returnedCalls(call) {
+  return (call?.operations ?? []).filter(operation => operation.output?.kind === "returned-callable" && operation.output.call)
+    .map(operation => [operation.id, operation.output.call]);
+}
+
 export function hasStrictReadAssertion(call) {
   return (call?.operations ?? []).some(operation => Object.hasOwn(operation, "strictRead"))
-    || memberCalls(call).some(([, member]) => hasStrictReadAssertion(member));
+    || memberCalls(call).some(([, member]) => hasStrictReadAssertion(member))
+    || returnedCalls(call).some(([, returned]) => hasStrictReadAssertion(returned));
 }
 
 export function validateStrictReads(where, claim) {
@@ -30,6 +37,8 @@ export function validateStrictReads(where, claim) {
     }
     for (const [key, member] of memberCalls(call))
       visit(member, claim.memberClosures?.[key], `${location} member ${key}`);
+    for (const [key, returned] of returnedCalls(call))
+      visit(returned, claim.returnedClosures?.[key], `${location} returned ${key}`);
   };
   visit(claim.call, claim.closures, where);
 }
@@ -39,6 +48,7 @@ export function strictReadWireCall(call) {
   const visit = graph => {
     for (const operation of graph?.operations ?? []) delete operation.why;
     for (const [, member] of memberCalls(graph)) visit(member);
+    for (const [, returned] of returnedCalls(graph)) visit(returned);
   };
   visit(result);
   return result;

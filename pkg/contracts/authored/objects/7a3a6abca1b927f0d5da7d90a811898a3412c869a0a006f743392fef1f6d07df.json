@@ -140,7 +140,8 @@
         "closed": [
           "reads",
           "creates",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": [],
@@ -219,7 +220,81 @@
               "scope": "call"
             },
             "output": {
-              "kind": "callable"
+              "kind": "returned-callable",
+              "call": {
+                "closed": [
+                  "reads",
+                  "creates",
+                  "returns"
+                ],
+                "reads": [],
+                "creates": [],
+                "returns": [
+                  "debounce-returned-return"
+                ],
+                "operations": [
+                  {
+                    "id": "debounce-returned-return",
+                    "kind": "return",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "untracked",
+                    "count": {
+                      "min": 0,
+                      "max": "many",
+                      "scope": "call"
+                    },
+                    "output": "undefined"
+                  }
+                ]
+              },
+              "members": [
+                {
+                  "name": "clear",
+                  "value": {
+                    "kind": "effectful-callable",
+                    "call": {
+                      "closed": [
+                        "callbacks",
+                        "reads",
+                        "creates",
+                        "returns"
+                      ],
+                      "callbacks": [],
+                      "reads": [],
+                      "creates": [],
+                      "returns": [
+                        "debounce-clear-return"
+                      ],
+                      "operations": [
+                        {
+                          "id": "debounce-clear-return",
+                          "kind": "return",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "untracked",
+                          "count": {
+                            "min": 0,
+                            "max": "many",
+                            "scope": "call"
+                          },
+                          "output": "undefined"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
             }
           }
         ]
@@ -326,7 +401,8 @@
         "closed": [
           "reads",
           "creates",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": [],
@@ -405,7 +481,81 @@
               "scope": "call"
             },
             "output": {
-              "kind": "callable"
+              "kind": "returned-callable",
+              "call": {
+                "closed": [
+                  "reads",
+                  "creates",
+                  "returns"
+                ],
+                "reads": [],
+                "creates": [],
+                "returns": [
+                  "throttle-returned-return"
+                ],
+                "operations": [
+                  {
+                    "id": "throttle-returned-return",
+                    "kind": "return",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "untracked",
+                    "count": {
+                      "min": 0,
+                      "max": "many",
+                      "scope": "call"
+                    },
+                    "output": "undefined"
+                  }
+                ]
+              },
+              "members": [
+                {
+                  "name": "clear",
+                  "value": {
+                    "kind": "effectful-callable",
+                    "call": {
+                      "closed": [
+                        "callbacks",
+                        "reads",
+                        "creates",
+                        "returns"
+                      ],
+                      "callbacks": [],
+                      "reads": [],
+                      "creates": [],
+                      "returns": [
+                        "throttle-clear-return"
+                      ],
+                      "operations": [
+                        {
+                          "id": "throttle-clear-return",
+                          "kind": "return",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "untracked",
+                          "count": {
+                            "min": 0,
+                            "max": "many",
+                            "scope": "call"
+                          },
+                          "output": "undefined"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
             }
           }
         ]

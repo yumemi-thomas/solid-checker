@@ -1040,6 +1040,18 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 validate_contract_return(element)?;
             }
         }
+        crate::contracts::RETURNED_CALLABLE => {
+            if !returned.label.is_empty()
+                || returned.parameter.is_some()
+                || !returned.elements.is_empty()
+                || returned.properties.keys().any(String::is_empty)
+            {
+                return Err("a returned callable admits named members only");
+            }
+            for property in returned.properties.values() {
+                validate_contract_return(property)?;
+            }
+        }
         "object" => {
             if !returned.label.is_empty()
                 || returned.parameter.is_some()
@@ -1458,6 +1470,8 @@ pub struct ContractExport {
     /// contract states as `effectful-callable`. A destructured member's call
     /// is bound to its entry like a call of an export. Projection only.
     pub returned_member_effects: BTreeMap<String, ContractExport>,
+    /// Projection only: one call of an exactly agreed whole returned function.
+    pub returned_callable_effects: Option<Box<ContractExport>>,
     /// ADR 0109: the parameter whose reactivity a props merge this export
     /// returns carries, when the generator's own walk cleared the body
     /// ([`crate::returns_walk::MergedPropsReturns`]).

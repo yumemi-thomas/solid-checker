@@ -468,7 +468,41 @@
               "scope": "call"
             },
             "output": {
-              "kind": "callable"
+              "kind": "returned-callable",
+              "call": {
+                "closed": [
+                  "callbacks",
+                  "reads",
+                  "creates",
+                  "returns"
+                ],
+                "callbacks": [],
+                "reads": [],
+                "creates": [],
+                "returns": [
+                  "makeTimer-returned-clear-return"
+                ],
+                "operations": [
+                  {
+                    "id": "makeTimer-returned-clear-return",
+                    "kind": "return",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "untracked",
+                    "count": {
+                      "min": 0,
+                      "max": "many",
+                      "scope": "call"
+                    },
+                    "output": "undefined"
+                  }
+                ]
+              }
             }
           },
           {
@@ -514,7 +548,8 @@
         "closed": [
           "reads",
           "creates",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": []

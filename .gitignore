@@ -303,3 +303,6 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/async-call-prefix/node_modules/**
 !fixtures/reactive-ir/shadowed-control-flow-tag/node_modules/
 !fixtures/reactive-ir/shadowed-control-flow-tag/node_modules/**
+
+!fixtures/reactive-ir/package-returned-callable-consumer/node_modules/
+!fixtures/reactive-ir/package-returned-callable-consumer/node_modules/**

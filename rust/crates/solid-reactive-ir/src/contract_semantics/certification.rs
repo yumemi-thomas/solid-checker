@@ -334,7 +334,9 @@ impl ProofPolicy2 {
                 }) {
                     return Err(ModelError::Contradiction {
                         path: format!("{}.{export_name}", artifact.id),
-                        reason: "an effectful callable member is not certifiable".into(),
+                        reason:
+                            "a returned callable or effectful callable member is not certifiable"
+                                .into(),
                     });
                 }
                 inventory_export_facts(
@@ -760,6 +762,7 @@ fn inventory_value_shape(
         | ValueShape::DescribedCallable(_)
         // ADR 0235: refused before inventory (`inspect_candidates`).
         | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. }
         | ValueShape::ReadValue
         | ValueShape::Callable
         | ValueShape::Reactive { .. }
@@ -797,7 +800,8 @@ const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability 
         ValueShape::Callable
         | ValueShape::Component
         | ValueShape::DescribedCallable(_)
-        | ValueShape::EffectfulCallable(_) => DemandedCallability::Callable,
+        | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. } => DemandedCallability::Callable,
         ValueShape::Plain => DemandedCallability::NonCallable,
         ValueShape::Unknown
         | ValueShape::Parameter { .. }
@@ -1993,6 +1997,7 @@ const fn manifest() -> PolicyManifest {
 /// (ADR 0235).
 fn holds_effectful_member(output: &ValueShape) -> bool {
     match output {
+        ValueShape::ReturnedCallable { .. } => true,
         ValueShape::Tuple(items) => items
             .items()
             .iter()

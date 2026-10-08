@@ -1136,6 +1136,26 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
             "kind": "effectful-callable",
             "call": compact_call(call, ids)?,
         }),
+        ValueShape::ReturnedCallable { call, members } => {
+            let mut node = json!({ "kind": "returned-callable" });
+            if let Some(call) = call {
+                node["call"] = compact_call(call, ids)?;
+            }
+            if !members.is_empty() {
+                node["members"] = json!(
+                    members
+                        .iter()
+                        .map(|member| {
+                            Ok(json!({
+                                "name": member.name,
+                                "value": compact_value(&member.value, ids)?,
+                            }))
+                        })
+                        .collect::<Result<Vec<_>, ContractFailure>>()?
+                );
+            }
+            node
+        }
         ValueShape::DescribedCallable(call) => {
             let mut node = json!({
                 "kind": "described-callable",
@@ -2378,6 +2398,12 @@ enum WireValueNode {
     /// namespace. Additive to `schemaVersion: 1`.
     EffectfulCallable {
         call: Box<WireCall>,
+    },
+    ReturnedCallable {
+        #[serde(default)]
+        call: Option<Box<WireCall>>,
+        #[serde(default)]
+        members: Vec<WireObjectProperty>,
     },
     Action {
         #[serde(default)]
@@ -3732,6 +3758,21 @@ fn expand_value_node(
         WireValueNode::EffectfulCallable { call } => Ok(ValueShape::EffectfulCallable(Box::new(
             expand_call(Some(call), ids)?,
         ))),
+        WireValueNode::ReturnedCallable { call, members } => Ok(ValueShape::ReturnedCallable {
+            call: call
+                .as_ref()
+                .map(|call| expand_call(Some(call), ids).map(Box::new))
+                .transpose()?,
+            members: members
+                .iter()
+                .map(|member| {
+                    Ok(ObjectProperty {
+                        name: member.name.clone(),
+                        value: expand_value_at(&member.value, ids, depth + 1)?,
+                    })
+                })
+                .collect::<Result<Vec<_>, ContractFailure>>()?,
+        }),
         WireValueNode::DescribedCallable {
             reads,
             returns,
@@ -4534,6 +4575,112 @@ mod tests {
                 "{needle:?}: {refused}"
             );
         }
+    }
+
+    #[test]
+    fn returned_callable_round_trip_refusal_and_namespace() {
+        let at = json!({ "event": "call", "schedule": "same-stack" });
+        let graph = |id: &str, resource: &str| {
+            json!({
+                "closed": ["reads", "returns", "callbacks", "creates"],
+                "reads": [id], "returns": [], "callbacks": [], "creates": [],
+                "operations": [{ "id": id, "kind": "read", "trigger": { "event": "call" },
+                    "at": at, "tracking": "ambient-at-execution",
+                    "owner": { "source": "ambient-at-execution" },
+                    "count": { "min": 1, "max": 1, "scope": "call" },
+                    "inputs": [{ "kind": "reactive", "role": "accessor", "resource": resource }] }]
+            })
+        };
+        let whole = json!({ "kind": "returned-callable", "call": graph("invoke-read", "running"),
+            "members": [{ "name": "clear", "value": { "kind": "effectful-callable",
+                "call": graph("clear-read", "running") } }, { "name": "opaque", "value": "callable" }] });
+        let document = |output: JsonValue| {
+            let mut doc: JsonValue = serde_json::from_slice(MINIMAL).unwrap();
+            doc["summaries"]["plain-value"] = json!({ "shape": "callable", "call": {
+                "closed": ["returns"], "returns": ["return"],
+                "resources": [{ "id": "running", "kind": "reactive-source" }],
+                "operations": [{ "id": "return", "kind": "return", "trigger": { "event": "call" },
+                    "at": at, "tracking": "untracked", "count": { "min": 0, "max": "many", "scope": "call" },
+                    "output": output }]
+            }});
+            doc
+        };
+        let kept = normalized(&serde_json::to_vec(&document(whole.clone())).unwrap());
+        let encoded = encode(&kept, &SidecarDigests::default(), true).unwrap();
+        assert_eq!(normalized(&encoded), kept);
+        let Err(refused) = solid_reactive_ir::contract_semantics::certification::proof_policy_2()
+            .inspect_candidates(&kept)
+        else {
+            panic!("authored graphs are never certified")
+        };
+        assert!(refused.to_string().contains("not certifiable"));
+        let absent = normalized(
+            &serde_json::to_vec(&document(json!({ "kind": "returned-callable" }))).unwrap(),
+        );
+        let empty = normalized(
+            &serde_json::to_vec(&document(
+                json!({ "kind": "returned-callable", "call": {} }),
+            ))
+            .unwrap(),
+        );
+        assert_ne!(absent.semantic_digest(), empty.semantic_digest());
+        for candidate in [&absent, &empty] {
+            let encoded = encode(candidate, &SidecarDigests::default(), true).unwrap();
+            assert_eq!(normalized(&encoded), *candidate);
+            assert!(
+                solid_reactive_ir::contract_semantics::certification::proof_policy_2()
+                    .inspect_candidates(candidate)
+                    .is_err()
+            );
+        }
+        let mut duplicates = whole.clone();
+        duplicates["members"][0]["value"]["call"] = graph("invoke-read", "running");
+        let mut missing = whole.clone();
+        missing["call"] = graph("invoke-read", "missing");
+        let mut outer_collision = whole.clone();
+        outer_collision["call"] = graph("return", "running");
+        let mut unknown = whole.clone();
+        unknown["captures"] = json!([]);
+        let mut duplicate_members = whole.clone();
+        duplicate_members["members"] = json!([{ "name": "clear", "value": "callable" }, { "name": "clear", "value": "unknown" }]);
+        let mut sibling_resource = whole.clone();
+        sibling_resource["call"]["resources"] =
+            json!([{ "id": "private", "kind": "reactive-source" }]);
+        sibling_resource["members"][0]["value"]["call"]["resources"] =
+            json!([{ "id": "private", "kind": "reactive-source" }]);
+        for output in [
+            duplicates,
+            missing,
+            outer_collision,
+            unknown,
+            duplicate_members,
+            sibling_resource,
+            json!({ "kind": "tuple", "items": [whole.clone()], "closed": ["items"] }),
+        ] {
+            let bytes = serde_json::to_vec(&document(output)).unwrap();
+            assert!(
+                decode(&bytes)
+                    .and_then(|decoded| decoded.normalize())
+                    .is_err()
+            );
+        }
+        let mut input = document(whole.clone());
+        input["summaries"]["plain-value"]["call"]["operations"][0]["inputs"] =
+            json!([whole.clone()]);
+        assert!(
+            decode(&serde_json::to_vec(&input).unwrap())
+                .and_then(|decoded| decoded.normalize())
+                .is_err()
+        );
+        let mut nested = whole;
+        nested["call"] =
+            document(json!({ "kind": "returned-callable" }))["summaries"]["plain-value"]["call"]
+                .clone();
+        assert!(
+            decode(&serde_json::to_vec(&document(nested)).unwrap())
+                .and_then(|decoded| decoded.normalize())
+                .is_err()
+        );
     }
 
     /// ADR 0153 part 3: `contextPremises` survives the round trip, puts the

@@ -468,7 +468,12 @@ fn is_contracted_container_value(
             .and_then(|symbol| contracts.by_symbol.get(symbol))
             .and_then(|contract| contract.summary.returns.known())
             .and_then(Option::as_ref)
-            .is_some_and(|value| matches!(value.kind.as_str(), "tuple" | "object"));
+            .is_some_and(|value| {
+                matches!(
+                    value.kind.as_str(),
+                    "tuple" | "object" | crate::contracts::RETURNED_CALLABLE
+                )
+            });
     }
     let Some(symbol) = entities.at(file.path.as_str(), span) else {
         return false;

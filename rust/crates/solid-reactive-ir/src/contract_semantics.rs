@@ -2374,6 +2374,15 @@ pub enum ValueShape {
     /// only as a direct member of a `return` operation's tuple or object
     /// output, never nested.
     EffectfulCallable(Box<CallSemantics>),
+    /// A whole function returned by a factory. The graph's parameters are
+    /// invocation arguments, never retained factory arguments. Named function
+    /// object members use the existing returned-member vocabulary. Missing
+    /// graphs or members assert nothing about later dispatch. Authored only;
+    /// valid only as the whole output of a factory return, never nested.
+    ReturnedCallable {
+        call: Option<Box<CallSemantics>>,
+        members: Vec<ObjectProperty>,
+    },
     Component,
     Cleanup {
         resource: Option<ResourceId>,

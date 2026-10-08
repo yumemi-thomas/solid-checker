@@ -627,6 +627,7 @@
         { "$ref": "#/$defs/undefinedValue" },
         { "$ref": "#/$defs/describedCallableValue" },
         { "$ref": "#/$defs/effectfulCallableValue" },
+        { "$ref": "#/$defs/returnedCallableValue" },
         { "$ref": "#/$defs/actionValue" },
         { "$ref": "#/$defs/componentValue" },
         { "$ref": "#/$defs/cleanupValue" },
@@ -794,6 +795,28 @@
       "properties": {
         "kind": { "const": "invocation-result" },
         "parameter": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "returnedCallableValue": {
+      "description": "A whole function returned by a factory. Optional call describes invocation arguments, never retained factory arguments; optional named members reuse returned-member values. Missing graphs/members confer no dispatch proof. Valid only as the whole output of a factory return, never nested; certification refuses it. Operation and resource IDs share the factory namespace. Factory closure never closes a returned graph.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "returned-callable" },
+        "call": { "$ref": "#/$defs/call" },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "value"],
+            "properties": {
+              "name": { "$ref": "#/$defs/nonemptyString" },
+              "value": { "$ref": "#/$defs/value" }
+            }
+          }
+        }
       }
     },
     "effectfulCallableValue": {

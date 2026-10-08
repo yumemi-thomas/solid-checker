@@ -568,7 +568,41 @@
               "scope": "call"
             },
             "output": {
-              "kind": "callable"
+              "kind": "returned-callable",
+              "call": {
+                "closed": [
+                  "callbacks",
+                  "reads",
+                  "creates",
+                  "returns"
+                ],
+                "callbacks": [],
+                "reads": [],
+                "creates": [],
+                "returns": [
+                  "makeTimer-returned-clear-return"
+                ],
+                "operations": [
+                  {
+                    "id": "makeTimer-returned-clear-return",
+                    "kind": "return",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "untracked",
+                    "count": {
+                      "min": 0,
+                      "max": "many",
+                      "scope": "call"
+                    },
+                    "output": "undefined"
+                  }
+                ]
+              }
             }
           },
           {
@@ -614,7 +648,8 @@
         "closed": [
           "reads",
           "creates",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": []
@@ -622,7 +657,8 @@
       "closures": {
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 No own reactive read; timer-provider invokes parameter 2 inline, retaining all caller effects. No primitive delay coercion read.",
         "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 No package-defined reactive owner/source/cleanup; the timer provider is an explicit caller-code invocation, not an inertness claim.",
-        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 P1: timer, including non-native structurally compatible providers, has host scheduling behavior. timer-provider records the synchronous registration call; host-handler records caller fn later, external/ambient/0..many. The returned clear stays open by the owner's explicit restriction."
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 P1: timer, including non-native structurally compatible providers, has host scheduling behavior. timer-provider records the synchronous registration call; host-handler records caller fn later, external/ambient/0..many. The whole returned clear now carries an independently cited graph; this factory closure confers no authority on future uses.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 One browser normal completion returns a function clearing id via native clearInterval. The server branch returns an inert function; only browser authority is drafted here. Factory callback and timer-provider claims retain their existing P1 premise."
       },
       "probes": [
         {
@@ -636,8 +672,28 @@
               "text": "done"
             }
           ]
+        },
+        {
+          "label": "returned-clear",
+          "rule": "missing-owner",
+          "why": "Only the misuse leaves the native timer running until its ownerless callback. The correct twin invokes the returned clear before dispatch; fresh graph-bound admission is required.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
         }
-      ]
+      ],
+      "returnedClosures": {
+        "return": {
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:22 \u2014 Returned arrow calls native clearInterval with its retained timer handle, without dereferencing or calling the handle. Under P1 there is no caller invocation, reactive read or reactive allocation and normal completion returns undefined. No captured factory argument is required; callbacks/reads/creates/returns are independently enumerated. Writes and cancellation protocols remain open.",
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:22 \u2014 Returned arrow calls native clearInterval with its retained timer handle, without dereferencing or calling the handle. Under P1 there is no caller invocation, reactive read or reactive allocation and normal completion returns undefined. No captured factory argument is required; callbacks/reads/creates/returns are independently enumerated. Writes and cancellation protocols remain open.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:22 \u2014 Returned arrow calls native clearInterval with its retained timer handle, without dereferencing or calling the handle. Under P1 there is no caller invocation, reactive read or reactive allocation and normal completion returns undefined. No captured factory argument is required; callbacks/reads/creates/returns are independently enumerated. Writes and cancellation protocols remain open.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:22 \u2014 Returned arrow calls native clearInterval with its retained timer handle, without dereferencing or calling the handle. Under P1 there is no caller invocation, reactive read or reactive allocation and normal completion returns undefined. No captured factory argument is required; callbacks/reads/creates/returns are independently enumerated. Writes and cancellation protocols remain open."
+        }
+      }
     }
   }
 }

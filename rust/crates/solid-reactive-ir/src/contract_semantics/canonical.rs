@@ -328,6 +328,12 @@ fn has_strict_read(call: &CallSemantics) -> bool {
 fn value_has_strict_read(value: &ValueShape) -> bool {
     match value {
         ValueShape::EffectfulCallable(call) => has_strict_read(call),
+        ValueShape::ReturnedCallable { call, members } => {
+            call.as_deref().is_some_and(has_strict_read)
+                || members
+                    .iter()
+                    .any(|member| value_has_strict_read(&member.value))
+        }
         ValueShape::Tuple(items) => items.items().iter().any(value_has_strict_read),
         ValueShape::Object(properties) => properties
             .items()
@@ -1307,6 +1313,43 @@ impl CanonicalWriter {
             ValueShape::EffectfulCallable(call) => {
                 self.u8(24);
                 self.call(call);
+            }
+            // Appended. No preexisting value changes its canonical stream.
+            ValueShape::ReturnedCallable { call, members } => {
+                self.u8(25);
+                // Nested graphs encode every optional axis, even when the
+                // factory selected the legacy family. This local switch is
+                // scoped to tag 25 and cannot change any older document.
+                let flags = (
+                    self.strict_reads,
+                    self.composed_provenance,
+                    self.proposed_closure,
+                    self.computations,
+                    self.invoke_protocols,
+                    self.context_premises,
+                    self.accessor_bounds,
+                );
+                self.strict_reads = true;
+                self.composed_provenance = true;
+                self.proposed_closure = true;
+                self.computations = true;
+                self.invoke_protocols = true;
+                self.context_premises = true;
+                self.accessor_bounds = true;
+                self.option(call.as_deref(), Self::call);
+                self.sequence(members, |writer, member| {
+                    writer.text(&member.name);
+                    writer.value(&member.value);
+                });
+                (
+                    self.strict_reads,
+                    self.composed_provenance,
+                    self.proposed_closure,
+                    self.computations,
+                    self.invoke_protocols,
+                    self.context_premises,
+                    self.accessor_bounds,
+                ) = flags;
             }
         }
     }

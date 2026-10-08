@@ -652,6 +652,23 @@ impl<'a> SemanticLookup<'a> {
         }
     }
 
+    /// Whether an exact whole-function graph was actually installed.
+    pub(super) fn returned_callable_is_bound(&self, symbol: &str) -> bool {
+        self.resolved_contracts
+            .returned_callable_bindings
+            .contains(symbol)
+    }
+
+    /// Whether this exact function-object member callee has a binding.
+    pub(super) fn returned_member_is_bound(&self, file: &FileFacts, callee: Span) -> bool {
+        self.resolved_contracts
+            .callee_bindings
+            .contains_key(&crate::location(
+                file.path.shared(),
+                file.ast.peel_ts_sugar_span(callee),
+            ))
+    }
+
     /// The known callback rows of the contract bound to `symbol` that invoke
     /// the argument as a callable. A non-call row (a property read or
     /// coercion of the argument, `ContractCallback::is_invocation`) is not an
@@ -2360,6 +2377,13 @@ impl<'a> SemanticLookup<'a> {
     /// semantic fact.
     pub(super) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
         let callee = file.ast.peel_ts_sugar_span(callee);
+        if let Some(symbol) = self
+            .resolved_contracts
+            .callee_bindings
+            .get(&crate::location(file.path.shared(), callee))
+        {
+            return Some(symbol.as_str());
+        }
         let member_property = self
             .ast_indexes
             .get(file.path.as_str())
@@ -2398,6 +2422,13 @@ impl<'a> SemanticLookup<'a> {
     /// compare the returned candidates' summaries before using more than one.
     pub(super) fn callee_symbols(&self, file: &FileFacts, callee: Span) -> Vec<SymbolId> {
         let callee = file.ast.peel_ts_sugar_span(callee);
+        if let Some(symbol) = self
+            .resolved_contracts
+            .callee_bindings
+            .get(&crate::location(file.path.shared(), callee))
+        {
+            return vec![symbol.clone()];
+        }
         let member_property = self
             .ast_indexes
             .get(file.path.as_str())
@@ -2414,6 +2445,12 @@ impl<'a> SemanticLookup<'a> {
             }
             let mut visited = HashSet::new();
             let aliases = self.direct_value_symbols(file, callee, &mut visited);
+            if aliases
+                .iter()
+                .any(|alias| self.returned_callable_is_bound(alias.as_str()))
+            {
+                return vec![symbol.clone()];
+            }
             if !aliases.is_empty() {
                 return aliases;
             }
@@ -3969,6 +4006,8 @@ mod tests {
         let contracts = crate::contracts::ResolvedContracts {
             bindings: Vec::new(),
             by_symbol: HashMap::new(),
+            callee_bindings: HashMap::new(),
+            returned_callable_bindings: HashSet::new(),
             missing_exports: Vec::new(),
             counts: crate::ContractBindingCounts::default(),
         };
@@ -3982,6 +4021,68 @@ mod tests {
             false,
         );
         body(&lookup)
+    }
+
+    #[test]
+    fn returned_member_callee_bindings_are_exact_and_instance_local() {
+        let source = "const first = make(); const second = make(); first.clear(); second.clear();";
+        let facts = project(source);
+        let entities = entity_symbols(&[]);
+        let ast_indexes = facts
+            .files
+            .iter()
+            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+            .collect::<HashMap<_, _>>();
+        let symbol_names = HashMap::new();
+        let dialect = solid_dialect::Solid2;
+        let first = span_of(source, "first.clear", 0);
+        let second = span_of(source, "second.clear", 0);
+        let contracts = crate::contracts::ResolvedContracts {
+            bindings: vec![],
+            by_symbol: HashMap::new(),
+            callee_bindings: HashMap::from([
+                (
+                    crate::location(facts.files[0].path.shared(), first),
+                    SymbolId::from("first-instance"),
+                ),
+                (
+                    crate::location(facts.files[0].path.shared(), second),
+                    SymbolId::from("second-instance"),
+                ),
+            ]),
+            returned_callable_bindings: HashSet::new(),
+            missing_exports: vec![],
+            counts: crate::ContractBindingCounts::default(),
+        };
+        let lookup = SemanticLookup::new(
+            &facts,
+            &ast_indexes,
+            &entities,
+            &symbol_names,
+            &dialect,
+            &contracts,
+            false,
+        );
+        assert_eq!(
+            lookup.callee_symbol(&facts.files[0], first),
+            Some("first-instance")
+        );
+        assert_eq!(
+            lookup.callee_symbols(&facts.files[0], first),
+            vec![SymbolId::from("first-instance")]
+        );
+        assert_eq!(
+            lookup.callee_symbol(&facts.files[0], second),
+            Some("second-instance")
+        );
+        assert_eq!(
+            lookup.callee_symbols(&facts.files[0], second),
+            vec![SymbolId::from("second-instance")]
+        );
+        assert_eq!(
+            lookup.callee_symbol(&facts.files[0], span_of(source, "make", 0)),
+            None
+        );
     }
 
     /// Call sites keyed by target function span, as `(callee start, end)`.
@@ -4237,6 +4338,8 @@ mod tests {
         let contracts = crate::contracts::ResolvedContracts {
             bindings: Vec::new(),
             by_symbol: HashMap::new(),
+            callee_bindings: HashMap::new(),
+            returned_callable_bindings: HashSet::new(),
             missing_exports: Vec::new(),
             counts: crate::ContractBindingCounts::default(),
         };

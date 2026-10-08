@@ -240,6 +240,15 @@ fn normalize_call_in(
             });
         }
     }
+    // New whole returns reserve every sibling graph's IDs in one export
+    // namespace. Keep the historical member-only normalization unchanged.
+    if call
+        .operations
+        .iter()
+        .any(|operation| matches!(operation.output, Some(ValueShape::ReturnedCallable { .. })))
+    {
+        validate_returned_callable_ids(call, path)?;
+    }
     for operation in &mut call.operations {
         normalize_operation(operation, &operation_ids, &resources, path, outer.is_some())?;
     }
@@ -486,7 +495,43 @@ fn normalize_operation(
         normalize_value(input, resources, &format!("{op_path}.input.{index}"))?;
     }
     if let Some(output) = &mut operation.output {
-        if let ValueShape::DescribedCallable(call) = output {
+        if let ValueShape::ReturnedCallable { call, members } = output {
+            if operation.kind != OperationKind::Return || nested {
+                return contradiction(
+                    format!("{op_path}.output"),
+                    "a returned callable is valid only as the whole output of a factory return",
+                );
+            }
+            let out_path = format!("{op_path}.output");
+            let names = members
+                .iter()
+                .map(|member| &member.name)
+                .collect::<BTreeSet<_>>();
+            if names.len() != members.len() {
+                return Err(ModelError::DuplicateIdentity {
+                    kind: "returned member",
+                    id: out_path,
+                });
+            }
+            if let Some(call) = call {
+                normalize_call_in(call, &out_path, Some((resources, operations)))?;
+            }
+            // Reuse ADR 0235's lift/normalize/restore machinery verbatim.
+            let mut container = ValueShape::Object(KnowledgeSet::Complete(std::mem::take(members)));
+            let lifted = lift_effectful_members(&mut container);
+            normalize_value(&mut container, resources, &format!("{out_path}.members"))?;
+            for (member, mut call) in lifted {
+                normalize_call_in(
+                    &mut call,
+                    &format!("{out_path}.member.{member}"),
+                    Some((resources, operations)),
+                )?;
+                restore_effectful_member(&mut container, &member, call);
+            }
+            if let ValueShape::Object(KnowledgeSet::Complete(properties)) = container {
+                *members = properties;
+            }
+        } else if let ValueShape::DescribedCallable(call) = output {
             if operation.kind != OperationKind::Return {
                 return contradiction(
                     format!("{op_path}.output"),
@@ -1031,6 +1076,69 @@ pub(super) fn normalize_described_callable(
     Ok(())
 }
 
+/// All graphs of a new whole return share its factory's ID namespace.
+/// Outer IDs are reservations only, never nested trigger targets.
+fn validate_returned_callable_ids(call: &CallSemantics, _path: &str) -> Result<(), ModelError> {
+    fn reserve(
+        call: &CallSemantics,
+        operations: &mut BTreeSet<OperationId>,
+        resources: &mut BTreeSet<ResourceId>,
+    ) -> Result<(), ModelError> {
+        for operation in &call.operations {
+            if !operations.insert(operation.id.clone()) {
+                return Err(ModelError::DuplicateIdentity {
+                    kind: "operation",
+                    id: operation.id.0.clone(),
+                });
+            }
+        }
+        for resource in &call.resources {
+            if !resources.insert(resource.id.clone()) {
+                return Err(ModelError::DuplicateIdentity {
+                    kind: "resource",
+                    id: resource.id.0.clone(),
+                });
+            }
+        }
+        for operation in &call.operations {
+            if let Some(output) = &operation.output {
+                visit(output, operations, resources)?;
+            }
+        }
+        Ok(())
+    }
+    fn visit(
+        value: &ValueShape,
+        operations: &mut BTreeSet<OperationId>,
+        resources: &mut BTreeSet<ResourceId>,
+    ) -> Result<(), ModelError> {
+        match value {
+            ValueShape::ReturnedCallable { call, members } => {
+                if let Some(call) = call {
+                    reserve(call, operations, resources)?;
+                }
+                for member in members {
+                    visit(&member.value, operations, resources)?;
+                }
+            }
+            ValueShape::EffectfulCallable(call) => reserve(call, operations, resources)?,
+            ValueShape::Tuple(items) => {
+                for item in items.items() {
+                    visit(item, operations, resources)?;
+                }
+            }
+            ValueShape::Object(properties) => {
+                for property in properties.items() {
+                    visit(&property.value, operations, resources)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    reserve(call, &mut BTreeSet::new(), &mut BTreeSet::new())
+}
+
 /// Where an effectful callable sits in a returned container: its tuple index
 /// or object property name.
 enum EffectfulMember {
@@ -1145,6 +1253,12 @@ fn normalize_value(
             return contradiction(
                 path,
                 "an effectful callable is valid only as a member of a returned tuple or object",
+            );
+        }
+        ValueShape::ReturnedCallable { .. } => {
+            return contradiction(
+                path,
+                "a returned callable is valid only as the whole output of a factory return",
             );
         }
         ValueShape::ReadValue => {
@@ -2206,6 +2320,7 @@ fn visit_closed_value(
         | ValueShape::Undefined
         | ValueShape::DescribedCallable(_)
         | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
@@ -2618,6 +2733,7 @@ fn open_value_closure(
         | ValueShape::Undefined
         | ValueShape::DescribedCallable(_)
         | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
@@ -2650,6 +2766,7 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::Undefined
         | ValueShape::DescribedCallable(_)
         | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}

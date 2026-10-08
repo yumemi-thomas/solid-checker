@@ -2258,8 +2258,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/06c6e3b969d7ef1d1f6039939fa12335d1dfb4dd54be1699ddde04a5bfcf3cf0.json",
-      "documentDigest": "sha256:06c6e3b969d7ef1d1f6039939fa12335d1dfb4dd54be1699ddde04a5bfcf3cf0"
+      "document": "objects/7a3a6abca1b927f0d5da7d90a811898a3412c869a0a006f743392fef1f6d07df.json",
+      "documentDigest": "sha256:7a3a6abca1b927f0d5da7d90a811898a3412c869a0a006f743392fef1f6d07df"
     },
     {
       "packageName": "@solid-primitives/script-loader",
@@ -2683,8 +2683,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/c1294573b49998d8875792565545db32325d84aadf441db9aa6e0d6815ca1637.json",
-      "documentDigest": "sha256:c1294573b49998d8875792565545db32325d84aadf441db9aa6e0d6815ca1637"
+      "document": "objects/cc2f52cc29f9e4acfb2f87b06d5e1504c3776dd5586de6f47fa8dc5a9cfcbb8b.json",
+      "documentDigest": "sha256:cc2f52cc29f9e4acfb2f87b06d5e1504c3776dd5586de6f47fa8dc5a9cfcbb8b"
     },
     {
       "packageName": "@solid-primitives/timer",

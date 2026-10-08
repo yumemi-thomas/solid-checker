@@ -28615,3 +28615,22 @@ Residual after this change: the remaining `strict-read-untracked` violations are
 the direct reads in a body, an effect apply or a Show/For callback (K8-K11),
 plus the summary-path reads through hooks and helpers (`read through ...`)
 that `interproc.rs` still attributes.
+
+## Whole returned functions (2026-10-08)
+
+ADR 0249: a factory's closed return can enumerate a whole returned function
+(`returned-callable`) with its own call graph and members. A `const` binding
+of the factory call instantiates that graph at direct calls. Every escape,
+mutable binding, wrapped callee and unbound use is a
+`reactive-dispatch-unresolved` obligation. `debounce`/`throttle` (with
+`.clear`) and `makeTimer` ship. Corpus primitive imports still raising SC9005:
+27 to 24 of 43.
+
+Still open:
+- captures, so the debounced function's invocation of the factory callback
+  keeps `callbacks` open;
+- a call through a TypeScript wrapper, `(f as T)()`, is an obligation rather
+  than a proven read;
+- ADR 0234's opaque-member escape check likely shares the gap fixed here (a
+  reference with no TypeFacts entity, such as an array element, was skipped
+  rather than counted as an escape) and has not been re-audited.
