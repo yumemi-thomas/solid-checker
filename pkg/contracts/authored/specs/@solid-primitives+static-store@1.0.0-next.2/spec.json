@@ -443,7 +443,7 @@
       }
     },
     "createStaticStore": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Getter returns plain copy without observer, creates and caches a per-key ownedWrite signal under an observer, and then always reads that cached signal. Cache is retained, not reset on owner cleanup. Fixed resize values are plain numbers/null. Arbitrary static-store input values and unknown keys need consumer proof; no blanket store branding. Constructor spreads init twice. Function-valued seeds may select createSignal\u2019s memo overload later; no constructor read/create negative closure is asserted. Setter remains opaque.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Construction copies init twice (28), allocates plain objects and closures (28-29,42,47), enumerates keys and installs getters without invoking them (38-41), then returns the tuple (47-54). Own construction reads/creates are empty. Caller getter/proxy behavior remains open and separate; initial-copy-0/1 retain ambient property Gets. Returned getter 29-36/39 and setter 42-52 are separate scopes: a tracked Get may cache a per-key ownedWrite signal, later Gets read it, and the setter remains opaque. Function-valued seeds may select the memo overload only on a later Get. No cache-priming/dominance claim.",
       "rule": "strict-read-untracked",
       "call": {
         "operations": [
@@ -540,14 +540,20 @@
           }
         ],
         "closed": [
+          "reads",
+          "creates",
           "returns"
         ],
         "returns": [
           "static-return"
-        ]
+        ],
+        "reads": [],
+        "creates": []
       },
       "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Fresh static object, keys derived from exact input; second tuple item is unknown. Recipe binds lazy Get only, not setter or arbitrary seed behavior."
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Fresh static object, keys derived from exact input; second tuple item is unknown. Recipe binds lazy Get only, not setter or arbitrary seed behavior.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Own construction scope only, for every input: the two spreads at 28 perform caller value Gets (initial-copy-0/1), not private reactive reads. for-in/defineProperty at 38-41 enumerate/install without invoking the installed getter. Plain object/function/tuple allocation at 28-29,42,47 performs no private reactive read. Getter body 29-36/39 and returned setter body 42-52 are later scopes. Proxy/getter reentrancy remains caller behavior under open callbacks; this is not a negative census for caller or returned behavior. Standard-library operations use the existing unpatched-built-ins premise.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Own construction scope only, for every input: spreads at 28, for-in/defineProperty at 38-41, and plain object/function/tuple allocation at 28-29,42,47 create no reactive owner/computation. createSignal at 33 is inside getValue and is not executed during installation; function-valued seeds are merely copied. Caller getters/proxy traps can create computations and remain caller behavior under open callbacks. Returned getter and setter scopes remain separately modelled/opaque, not closed empty. Throwing construction prefixes add no private creation."
       },
       "lazyGetterClosures": {
         "static-return": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createStaticStore-primed-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:27-54 - Getter returns plain copy without observer, creates and caches a per-key ownedWrite signal under an observer, and then always reads that cached signal. Cache is retained, not reset on owner cleanup. Fixed resize values are plain numbers/null. Arbitrary static-store input values and unknown keys need consumer proof; no blanket store branding."
@@ -557,6 +563,16 @@
           "label": "lazy-memo",
           "rule": "strict-read-untracked",
           "why": "Correct twin Gets count inside a memo after priming; misuse reads in component body."
+        },
+        {
+          "label": "construction-read",
+          "rule": "strict-read-untracked",
+          "why": "Construction does not clear caller input Gets: a count getter reads a signal in the labeled component body; the correct twin explicitly untracks construction. Neither twin Gets a returned property. Closure is source-audited; this pair checks ambient caller behavior, not absence proof."
+        },
+        {
+          "label": "construction-owner",
+          "rule": "missing-owner",
+          "why": "Plain and function-valued seeds are construction-only controls. The input count getter creates an effect: module-scope misuse has no owner; the correct twin supplies and disposes a root. Neither twin invokes a returned getter/setter. Creation belongs to the caller getter, not the factory; the pair never closes callbacks."
         }
       ],
       "hostFree": {

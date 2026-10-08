@@ -12538,8 +12538,8 @@
       "package": "@solid-primitives/static-store",
       "version": "1.0.0-next.2",
       "export": "createStaticStore",
-      "propertyGetProbeDigest": "18df6b7913e9c63375d84346663ba58b6d2766489d9c4cd87f6454941c4a9853",
-      "lazyGetterProbeDigest": "b4ff4b0dcdb5be2db75b3342da5842f66ecbd97ca90962c4fba02176ea4ae03b",
+      "propertyGetProbeDigest": "f656020778c81852ee2bb4322e1210606819d030b9e2d81fd5aff4f626c2dc2e",
+      "lazyGetterProbeDigest": "19720e9f2c769637ad0c131f90143a428320e96100d96a15fc1be665a363692e",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -12576,9 +12576,103 @@
       "package": "@solid-primitives/static-store",
       "version": "1.0.0-next.2",
       "export": "createStaticStore",
+      "label": "construction-owner",
+      "propertyGetProbeDigest": "f9674b25643e7890373c08eeb0683c23a222434933c4bfa91d5c6f3341779c89",
+      "lazyGetterProbeDigest": "ad72a69420eca27eafb425696591823134e4bfd5a5f6a8071984366a7a10bb53",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_EFFECT",
+          "site": {
+            "file": "case",
+            "line": 11,
+            "column": 5
+          }
+        },
+        {
+          "code": "NO_OWNER_EFFECT",
+          "site": {
+            "file": "case",
+            "line": 11,
+            "column": 5
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+static-store@1.0.0-next.2",
+      "package": "@solid-primitives/static-store",
+      "version": "1.0.0-next.2",
+      "export": "createStaticStore",
+      "label": "construction-read",
+      "propertyGetProbeDigest": "653b62b1e372dc27d3fde193f7772274a9ff70a993d6f6d8d38b6fbb854ab121",
+      "lazyGetterProbeDigest": "efad6039e90805de41967608a688fc32e7cdada4a286dd6b81d461276e72c4b0",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 26
+          }
+        },
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 26
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+static-store@1.0.0-next.2",
+      "package": "@solid-primitives/static-store",
+      "version": "1.0.0-next.2",
+      "export": "createStaticStore",
       "label": "lazy-memo",
-      "propertyGetProbeDigest": "4c1a3eb982b060b30ecd48b12a5c198ac68c1b13491e5bf6aaf67beaa7afd0ca",
-      "lazyGetterProbeDigest": "ccaec888f1099ecb6b3120d7df93e873ffeb976ad5e70243085679449a2458a1",
+      "propertyGetProbeDigest": "d2368e609bf949eef5761856079da3a06d6d80d0a99e7f85e95ec5ad0e3424d7",
+      "lazyGetterProbeDigest": "8776d4e621f25108081520b6b8a284b94ef231e5424e9b5218e0e3b65f661b00",
       "solidRuntime": [
         {
           "name": "solid-js",

@@ -411,11 +411,15 @@
           }
         ],
         "closed": [
+          "reads",
+          "creates",
           "returns"
         ],
         "returns": [
           "static-return"
-        ]
+        ],
+        "reads": [],
+        "creates": []
       },
       "shape": "callable"
     }

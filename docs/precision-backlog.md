@@ -28776,3 +28776,11 @@ returns and paths into property values remain uncertifiable. Later events or
 schedules still need an escape/mutation proof; the current undefined-return
 non_escaping projection is insufficient. Empty literals have no structure fact
 and remain uncertifiable. Fixture: package-derived-get-consumer.
+
+## createStaticStore construction domains (2026-10-09, ADR 0264)
+
+Own reads and creates close as empty for every input; correct use is clean.
+Open: the primed untracked Get. Proving it needs an evaluation-order and
+successful-completion relation for property Gets (the priming tracked Get
+certainly ran first, same receiver and key, no intervening cache change),
+which the IR does not have. Until then the misuse stays a dispatch obligation.

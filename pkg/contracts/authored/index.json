@@ -2618,8 +2618,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/ad3aeb2f5e102b1e451b8ed6741c5bb4096fc58991c2d11684bad503b3104c2b.json",
-      "documentDigest": "sha256:ad3aeb2f5e102b1e451b8ed6741c5bb4096fc58991c2d11684bad503b3104c2b"
+      "document": "objects/30c8f7b8b6098efa45134715c3373b1e9c50d070ec8ff07502542c673d1d2348.json",
+      "documentDigest": "sha256:30c8f7b8b6098efa45134715c3373b1e9c50d070ec8ff07502542c673d1d2348"
     },
     {
       "packageName": "@solid-primitives/static-store",
