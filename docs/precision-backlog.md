@@ -28631,6 +28631,5 @@ Still open:
   keeps `callbacks` open;
 - a call through a TypeScript wrapper, `(f as T)()`, is an obligation rather
   than a proven read;
-- ADR 0234's opaque-member escape check likely shares the gap fixed here (a
-  reference with no TypeFacts entity, such as an array element, was skipped
-  rather than counted as an escape) and has not been re-audited.
+- ADR 0234's opaque-member escape check shared the gap; ADR 0250 fixed it by
+  matching references through the binder.

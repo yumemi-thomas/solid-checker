@@ -37,3 +37,25 @@ export function ThroughTheTuple() {
   ticker[1]();
   return <div>{String(ticker[0]())}</div>;
 }
+
+// ADR 0250: escapes the binder sees but TypeFacts may emit no entity for, and
+// a wrapped call that does not instantiate the member's effects. Each is an
+// obligation, never silently clean.
+function keepValue(value: unknown) {
+  return value;
+}
+export function TupleInArray() {
+  const ticker = createTicker();
+  keepValue([ticker]);
+  return <div />;
+}
+export function TupleInShorthand() {
+  const ticker = createTicker();
+  keepValue({ ticker });
+  return <div />;
+}
+export function WrappedMemberCall() {
+  const [running, start] = createTicker();
+  (start as () => void)();
+  return <div>{String(running())}</div>;
+}

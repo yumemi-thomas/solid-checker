@@ -906,37 +906,43 @@ impl LocalAccessContext<'_, '_> {
                 continue;
             }
             let export = file.source_text(call.callee).unwrap_or_default();
+            // ADR 0250: references are matched by the binder's declaration,
+            // not by TypeFacts entities. An entity exists only where the
+            // analysis demanded one, so a reference without one (an array
+            // element, a shorthand property) would drop out of the escape
+            // test and leave an escaping value looking member-only.
             let root = file
                 .ast
                 .bindings
                 .iter()
-                .filter(|binding| {
+                .find(|binding| {
                     binding.shape == solid_facts::ast::BindingShape::Identifier
                         && binding.names.len() == 1
                         && binding
                             .initializer
                             .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == call.span)
                 })
-                .find_map(|binding| self.entities.at(file.path.as_str(), binding.names[0].span));
-            let aliased = |root: &SymbolId| {
+                .map(|binding| binding.names[0].span);
+            let refers_to = |span: solid_facts::core::Span, root: solid_facts::core::Span| {
+                file.ast.reference_declaration(span) == Some(root)
+            };
+            let aliased = |root: solid_facts::core::Span| {
                 file.ast.bindings.iter().any(|binding| {
                     binding
                         .initializer_identifier
                         .as_ref()
-                        .is_some_and(|initializer| {
-                            self.entities.at(file.path.as_str(), initializer.span) == Some(root)
-                        })
+                        .is_some_and(|initializer| refers_to(initializer.span, root))
                 })
             };
             // Every reference to the name is a direct member receiver: the
             // value itself goes nowhere, so a member is reached only through
             // the accesses enumerated below.
-            let only_members = |root: &SymbolId| {
+            let only_members = |root: solid_facts::core::Span| {
                 file.ast
                     .identifiers
                     .iter()
                     .filter(|id| id.role == solid_facts::ast::IdentifierRole::Reference)
-                    .filter(|id| self.entities.at(file.path.as_str(), id.span) == Some(root))
+                    .filter(|id| refers_to(id.span, root))
                     .all(|id| {
                         file.ast
                             .members
@@ -944,7 +950,7 @@ impl LocalAccessContext<'_, '_> {
                             .any(|member| member.object == id.span)
                     })
             };
-            let tracked_root = root.filter(|root| !aliased(root) && only_members(root));
+            let tracked_root = root.filter(|root| !aliased(*root) && only_members(*root));
             let Some(root) = tracked_root else {
                 result.dispatch_obligations.push(obligation(
                     call.span,
@@ -954,7 +960,7 @@ impl LocalAccessContext<'_, '_> {
                 continue;
             };
             for member in &file.ast.members {
-                if self.entities.at(file.path.as_str(), member.object) != Some(root) {
+                if !refers_to(member.object, root) {
                     continue;
                 }
                 let computed = file.ast.computed_members.contains(&member.span);
@@ -1018,7 +1024,14 @@ impl LocalAccessContext<'_, '_> {
                 continue;
             };
             if let Some(call) = callees.get(&identifier.span) {
-                if !*bound && !inside_non_component_function(file, identifier.span, self.lookup) {
+                // ADR 0250: the effects bind to a call written on the name
+                // itself. `(start as T)()` is peeled to the name here but is
+                // not instantiated, so it stays an obligation.
+                let wrapped = !file.ast.calls.iter().any(|candidate| {
+                    candidate.span == *call && candidate.callee == identifier.span
+                });
+                let bound = *bound && !wrapped;
+                if !bound && !inside_non_component_function(file, identifier.span, self.lookup) {
                     result.dispatch_obligations.push(obligation(
                         *call,
                         export,
