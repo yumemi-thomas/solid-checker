@@ -365,7 +365,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 199 adds the four package-prototype-*-consumer hand-stated documents,
       // ADR 0258's pins of exact constructor-instance prototypes.
-      stableMainDocuments: 200,
+      stableMainDocuments: 201,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

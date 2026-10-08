@@ -28740,3 +28740,24 @@ internal poll. Open: callbacks (nested option getters, comparators and
 subscriber-loss hooks), writes, invalidates, throws, cleanups, disposals; no
 host-free row. The constructor read is citation-backed only (its Chrome warning
 is package-attributed).
+
+## Single primitive callback completion (2026-10-09, ADR 0262)
+
+Closed optional callable-only callback-result uses can be inapplicable when
+one complete synchronous arrow return has a runtime primitive completion.
+Syntax supplies literals, untagged templates, selected unary results and
+binary results; arithmetic/coercing comparisons require primitive operands.
+Reviewed Date.now and Math.abs/ceil/floor/round calls additionally require
+valid single standard-library call resolution and an exact global declaration,
+plus the configured-project write/delete/escape veto. This uses the existing
+standard-library runtime premise (ADRs 0167, 0190, 0211), not a return annotation.
+Reflective or external patching remains outside that model. Admission does
+not close the callback census or change producer-body effects.
+
+Fixture: package-scalar-result-consumer. createPolled's Date.now initializer
+obligation is gone; its top-level-read case keeps package-contract-incomplete
+for callbacks.
+Still refused: dynamic/annotated values, object coercion operands, unknown,
+shadowed or typed local receivers, computed/optional/unreviewed calls, Recovery,
+multiple or incomplete returns, async/named callbacks, and other result uses.
+No published signature, contract spec or finding snapshot was changed.

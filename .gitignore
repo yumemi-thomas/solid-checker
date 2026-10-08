@@ -333,3 +333,5 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/package-prototype-isolation-consumer/node_modules/**
 !fixtures/reactive-ir/root-callback-return/node_modules/
 !fixtures/reactive-ir/root-callback-return/node_modules/**
+!fixtures/reactive-ir/package-scalar-result-consumer/node_modules/
+!fixtures/reactive-ir/package-scalar-result-consumer/node_modules/**

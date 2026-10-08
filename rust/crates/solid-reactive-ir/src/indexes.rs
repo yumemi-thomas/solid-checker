@@ -1244,6 +1244,25 @@ impl<'a> SemanticLookup<'a> {
             component_keys.sort_unstable();
             let mut hasher = Sha256::new();
             hasher.update(b"components\0");
+            // Scalar-result admission vetoes writes/escapes in any configured
+            // file. Bind that census when a callback-result contract can use
+            // it: a mutation elsewhere must invalidate a cached clean result.
+            if self
+                .resolved_contracts
+                .by_symbol
+                .values()
+                .any(|binding| !binding.summary.callback_results.is_empty())
+            {
+                let mut scalar_inputs = self.files().iter().collect::<Vec<_>>();
+                scalar_inputs.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+                hasher.update(b"scalar-result-inputs\0");
+                for file in scalar_inputs {
+                    let path = file.path.as_str();
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    hasher.update(file.source_hash.as_str().as_bytes());
+                }
+            }
             // Returned-source proofs inspect callee syntax and binding facts,
             // even when its public type and read summary do not change. Bind
             // the byte identity of every file that can hold such a proof (a
@@ -2096,6 +2115,145 @@ impl<'a> SemanticLookup<'a> {
             return function.expression_return.as_ref().is_some_and(proven);
         }
         crate::returns_walk::own_returns(&file.ast, function).all(proven)
+    }
+
+    /// A reviewed ECMAScript primitive return, not a TypeScript return type.
+    /// Positive library identity is required for both member and receiver.
+    /// The deliberately short table uses members declared beside their global
+    /// in the same default-library source; split/augmented declarations refuse.
+    pub(super) fn scalar_builtin_call_result(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        use solid_facts::ast::IdentifierRole;
+        if call.construct
+            || call.arguments.iter().any(|argument| argument.spread)
+            // This positive fact also excludes optional calls/member chains.
+            || !file.ast.straight_line_calls.contains(&call.span)
+        {
+            return false;
+        }
+        let Some(declaration) =
+            self.standard_library_declaration(file, call, typefacts::CallKind::Call)
+        else {
+            return false;
+        };
+        let (global, property) = match declaration.qualified_name.as_ref() {
+            "DateConstructor.now" if call.arguments.is_empty() => ("Date", "now"),
+            "Math.abs" => ("Math", "abs"),
+            "Math.ceil" => ("Math", "ceil"),
+            "Math.floor" => ("Math", "floor"),
+            "Math.round" => ("Math", "round"),
+            _ => return false,
+        };
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some(member) = file.ast.members.iter().find(|member| {
+            member.span == callee
+                && file
+                    .ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_err()
+                && file.source_text(member.property) == Some(property)
+        }) else {
+            return false;
+        };
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        if !file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == receiver && identifier.role == IdentifierRole::Reference
+        }) {
+            return false;
+        }
+        let Some(entity) = self.entity_at(file.path.as_str(), receiver) else {
+            return false;
+        };
+        if entity.symbol_unresolved
+            || entity.symbol.is_empty()
+            || declaration.source_file.is_empty()
+        {
+            return false;
+        }
+        let Some(symbol) = self.symbols_by_id().get(entity.symbol.as_ref()).copied() else {
+            return false;
+        };
+        // Date/Math merge their global variable with interfaces. Those type
+        // declarations do not replace the positive runtime binding premise.
+        // A configured-project augmentation is withheld, irrespective of kind.
+        let mut bindings = symbol
+            .declarations()
+            .iter()
+            .filter(|binding| binding.kind.as_ref() == "variable");
+        let Some(binding) = bindings.next() else {
+            return false;
+        };
+        if !symbol.alias_target().is_empty()
+            || bindings.next().is_some()
+            || symbol.declarations().iter().any(|declaration| {
+                self.file_by_path(declaration.location.path.as_ref())
+                    .is_some()
+            })
+            || binding.name.as_ref() != global
+            || binding.location.path != declaration.source_file
+            || declaration.location.path != declaration.source_file
+        {
+            return false;
+        }
+        if self.member_name_may_be_reassigned(property)
+            || self.member_name_may_be_reassigned(global)
+        {
+            return false;
+        }
+        // Veto writes, deletes and escapes throughout the configured project.
+        // Check exact symbols even for escaped identifier spellings. A missing
+        // fact for an unbound runtime reference withholds the proof.
+        self.files().iter().all(|other| {
+            other.ast.identifiers.iter().all(|identifier| {
+                if identifier.role != IdentifierRole::Reference
+                    // A binder-resolved local shadow is unrelated to this global.
+                    || other.ast.reference_declaration(identifier.span).is_some()
+                    || other.ast.type_queries.iter().any(|query| query.contains(identifier.span))
+                {
+                    return true;
+                }
+                let Some(reference) = self.entity_at(other.path.as_str(), identifier.span) else {
+                    return false;
+                };
+                if reference.symbol_unresolved || reference.symbol.is_empty() {
+                    return false;
+                }
+                if reference.symbol != entity.symbol {
+                    return true;
+                }
+                // Calling/constructing the global does not hand its object
+                // out. Member reads (including computed/optional reads) do
+                // not hand the receiver out either; target admission above
+                // still refuses computed or optional scalar calls.
+                if other
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| other.ast.peel_ts_sugar_span(call.callee) == identifier.span)
+                {
+                    return true;
+                }
+                let Some(access) =
+                    other.ast.members.iter().find(|access| {
+                        other.ast.peel_ts_sugar_span(access.object) == identifier.span
+                    })
+                else {
+                    return false;
+                };
+                !other
+                    .ast
+                    .assignments
+                    .iter()
+                    .map(|assignment| assignment.target)
+                    .chain(other.ast.iteration_targets.iter().copied())
+                    .chain(other.ast.deleted_targets.iter().copied())
+                    .any(|target| target.contains(access.span))
+            })
+        })
     }
 
     fn standard_library_declaration(

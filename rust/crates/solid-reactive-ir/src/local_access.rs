@@ -1601,6 +1601,12 @@ impl LocalAccessContext<'_, '_> {
                     .get(produced.parameter)
                     .is_some_and(|argument| {
                         callback_result_is_plain_data(file, argument, produced)
+                            || callback_result_has_primitive_completion(
+                                file,
+                                argument,
+                                produced,
+                                self.lookup,
+                            )
                             || (self.lookup.callee_symbol(file, call.callee).is_some_and(
                                 |symbol| self.lookup.contract_result_census_is_closed(symbol),
                             ) && callback_result_literal_is_tracked(
@@ -2710,6 +2716,69 @@ pub(crate) fn append_local_access_result_owned(
     target
         .dispatch_obligations
         .extend(source.dispatch_obligations);
+}
+
+/// Discharge only an optional callable-initializer use. This does not close
+/// the package's callback census or prove the producer is effect-free.
+fn callback_result_has_primitive_completion(
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+    result: &crate::ContractCallbackResult,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use crate::contract_semantics::InvokeProtocol;
+    use solid_facts::ast::FunctionKind;
+    if argument.spread
+        || !result.parameter_path.is_empty()
+        || !result.uses.is_closed()
+        || result.uses.items().is_empty()
+        || !result.uses.items().iter().all(|use_| {
+            use_.path.is_empty()
+                && use_.operation.invoke_protocol() == InvokeProtocol::Call
+                && use_.callable_only
+                && use_.operation.cardinality.min == Some(0)
+        })
+    {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(argument.span);
+    let Some(function) = file.ast.functions.iter().find(|function| {
+        function.span == span
+            && function.kind == FunctionKind::Arrow
+            && !function.r#async
+            && !function.generator
+    }) else {
+        return false;
+    };
+    let returns = function
+        .expression_return
+        .iter()
+        .chain(file.ast.returns.iter().filter(|returned| {
+            crate::owners::containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|owner| owner.span == function.span)
+        }))
+        .collect::<Vec<_>>();
+    let [returned] = returns.as_slice() else {
+        return false;
+    };
+    let Some(value) = returned
+        .argument
+        .map(|span| file.ast.peel_ts_sugar_span(span))
+    else {
+        return false;
+    };
+    let path = std::path::Path::new(file.path.as_str());
+    if !function.expression_body
+        && solid_facts::ast::completion_return_cover(path, &file.source, function.body, &[value])
+            != Some(true)
+    {
+        return false;
+    }
+    solid_facts::ast::primitive_completion_by_syntax(path, &file.source, value)
+        || file
+            .ast
+            .call_at(value)
+            .is_some_and(|call| lookup.scalar_builtin_call_result(file, call))
 }
 
 /// A negative is a syntax proof about fresh values, never an inference from
