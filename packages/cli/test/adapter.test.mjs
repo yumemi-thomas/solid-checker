@@ -25,7 +25,7 @@ function sourceCode(text) {
   };
 }
 
-function run(snapshot, filename, text) {
+function run(snapshot, filename, text, rule = "certification") {
   const reports = [];
   const context = {
     settings: { solidChecker: { snapshot } },
@@ -37,7 +37,9 @@ function run(snapshot, filename, text) {
       reports.push(descriptor);
     }
   };
-  plugin.rules.certification.create(context).Program({ type: "Program" });
+  const created = plugin.rules[rule].create(context);
+  created.Program({ type: "Program" });
+  created["Program:exit"]?.();
   return reports;
 }
 
@@ -260,13 +262,16 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
     assert.ok(!entry.name.includes("/"), `v2 stays unprefixed: ${entry.name}`);
   }
   assert.equal(v2.namespace, "");
-  // The dialect config enables exactly its default-enabled catalog, plus the
-  // certification switch-off that keeps it composable with `recommended` and
-  // the note rule every shipped config carries.
+  // The dialect config enables exactly its default-enabled catalog, less the
+  // opt-in contract-gap rule (ADR 0248), plus the certification switch-off
+  // that keeps it composable with `recommended` and the note rule every
+  // shipped config carries.
   assert.equal(
     Object.keys(plugin.configs.v2.rules).length,
-    v2.rules.filter(entry => entry.defaultEnabled).length + 2
+    v2.rules.filter(entry => entry.defaultEnabled && entry.name !== "package-contract-incomplete")
+      .length + 2
   );
+  assert.equal(plugin.configs.v2.rules["solid-checker/package-contract-incomplete"], undefined);
   assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
   assert.equal(plugin.configs.v2.rules["solid-checker/contract-note"], "warn");
 });
@@ -290,7 +295,7 @@ test("preference configs and recommendation metadata follow generated catalogs",
       );
       assert.equal(
         `solid-checker/${entry.name}` in plugin.configs[catalog.config].rules,
-        entry.defaultEnabled
+        entry.defaultEnabled && entry.name !== "package-contract-incomplete"
       );
     }
   }
@@ -607,23 +612,28 @@ test("a finding collapsed over a package export is reported in every file holdin
   };
   const snapshot = { status: "uncertifiable", findings: [collapsed] };
   const text = "0123456789ab";
+  const rule = "package-contract-incomplete";
 
-  const primary = run(snapshot, "/tmp/app/App.ts", text);
+  // ADR 0248: the catch-all rule leaves contract gaps out; the opt-in
+  // per-rule rule reports them.
+  assert.equal(run(snapshot, "/tmp/app/App.ts", text).length, 0);
+
+  const primary = run(snapshot, "/tmp/app/App.ts", text, rule);
   assert.equal(primary.length, 1);
   assert.deepEqual(primary[0].loc.start, { line: 1, column: 2 });
 
-  const other = run(snapshot, "/tmp/app/Other.ts", text);
+  const other = run(snapshot, "/tmp/app/Other.ts", text, rule);
   assert.equal(other.length, 1, "one report per file, not one per site");
   assert.deepEqual(other[0].loc.start, { line: 1, column: 4 }, "at the file's first site");
   assert.equal(other[0].data.message, primary[0].data.message);
 
-  assert.equal(run(snapshot, "/tmp/app/Unrelated.ts", text).length, 0);
+  assert.equal(run(snapshot, "/tmp/app/Unrelated.ts", text, rule).length, 0);
 
   // The same shape without a site subject keeps ordinary per-file matching:
   // a strict read's related location is its declaration, not a second read.
   const context = { ...collapsed, subjectKind: "" };
   assert.equal(
-    run({ status: "uncertifiable", findings: [context] }, "/tmp/app/Other.ts", text).length,
+    run({ status: "uncertifiable", findings: [context] }, "/tmp/app/Other.ts", text, rule).length,
     0
   );
 });

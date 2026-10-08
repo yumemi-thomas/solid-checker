@@ -64,6 +64,9 @@ function noticeMessage(notice) {
  */
 const ownedRules = new Map();
 
+/** The rule whose uncertifiable findings are contract gaps (ADR 0248). */
+const CONTRACT_GAP_RULE = "package-contract-incomplete";
+
 function registerOwnedRule(filename, ruleName) {
   let owned = ownedRules.get(filename);
   if (!owned) {
@@ -467,8 +470,15 @@ const certification = {
         // that rule reports them at its own severity, so certification
         // reporting them again would duplicate every one of its findings.
         const owned = ownedRules.get(contextFilename(context));
+        // ADR 0248: an import without a complete contract is a gap in what
+        // the analysis can see, not a finding about the user's code (ADR
+        // 0202). Editors showed one warning per such import, so the
+        // catch-all rule leaves them out; enabling
+        // `solid-checker/package-contract-incomplete` reports them again.
         const findings = (snapshot.findings ?? []).filter(
-          finding => !owned?.has(finding.rule)
+          finding =>
+            !owned?.has(finding.rule) &&
+            !(finding.rule === CONTRACT_GAP_RULE && finding.kind === "uncertifiable")
         );
         projectFindings(context, program, findings);
       }
@@ -671,8 +681,12 @@ for (const catalog of Object.values(manifests)) {
       // Every shipped config enables the note rule at `warn`, so no listing
       // order can make a note fail a lint.
       "solid-checker/contract-note": "warn",
+      // ADR 0248: contract gaps are opt-in. They are not findings about the
+      // user's code, so no shipped config enables them.
       ...Object.fromEntries(
-        catalog.rules.filter(entry => entry.defaultEnabled).map(entry => [
+        catalog.rules
+          .filter(entry => entry.defaultEnabled && entry.name !== CONTRACT_GAP_RULE)
+          .map(entry => [
           `solid-checker/${entry.name}`,
           entry.severity === "error" ? "error" : "warn"
         ])

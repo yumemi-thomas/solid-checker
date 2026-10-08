@@ -280,6 +280,15 @@ config resolves each rule from the later entry), certification skips every
 finding an enabled per-rule rule owns for the linted file and reports only
 the rest.
 
+Contract gaps are opt-in. An import of a package without a complete
+reactivity contract raises `SC9005` (`package-contract-incomplete`,
+uncertifiable). That is a gap in what the analysis can see, not a finding
+about your code, so `certification` does not report it and no shipped config
+enables its rule. To see them in the editor, enable
+`solid-checker/package-contract-incomplete` (at `warn`, or `error` to fail on
+them). The CLI's default output summarizes them under "Analysis coverage",
+and `--format json` and `--format full` list every one.
+
 The adapter discovers shipped dialect catalogs by enumerating
 `lib/rules-solid-vN.json`. Each generated catalog carries its stable `dialect`
 id, compatibility `config` key, and optional rule `namespace`; adding a catalog
