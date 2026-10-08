@@ -76,6 +76,14 @@ const option = name => { const index = rest.indexOf(name); return index >= 0 ? r
 /** The claim domains a call may list operations in (schema `$defs/call`). */
 const CLAIM_DOMAINS = ["callbacks", "reads", "writes", "creates", "invalidates", "throws", "returns", "cleanups", "disposals", "computations"];
 
+/** Whether a returned tuple or object has a `callable` or `unknown` member. */
+function opaqueMember(output) {
+  if (!output || typeof output !== "object" || !["tuple", "object"].includes(output.kind)) return false;
+  const members = output.kind === "tuple" ? output.items ?? [] : Object.values(output.properties ?? {});
+  const opaque = member => member === "unknown" || ["callable", "unknown"].includes(member?.kind) || opaqueMember(member);
+  return members.some(opaque);
+}
+
 function validateClosures(where, claim) {
   const closed = claim.call?.closed ?? [];
   const closures = claim.closures ?? {};
@@ -86,6 +94,14 @@ function validateClosures(where, claim) {
   }
   for (const domain of Object.keys(closures))
     assert(closed.includes(domain), `${where}: closures cites ${domain}, which the call does not close`);
+  // A closed `returns` over a tuple or object with an opaque `callable` or
+  // `unknown` member would certify every call of that member clean: the
+  // consumer keeps no obligation for invoking one (createRAF's `start` reads
+  // `running` untracked, and Chrome warns). Refuse it until it does.
+  if (closed.includes("returns"))
+    for (const operation of claim.call?.operations ?? [])
+      if (operation.kind === "return" && opaqueMember(operation.output))
+        assert.fail(`${where}: returns closes over an opaque member of ${operation.id}; leave returns open`);
   // The decoder refuses an empty list for a domain left open
   // (contract_document.rs), and one undecodable authored document fails
   // every project. Refuse it here, before it ships.

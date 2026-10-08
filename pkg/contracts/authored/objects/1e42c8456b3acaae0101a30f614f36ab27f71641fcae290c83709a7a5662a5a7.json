@@ -188,7 +188,6 @@
           "create-running"
         ],
         "closed": [
-          "returns",
           "reads",
           "creates",
           "callbacks"
@@ -343,7 +342,6 @@
           "create-running"
         ],
         "closed": [
-          "returns",
           "reads",
           "creates",
           "callbacks"

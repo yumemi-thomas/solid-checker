@@ -353,6 +353,23 @@
       "correct": "import { createRoot } from \"solid-js\";\nimport { createMs } from \"@solid-primitives/raf\";\n\ncreateRoot(dispose => {\n  createMs(60);\n  return dispose;\n});\n"
     },
     {
+      "id": "raf-createRAF-start-top-level",
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createRAF",
+      "class": "returnedAccessor",
+      "rule": "strict-read-untracked",
+      "hosts": [
+        "none",
+        "browser",
+        "node"
+      ],
+      "why": "createRAF's returned `start` reads the `running` signal before deciding to start. Called in the component body, that read is untracked, and Chrome on rc.13 raises STRICT_READ_UNTRACKED. Calling `start` from an event handler is the supported form.",
+      "misuse": "import { createRAF } from \"@solid-primitives/raf\";\n\nexport default function App() {\n  const [running, start, stop] = createRAF(() => {});\n  start();\n  return <p>{String(running())}<button onClick={stop}>stop</button></p>;\n}\n",
+      "correct": "import { createRAF } from \"@solid-primitives/raf\";\n\nexport default function App() {\n  const [running, start, stop] = createRAF(() => {});\n  return <p>{String(running())}<button onClick={start}>start</button><button onClick={stop}>stop</button></p>;\n}\n"
+    },
+    {
       "id": "scheduled-createScheduled-top-level-read",
       "package": "@solid-primitives/scheduled",
       "version": "2.0.0-next.2",
@@ -587,9 +604,9 @@
         "browser",
         "node"
       ],
-      "why": "toEffect registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "toEffect registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed. The correct twin creates the wrapper under a root and emits from a microtask: emitting inside the root body writes toEffect's stack signal in an owned scope, which Chrome on rc.13 rejects (REACTIVE_WRITE_IN_OWNED_SCOPE).",
       "misuse": "import { createEventBus, toEffect } from \"@solid-primitives/event-bus\";\n\ntoEffect(createEventBus<string>().emit)(\"hello\");\n",
-      "correct": "import { createRoot } from \"solid-js\";\nimport { createEventBus, toEffect } from \"@solid-primitives/event-bus\";\n\ncreateRoot(dispose => {\n  toEffect(createEventBus<string>().emit)(\"hello\");\n  return dispose;\n});\n"
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createEventBus, toEffect } from \"@solid-primitives/event-bus\";\n\ncreateRoot(dispose => {\n  const emit = toEffect(createEventBus<string>().emit);\n  queueMicrotask(() => emit(\"hello\"));\n  return dispose;\n});\n"
     },
     {
       "id": "set-ReactiveSet-leaf-owner",

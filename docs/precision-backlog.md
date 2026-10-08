@@ -1,5 +1,21 @@
 # Precision backlog
 
+## A closed return may not hide an opaque member (2026-10-08)
+
+ADR 0233: closing `returns` over a tuple or object with an opaque `callable`
+member certified every call of that member clean. `createRAF`'s `start` reads
+`running` untracked (Chrome: STRICT_READ_UNTRACKED) and was silent since ADR
+0227. Its `returns` is reopened, the tool refuses the shape, and the ledger
+gains `raf-createRAF-start-top-level`.
+
+- **Lost:** browser ledger 18 -> 16 reported correctly (the two createRAF
+  top-level reads keep proving the misuse; their correct twins are no longer
+  clean). This was a false negative, not a gain.
+- **Ledger fix:** `toEffect`'s correct twin emitted inside `createRoot`, which
+  Chrome rejects; it now emits from a microtask.
+- **Open:** a per-member invocation obligation in the consumer, the
+  prerequisite for the returned-member format extension (E1).
+
 ## Closing the open domains the primitives ledger needs (2026-10-08)
 
 ADR 0232: an absent argument no longer yields a parameter-member dispatch
