@@ -347,7 +347,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 190 adds package-returned-callable-consumer's hand-stated document,
       // ADR 0249's pin of a returned whole function.
-      stableMainDocuments: 190,
+      //
+      // 191 adds package-owner-guards-consumer's hand-stated document,
+      // ADR 0252's pin of guards instantiated from exact argument facts.
+      stableMainDocuments: 191,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

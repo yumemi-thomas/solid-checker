@@ -18,7 +18,7 @@
       "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
     }
   ],
-  "pairs": "../_pairs/@solid-primitives+event-listener",
+  "pairs": ".",
   "identity": "identity.json",
   "hostFreeIdentity": "identity.host-free.json",
   "exports": {
@@ -585,6 +585,244 @@
         "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventSignal-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-32; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88-93; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventSignal-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1723-1758,2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventSignal-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 \u2014 Only length-zero callable target/type are invoked, under the listener compute. The listener handler is the internally created signal setter. Options are P2 listener data.",
         "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventSignal-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-32; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88-93; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventSignal-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1723-1758,2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventSignal-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 \u2014 Every normal browser completion returns the lastEvent accessor at eventListener.js:31. Server constant function differs, so no host-free claim."
       }
+    },
+    "createEventListenerMap": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 Exact callable resize guard; optional other handlers remain. callbacks stays open: arbitrary map keys need B-dictionary, and a resize row alone cannot close that domain.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "resize-listener-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "property": "resize",
+                  "callable": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "other-listener-effects",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "targets-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "resize-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "property": "resize",
+                  "callable": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "targets-compute"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": [
+                "resize"
+              ]
+            },
+            "operation": "resize-handler"
+          }
+        ],
+        "computations": [
+          "resize-listener-effect",
+          "other-listener-effects"
+        ],
+        "resources": [
+          {
+            "id": "listener-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 Every completion is undefined; the map export returns no source or control.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 A callable own enumerable resize entry delegates to one owner-requiring listener effect. Remaining enumerable handlers may create more effects (min:0). No private source is created. The lower bound is conditional, never asserted for an empty map.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 P1/P2: map traversal and host fields are data/host reads. A callable target is computed tracked under the listener effect. There is no package-owned reactive source read."
+      },
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:7; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:11 \u2014 Server returns before map traversal and every delegated listener effect. Browser-positive guarded row must be weakened as well.",
+        "minZero": [
+          "resize-listener-effect"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads"
+        ],
+        "closures": {
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9 \u2014 Server early return before any callback, owner or source; output remains undefined. Domain returns adds no behavior.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9 \u2014 Server early return before any callback, owner or source; output remains undefined. Domain creates adds no behavior.",
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9 \u2014 Server early return before any callback, owner or source; output remains undefined. Domain reads adds no behavior."
+        }
+      },
+      "probes": [
+        {
+          "label": "guard-leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListenerMap.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-listener-createEventListenerMap-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 \u2014 resize handler creates a child computation in an onSettled leaf; ordinary component construction accepts it."
+        }
+      ]
     }
   }
 }

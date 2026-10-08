@@ -14,6 +14,8 @@ pub mod proof;
 pub mod solid2_rc3;
 mod validate;
 
+pub(crate) use consumer::owner_guard_at_call;
+
 pub use consumer::{
     AcceptedContractIndex, AcceptedContractInput, AcceptedContractUse, AcceptedImportIdentity,
     AcceptedSemanticIdentity, CallSiteFacts, FiniteFact, InstantiatedClaim, InstantiatedExport,

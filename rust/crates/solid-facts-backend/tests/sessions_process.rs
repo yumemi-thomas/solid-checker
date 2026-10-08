@@ -1108,13 +1108,16 @@ fn incremental_reactive_ir_reuses_semantic_indexes_for_same_shape_body_edit() {
         .build(&first, dialect::default_dialect().vocabulary)
         .unwrap();
 
-    let original = fs::read_to_string(&paths[1]).unwrap();
-    let changed = original.replacen("createSignal(0)", "createSignal(1)", 1);
+    // A same-length JSX text edit keeps every fact's shape. A call argument's
+    // literal is not such an edit (ADR 0252): owner guards read it, so a
+    // change there must recompute the owner fixed point.
+    let original = fs::read_to_string(&paths[0]).unwrap();
+    let changed = original.replacen(">Read</button>", ">Load</button>", 1);
     assert_ne!(changed, original);
     let edited = session
         .edit(
             vec![SourceChange {
-                path: paths[1].to_string_lossy().into_owned(),
+                path: paths[0].to_string_lossy().into_owned(),
                 version: 1,
                 source: Some(changed),
                 compiler_options: CompilerOptions::default(),

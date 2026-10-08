@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 51;
+pub const AST_FACTS_SCHEMA: u32 = 52;
 
 mod binding_references;
 mod class_obligation;
@@ -478,6 +478,36 @@ pub struct ArgumentFact {
     /// ways-to-improve § 3.3) to the value it invokes, and by nothing else.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub literal_members: Vec<ArgumentMemberFact>,
+    /// Exact runtime literals written at this argument, underneath transparent
+    /// TypeScript wrappers. Identifiers, getters, spreads and computed keys
+    /// yield unknown facts, never a type-based claim about runtime values.
+    #[serde(default)]
+    pub literal_value: ArgumentLiteralFact,
+}
+
+/// A normalized literal value; no parser node crosses the fact boundary.
+/// Objects contain only their final own data properties. Arrays state length
+/// only without spreads (holes still contribute to length). Nested literals
+/// stop at depth 32; an unknown child does not erase known sibling facts.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "kebab-case")]
+pub enum ArgumentLiteralFact {
+    #[default]
+    Unknown,
+    Null,
+    Boolean(bool),
+    Integer(u32),
+    String(CompactString),
+    Function,
+    Object(Vec<ArgumentLiteralPropertyFact>),
+    ArrayLength(u32),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArgumentLiteralPropertyFact {
+    pub name: CompactString,
+    pub value: ArgumentLiteralFact,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -2330,6 +2360,9 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         ArgumentFact {
             span: span(argument.span()),
             literal_members,
+            literal_value: expression.map_or(ArgumentLiteralFact::Unknown, |expression| {
+                argument_literal_fact(expression, 0)
+            }),
             binding_declaration,
             spread: argument.is_spread(),
             value,
@@ -4044,6 +4077,72 @@ fn canonical_index_key(value: f64) -> Option<CompactString> {
     })
 }
 
+/// Record literal facts from the exact argument expression, without following
+/// bindings or inferring properties from their declared types.
+fn argument_literal_fact(expression: &Expression<'_>, depth: u8) -> ArgumentLiteralFact {
+    if depth >= 32 {
+        return ArgumentLiteralFact::Unknown;
+    }
+    match peel_ts_sugar(expression) {
+        Expression::NullLiteral(_) => ArgumentLiteralFact::Null,
+        Expression::BooleanLiteral(value) => ArgumentLiteralFact::Boolean(value.value),
+        Expression::NumericLiteral(value) => canonical_index_key(value.value)
+            .and_then(|key| key.parse().ok())
+            .map_or(ArgumentLiteralFact::Unknown, ArgumentLiteralFact::Integer),
+        Expression::StringLiteral(value) if !value.lone_surrogates => {
+            ArgumentLiteralFact::String(value.value.as_str().into())
+        }
+        Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
+            ArgumentLiteralFact::Function
+        }
+        Expression::ArrayExpression(array)
+            if !array
+                .elements
+                .iter()
+                .any(|element| matches!(element, ArrayExpressionElement::SpreadElement(_))) =>
+        {
+            u32::try_from(array.elements.len()).map_or(
+                ArgumentLiteralFact::Unknown,
+                ArgumentLiteralFact::ArrayLength,
+            )
+        }
+        Expression::ObjectExpression(object) => {
+            let mut properties = Vec::<ArgumentLiteralPropertyFact>::new();
+            for property in &object.properties {
+                let ObjectPropertyKind::ObjectProperty(property) = property else {
+                    return ArgumentLiteralFact::Unknown;
+                };
+                if property.kind != PropertyKind::Init || property.computed {
+                    return ArgumentLiteralFact::Unknown;
+                }
+                let name: CompactString = match &property.key {
+                    PropertyKey::StaticIdentifier(key) => key.name.as_str().into(),
+                    PropertyKey::StringLiteral(key) if !key.lone_surrogates => {
+                        key.value.as_str().into()
+                    }
+                    PropertyKey::NumericLiteral(key) => {
+                        let Some(key) = canonical_index_key(key.value) else {
+                            return ArgumentLiteralFact::Unknown;
+                        };
+                        key
+                    }
+                    _ => return ArgumentLiteralFact::Unknown,
+                };
+                if name == "__proto__" {
+                    return ArgumentLiteralFact::Unknown;
+                }
+                properties.retain(|property| property.name != name);
+                properties.push(ArgumentLiteralPropertyFact {
+                    name,
+                    value: argument_literal_fact(&property.value, depth + 1),
+                });
+            }
+            ArgumentLiteralFact::Object(properties)
+        }
+        _ => ArgumentLiteralFact::Unknown,
+    }
+}
+
 /// The statically exact members of an array or object literal: see
 /// [`ArgumentFact::literal_members`].
 fn literal_members_of(expression: &Expression<'_>) -> Vec<ArgumentMemberFact> {
@@ -4788,6 +4887,36 @@ const mixed = () => {
             [(Some("sync"), true), (Some("ownedWrite"), false),]
         );
         assert_eq!(facts.calls[1].arguments[0].value, ArgumentValueKind::Null);
+    }
+
+    #[test]
+    fn argument_literals_keep_exact_values_and_refuse_dynamic_structure() {
+        let facts = extract(
+            "arguments.ts",
+            r#"use(true as const); use(["Control", "K"]); use([, ,]);
+use([...keys]); use({ resize() {}, resize: undefined });
+use({ resize: () => {}, ...other }); use({ get resize() { return fn; } });
+use({ [key]: () => {} }); use({ nested: { enabled: false } });"#,
+        )
+        .unwrap();
+        let values = facts
+            .calls
+            .iter()
+            .map(|call| &call.arguments[0].literal_value)
+            .collect::<Vec<_>>();
+        assert_eq!(values[0], &ArgumentLiteralFact::Boolean(true));
+        assert_eq!(values[1], &ArgumentLiteralFact::ArrayLength(2));
+        assert_eq!(values[2], &ArgumentLiteralFact::ArrayLength(2));
+        for index in [3, 5, 6, 7] {
+            assert_eq!(values[index], &ArgumentLiteralFact::Unknown);
+        }
+        let ArgumentLiteralFact::Object(properties) = values[4] else {
+            panic!("expected final own properties");
+        };
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].name, "resize");
+        assert_eq!(properties[0].value, ArgumentLiteralFact::Unknown);
+        assert!(matches!(values[8], ArgumentLiteralFact::Object(_)));
     }
 
     #[test]

@@ -1843,9 +1843,9 @@ pub struct ContractOwnerRequirement {
     /// owner is then a proof obligation, never a proven violation.
     pub guaranteed: bool,
     /// The accepted operation's guard, when only some calls register: an
-    /// argument-kind guard is evaluated at each call
-    /// (`owners::owner_requirement_at_call`, ADR 0223), and any other guard
-    /// leaves the registration possible, never guaranteed.
+    /// exact argument literal, property or value-kind guard is evaluated at
+    /// each call (`owners::owner_requirement_at_call`, ADR 0223). Missing
+    /// argument facts and unsupported guard axes retain a possible requirement.
     pub guard: Option<crate::contract_semantics::Guard>,
 }
 

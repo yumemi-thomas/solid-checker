@@ -1953,12 +1953,29 @@ pub(crate) fn push_owner_requirement(
         return;
     }
     let location = location(file.path.as_str(), span);
-    if seen.insert((
+    if !seen.insert((
         location.path.to_string(),
         location.start_byte,
         location.end_byte,
         operation.into(),
     )) {
+        // ADR 0252: a second requirement of the same operation at the same
+        // call (a guarded registration beside an unguarded optional one, say)
+        // merges into the first. One certain registration proves the call
+        // registers; the context is the call's either way, so only the
+        // registration's own certainty folds.
+        let operation = crate::OwnerRequirementOperation::from_internal(operation);
+        let certain = !status.uncertain;
+        if certain
+            && let Some(existing) = requirements
+                .iter_mut()
+                .find(|existing| existing.location == location && existing.operation == operation)
+        {
+            existing.uncertain = existing.missing_jsx_census;
+        }
+        return;
+    }
+    {
         let missing_jsx_census = crate::execution_role::missing_jsx_census_region(file, span);
         requirements.push(OwnerRequirement {
             operation: crate::OwnerRequirementOperation::from_internal(operation),
@@ -3457,66 +3474,22 @@ pub(crate) fn analysis_context(
     enclosing
 }
 
-/// ADR 0223: whether an accepted owner requirement applies to `call`, and if
-/// so whether this call is guaranteed to register. `None` when the
-/// requirement's guard is false here: an argument the guard says is callable
-/// is a literal value, or the reverse. An argument-kind atom whose kind the
-/// syntax does not settle, and any other guard atom, leave the registration
-/// possible, never guaranteed.
+/// Whether an accepted registration is required at this exact call. False
+/// guards remove the branch; unknown guards retain a possible requirement
+/// (ADR 0231). Only a true guard preserves an operation's certified min >= 1.
 pub(crate) fn owner_requirement_at_call(
     requirement: &crate::ContractOwnerRequirement,
     call: &solid_facts::ast::CallFact,
 ) -> Option<bool> {
-    use crate::contract_semantics::{GuardAtom, ValueKind};
-    use solid_facts::ast::RuntimeValueKind;
+    use crate::contract_semantics::{GuardTruth, owner_guard_at_call};
     let Some(guard) = &requirement.guard else {
         return Some(requirement.guaranteed);
     };
-    let mut settled = true;
-    for atom in &guard.0 {
-        let GuardAtom::ValueKind {
-            argument,
-            path,
-            kind,
-        } = atom
-        else {
-            settled = false;
-            continue;
-        };
-        let index = usize::from(*argument);
-        let Some(value) = call
-            .arguments
-            .get(index)
-            .filter(|_| path.is_empty())
-            .filter(|_| {
-                !call.arguments[..=index]
-                    .iter()
-                    .any(|argument| argument.spread)
-            })
-        else {
-            settled = false;
-            continue;
-        };
-        let holds = match (kind, value.runtime_value_kind) {
-            (ValueKind::Plain, RuntimeValueKind::Primitive | RuntimeValueKind::Nullish)
-            | (ValueKind::Callable, RuntimeValueKind::Function) => Some(true),
-            (ValueKind::Plain, RuntimeValueKind::Function)
-            | (
-                ValueKind::Callable,
-                RuntimeValueKind::Primitive
-                | RuntimeValueKind::Nullish
-                | RuntimeValueKind::Object
-                | RuntimeValueKind::Array,
-            ) => Some(false),
-            _ => None,
-        };
-        match holds {
-            Some(true) => {}
-            Some(false) => return None,
-            None => settled = false,
-        }
+    match owner_guard_at_call(guard, call) {
+        GuardTruth::True => Some(requirement.guaranteed),
+        GuardTruth::False => None,
+        GuardTruth::Unknown => Some(false),
     }
-    Some(settled && requirement.guaranteed)
 }
 
 #[cfg(test)]
@@ -3534,6 +3507,235 @@ mod tests {
     };
     use solid_facts::core::SourceHash;
     use solid_facts::core::Span;
+
+    fn guarded_registration(
+        source: &str,
+        atoms: Vec<crate::contract_semantics::GuardAtom>,
+        guaranteed: bool,
+    ) -> Option<bool> {
+        let facts = ast::extract("guards.ts", source).unwrap();
+        let requirement = crate::ContractOwnerRequirement {
+            operation: crate::OwnerRequirementOperation::Cleanup,
+            guaranteed,
+            guard: Some(crate::contract_semantics::Guard(atoms)),
+        };
+        super::owner_requirement_at_call(&requirement, &facts.calls[0])
+    }
+
+    #[test]
+    fn owner_literal_guards_require_exact_runtime_arguments() {
+        use crate::contract_semantics::{GuardAtom, Literal};
+        let atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec![],
+            value: Literal::Bool(true),
+        };
+        for source in [
+            "register(true);",
+            "register((true as boolean) satisfies boolean);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(true)
+            );
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], false),
+                Some(false)
+            );
+        }
+        assert_eq!(
+            guarded_registration("register(false);", vec![atom.clone()], true),
+            None
+        );
+        for source in [
+            "register(enabled);",
+            "register(...args);",
+            "register(...[], true);",
+            "register();",
+            "const enabled = true; register(enabled);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(false)
+            );
+        }
+    }
+
+    #[test]
+    fn owner_literal_guards_compare_values_instead_of_source_spelling() {
+        use crate::contract_semantics::{GuardAtom, Literal};
+        for number in ["2", "2.0", "2e0"] {
+            let atom = GuardAtom::Literal {
+                argument: 0,
+                path: vec!["length".into()],
+                value: Literal::Number(number.into()),
+            };
+            assert_eq!(
+                guarded_registration("register(['A', 'B']);", vec![atom.clone()], true),
+                Some(true)
+            );
+            assert_eq!(
+                guarded_registration("register([]);", vec![atom], true),
+                None
+            );
+        }
+        let atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec![],
+            value: Literal::String("resize".into()),
+        };
+        assert_eq!(
+            guarded_registration(r#"register('re\u0073ize');"#, vec![atom], true),
+            Some(true)
+        );
+        let atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec![],
+            value: Literal::Null,
+        };
+        assert_eq!(
+            guarded_registration("register(null);", vec![atom.clone()], true),
+            Some(true)
+        );
+        assert_eq!(
+            guarded_registration("register(undefined);", vec![atom], true),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn owner_property_guards_use_final_exact_data_properties() {
+        use crate::contract_semantics::GuardAtom;
+        let atom = GuardAtom::Property {
+            argument: 1,
+            path: vec![],
+            name: "resize".into(),
+            callable: Some(true),
+        };
+        for source in [
+            "register(window, { resize: () => {} });",
+            "register(window, ({ 'resize'() {} }) satisfies Map);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(true)
+            );
+        }
+        for source in [
+            "register(window, {});",
+            "register(window, { resize: false });",
+            "register(window, { resize: () => {}, resize: null });",
+        ] {
+            assert_eq!(guarded_registration(source, vec![atom.clone()], true), None);
+        }
+        for source in [
+            "register(window, handlers);",
+            "register(window, { resize: handler });",
+            "register(window, { resize: () => {}, ...other });",
+            "register(window, { get resize() { return handler; } });",
+            "register(window, { [key]: () => {} });",
+            "register(...targets, { resize: () => {} });",
+            "register(window, { __proto__: proto, resize: () => {} });",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(false)
+            );
+        }
+    }
+
+    #[test]
+    fn owner_length_guards_use_exact_array_lengths_and_nested_paths() {
+        use crate::contract_semantics::{GuardAtom, Literal};
+        let atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec!["length".into()],
+            value: Literal::Number("2".into()),
+        };
+        for source in [
+            "register(['Control', 'K']);",
+            "register([, ,]);",
+            "register((['Control', 'K'] as const));",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(true)
+            );
+        }
+        for source in [
+            "register([]);",
+            "register(['K']);",
+            "register(['A', 'B', 'C']);",
+        ] {
+            assert_eq!(guarded_registration(source, vec![atom.clone()], true), None);
+        }
+        for source in [
+            "register(keys);",
+            "register(['A', ...keys]);",
+            "register(...args);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(false)
+            );
+        }
+        let nested = GuardAtom::Literal {
+            argument: 0,
+            path: vec!["keys".into(), "length".into()],
+            value: Literal::Number("2".into()),
+        };
+        assert_eq!(
+            guarded_registration("register({ keys: ['A', 'B'] });", vec![nested], true),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn owner_guards_do_not_guess_unavailable_axes_or_strengthen_zero_minimums() {
+        use crate::contract_semantics::{GuardAtom, Literal, ValueKind};
+        let unknown = GuardAtom::Signature("selected".into());
+        let false_atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec![],
+            value: Literal::Bool(true),
+        };
+        assert_eq!(
+            guarded_registration("register(false);", vec![unknown.clone(), false_atom], true),
+            None
+        );
+        for atom in [
+            unknown,
+            GuardAtom::ArtifactCase("".into()),
+            GuardAtom::ArgumentCount { min: 1, max: None },
+            GuardAtom::TupleAlternative {
+                argument: 0,
+                alternative: 0,
+            },
+            GuardAtom::ResultProtocol(ValueKind::Plain),
+        ] {
+            assert_eq!(
+                guarded_registration("register(true);", vec![atom], true),
+                Some(false)
+            );
+        }
+        let callable = GuardAtom::ValueKind {
+            argument: 0,
+            path: vec![],
+            kind: ValueKind::Callable,
+        };
+        assert_eq!(
+            guarded_registration("register(() => {});", vec![callable.clone()], true),
+            Some(true)
+        );
+        assert_eq!(
+            guarded_registration("register({});", vec![callable], true),
+            None
+        );
+        assert_eq!(
+            guarded_registration("register();", vec![], false),
+            Some(false)
+        );
+    }
 
     fn returned_arrow(source: &str) -> bool {
         let source = format!("function outer() {{ return {source}; }}");

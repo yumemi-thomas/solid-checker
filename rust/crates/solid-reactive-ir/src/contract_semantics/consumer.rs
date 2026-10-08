@@ -1499,10 +1499,190 @@ fn selected_operations(
     }
 }
 
+/// Owner projection has no selected signature or authenticated artifact-case
+/// key. Only exact argument facts may settle its guards; unsupported axes stay
+/// unknown, even if an artifact-case name happens to be the empty string.
+pub(crate) fn owner_guard_at_call(guard: &Guard, call: &solid_facts::ast::CallFact) -> GuardTruth {
+    use solid_facts::ast::ArgumentLiteralFact;
+
+    let mut facts = CallSiteFacts::default();
+    for atom in &guard.0 {
+        let (argument, path) = match atom {
+            GuardAtom::Literal { argument, path, .. }
+            | GuardAtom::ValueKind { argument, path, .. }
+            | GuardAtom::Property { argument, path, .. } => (*argument, path),
+            GuardAtom::Signature(_)
+            | GuardAtom::ArgumentCount { .. }
+            | GuardAtom::TupleAlternative { .. }
+            | GuardAtom::ResultProtocol(_)
+            | GuardAtom::ArtifactCase(_) => continue,
+        };
+        let index = usize::from(argument);
+        let Some(value) = call.arguments.get(index).filter(|_| {
+            !call.arguments[..=index]
+                .iter()
+                .any(|argument| argument.spread)
+        }) else {
+            continue;
+        };
+        if path.is_empty() {
+            facts.set_value_kind(
+                argument,
+                path.clone(),
+                syntax_value_kinds(value.runtime_value_kind),
+            );
+        }
+        let Some(literal) = literal_at_path(&value.literal_value, path) else {
+            continue;
+        };
+        match atom {
+            GuardAtom::Literal {
+                value: expected, ..
+            } => {
+                let value = match literal {
+                    ArgumentLiteralFact::Null => Some(Literal::Null),
+                    ArgumentLiteralFact::Boolean(value) => Some(Literal::Bool(value)),
+                    ArgumentLiteralFact::Integer(value) => match expected {
+                        Literal::Number(number) => number
+                            .parse::<f64>()
+                            .ok()
+                            .filter(|number| number.is_finite())
+                            .map(|number_value| {
+                                Literal::Number(if number_value == f64::from(value) {
+                                    number.clone()
+                                } else {
+                                    value.to_string()
+                                })
+                            }),
+                        _ => Some(Literal::Number(value.to_string())),
+                    },
+                    ArgumentLiteralFact::String(value) => Some(Literal::String(value.to_string())),
+                    ArgumentLiteralFact::Unknown
+                    | ArgumentLiteralFact::Function
+                    | ArgumentLiteralFact::Object(_)
+                    | ArgumentLiteralFact::ArrayLength(_) => None,
+                };
+                if let Some(value) = value {
+                    facts.set_literal(argument, path.clone(), FiniteFact::exact(value));
+                }
+            }
+            GuardAtom::ValueKind { .. } if !path.is_empty() => {
+                facts.set_value_kind(argument, path.clone(), literal_value_kinds(&literal));
+            }
+            GuardAtom::Property { name, .. } => {
+                if let ArgumentLiteralFact::Object(properties) = literal {
+                    let property = properties
+                        .iter()
+                        .find(|property| property.name == name.as_str());
+                    let callable = property.map_or_else(FiniteFact::unknown, |property| {
+                        match property.value {
+                            ArgumentLiteralFact::Function => FiniteFact::exact(true),
+                            ArgumentLiteralFact::Unknown => FiniteFact::unknown(),
+                            ArgumentLiteralFact::Null
+                            | ArgumentLiteralFact::Boolean(_)
+                            | ArgumentLiteralFact::Integer(_)
+                            | ArgumentLiteralFact::String(_)
+                            | ArgumentLiteralFact::Object(_)
+                            | ArgumentLiteralFact::ArrayLength(_) => FiniteFact::exact(false),
+                        }
+                    });
+                    facts.set_property(
+                        argument,
+                        path.clone(),
+                        name.clone(),
+                        PropertyFact {
+                            present: FiniteFact::exact(property.is_some()),
+                            callable,
+                        },
+                    );
+                }
+            }
+            GuardAtom::ValueKind { .. }
+            | GuardAtom::Signature(_)
+            | GuardAtom::ArgumentCount { .. }
+            | GuardAtom::TupleAlternative { .. }
+            | GuardAtom::ResultProtocol(_)
+            | GuardAtom::ArtifactCase(_) => {}
+        }
+    }
+    evaluate_guard_with(guard, |atom| match atom {
+        GuardAtom::Literal { .. } | GuardAtom::ValueKind { .. } | GuardAtom::Property { .. } => {
+            facts.evaluate(atom, "")
+        }
+        GuardAtom::Signature(_)
+        | GuardAtom::ArgumentCount { .. }
+        | GuardAtom::TupleAlternative { .. }
+        | GuardAtom::ResultProtocol(_)
+        | GuardAtom::ArtifactCase(_) => GuardTruth::Unknown,
+    })
+}
+
+fn literal_at_path(
+    root: &solid_facts::ast::ArgumentLiteralFact,
+    path: &[String],
+) -> Option<solid_facts::ast::ArgumentLiteralFact> {
+    use solid_facts::ast::ArgumentLiteralFact;
+    let Some((name, rest)) = path.split_first() else {
+        return Some(root.clone());
+    };
+    match root {
+        ArgumentLiteralFact::Object(properties) => properties
+            .iter()
+            .find(|property| property.name == name.as_str())
+            .and_then(|property| literal_at_path(&property.value, rest)),
+        ArgumentLiteralFact::ArrayLength(length) if name == "length" && rest.is_empty() => {
+            Some(ArgumentLiteralFact::Integer(*length))
+        }
+        _ => None,
+    }
+}
+
+fn literal_value_kinds(value: &solid_facts::ast::ArgumentLiteralFact) -> FiniteFact<ValueKind> {
+    use solid_facts::ast::{ArgumentLiteralFact, RuntimeValueKind};
+    syntax_value_kinds(match value {
+        ArgumentLiteralFact::Unknown => RuntimeValueKind::Unknown,
+        ArgumentLiteralFact::Null => RuntimeValueKind::Nullish,
+        ArgumentLiteralFact::Boolean(_)
+        | ArgumentLiteralFact::Integer(_)
+        | ArgumentLiteralFact::String(_) => RuntimeValueKind::Primitive,
+        ArgumentLiteralFact::Function => RuntimeValueKind::Function,
+        ArgumentLiteralFact::Object(_) => RuntimeValueKind::Object,
+        ArgumentLiteralFact::ArrayLength(_) => RuntimeValueKind::Array,
+    })
+}
+
+fn syntax_value_kinds(kind: solid_facts::ast::RuntimeValueKind) -> FiniteFact<ValueKind> {
+    use solid_facts::ast::RuntimeValueKind;
+    match kind {
+        RuntimeValueKind::Primitive | RuntimeValueKind::Nullish => {
+            FiniteFact::exact(ValueKind::Plain)
+        }
+        RuntimeValueKind::Function => FiniteFact::exact(ValueKind::Callable),
+        // Noncallable does not prove a plain protocol: preserve the previous
+        // owner projection's conservative object/array ValueKind behavior.
+        RuntimeValueKind::Object | RuntimeValueKind::Array => FiniteFact::possibilities(
+            [
+                ValueKind::Plain,
+                ValueKind::Promise,
+                ValueKind::AsyncIterable,
+            ],
+            true,
+        ),
+        RuntimeValueKind::Unknown => FiniteFact::unknown(),
+    }
+}
+
 fn evaluate_guard(guard: &Guard, facts: &CallSiteFacts, selected_case: &str) -> GuardTruth {
+    evaluate_guard_with(guard, |atom| facts.evaluate(atom, selected_case))
+}
+
+fn evaluate_guard_with(
+    guard: &Guard,
+    mut evaluate: impl FnMut(&GuardAtom) -> GuardTruth,
+) -> GuardTruth {
     let mut unknown = false;
     for atom in &guard.0 {
-        match facts.evaluate(atom, selected_case) {
+        match evaluate(atom) {
             GuardTruth::False => return GuardTruth::False,
             GuardTruth::Unknown => unknown = true,
             GuardTruth::True => {}

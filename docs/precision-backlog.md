@@ -28633,3 +28633,22 @@ Still open:
   than a proven read;
 - ADR 0234's opaque-member escape check shared the gap; ADR 0250 fixed it by
   matching references through the binder.
+
+## Exact owner-registration guards (2026-10-08)
+
+Owner and leaf projection share the existing contract guard evaluator for
+direct argument literals, final own data properties and exact array lengths.
+A true guard preserves the certified lower bound, a false guard removes that
+branch, and an unknown guard retains an uncertifiable requirement (ADR 0231).
+No TypeScript type or identifier initializer establishes a runtime guard.
+
+ADR 0252. Regression: `package-owner-guards-consumer`, literal, property,
+length and mixed guarded/optional branches at module scope and in a leaf.
+A guarded mandatory registration beside an optional one at the same call is
+now proven; the first-sorted (optional) one used to win the dedupe.
+Unsupported signature,
+artifact, result and tuple axes, spread arguments, array spreads, getters,
+computed keys, prototype setters and nonliteral values remain fail closed.
+The authored pointer lower bound is blocked by alias overwrites: callable
+`onDown` alone does not prove an effective handler if a later `ondown` is
+undefined. Arbitrary event-map callback keys remain open (B-dictionary).

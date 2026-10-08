@@ -111,6 +111,39 @@
             "owner": {
               "source": "ambient-at-execution"
             }
+          },
+          {
+            "id": "two-key-listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 4,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 2
+                }
+              ]
+            }
           }
         ],
         "callbacks": [
@@ -127,7 +160,8 @@
           "return"
         ],
         "cleanups": [
-          "shortcut-listener-cleanups"
+          "shortcut-listener-cleanups",
+          "two-key-listener-cleanups"
         ],
         "closed": [
           "returns",

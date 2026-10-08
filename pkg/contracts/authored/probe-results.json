@@ -3306,6 +3306,87 @@
       "spec": "@solid-primitives+event-listener@3.0.0-next.5",
       "package": "@solid-primitives/event-listener",
       "version": "3.0.0-next.5",
+      "export": "createEventListenerMap",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_EFFECT",
+          "site": {
+            "file": "case",
+            "line": 2,
+            "column": 1
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+event-listener@3.0.0-next.5",
+      "package": "@solid-primitives/event-listener",
+      "version": "3.0.0-next.5",
+      "export": "createEventListenerMap",
+      "label": "guard-leaf",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 4,
+            "column": 21
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.5_createEventListenerMap_guard-leaf/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+event-listener@3.0.0-next.5",
+      "package": "@solid-primitives/event-listener",
+      "version": "3.0.0-next.5",
       "export": "createEventSignal",
       "solidRuntime": [
         {
