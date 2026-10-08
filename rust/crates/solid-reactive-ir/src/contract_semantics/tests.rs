@@ -3201,3 +3201,190 @@ fn returned_callable_keeps_the_old_digest_and_hashes_its_graph_axes() {
         normalize(queued).semantic_digest()
     );
 }
+
+fn callback_result_graph(protocol: InvokeProtocol, complete: bool) -> CallSemantics {
+    let producer = operation("produce", OperationKind::Invoke);
+    let mut use_ = operation("use-result", OperationKind::Invoke);
+    use_.protocol = (protocol != InvokeProtocol::Call).then_some(protocol);
+    use_.tracking = Tracking::AmbientAtExecution;
+    use_.owner = OwnerRelation {
+        source: OwnerSource::AmbientAtExecution,
+        ..OwnerRelation::default()
+    };
+    use_.cardinality.min = Some(0);
+    let mut claims = closed_claims();
+    claims.callbacks = KnowledgeSet::Complete(vec![
+        CallbackInvocation {
+            from: ValueSource::Parameter {
+                index: 0,
+                path: vec![],
+            },
+            operation: producer.id.clone(),
+        },
+        CallbackInvocation {
+            from: ValueSource::OperationOutput {
+                operation: producer.id.clone(),
+                path: vec![],
+            },
+            operation: use_.id.clone(),
+        },
+    ]);
+    let result = CallbackResult {
+        producer: producer.id.clone(),
+        shape: ValueShape::Unknown,
+        uses: if complete {
+            KnowledgeSet::Complete(vec![use_.id.clone()])
+        } else {
+            KnowledgeSet::Partial(vec![use_.id.clone()])
+        },
+        callable_only: if protocol == InvokeProtocol::Call {
+            BTreeSet::from([use_.id.clone()])
+        } else {
+            BTreeSet::new()
+        },
+    };
+    CallSemantics::new(
+        claims,
+        vec![producer.clone(), use_.clone()],
+        vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: producer.id,
+            to: use_.id,
+        }],
+        vec![],
+        GuardPartition::default(),
+    )
+    .with_callback_results(vec![result])
+}
+
+#[test]
+fn callback_results_preserve_every_context_and_refuse_missing_provenance() {
+    for protocol in [
+        InvokeProtocol::Call,
+        InvokeProtocol::Get,
+        InvokeProtocol::Iterate,
+        InvokeProtocol::Coerce,
+        InvokeProtocol::GetEnumerableStringValues,
+        InvokeProtocol::GetOwnEnumerableValues,
+    ] {
+        let graph = callback_result_graph(protocol, true);
+        let kept = proposal_with(ValueShape::Callable, graph.clone())
+            .normalize()
+            .unwrap();
+        let export = &kept.artifact_cases()[0].exports["createResource"];
+        assert_eq!(export.call.callback_results().len(), 1);
+        assert_eq!(
+            export.operation("use-result").unwrap().invoke_protocol(),
+            protocol
+        );
+        assert!(
+            crate::contract_semantics::certification::proof_policy_2()
+                .inspect_candidates(&kept)
+                .is_err()
+        );
+        let mut missing_edge = graph.clone();
+        missing_edge.edges.clear();
+        assert!(
+            proposal_with(ValueShape::Callable, missing_edge)
+                .normalize()
+                .is_err()
+        );
+        let mut no_timing = graph.clone();
+        no_timing.operations[1].schedule = None;
+        assert!(
+            proposal_with(ValueShape::Callable, no_timing)
+                .normalize()
+                .is_err()
+        );
+        let mut unknown_owner = graph;
+        unknown_owner.operations[1].owner.source = OwnerSource::Unknown;
+        assert!(
+            proposal_with(ValueShape::Callable, unknown_owner)
+                .normalize()
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn callback_result_closure_shape_and_callable_test_bind_digest_and_recipe() {
+    let contract = |graph| {
+        proposal_with(ValueShape::Callable, graph)
+            .normalize()
+            .unwrap()
+    };
+    let closed = contract(callback_result_graph(InvokeProtocol::Call, true));
+    let open = contract(callback_result_graph(InvokeProtocol::Call, false));
+    assert_ne!(closed.semantic_digest(), open.semantic_digest());
+    let graph = callback_result_graph(InvokeProtocol::Call, true);
+    let mut results = graph.callback_results().to_vec();
+    results[0].callable_only.clear();
+    let ungated = contract(graph.clone().with_callback_results(results.clone()));
+    assert_ne!(closed.semantic_digest(), ungated.semantic_digest());
+    results[0].shape = ValueShape::Callable;
+    let shaped = contract(graph.with_callback_results(results));
+    assert_ne!(ungated.semantic_digest(), shaped.semantic_digest());
+    for path in [
+        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)),
+        SemanticClaimPath::Operation(OperationId("produce".into())),
+        SemanticClaimPath::Operation(OperationId("use-result".into())),
+    ] {
+        assert_ne!(
+            address_of(&closed, "server-import", path.clone(), "closure"),
+            address_of(&open, "server-import", path, "closure")
+        );
+    }
+    let mut context = callback_result_graph(InvokeProtocol::Call, true);
+    context.operations[1].tracking = Tracking::Untracked;
+    let changed_context = contract(context);
+    assert_ne!(closed.semantic_digest(), changed_context.semantic_digest());
+    assert_ne!(
+        address_of(
+            &closed,
+            "server-import",
+            SemanticClaimPath::Operation(OperationId("produce".into())),
+            "closure"
+        ),
+        address_of(
+            &changed_context,
+            "server-import",
+            SemanticClaimPath::Operation(OperationId("produce".into())),
+            "closure"
+        )
+    );
+    // Existing frozen golden vectors above must keep passing byte-for-byte.
+}
+
+#[test]
+fn callback_results_refuse_recursive_producers_and_wildcard_paths() {
+    let graph = callback_result_graph(InvokeProtocol::Call, true);
+    let mut results = graph.callback_results().to_vec();
+    results[0].producer = OperationId("use-result".into());
+    assert!(
+        proposal_with(
+            ValueShape::Callable,
+            graph.clone().with_callback_results(results)
+        )
+        .normalize()
+        .is_err()
+    );
+    let mut claims = graph.claims().clone();
+    if let KnowledgeSet::Complete(rows) = &mut claims.callbacks
+        && let ValueSource::OperationOutput { path, .. } = &mut rows[1].from
+    {
+        path.push("*".into());
+    }
+    let wildcard = CallSemantics::new(
+        claims,
+        graph.operations.clone(),
+        graph.edges.clone(),
+        graph.resources.clone(),
+        graph.guards.clone(),
+    )
+    .with_callback_results(graph.callback_results().to_vec());
+    assert!(
+        proposal_with(ValueShape::Callable, wildcard)
+            .normalize()
+            .is_err()
+    );
+}

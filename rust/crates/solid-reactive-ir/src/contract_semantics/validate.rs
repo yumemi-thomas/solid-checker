@@ -249,13 +249,33 @@ fn normalize_call_in(
     {
         validate_returned_callable_ids(call, path)?;
     }
+    let result_uses = call
+        .callback_results
+        .iter()
+        .flat_map(|result| result.uses.items().iter().cloned())
+        .collect::<BTreeSet<_>>();
     for operation in &mut call.operations {
-        normalize_operation(operation, &operation_ids, &resources, path, outer.is_some())?;
+        let result_use = result_uses.contains(&operation.id);
+        normalize_operation(
+            operation,
+            &operation_ids,
+            &resources,
+            path,
+            outer.is_some(),
+            result_use,
+        )?;
     }
+    normalize_callback_results(call, &resources, path)?;
     call.operations
         .sort_by(|left, right| left.id.cmp(&right.id));
 
-    validate_call_claims(&call.claims, &call.operations, &resources, path)?;
+    validate_call_claims(
+        &call.claims,
+        &call.operations,
+        &resources,
+        path,
+        &result_uses,
+    )?;
     validate_proposed_closures(call, path)?;
     validate_accessor_bounds(call, path)?;
     normalize_operation_graph(&mut call.edges, &call.operations, &operation_ids, path)?;
@@ -463,6 +483,7 @@ fn normalize_operation(
     resources: &BTreeMap<ResourceId, ResourceInfo>,
     path: &str,
     nested: bool,
+    result_use: bool,
 ) -> Result<(), ModelError> {
     let op_path = format!("{path}.operation.{}", operation.id.0);
     if operation.strict_read.is_some()
@@ -565,10 +586,12 @@ fn normalize_operation(
     if operation.protocol == Some(InvokeProtocol::Call) {
         operation.protocol = None;
     }
-    if let Some(protocol) = operation.protocol {
+    if let Some(protocol) = operation.protocol
+        && !result_use
+    {
         validate_protocol_operation(operation, protocol, &op_path)?;
     }
-    if operation.is_result_access() {
+    if operation.is_result_access() && !result_use {
         validate_result_access_operation(operation, &op_path)?;
     }
     if let Some(composed) = &operation.composed_from {
@@ -1602,6 +1625,7 @@ fn validate_call_claims(
     operations: &[Operation],
     resources: &BTreeMap<ResourceId, ResourceInfo>,
     path: &str,
+    result_uses: &BTreeSet<OperationId>,
 ) -> Result<(), ModelError> {
     let operation_kinds = operation_map(operations);
     for callback in claims.callbacks.items() {
@@ -1711,7 +1735,7 @@ fn validate_call_claims(
     // than one the caller handed it, and no census confirms a protocol there.
     for operation in operations
         .iter()
-        .filter(|operation| operation.protocol.is_some())
+        .filter(|operation| operation.protocol.is_some() && !result_uses.contains(&operation.id))
     {
         let naming = claims
             .callbacks
@@ -1736,7 +1760,7 @@ fn validate_call_claims(
     // reached, and no census states what the export keeps of one.
     for operation in operations
         .iter()
-        .filter(|operation| operation.is_result_access())
+        .filter(|operation| operation.is_result_access() && !result_uses.contains(&operation.id))
     {
         let naming = claims
             .callbacks
@@ -2867,4 +2891,145 @@ fn push_value(
     domain: ValueClaimDomain,
 ) {
     claims.push(ClaimPath::Value { root, path, domain });
+}
+
+/// Result provenance is one finite hop from an exact caller invocation.
+/// Cycles, recursive traversal and wildcard member dispatch are not implied.
+fn normalize_callback_results(
+    call: &mut CallSemantics,
+    resources: &BTreeMap<ResourceId, ResourceInfo>,
+    path: &str,
+) -> Result<(), ModelError> {
+    let mut producers = BTreeSet::new();
+    let mut uses = BTreeSet::new();
+    for result in &mut call.callback_results {
+        let result_path = format!("{path}.callbackResults.{}", result.producer.0);
+        if !producers.insert(result.producer.clone()) {
+            return contradiction(result_path, "duplicate callback result producer");
+        }
+        let sources = call
+            .claims
+            .callbacks
+            .items()
+            .iter()
+            .filter(|row| row.operation == result.producer)
+            .collect::<Vec<_>>();
+        if !matches!(sources.as_slice(), [row] if matches!(row.from, ValueSource::Parameter { .. }))
+        {
+            return contradiction(
+                result_path,
+                "a result producer is one exact parameter invocation; recursive results are unsupported",
+            );
+        }
+        let Some(producer) = call.operations.iter().find(|op| op.id == result.producer) else {
+            return Err(ModelError::MissingOperation {
+                path: result_path,
+                operation: result.producer.0.clone(),
+            });
+        };
+        if producer.kind != OperationKind::Invoke || producer.is_protocol_invocation() {
+            return contradiction(result_path, "a callback result producer invokes a callable");
+        }
+        normalize_value(
+            &mut result.shape,
+            resources,
+            &format!("{result_path}.shape"),
+        )?;
+        normalize_knowledge(&mut result.uses, &format!("{result_path}.uses"))?;
+        for id in &result.callable_only {
+            if !result.uses.items().contains(id)
+                || !call.operations.iter().any(|operation| {
+                    &operation.id == id
+                        && operation.invoke_protocol() == InvokeProtocol::Call
+                        && operation.cardinality.min == Some(0)
+                })
+            {
+                return contradiction(
+                    result_path.clone(),
+                    "callableOnly names an optional call use in this result census",
+                );
+            }
+        }
+        for id in result.uses.items() {
+            if !uses.insert(id.clone()) || id == &result.producer {
+                return contradiction(
+                    result_path.clone(),
+                    "result uses are distinct and non-recursive",
+                );
+            }
+            let Some(operation) = call.operations.iter().find(|op| &op.id == id) else {
+                return Err(ModelError::MissingOperation {
+                    path: result_path.clone(),
+                    operation: id.0.clone(),
+                });
+            };
+            let rows = call
+                .claims
+                .callbacks
+                .items()
+                .iter()
+                .filter(|row| &row.operation == id)
+                .collect::<Vec<_>>();
+            if !matches!(rows.as_slice(), [row] if matches!(&row.from,
+                ValueSource::OperationOutput { operation, path } if operation == &result.producer
+                    && path.iter().all(|segment| !segment.is_empty() && segment != "*")))
+            {
+                return contradiction(
+                    result_path.clone(),
+                    "a use names exactly one literal path on its producer output",
+                );
+            }
+            if operation.kind != OperationKind::Invoke
+                || operation.at.is_none()
+                || operation.schedule.is_none()
+                || operation.tracking == Tracking::Unknown
+                || operation.owner.source == OwnerSource::Unknown
+                || operation.cardinality.scope.is_none()
+                || operation.cardinality.min.is_none()
+                || operation.cardinality.max.is_none()
+                || !matches!(
+                    operation.invoke_protocol(),
+                    InvokeProtocol::Call
+                        | InvokeProtocol::Get
+                        | InvokeProtocol::Iterate
+                        | InvokeProtocol::Coerce
+                        | InvokeProtocol::GetEnumerableStringValues
+                        | InvokeProtocol::GetOwnEnumerableValues
+                )
+            {
+                return contradiction(
+                    result_path.clone(),
+                    "a result use states its exact protocol, timing, owner, tracking and count",
+                );
+            }
+            if !call.edges.iter().any(|edge| {
+                edge.kind == EdgeKind::Data && edge.from == result.producer && &edge.to == id
+            }) {
+                return contradiction(
+                    result_path.clone(),
+                    "a result use requires an exact producer-to-use data edge",
+                );
+            }
+        }
+        let described = call
+            .claims
+            .callbacks
+            .items()
+            .iter()
+            .filter_map(|row| {
+                matches!(&row.from, ValueSource::OperationOutput { operation, .. }
+                if operation == &result.producer)
+                .then_some(&row.operation)
+            })
+            .collect::<BTreeSet<_>>();
+        if described != result.uses.items().iter().collect::<BTreeSet<_>>() {
+            return contradiction(
+                result_path,
+                "result uses and output-source callback rows must agree exactly",
+            );
+        }
+    }
+    call.callback_results
+        .sort_by(|a, b| a.producer.cmp(&b.producer));
+    Ok(())
 }

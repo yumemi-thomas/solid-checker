@@ -84,6 +84,7 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
     let exports = BTreeMap::from([(
         "version".into(),
         ContractExport {
+            callback_results: Vec::new(),
             kind: "value".into(),
             reactive_reads: ContractClaim::Known(Vec::new()),
             returns: ContractClaim::Known(None),
@@ -156,6 +157,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
     let exports = BTreeMap::from([(
         "version".into(),
         ContractExport {
+            callback_results: Vec::new(),
             kind: "function".into(),
             reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
                 kind: "parameter-member".into(),

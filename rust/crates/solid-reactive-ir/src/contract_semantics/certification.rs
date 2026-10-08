@@ -311,6 +311,14 @@ impl ProofPolicy2 {
 
         for artifact in &mut artifact_cases {
             for (export_name, export) in &mut artifact.exports {
+                // No implementation census establishes result-use closure.
+                if !export.call.callback_results().is_empty() {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "callback-result provenance is authored-only and not certifiable"
+                            .into(),
+                    });
+                }
                 // No census establishes the strict-read label at a read.
                 // Only an authored, cited and probed contract can state this.
                 if export

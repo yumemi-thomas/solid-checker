@@ -99,6 +99,7 @@ pub fn project_export_semantics(
     };
 
     let mut callbacks = project_callbacks(export, &mut open_claims);
+    let callback_results = project_callback_results(export);
     let mut reactive_reads = project_reactive_reads(export, &mut open_claims);
     let mut returns = project_return(export, &mut open_claims);
     let mut owner_requirements = project_owner_requirements(export, &mut open_claims);
@@ -196,6 +197,7 @@ pub fn project_export_semantics(
         reactive_reads,
         returns,
         callbacks,
+        callback_results,
         inline_accessor_invocations: export
             .callbacks()
             .items()
@@ -401,6 +403,13 @@ fn project_callbacks(
     }
     let mut callbacks = Vec::new();
     for callback in knowledge.items() {
+        if let ValueSource::OperationOutput { operation, .. } = &callback.from
+            && export.call.callback_results().iter().any(|result| {
+                &result.producer == operation && result.uses.items().contains(&callback.operation)
+            })
+        {
+            continue;
+        }
         let ValueSource::Parameter { index, path } = &callback.from else {
             open.insert(ClaimDomain::Callbacks);
             continue;
@@ -1390,6 +1399,67 @@ mod owner_requirement_projection_tests {
             disposals: KnowledgeSet::Unknown,
             computations: KnowledgeSet::Unknown,
         }
+    }
+
+    #[test]
+    fn callback_result_rows_never_become_calls_of_the_original_argument() {
+        use crate::contract_semantics::{
+            CallbackInvocation, CallbackResult, EdgeKind, OperationEdge, ValueSource,
+        };
+        let producer = operation("producer", OperationKind::Invoke, &[]);
+        let mut use_ = operation("use", OperationKind::Invoke, &[]);
+        use_.tracking = Tracking::AmbientAtExecution;
+        use_.owner.source = OwnerSource::AmbientAtExecution;
+        let mut claims = claims();
+        claims.callbacks = KnowledgeSet::Complete(vec![
+            CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 0,
+                    path: vec![],
+                },
+                operation: producer.id.clone(),
+            },
+            CallbackInvocation {
+                from: ValueSource::OperationOutput {
+                    operation: producer.id.clone(),
+                    path: vec!["0".into()],
+                },
+                operation: use_.id.clone(),
+            },
+        ]);
+        let mut subject = export(claims, vec![producer.clone(), use_.clone()], vec![]);
+        subject.call.edges.push(OperationEdge {
+            kind: EdgeKind::Data,
+            from: producer.id.clone(),
+            to: use_.id.clone(),
+        });
+        subject.call = subject.call.with_callback_results(vec![CallbackResult {
+            producer: producer.id,
+            shape: ValueShape::Unknown,
+            uses: KnowledgeSet::Complete(vec![use_.id]),
+            callable_only: BTreeSet::new(),
+        }]);
+        let projected = project_export_semantics(&subject);
+        assert!(!projected.open_claims.contains(&ClaimDomain::Callbacks));
+        assert_eq!(projected.callbacks.known().unwrap().len(), 1);
+        assert_eq!(projected.callback_results[0].uses.items()[0].path, ["0"]);
+        assert_eq!(
+            projected.callback_results[0].uses.items()[0]
+                .operation
+                .schedule,
+            Some(Schedule::SameStack)
+        );
+        // A dependency's result graph is not silently re-emitted as ordinary callbacks.
+        let mut inherited = projected;
+        inherited.inherited_from = Some(crate::InheritedExportOrigin {
+            package_name: "package".into(),
+            package_version: "1.0.0".into(),
+            artifact_case: "case".into(),
+            semantic_digest: digest().as_str().into(),
+            entrypoint: ".".into(),
+            export: "subject".into(),
+        });
+        assert!(!inherited.inherited_closure(ClaimDomain::Callbacks));
     }
 
     #[test]
@@ -3990,6 +4060,7 @@ fn contract_export_function(
         ContractClaim::Open
     };
     ContractExport {
+        callback_results: Vec::new(),
         kind: "function".into(),
         // ADR 0013: an access path alone does not establish the execution of
         // a nested callable. The compact model cannot express this uncertainty
@@ -6008,4 +6079,72 @@ fn bind_returned_member_effects(
             by_symbol.insert(member.symbol.clone(), member);
         }
     }
+}
+
+fn project_callback_results(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Vec<crate::ContractCallbackResult> {
+    export
+        .call
+        .callback_results()
+        .iter()
+        .filter_map(|result| {
+            let row = export
+                .callbacks()
+                .items()
+                .iter()
+                .find(|row| row.operation == result.producer)?;
+            let ValueSource::Parameter { index, path } = &row.from else {
+                return None;
+            };
+            let project = |id: &crate::contract_semantics::OperationId| {
+                let row = export
+                    .callbacks()
+                    .items()
+                    .iter()
+                    .find(|row| &row.operation == id)
+                    .expect("normalized result use has one source");
+                let ValueSource::OperationOutput { path, .. } = &row.from else {
+                    unreachable!("normalized result use names its producer output")
+                };
+                crate::ContractCallbackResultUse {
+                    path: path.clone(),
+                    callable_only: result.callable_only.contains(id),
+                    operation: export
+                        .operation(&id.0)
+                        .expect("normalized result operation")
+                        .clone(),
+                }
+            };
+            let uses = match &result.uses {
+                KnowledgeSet::Unknown => KnowledgeSet::Unknown,
+                KnowledgeSet::Partial(ids) => {
+                    KnowledgeSet::Partial(ids.iter().map(project).collect())
+                }
+                KnowledgeSet::Complete(ids) => {
+                    KnowledgeSet::Complete(ids.iter().map(project).collect())
+                }
+            };
+            Some(crate::ContractCallbackResult {
+                parameter: usize::from(*index),
+                parameter_path: path.clone(),
+                producer: export
+                    .operation(&result.producer.0)
+                    .expect("normalized result producer")
+                    .clone(),
+                shape: result.shape.clone(),
+                uses,
+                non_escaping: export
+                    .operation_claim(ClaimDomain::Returns)
+                    .is_some_and(|returns| {
+                        returns.is_closed()
+                            && returns.items().iter().all(|id| {
+                                export.operation(&id.0).is_some_and(|operation| {
+                                    operation.output == Some(ValueShape::Undefined)
+                                })
+                            })
+                    }),
+            })
+        })
+        .collect()
 }

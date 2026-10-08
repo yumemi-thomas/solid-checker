@@ -940,6 +940,283 @@
         "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 \u2014 The only caller-code invocation is fn(...args) in queueMicrotask, later and only for the final noncancelled task. Minimum zero covers an unused wrapper, batching and cleanup cancellation.",
         "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 \u2014 onCleanup(() => calls = 0) occurs exactly once on construction, with no other explicit cleanup registration."
       }
+    },
+    "createHydratableSignal": {
+      "rule": "strict-read-untracked",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219 \u2014 Nonhydrating update result is passed to createSignal; callable initializers are conditional tracked computations. Hydration callback timing/context remains open; do not close callbacks.",
+      "call": {
+        "closed": [
+          "reads",
+          "returns",
+          "creates"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "signal"
+        ],
+        "computations": [
+          "conditional-initializer",
+          "hydration-settled"
+        ],
+        "resources": [
+          {
+            "id": "state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "initializer-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "hydration-leaf",
+            "kind": "owner"
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "update-now"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "update-hydrating"
+          },
+          {
+            "from": {
+              "operation": "update-now",
+              "path": []
+            },
+            "operation": "initialize-update-result"
+          }
+        ],
+        "operations": [
+          {
+            "id": "signal",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "state"
+            ]
+          },
+          {
+            "id": "conditional-initializer",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "initializer-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "update-now",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "update-hydrating",
+            "kind": "invoke",
+            "trigger": {
+              "event": "settle"
+            },
+            "count": {
+              "scope": "trigger",
+              "min": 0,
+              "max": 1
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "state"
+                },
+                {
+                  "kind": "reactive",
+                  "role": "setter",
+                  "resource": "state"
+                }
+              ]
+            }
+          },
+          {
+            "id": "initialize-update-result",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "initializer-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "initializer-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "hydration-settled",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "hydration-leaf",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            },
+            "count": {
+              "scope": "call",
+              "min": 0,
+              "max": 1
+            }
+          }
+        ],
+        "edges": [
+          {
+            "kind": "data",
+            "from": "update-now",
+            "to": "initialize-update-result"
+          }
+        ],
+        "callbackResults": [
+          {
+            "producer": "update-now",
+            "shape": "unknown",
+            "uses": [
+              "initialize-update-result"
+            ],
+            "closed": [
+              "uses"
+            ],
+            "callableOnly": [
+              "initialize-update-result"
+            ]
+          },
+          {
+            "producer": "update-hydrating",
+            "shape": "unknown"
+          }
+        ]
+      },
+      "resultClosures": {
+        "update-now": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219; createSignal initializer callable test: solid-js/types/client/hydration.d.ts and audited rc.13 signal entrypoint."
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219 \u2014 Signal tuple and conditional initializer computation; no own reactive read. Callback result uses are separate from reads. Hydration invokes the update through the setter wrapper rather than invoking its result.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219 \u2014 Signal tuple and conditional initializer computation; no own reactive read. Callback result uses are separate from reads. Hydration invokes the update through the setter wrapper rather than invoking its result.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219 \u2014 Signal tuple and conditional initializer computation; no own reactive read. Callback result uses are separate from reads. Hydration invokes the update through the setter wrapper rather than invoking its result."
+      },
+      "probes": [
+        {
+          "label": "result-initializer",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Case-file result code distinguishes the result-use context from the producer callback. Fresh runtime probe required; no passed observation is fabricated."
+        }
+      ]
     }
   }
 }

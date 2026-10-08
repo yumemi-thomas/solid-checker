@@ -91,7 +91,16 @@ pub(super) fn semantic_digest(
             .values()
             .any(|export| has_strict_read(&export.call))
     });
+    let callback_results = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| has_callback_results(&export.call))
+    });
     let mut writer = CanonicalWriter::new();
+    if callback_results {
+        writer.text("solid-checker:semantic-callback-results:v1");
+    }
+    writer.callback_results = callback_results;
     if strict_reads {
         writer.text("solid-checker:semantic-strict-read:v1");
     }
@@ -278,8 +287,25 @@ pub(super) fn recipe_address(
         writer.text("solid-checker:semantic-strict-read:v1");
         writer.strict_reads = true;
     }
+    if has_callback_results(&export.call) {
+        writer.text("solid-checker:semantic-callback-results:v1");
+        writer.callback_results = true;
+    }
     writer.local_ids = true;
     writer.address_case = Some(artifact_case.id.clone());
+    if writer.callback_results {
+        // A producer recipe must also bind its consumers' timing, context,
+        // paths and data edges. Bind the complete new graph conservatively;
+        // pre-extension recipes keep their exact historical stream.
+        writer.strict_reads = true;
+        writer.composed_provenance = true;
+        writer.proposed_closure = true;
+        writer.computations = true;
+        writer.invoke_protocols = true;
+        writer.context_premises = true;
+        writer.accessor_bounds = true;
+        writer.call(&export.call);
+    }
     writer.composed_provenance = true;
     writer.text("solid-checker:recipe-address");
     writer.u16(RECIPE_ADDRESS_VERSION);
@@ -348,6 +374,7 @@ struct CanonicalWriter {
     /// A separate family: contracts and recipe values with no strict-read
     /// assertion retain their previous byte stream, including absent fields.
     strict_reads: bool,
+    callback_results: bool,
     /// Whether operation and resource ids are written with their artifact-case
     /// prefix removed. Set only by [`recipe_address`]; false everywhere else,
     /// so every other digest writes every id verbatim, byte for byte.
@@ -392,6 +419,7 @@ impl CanonicalWriter {
         Self {
             hash: Sha256::new(),
             strict_reads: false,
+            callback_results: false,
             local_ids: false,
             address_case: None,
             composed_provenance: false,
@@ -671,7 +699,20 @@ impl CanonicalWriter {
         });
     }
 
+    fn callback_result(&mut self, result: &CallbackResult) {
+        self.operation_id(&result.producer);
+        self.value(&result.shape);
+        self.knowledge(&result.uses, Self::operation_id);
+        self.usize(result.callable_only.len());
+        for id in &result.callable_only {
+            self.operation_id(id);
+        }
+    }
+
     fn call(&mut self, call: &CallSemantics) {
+        if self.callback_results {
+            self.sequence(call.callback_results(), Self::callback_result);
+        }
         self.call_claims(&call.claims);
         // Written only in the proposed-closure families, so a contract that
         // proposes nothing hashes the legacy stream byte for byte. The set is
@@ -1366,4 +1407,31 @@ impl CanonicalWriter {
             writer.option(claim.resource.as_ref(), Self::resource_id);
         });
     }
+}
+
+fn has_callback_results(call: &CallSemantics) -> bool {
+    fn value_has(value: &ValueShape) -> bool {
+        match value {
+            ValueShape::EffectfulCallable(call) => has_callback_results(call),
+            ValueShape::ReturnedCallable { call, members } => {
+                call.as_deref().is_some_and(has_callback_results)
+                    || members.iter().any(|member| value_has(&member.value))
+            }
+            ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+                items.items().iter().any(value_has)
+            }
+            ValueShape::Object(items) => {
+                items.items().iter().any(|member| value_has(&member.value))
+            }
+            ValueShape::Array { element, .. }
+            | ValueShape::Promise(element)
+            | ValueShape::AsyncIterable(element) => value_has(element),
+            _ => false,
+        }
+    }
+    !call.callback_results().is_empty()
+        || call
+            .operations
+            .iter()
+            .any(|operation| operation.output.as_ref().is_some_and(value_has))
 }

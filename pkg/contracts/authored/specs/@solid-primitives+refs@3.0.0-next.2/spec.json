@@ -23,7 +23,7 @@
   "hostFreeIdentity": "identity.host-free.json",
   "exports": {
     "resolveFirst": {
-      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/refs/dist/index.js:35,75-87 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/refs/dist/index.js:35,75-87 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained. The first children source is eager (min:1). Its result census is explicitly unknown: getFirstChild recursively invokes functions and descends arrays. Recursive traversal is a later slice; reads/callbacks stay open on browser and host-free paths.",
       "rule": "strict-read-untracked",
       "call": {
         "operations": [
@@ -97,7 +97,7 @@
             },
             "tracking": "tracked",
             "count": {
-              "min": 0,
+              "min": 1,
               "max": "many",
               "scope": "call"
             },
@@ -204,7 +204,13 @@
           "returns",
           "creates"
         ],
-        "creates": []
+        "creates": [],
+        "callbackResults": [
+          {
+            "producer": "children-source",
+            "shape": "unknown"
+          }
+        ]
       },
       "closures": {
         "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/refs/dist/index.js:35,75-87 \u2014 Normal completion returns the resolved memo accessor.",

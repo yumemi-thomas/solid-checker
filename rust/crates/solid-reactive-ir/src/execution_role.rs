@@ -615,6 +615,9 @@ fn semantic_write_execution_role_within(
             }
         }
     }
+    if let Some(role) = contract_callback_result_literal_role(file, span, lookup, true) {
+        return role;
+    }
     let direct = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
     // Directly in a component body the dev owner is the component's root, so
     // a guard that exempts roots exempts the body too. Only the body itself:
@@ -1907,6 +1910,9 @@ fn semantic_execution_role_within(
     // `callbacks` enumeration open makes every argument of the call one of
     // unproven timing, but a slot it states as a guaranteed owned computation
     // is proven to run during the call whatever else the export does with it.
+    if let Some(role) = contract_callback_result_literal_role(file, span, lookup, true) {
+        return role;
+    }
     if let Some(role) = contract_owned_computation_callback_role(file, span, lookup) {
         return role;
     }
@@ -2124,6 +2130,9 @@ pub(super) fn contract_tracked_accessor_read_role(
 ) -> Option<ExecutionRole> {
     if discarded_region_contains(file, span) {
         return None;
+    }
+    if let Some(role) = contract_callback_result_literal_role(file, span, lookup, false) {
+        return Some(role);
     }
     let literal = containing_ast_function(&file.ast, span)?;
     // Suspension, generator resumption, named self-escapes and parameter
@@ -3910,6 +3919,67 @@ pub(super) fn allowed_callback_spans(
         }
     }
     spans
+}
+
+fn contract_callback_result_literal_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    guaranteed: bool,
+) -> Option<ExecutionRole> {
+    if discarded_region_contains(file, span) {
+        return None;
+    }
+    let target = containing_ast_function(&file.ast, span)?;
+    if !target.body.contains(span) {
+        return None;
+    }
+    for (call, index) in file.ast.arguments_containing(span) {
+        let argument = &call.arguments[index];
+        let Some(producer) = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
+        else {
+            continue;
+        };
+        if !producer
+            .expression_return
+            .as_ref()
+            .and_then(|returned| returned.argument)
+            .is_some_and(|returned| file.ast.peel_ts_sugar_span(returned) == target.span)
+        {
+            continue;
+        }
+        let Some(symbol) = lookup.callee_symbol(file, call.callee) else {
+            continue;
+        };
+        if !lookup.contract_result_census_is_closed(symbol)
+            || !lookup
+                .resolved_callee_call(file, call.callee)
+                .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
+        {
+            continue;
+        }
+        let Some(results) = lookup.contract_callback_results(symbol) else {
+            continue;
+        };
+        let mut matching = results
+            .iter()
+            .filter(|result| result.parameter == index)
+            .peekable();
+        if matching.peek().is_some()
+            && matching.all(|result| {
+                crate::local_access::callback_result_literal_is_tracked(
+                    file, argument, result, guaranteed,
+                )
+            })
+        {
+            return Some(ExecutionRole::TrackedJsx);
+        }
+    }
+    None
 }
 
 #[cfg(test)]

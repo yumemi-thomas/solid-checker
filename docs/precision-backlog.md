@@ -1,5 +1,19 @@
 # Precision backlog
 
+## Callback-result provenance (2026-10-08, ADR 0253)
+
+An authored callback-result census separates the package's finite uses of a
+callback return from its invocations of the original callback. Producer/output
+paths, protocol, owner, tracking, timing, shape and closure bind new digests;
+documents without the vocabulary keep their historical stream. Certification
+refuses this authored-only feature. Primitive-result negatives and exact
+synchronous returned arrows have a narrow consumer proof; dynamic getters,
+proxies, escapes, named results, generic structures, retained values and all
+recursive traversal remain explicit uncertifiable obligations. Project wrappers
+cannot infer result-use closure. The package-callback-result-consumer fixture
+is a draft until the lead runs normalization, coverage and ownership gates.
+No census ledger expectation, receipt or generated contract is changed here.
+
 ## Explicit strict-read clearing (2026-10-08)
 
 ADR 0247: a contract read may state `strictRead: cleared` (an unlabelled

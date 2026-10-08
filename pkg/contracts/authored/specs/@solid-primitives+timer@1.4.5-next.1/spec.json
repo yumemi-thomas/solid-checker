@@ -1372,6 +1372,550 @@
           "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1)."
         }
       }
+    },
+    "createPolled": {
+      "rule": "missing-owner",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 Browser constructor effect requires an owner. The real dependent accessor read at line 124 is retained. Callable generic poll results are signal initializers. Numeric timeout cleanup guard needs exact consumer guard evidence; callbacks stays open for generic options/delay behavior.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [
+          "initial-dependent-read",
+          "tick-read",
+          "effect-dependent-read"
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-tick",
+          "create-dependent",
+          "create-polled"
+        ],
+        "computations": [
+          "dependent-memo",
+          "result-memo",
+          "effect",
+          "timer-delay-effect"
+        ],
+        "cleanups": [
+          "timer-cleanup"
+        ],
+        "resources": [
+          {
+            "id": "tick",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "dependent",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "polled",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "dependent-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "polled-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "effect-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "delay-owner",
+            "kind": "owner"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create-tick",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "tick"
+            ]
+          },
+          {
+            "id": "create-dependent",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "dependent"
+            ]
+          },
+          {
+            "id": "create-polled",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "polled"
+            ]
+          },
+          {
+            "id": "dependent-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "dependent-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "result-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "polled-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "poll-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "dependent-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "dependent-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "delay-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "delay-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "delay-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timer-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "polled"
+            }
+          },
+          {
+            "id": "initial-dependent-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "dependent"
+              }
+            ]
+          },
+          {
+            "id": "tick-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "dependent-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "dependent-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "tick"
+              }
+            ]
+          },
+          {
+            "id": "effect-dependent-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "dependent"
+              }
+            ]
+          },
+          {
+            "id": "initialize-polled-result",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "polled-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "polled-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timer-delay-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "delay-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "count": {
+              "scope": "call",
+              "min": 0,
+              "max": 1
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "poll-source"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "delay-source"
+          },
+          {
+            "from": {
+              "operation": "poll-source",
+              "path": []
+            },
+            "operation": "initialize-polled-result"
+          }
+        ],
+        "edges": [
+          {
+            "kind": "data",
+            "from": "poll-source",
+            "to": "initialize-polled-result"
+          }
+        ],
+        "callbackResults": [
+          {
+            "producer": "poll-source",
+            "shape": "unknown",
+            "uses": [
+              "initialize-polled-result"
+            ],
+            "closed": [
+              "uses"
+            ],
+            "callableOnly": [
+              "initialize-polled-result"
+            ]
+          }
+        ]
+      },
+      "resultClosures": {
+        "poll-source": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 First result enters createSignal at 124; effect updates use an explicit () => newValue wrapper, preserving a function as data thereafter."
+      },
+      "probes": [
+        {
+          "label": "result-initializer",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Case-file result code distinguishes the result-use context from the producer callback. Fresh runtime probe required; no passed observation is fabricated."
+        }
+      ],
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 Enumerated constructor tick/dependent/polled resources, dependent/result computations, effect and timer cleanup. The callback census remains open.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 Enumerated constructor tick/dependent/polled resources, dependent/result computations, effect and timer cleanup. The callback census remains open.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 Enumerated constructor tick/dependent/polled resources, dependent/result computations, effect and timer cleanup. The callback census remains open."
+      }
     }
   }
 }

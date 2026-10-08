@@ -22,7 +22,7 @@
   "hostFreeIdentity": "identity.host-free.json",
   "exports": {
     "createDerivedStaticStore": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:97-108 — Tracked derive callback and reactive string-key getter result; no complete domain closure.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:97-108 \u2014 Tracked derive callback and reactive string-key getter result; no complete domain closure. First derive is guaranteed; untrack(fnMemo) clears only that read. The following spread runs in the caller context. Dynamic getters/proxies and escaped retained results remain obligations.",
       "rule": "strict-read-untracked",
       "call": {
         "operations": [
@@ -67,7 +67,7 @@
             },
             "tracking": "tracked",
             "count": {
-              "min": 0,
+              "min": 1,
               "max": "many",
               "scope": "call"
             },
@@ -104,6 +104,122 @@
             "output": {
               "kind": "store"
             }
+          },
+          {
+            "id": "spread-derived-result",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "protocol": "get-own-enumerable-values"
+          },
+          {
+            "id": "get-derived-key",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "derived-memos-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "derived-memos-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "protocol": "get"
+          },
+          {
+            "id": "initial-memo-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "none"
+            },
+            "strictRead": "cleared",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "why": "rust/target/primitives-checkpoint/misuse/static-store-createDerivedStaticStore-write-in-tracked-callback/node_modules/@solid-primitives/static-store/dist/index.js:98 invokes untrack(fnMemo) without a label; this clears that read only. Root object spread starts after untrack restores tracking. The existing hostFree block keeps reads open and makes no negative result claim."
+          },
+          {
+            "id": "per-key-memo-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "derived-memos-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "derived-memos-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
           }
         ],
         "callbacks": [
@@ -113,6 +229,20 @@
               "path": []
             },
             "operation": "derive"
+          },
+          {
+            "from": {
+              "operation": "derive",
+              "path": []
+            },
+            "operation": "spread-derived-result"
+          },
+          {
+            "from": {
+              "operation": "derive",
+              "path": []
+            },
+            "operation": "get-derived-key"
           }
         ],
         "computations": [
@@ -126,6 +256,42 @@
         ],
         "returns": [
           "return"
+        ],
+        "edges": [
+          {
+            "kind": "data",
+            "from": "derive",
+            "to": "spread-derived-result"
+          },
+          {
+            "kind": "data",
+            "from": "derive",
+            "to": "get-derived-key"
+          }
+        ],
+        "callbackResults": [
+          {
+            "producer": "derive",
+            "shape": "unknown",
+            "uses": [
+              "spread-derived-result",
+              "get-derived-key"
+            ],
+            "closed": [
+              "uses"
+            ]
+          }
+        ],
+        "reads": [
+          "initial-memo-read",
+          "per-key-memo-read"
+        ],
+        "creates": [],
+        "closed": [
+          "reads",
+          "creates",
+          "returns",
+          "callbacks"
         ]
       },
       "probes": [
@@ -149,13 +315,131 @@
           "label": "leaf",
           "rule": "leaf-owner-forbidden-call",
           "why": "The initial optional-owner fnMemo rejects a present leaf."
+        },
+        {
+          "label": "result-getter",
+          "rule": "strict-read-untracked",
+          "why": "Case-file result code distinguishes the result-use context from the producer callback. Fresh runtime probe required; no passed observation is fabricated."
         }
       ],
       "hostFree": {
-        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:97-108; No host branch. Both create the fn memo and one memo per key, execute derive tracked under the fn memo owner, and return an object whose getters read the key memos. Server untrack differs internally but no untracked-read operation is asserted here; reads, callbacks, creates, and returns were all open and remain open. The store's memo-backed getters remain the claimed returned store.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:97-108; No host branch. Both create the fn memo and one memo per key, execute derive tracked under the fn memo owner, and return an object whose getters read the key memos. Server untrack differs internally but no untracked-read operation is asserted here; reads, callbacks, creates, and returns were all open and remain open. The store's memo-backed getters remain the claimed returned store.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). The server graph is explicitly the previously audited call below: server.dev.js:1937-1939 untrack merely invokes fn, so browser strictRead clearing and result contexts are not transplanted. All server domains remain open; result handling is an obligation.",
         "minZero": [],
         "closed": [],
-        "closures": {}
+        "closures": {},
+        "call": {
+          "operations": [
+            {
+              "id": "derived-memos",
+              "kind": "compute",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "untracked",
+              "count": {
+                "min": 1,
+                "max": "many",
+                "scope": "call"
+              },
+              "owner": {
+                "source": "ambient-at-call",
+                "requires": "unconstrained",
+                "requiresChildren": "required",
+                "productions": [
+                  {
+                    "resource": "derived-memos-owner",
+                    "children": "allowed",
+                    "cleanup": "supported"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "derive",
+              "kind": "invoke",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "tracked",
+              "count": {
+                "min": 0,
+                "max": "many",
+                "scope": "call"
+              },
+              "owner": {
+                "source": "created",
+                "resource": "derived-memos-owner",
+                "children": "allowed",
+                "cleanup": "supported",
+                "productions": [
+                  {
+                    "resource": "derived-memos-owner",
+                    "children": "allowed",
+                    "cleanup": "supported"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "return",
+              "kind": "return",
+              "trigger": {
+                "event": "call"
+              },
+              "at": {
+                "event": "call",
+                "schedule": "same-stack"
+              },
+              "tracking": "untracked",
+              "count": {
+                "min": 0,
+                "max": "many",
+                "scope": "call"
+              },
+              "output": {
+                "kind": "store"
+              }
+            }
+          ],
+          "callbacks": [
+            {
+              "from": {
+                "arg": 0,
+                "path": []
+              },
+              "operation": "derive"
+            }
+          ],
+          "computations": [
+            "derived-memos"
+          ],
+          "resources": [
+            {
+              "id": "derived-memos-owner",
+              "kind": "owner"
+            }
+          ],
+          "returns": [
+            "return"
+          ]
+        }
+      },
+      "resultClosures": {
+        "derive": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createDerivedStaticStore-write-in-tracked-callback/node_modules/@solid-primitives/static-store/dist/index.js:97-107 \u2014 Object spread gets every own enumerable string/symbol value after untrack returns; per-key fnMemo()[k] Gets occur inside created tracked key memos. No recursive traversal."
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createDerivedStaticStore-write-in-tracked-callback/node_modules/@solid-primitives/static-store/dist/index.js:97-107 \u2014 fnMemo and per-key memos are all computed owners; derive result spread/Gets are explicit callback-result operations. untrack clears only fnMemo read at 98, not the spread. Each returned property reads keyMemo.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createDerivedStaticStore-write-in-tracked-callback/node_modules/@solid-primitives/static-store/dist/index.js:97-107 \u2014 fnMemo and per-key memos are all computed owners; derive result spread/Gets are explicit callback-result operations. untrack clears only fnMemo read at 98, not the spread. Each returned property reads keyMemo.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createDerivedStaticStore-write-in-tracked-callback/node_modules/@solid-primitives/static-store/dist/index.js:97-107 \u2014 fnMemo and per-key memos are all computed owners; derive result spread/Gets are explicit callback-result operations. untrack clears only fnMemo read at 98, not the spread. Each returned property reads keyMemo.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/static-store-createDerivedStaticStore-write-in-tracked-callback/node_modules/@solid-primitives/static-store/dist/index.js:97-107 \u2014 fnMemo and per-key memos are all computed owners; derive result spread/Gets are explicit callback-result operations. untrack clears only fnMemo read at 98, not the spread. Each returned property reads keyMemo."
       }
     }
   }

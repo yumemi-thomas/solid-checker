@@ -53,6 +53,8 @@ import { propertyGetProbeDigest, validatePropertyGets } from "./lib/property-get
 
 import { strictReadProbeDigest, strictReadWireCall, validateStrictReads } from "./lib/strict-read-contracts.mjs";
 
+import { callbackResultProbeDigest, validateCallbackResults } from "./lib/callback-result-contracts.mjs";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TIER = join(ROOT, "pkg/contracts/authored");
 const EMBEDDED = join(ROOT, "rust/crates/solid-facts-backend/src/authored_contracts/embedded.rs");
@@ -146,6 +148,7 @@ function returnedCallableProbeDigest(spec, name, pair, misuse, correct, artifact
 
 function validateClosures(where, claim) {
   validateStrictReads(where, claim);
+  validateCallbackResults(where, claim);
   const closed = claim.call?.closed ?? [];
   const closures = claim.closures ?? {};
   for (const domain of closed) {
@@ -186,12 +189,14 @@ function validateCreatedOwners(where, value) {
  * is closed only where `hostFree.closed` says so, each with its own citation
  * (`hostFree.closures`), and a domain left open loses an empty list, which
  * the decoder refuses. Returns undefined for an export with no `hostFree`.
+ * An optional, independently audited `hostFree.call` keeps browser-only
+ * result/clearing claims out of the server graph. It is authoring input only.
  */
 function hostFreeClaim(where, claim) {
   const hostFree = claim.hostFree;
   if (!hostFree) return undefined;
   assert(typeof hostFree.why === "string" && hostFree.why.length > 0, `${where}: hostFree needs a why`);
-  const call = structuredClone(claim.call);
+  const call = structuredClone(hostFree.call ?? claim.call);
   const operations = new Map((call.operations ?? []).map(operation => [operation.id, operation]));
   for (const id of hostFree.minZero ?? []) {
     const operation = operations.get(id);
@@ -207,7 +212,8 @@ function hostFreeClaim(where, claim) {
   if (call.closed.length === 0) delete call.closed;
   const derived = { call, closures: hostFree.closures ?? {},
     memberClosures: hostFree.memberClosures ?? claim.memberClosures,
-    returnedClosures: hostFree.returnedClosures ?? claim.returnedClosures };
+    returnedClosures: hostFree.returnedClosures ?? claim.returnedClosures,
+    resultClosures: hostFree.resultClosures ?? (hostFree.call ? undefined : claim.resultClosures) };
   validateMemberClosures(`${where} (host-free)`, derived);
   validateReturnedClosures(`${where} (host-free)`, derived);
   validateClosures(`${where} (host-free)`, derived);
@@ -372,6 +378,11 @@ function probe(browser) {
       return [entry.id, strictReadProbeDigest(spec, entry.export, pair,
         entry.misuse, entry.correct, certifiedCases(spec))];
     }));
+    const callbackResultDigests = new Map(cases.map(entry => {
+      const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
+      return [entry.id, callbackResultProbeDigest(spec, entry.export, pair,
+        entry.misuse, entry.correct, certifiedCases(spec))];
+    }));
     const returnedDigests = new Map(cases.map(entry => {
       const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
       return [entry.id, returnedCallableProbeDigest(spec, entry.export, pair,
@@ -397,11 +408,13 @@ function probe(browser) {
       const probeDigest = probeDigests.get(row.id);
       const strictReadDigest = strictReadDigests.get(row.id);
       const returnedDigest = returnedDigests.get(row.id);
+      const callbackResultDigest = callbackResultDigests.get(row.id);
       results.push({ spec: spec.name, package: spec.package, version: spec.version, export: row.export,
         ...(label ? { label } : {}),
         ...(probeDigest ? { propertyGetProbeDigest: probeDigest } : {}),
         ...(strictReadDigest ? { strictReadProbeDigest: strictReadDigest } : {}),
         ...(returnedDigest ? { returnedCallableProbeDigest: returnedDigest } : {}),
+        ...(callbackResultDigest ? { callbackResultProbeDigest: callbackResultDigest } : {}),
         solidRuntime: identity.runtime, artifacts: identity.artifacts, rule: row.rule,
         verdict: row.runtime === "detected" ? "passed" : row.runtime,
         misuse: (row.misuse.diagnostics ?? []).map(({ code, site }) => ({ code, site })),
@@ -462,12 +475,16 @@ function passed(spec, name) {
     const returnedDigest = returnedCallableProbeDigest(spec, name, pair,
       readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
+    const callbackResultDigest = callbackResultProbeDigest(spec, name, pair,
+      readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
+      readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
     return results.some(row => row.spec === spec.name && row.export === name
       && (row.label ?? undefined) === pair.label && row.verdict === "passed"
       && JSON.stringify(row.solidRuntime) === runtime
       && (!probeDigest || row.propertyGetProbeDigest === probeDigest)
       && (!strictReadDigest || row.strictReadProbeDigest === strictReadDigest)
-      && (!returnedDigest || row.returnedCallableProbeDigest === returnedDigest));
+      && (!returnedDigest || row.returnedCallableProbeDigest === returnedDigest)
+      && (!callbackResultDigest || row.callbackResultProbeDigest === callbackResultDigest));
   });
 }
 

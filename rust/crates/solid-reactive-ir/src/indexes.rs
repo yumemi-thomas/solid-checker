@@ -691,6 +691,32 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    pub(super) fn contract_callback_results(
+        &self,
+        symbol: &str,
+    ) -> Option<&[crate::ContractCallbackResult]> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.callback_results.as_slice())
+    }
+
+    pub(super) fn contract_result_census_is_closed(&self, symbol: &str) -> bool {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .is_some_and(|binding| {
+                !binding
+                    .summary
+                    .open_claims
+                    .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
+                    && !binding
+                        .summary
+                        .open_claims
+                        .contains(&crate::contract_semantics::ClaimDomain::Returns)
+            })
+    }
+
     /// ADR 0207: the `event-handler-props` items of the accepted contract
     /// bound to `symbol`.
     pub(super) fn contract_event_handler_props(

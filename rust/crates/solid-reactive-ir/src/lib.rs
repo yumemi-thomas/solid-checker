@@ -1253,6 +1253,9 @@ pub struct ContractExport {
     pub reactive_reads: ContractClaim<Vec<ContractReactiveRead>>,
     pub returns: ContractClaim<Option<ContractReturn>>,
     pub callbacks: ContractClaim<Vec<ContractCallback>>,
+    /// Exact result producers and contextual uses, never ordinary argument
+    /// invocation rows. Local summaries do not infer this authored vocabulary.
+    pub callback_results: Vec<ContractCallbackResult>,
     /// Exact argument slots an accepted ambient invocation may call inline
     /// during the export call. The value is true only for an unguarded,
     /// call-scoped lower bound of at least one. Internal projection only;
@@ -1580,7 +1583,9 @@ impl ContractExport {
                 self.returns_closed_empty && closed(!self.returns.is_open(), domain)
             }
             ClaimDomain::Reads => closed(!self.reactive_reads.is_open(), domain),
-            ClaimDomain::Callbacks => closed(!self.callbacks.is_open(), domain),
+            ClaimDomain::Callbacks => {
+                self.callback_results.is_empty() && closed(!self.callbacks.is_open(), domain)
+            }
             _ => false,
         }
     }
@@ -1598,6 +1603,7 @@ impl ContractExport {
                 .is_some_and(|reads| !reads.is_empty())
             || self.returns.is_open()
             || self.returns.known().is_some_and(Option::is_some)
+            || !self.callback_results.is_empty()
             || self.callbacks.is_open()
             || self
                 .callbacks
@@ -1830,6 +1836,26 @@ impl ContractCallback {
     pub fn invokes_member(&self) -> bool {
         self.is_invocation() && !self.path.is_empty()
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractCallbackResult {
+    pub parameter: usize,
+    pub parameter_path: Vec<String>,
+    pub producer: contract_semantics::Operation,
+    pub shape: contract_semantics::ValueShape,
+    pub uses: contract_semantics::KnowledgeSet<ContractCallbackResultUse>,
+    /// Initial consumer proof: a closed return census of explicit undefined
+    /// completions cannot pass this result to the caller. Other return shapes
+    /// need a separate escape proof, even when their census is closed.
+    pub non_escaping: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractCallbackResultUse {
+    pub path: Vec<String>,
+    pub operation: contract_semantics::Operation,
+    pub callable_only: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

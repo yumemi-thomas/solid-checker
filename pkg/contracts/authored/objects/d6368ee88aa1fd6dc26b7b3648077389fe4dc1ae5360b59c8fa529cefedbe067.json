@@ -165,7 +165,7 @@
             },
             "tracking": "tracked",
             "count": {
-              "min": 0,
+              "min": 1,
               "max": "many",
               "scope": "call"
             },
@@ -203,6 +203,129 @@
               "kind": "reactive",
               "role": "accessor"
             }
+          },
+          {
+            "id": "aggregate-result-iterate",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "protocol": "iterate"
+          },
+          {
+            "id": "aggregate-result-spread",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "protocol": "get-own-enumerable-values"
+          },
+          {
+            "id": "aggregate-result-coerce",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "protocol": "coerce"
+          },
+          {
+            "id": "aggregate-result-toString",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
           }
         ],
         "computations": [
@@ -215,6 +338,36 @@
               "path": []
             },
             "operation": "aggregate-source"
+          },
+          {
+            "from": {
+              "operation": "aggregate-source",
+              "path": []
+            },
+            "operation": "aggregate-result-iterate"
+          },
+          {
+            "from": {
+              "operation": "aggregate-source",
+              "path": []
+            },
+            "operation": "aggregate-result-spread"
+          },
+          {
+            "from": {
+              "operation": "aggregate-source",
+              "path": []
+            },
+            "operation": "aggregate-result-coerce"
+          },
+          {
+            "from": {
+              "operation": "aggregate-source",
+              "path": [
+                "toString"
+              ]
+            },
+            "operation": "aggregate-result-toString"
           }
         ],
         "returns": [
@@ -232,7 +385,44 @@
           "returns"
         ],
         "reads": [],
-        "creates": []
+        "creates": [],
+        "edges": [
+          {
+            "kind": "data",
+            "from": "aggregate-source",
+            "to": "aggregate-result-iterate"
+          },
+          {
+            "kind": "data",
+            "from": "aggregate-source",
+            "to": "aggregate-result-spread"
+          },
+          {
+            "kind": "data",
+            "from": "aggregate-source",
+            "to": "aggregate-result-coerce"
+          },
+          {
+            "kind": "data",
+            "from": "aggregate-source",
+            "to": "aggregate-result-toString"
+          }
+        ],
+        "callbackResults": [
+          {
+            "producer": "aggregate-source",
+            "shape": "unknown",
+            "uses": [
+              "aggregate-result-iterate",
+              "aggregate-result-spread",
+              "aggregate-result-coerce",
+              "aggregate-result-toString"
+            ],
+            "closed": [
+              "uses"
+            ]
+          }
+        ]
       },
       "shape": "callable"
     },

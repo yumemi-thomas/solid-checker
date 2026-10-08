@@ -7,6 +7,7 @@ export const propertyGetOperations = call => (call.operations ?? []).filter(oper
 
 export function validatePropertyGets(call) {
   for (const operation of propertyGetOperations(call)) {
+    if ((call.callbackResults ?? []).some(result => (result.uses ?? []).includes(operation.id))) continue;
     const items = (call.callbacks ?? []).filter(item => item.operation === operation.id);
     assert.equal(items.length, 1, "a value Get needs one source item");
     const source = items[0].from;

@@ -1244,10 +1244,62 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    fn callback_result_obligations(
+        &self,
+        file: &solid_facts::FileFacts,
+        result: &mut LocalAccessResult,
+    ) {
+        for call in &file.ast.calls {
+            if self
+                .lookup
+                .resolved_callee_call(file, call.callee)
+                .is_some_and(|resolved| {
+                    resolved.validity == typefacts::ResolvedCallValidity::Recovery
+                })
+            {
+                // TypeScript already owns the invalid-call diagnostic.
+                continue;
+            }
+            let Some(results) = self
+                .lookup
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| self.lookup.contract_callback_results(symbol))
+            else {
+                continue;
+            };
+            for produced in results {
+                let clean = call
+                    .arguments
+                    .get(produced.parameter)
+                    .is_some_and(|argument| {
+                        callback_result_is_plain_data(file, argument, produced)
+                            || (self.lookup.callee_symbol(file, call.callee).is_some_and(
+                                |symbol| self.lookup.contract_result_census_is_closed(symbol),
+                            ) && callback_result_literal_is_tracked(
+                                file, argument, produced, true,
+                            ))
+                    });
+                if clean {
+                    continue;
+                }
+                result.dispatch_obligations.push(crate::StaticDefect {
+                    kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: file.source_text(call.callee).unwrap_or_default().to_owned(), member: None,
+                    },
+                    location: location(file.path.shared(), call.span),
+                    analysis_context: format!("the value returned by callback argument {} has result uses whose exact target, shape or execution is not established",
+                        produced.parameter + 1),
+                    fixes: vec![], uncertain: true,
+                });
+            }
+        }
+    }
+
     pub(crate) fn discover(&self, file: &solid_facts::FileFacts) -> LocalAccessResult {
         let mut result = LocalAccessResult::default();
         self.opaque_member_obligations(file, &mut result);
         self.returned_callable_obligations(file, &mut result);
+        self.callback_result_obligations(file, &mut result);
         let mut seen = HashSet::new();
         let allowed = allowed_callback_spans(file, self.lookup);
         for call in &file.ast.calls {
@@ -2257,4 +2309,332 @@ pub(crate) fn append_local_access_result_owned(
     target
         .dispatch_obligations
         .extend(source.dispatch_obligations);
+}
+
+/// A negative is a syntax proof about fresh values, never an inference from
+/// an annotation, an unknown symbol or the contract's upper-bound shape.
+fn callback_result_is_plain_data(
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+    result: &crate::ContractCallbackResult,
+) -> bool {
+    use solid_facts::ast::FunctionKind;
+    if argument.spread || !result.parameter_path.is_empty() || !result.uses.is_closed() {
+        return false;
+    }
+    if result.uses.items().is_empty() {
+        return true;
+    }
+    let span = file.ast.peel_ts_sugar_span(argument.span);
+    let Some(function) = file.ast.functions.iter().find(|function| {
+        function.span == span
+            && function.kind == FunctionKind::Arrow
+            && !function.r#async
+            && !function.generator
+    }) else {
+        return false;
+    };
+    let own_returns = file
+        .ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            crate::owners::containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|owner| owner.span == function.span)
+        })
+        .chain(function.expression_return.iter())
+        .collect::<Vec<_>>();
+    own_returns
+        .iter()
+        .all(|returned| callback_result_completion_is_plain_data(file, returned, result))
+}
+
+fn callback_result_completion_is_plain_data(
+    file: &solid_facts::FileFacts,
+    returned: &solid_facts::ast::ReturnFact,
+    result: &crate::ContractCallbackResult,
+) -> bool {
+    use crate::contract_semantics::{InvokeProtocol, Schedule};
+    use solid_facts::ast::RuntimeValueKind;
+    let completion = returned
+        .argument
+        .map_or(returned.span, |span| file.ast.peel_ts_sugar_span(span));
+    let primitive = matches!(returned.runtime_value_kind, RuntimeValueKind::Primitive | RuntimeValueKind::Nullish)
+        // Oxc's broad runtime kind also contains a RegExp allocation. It is
+        // an object, so it cannot supply the primitive negative premise.
+        && file.source_text(completion).is_some_and(|text| !text.trim_start().starts_with('/'));
+    let plain_object = returned.runtime_value_kind == RuntimeValueKind::Object
+        && returned
+            .structure
+            .as_deref()
+            .is_some_and(|structure| structure.complete_literal);
+    result.uses.items().iter().all(|use_| {
+        if !use_.path.is_empty() {
+            return false;
+        }
+        match use_.operation.invoke_protocol() {
+            InvokeProtocol::Call => {
+                primitive && use_.callable_only && use_.operation.cardinality.min == Some(0)
+            }
+            InvokeProtocol::Get | InvokeProtocol::Coerce => primitive,
+            InvokeProtocol::Iterate => primitive,
+            // A fresh literal object has no getters, spreads, computed keys,
+            // prototype replacement or method definitions. Later retained
+            // uses need an escape/mutation proof not supplied by this shape.
+            InvokeProtocol::GetEnumerableStringValues | InvokeProtocol::GetOwnEnumerableValues => {
+                primitive
+                    || (plain_object
+                        && use_.operation.at == Some(crate::contract_semantics::Event::Call)
+                        && use_.operation.schedule == Some(Schedule::SameStack))
+            }
+            InvokeProtocol::HasInstance => false,
+        }
+    })
+}
+
+/// Exact returned arrow, with no alias, wrapper callee, retained value or
+/// recursive callable traversal. `guaranteed` is required for write proof
+/// and for discharging dispatch; read classification needs universal context.
+pub(crate) fn callback_result_literal_is_tracked(
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+    result: &crate::ContractCallbackResult,
+    guaranteed: bool,
+) -> bool {
+    use crate::contract_semantics::{
+        CapabilityKnowledge, CardinalityScope, Event, InvokeProtocol, OwnerSource, Schedule,
+        Tracking,
+    };
+    let exact_at_call = |operation: &crate::contract_semantics::Operation| {
+        operation.guard.is_none()
+            && operation.trigger == Some(crate::contract_semantics::Trigger::Event(Event::Call))
+            && operation.at == Some(Event::Call)
+            && operation.schedule == Some(Schedule::SameStack)
+            && operation.cardinality.scope == Some(CardinalityScope::Call)
+            && operation.cardinality.min.is_some_and(|min| min >= 1)
+    };
+    if !result.uses.is_closed()
+        || result.uses.items().is_empty()
+        || !result.parameter_path.is_empty()
+        || !result.non_escaping
+        || argument.spread
+        || (guaranteed && !exact_at_call(&result.producer))
+    {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(argument.span);
+    let Some(producer) = file.ast.functions.iter().find(|function| {
+        function.span == span
+            && function.kind == solid_facts::ast::FunctionKind::Arrow
+            && !function.r#async
+            && !function.generator
+            && function.expression_body
+    }) else {
+        return false;
+    };
+    let Some(returned) = producer
+        .expression_return
+        .as_ref()
+        .and_then(|returned| returned.argument)
+    else {
+        return false;
+    };
+    if !file.ast.functions.iter().any(|function| {
+        function.span == file.ast.peel_ts_sugar_span(returned)
+            && function.kind == solid_facts::ast::FunctionKind::Arrow
+            && !function.r#async
+            && !function.generator
+    }) {
+        return false;
+    }
+    result.uses.items().iter().all(|use_| {
+        use_.path.is_empty()
+            && use_.operation.invoke_protocol() == InvokeProtocol::Call
+            && use_.operation.tracking == Tracking::Tracked
+            && matches!(use_.operation.owner.source, OwnerSource::Created(_))
+            && use_.operation.owner.capabilities.child_owners == CapabilityKnowledge::Allowed
+            && (!guaranteed || exact_at_call(&use_.operation))
+    })
+}
+
+// Insert at the end of the existing local_access.rs module.
+#[cfg(test)]
+mod callback_result_tests {
+    use crate::contract_semantics::{
+        Cardinality, CardinalityScope, Event, InvokeProtocol, KnowledgeSet, Operation, OperationId,
+        OperationKind, OwnerRelation, OwnerSource, Schedule, Tracking, UpperBound, ValueShape,
+    };
+    use crate::{ContractCallbackResult, ContractCallbackResultUse};
+    use solid_facts::{
+        FileFacts, ast,
+        compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
+        core::Generation,
+    };
+    use std::collections::BTreeSet;
+
+    fn file(source: &str) -> FileFacts {
+        let ast = ast::extract("case.tsx", source).unwrap();
+        let compiler = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: ast.source.hash.clone(),
+            semantic_model: Default::default(),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            discarded_regions: vec![],
+            ownership_regions: vec![],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        };
+        FileFacts::new(Generation::new(1).unwrap(), source, ast, compiler).unwrap()
+    }
+
+    fn operation(protocol: InvokeProtocol) -> Operation {
+        Operation {
+            id: OperationId("result-use".into()),
+            kind: OperationKind::Invoke,
+            guard: None,
+            trigger: Some(crate::contract_semantics::Trigger::Event(Event::Call)),
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            tracking: Tracking::AmbientAtExecution,
+            strict_read: None,
+            owner: OwnerRelation {
+                source: OwnerSource::AmbientAtExecution,
+                ..OwnerRelation::default()
+            },
+            cardinality: Cardinality {
+                scope: Some(CardinalityScope::Call),
+                min: Some(0),
+                max: Some(UpperBound::Many),
+            },
+            inputs: vec![],
+            output: None,
+            resources: BTreeSet::new(),
+            composed_from: None,
+            protocol: (protocol != InvokeProtocol::Call).then_some(protocol),
+        }
+    }
+
+    fn result(protocol: InvokeProtocol, gated: bool) -> ContractCallbackResult {
+        ContractCallbackResult {
+            parameter: 0,
+            parameter_path: vec![],
+            non_escaping: true,
+            producer: operation(InvokeProtocol::Call),
+            shape: ValueShape::Unknown,
+            uses: KnowledgeSet::Complete(vec![ContractCallbackResultUse {
+                path: vec![],
+                operation: operation(protocol),
+                callable_only: gated,
+            }]),
+        }
+    }
+
+    fn clean(source: &str, result: &ContractCallbackResult) -> bool {
+        let file = file(source);
+        let argument = &file
+            .ast
+            .calls
+            .iter()
+            .find(|call| file.source_text(call.callee) == Some("take"))
+            .unwrap()
+            .arguments[0];
+        crate::local_access::callback_result_is_plain_data(&file, argument, result)
+    }
+
+    #[test]
+    fn primitive_result_negative_requires_the_callable_test_not_only_min_zero() {
+        assert!(clean("take(() => 1)", &result(InvokeProtocol::Call, true)));
+        assert!(!clean(
+            "take(() => 1)",
+            &result(InvokeProtocol::Call, false)
+        ));
+        for protocol in [
+            InvokeProtocol::Get,
+            InvokeProtocol::Iterate,
+            InvokeProtocol::Coerce,
+        ] {
+            assert!(clean(
+                "take((() => 1) satisfies (() => number))",
+                &result(protocol, false)
+            ));
+            assert!(!clean("take(() => /regexp/)", &result(protocol, false)));
+            assert!(!clean(
+                "take(() => (/regexp/ satisfies object))",
+                &result(protocol, false)
+            ));
+        }
+        let mut partial = result(InvokeProtocol::Coerce, false);
+        partial.uses = KnowledgeSet::Partial(partial.uses.items().to_vec());
+        assert!(!clean("take(() => 1)", &partial));
+    }
+
+    #[test]
+    fn returned_arrow_requires_exact_guaranteed_context_and_no_escape() {
+        use crate::contract_semantics::{CapabilityKnowledge, ResourceId};
+        let mut result = result(InvokeProtocol::Call, false);
+        result.producer.cardinality.min = Some(1);
+        let mut uses = result.uses.items().to_vec();
+        uses[0].operation.cardinality.min = Some(1);
+        uses[0].operation.tracking = Tracking::Tracked;
+        uses[0].operation.owner.source = OwnerSource::Created(ResourceId("owner".into()));
+        uses[0].operation.owner.capabilities.child_owners = CapabilityKnowledge::Allowed;
+        result.uses = KnowledgeSet::Complete(uses);
+        let tracked = |source: &str, result: &ContractCallbackResult| {
+            let file = file(source);
+            let argument = &file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some("take"))
+                .unwrap()
+                .arguments[0];
+            crate::local_access::callback_result_literal_is_tracked(&file, argument, result, true)
+        };
+        assert!(tracked("take(() => () => read())", &result));
+        assert!(tracked(
+            "take((() => (() => read()) satisfies (() => number)) satisfies (() => () => number))",
+            &result
+        ));
+        for source in [
+            "take(() => known)",
+            "take(() => { return () => read(); })",
+            "take(async () => () => read())",
+            "take(() => async () => read())",
+        ] {
+            assert!(!tracked(source, &result), "{source}");
+        }
+        let mut escapes = result.clone();
+        escapes.non_escaping = false;
+        assert!(!tracked("take(() => () => read())", &escapes));
+        let mut optional = result.clone();
+        let mut uses = optional.uses.items().to_vec();
+        uses[0].operation.cardinality.min = Some(0);
+        optional.uses = KnowledgeSet::Complete(uses);
+        assert!(!tracked("take(() => () => read())", &optional));
+        let mut no_trigger = result;
+        no_trigger.producer.trigger = None;
+        assert!(!tracked("take(() => () => read())", &no_trigger));
+    }
+
+    #[test]
+    fn result_get_is_shallow_and_never_suppresses_getters_proxies_or_later_mutation() {
+        let result = result(InvokeProtocol::GetOwnEnumerableValues, false);
+        assert!(clean("take(() => ({ value: 1 }))", &result));
+        assert!(clean("take(() => { return { value: 1 }; })", &result));
+        for source in [
+            "take(() => ({ get value() { return 1; } }))",
+            "take(() => ({ ...other }))",
+            "take(() => other)",
+            "take(() => ({ [key]: 1 }))",
+            "take(async () => ({ value: 1 }))",
+        ] {
+            assert!(!clean(source, &result), "{source}");
+        }
+        let mut later = result;
+        let mut uses = later.uses.items().to_vec();
+        uses[0].operation.at = Some(Event::ResultAccess);
+        later.uses = KnowledgeSet::Complete(uses);
+        assert!(!clean("take(() => ({ value: 1 }))", &later));
+    }
 }

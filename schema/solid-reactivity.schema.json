@@ -205,6 +205,11 @@
           "minItems": 1,
           "items": { "$ref": "#/$defs/nonemptyString" }
         },
+        "callbackResults": {
+          "description": "Authored finite use censuses for exact callback invocation results. Omission states no result claim; recursive traversal is unsupported.",
+          "type": "array", "maxItems": 4096,
+          "items": { "$ref": "#/$defs/callbackResult" }
+        },
         "callbacks": {
           "type": "array",
           "items": { "$ref": "#/$defs/callback" }
@@ -261,6 +266,18 @@
       "type": "array",
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/nonemptyString" }
+    },
+    "callbackResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["producer", "shape"],
+      "properties": {
+        "producer": { "$ref": "#/$defs/nonemptyString" },
+        "shape": { "$ref": "#/$defs/value" },
+        "uses": { "$ref": "#/$defs/operationIds" },
+        "callableOnly": { "$ref": "#/$defs/operationIds" },
+        "closed": { "type": "array", "uniqueItems": true,
+          "items": { "enum": ["uses"] } }
+      }
     },
     "callback": {
       "type": "object",

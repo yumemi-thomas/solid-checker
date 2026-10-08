@@ -1207,6 +1207,12 @@ impl ExportSemantics {
             }
             opened.insert(ClaimDomain::Callbacks);
         }
+        // Withdrawing an effect loses its result census too; do not leave a
+        // complete empty list behind after removing its only positive item.
+        self.call.callback_results.retain(|result| {
+            !gone.contains(&result.producer)
+                && !result.uses.items().iter().any(|id| gone.contains(id))
+        });
         self.call
             .operations
             .retain(|operation| !gone.contains(&operation.id));
@@ -1460,6 +1466,9 @@ pub struct CallSemantics {
     /// not named here, exactly as it did before bounds existed. Stated only
     /// beside a closed `reads`.
     accessor_bounds: BTreeSet<String>,
+    /// Authored result-use censuses, local to this call graph. Omission is
+    /// historical behavior, never a negative claim about callback results.
+    callback_results: Vec<CallbackResult>,
     pub operations: Vec<Operation>,
     pub edges: Vec<OperationEdge>,
     pub resources: Vec<Resource>,
@@ -1480,11 +1489,25 @@ impl CallSemantics {
             proposed_closures: BTreeSet::new(),
             context_premises: BTreeSet::new(),
             accessor_bounds: BTreeSet::new(),
+            callback_results: Vec::new(),
             operations,
             edges,
             resources,
             guards,
         }
+    }
+
+    /// State the package's finite uses of each invocation result. This never
+    /// asserts that a caller's implementation has the declared shape.
+    #[must_use]
+    pub fn with_callback_results(mut self, results: Vec<CallbackResult>) -> Self {
+        self.callback_results = results;
+        self
+    }
+
+    #[must_use]
+    pub fn callback_results(&self) -> &[CallbackResult] {
+        &self.callback_results
     }
 
     /// The same call semantics, additionally proposing the named domains for
@@ -1642,6 +1665,20 @@ impl CallClaims {
     }
 }
 
+/// A finite, non-recursive use census for the value a caller invocation
+/// produces. `shape` is an upper-bound description; consumers must substitute
+/// the actual caller result before proving a negative or executing a target.
+/// A partial/unknown `uses` remains an obligation even for primitive data.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CallbackResult {
+    pub producer: OperationId,
+    pub shape: ValueShape,
+    pub uses: KnowledgeSet<OperationId>,
+    /// Exact uses guarded by a runtime callable test of this result value.
+    /// A zero lower bound alone never supplies that negative premise.
+    pub callable_only: BTreeSet<OperationId>,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CallbackInvocation {
     pub from: ValueSource,
@@ -1737,7 +1774,9 @@ pub enum Event {
     /// `invoke` a `callbacks` item names from a bare parameter, with schedule
     /// `external`, tracking and owner `ambient-at-execution`, counted per
     /// trigger from zero to many, unguarded
-    /// (`validate::validate_result_access_operation`).
+    /// (`validate::validate_result_access_operation`). A catalogued callback
+    /// result use instead states its exact context and can run synchronously
+    /// and untracked on a later caller's stack; it is never guessed queued.
     ResultAccess,
 }
 
@@ -1767,8 +1806,9 @@ pub enum Schedule {
 /// additionally distinguish which property values are obtained; their entry
 /// bounds never establish every getter's execution. Each runs whatever the caller's value
 /// carries, at the call, on the caller's stack, in the caller's tracking
-/// context, so a non-call item is always `ambient-at-execution` and never a
-/// claim that the export clears or establishes tracking.
+/// context. Historical argument protocol items are always
+/// `ambient-at-execution`. A catalogued callback-result use states its exact
+/// execution point, owner and tracking independently of the producer.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum InvokeProtocol {
     Call,

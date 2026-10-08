@@ -2142,7 +2142,19 @@ fn discover_interprocedural_graph(
                     } else if callback.execution == "inline"
                         && let Some(target) =
                             functions_for_path(nodes, nodes_by_path, file.path.as_str())
-                                .filter(|(_, node)| invoked.contains(node.span))
+                                .filter(|(_, node)| {
+                                    if lookup.contract_callback_results(symbol).is_some_and(
+                                        |results| {
+                                            results.iter().any(|result| {
+                                                result.parameter == callback.parameter
+                                            })
+                                        },
+                                    ) {
+                                        node.span == file.ast.peel_ts_sugar_span(invoked)
+                                    } else {
+                                        invoked.contains(node.span)
+                                    }
+                                })
                                 .min_by_key(|(_, node)| node.span.end - node.span.start)
                                 .map(|(_, node)| node.span)
                     {
@@ -2211,7 +2223,20 @@ fn discover_interprocedural_graph(
                 } else if callback.execution == "inline"
                     && let Some(target) =
                         functions_for_path(nodes, nodes_by_path, file.path.as_str())
-                            .filter(|(_, node)| argument.span.contains(node.span))
+                            .filter(|(_, node)| {
+                                if lookup
+                                    .contract_callback_results(symbol)
+                                    .is_some_and(|results| {
+                                        results
+                                            .iter()
+                                            .any(|result| result.parameter == callback.parameter)
+                                    })
+                                {
+                                    node.span == file.ast.peel_ts_sugar_span(argument.span)
+                                } else {
+                                    argument.span.contains(node.span)
+                                }
+                            })
                             .min_by_key(|(_, node)| node.span.end - node.span.start)
                             .map(|(_, node)| node.span)
                 {
@@ -2260,6 +2285,24 @@ fn discover_interprocedural_graph(
                 .parameter_owner
                 .get(argument_symbol)
                 .copied();
+            // A local wrapper cannot republish an authored result-use census
+            // as ordinary argument invocations. Result provenance has not been
+            // transported across this project call, so this parameter remains
+            // unaccounted for in the wrapper's callback domain.
+            if let Some((callback_owner, parameter)) = callback_owner_and_parameter
+                && lookup
+                    .contract_callback_results(symbol)
+                    .is_some_and(|results| {
+                        results
+                            .iter()
+                            .any(|result| result.parameter == argument_index)
+                    })
+            {
+                contribution
+                    .escaped_parameters
+                    .push((nodes[callback_owner].span, parameter));
+                continue;
+            }
             let Some((callback_owner, parameter)) = callback_owner_and_parameter else {
                 if let Some((package, export)) = unknown_contract_callback
                     && potentially_callable(runtime_argument_callability)
@@ -6048,7 +6091,18 @@ fn interprocedural_result_reads_for_file(
                             .iter()
                             .enumerate()
                             .filter(|(_, node)| {
-                                node.path == file.path.as_str() && invoked.contains(node.span)
+                                node.path == file.path.as_str()
+                                    && (if lookup.contract_callback_results(symbol).is_some_and(
+                                        |results| {
+                                            results.iter().any(|result| {
+                                                result.parameter == callback.parameter
+                                            })
+                                        },
+                                    ) {
+                                        node.span == file.ast.peel_ts_sugar_span(invoked)
+                                    } else {
+                                        invoked.contains(node.span)
+                                    })
                             })
                             .min_by_key(|(_, node)| node.span.end - node.span.start)
                             .map(|(index, node)| {

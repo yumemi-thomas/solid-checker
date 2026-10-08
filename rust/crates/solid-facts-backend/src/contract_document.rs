@@ -418,6 +418,38 @@ fn compact_call(
 ) -> Result<JsonValue, ContractFailure> {
     let claims = call.claims();
     let mut object = JsonMap::new();
+    if !call.callback_results().is_empty() {
+        let results = call
+            .callback_results()
+            .iter()
+            .map(|result| {
+                let mut item = JsonMap::new();
+                item.insert("producer".into(), json!(ids.operation(&result.producer)?));
+                item.insert("shape".into(), compact_value(&result.shape, ids)?);
+                if !result.callable_only.is_empty() {
+                    item.insert(
+                        "callableOnly".into(),
+                        JsonValue::Array(
+                            result
+                                .callable_only
+                                .iter()
+                                .map(|id| Ok(json!(ids.operation(id)?)))
+                                .collect::<Result<Vec<_>, ContractFailure>>()?,
+                        ),
+                    );
+                }
+                let mut closed = Vec::new();
+                compact_knowledge(&mut item, &mut closed, "uses", &result.uses, |id| {
+                    Ok(json!(ids.operation(id)?))
+                })?;
+                if !closed.is_empty() {
+                    item.insert("closed".into(), json!(closed));
+                }
+                Ok(JsonValue::Object(item))
+            })
+            .collect::<Result<Vec<_>, ContractFailure>>()?;
+        object.insert("callbackResults".into(), JsonValue::Array(results));
+    }
     let mut closed = Vec::new();
     compact_knowledge(
         &mut object,
@@ -1599,6 +1631,8 @@ struct WireCall {
     /// against. Additive to `schemaVersion: 1`.
     #[serde(default, rename = "accessorBounds")]
     accessor_bounds: Vec<String>,
+    #[serde(default, rename = "callbackResults")]
+    callback_results: Vec<WireCallbackResult>,
     #[serde(default)]
     callbacks: Option<Vec<WireCallback>>,
     #[serde(default)]
@@ -1643,6 +1677,19 @@ enum WireCallDomain {
     Returns,
     Cleanups,
     Disposals,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireCallbackResult {
+    producer: String,
+    shape: WireValue,
+    #[serde(default)]
+    uses: Option<Vec<String>>,
+    #[serde(default)]
+    closed: Vec<String>,
+    #[serde(default, rename = "callableOnly")]
+    callable_only: Vec<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -2617,6 +2664,7 @@ impl WireSummary {
                 .saturating_add(call.resources.len())
                 .saturating_add(call.edges.len())
                 .saturating_add(call.cases.as_ref().map_or(0, Vec::len))
+                .saturating_add(call.callback_results.len())
         })
     }
 }
@@ -2912,6 +2960,11 @@ fn expand_call(
 ) -> Result<solid_reactive_ir::contract_semantics::CallSemantics, ContractFailure> {
     let call = call.cloned().unwrap_or_default();
     validate_count("operations", call.operations.len(), MAX_OPERATIONS)?;
+    validate_count(
+        "callback result censuses",
+        call.callback_results.len(),
+        MAX_OPERATIONS,
+    )?;
     validate_count("resources", call.resources.len(), MAX_RESOURCES)?;
     validate_count("edges", call.edges.len(), MAX_EDGES)?;
     validate_count(
@@ -3010,7 +3063,42 @@ fn expand_call(
     )
     // Whether a bound is admissible -- `reads` closed -- is a normalization
     // invariant, refused by name in `validate_accessor_bounds`.
-    .with_accessor_bounds(bounds))
+    .with_accessor_bounds(bounds)
+    .with_callback_results(
+        call.callback_results
+            .into_iter()
+            .map(|result| {
+                if result.closed.iter().any(|domain| domain != "uses") || result.closed.len() > 1 {
+                    return invalid_model("a callback result may close only uses, once");
+                }
+                if result
+                    .callable_only
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    != result.callable_only.len()
+                {
+                    return invalid_model("duplicate callableOnly result use");
+                }
+                Ok(solid_reactive_ir::contract_semantics::CallbackResult {
+                    producer: ids.operation(&result.producer),
+                    callable_only: result
+                        .callable_only
+                        .into_iter()
+                        .map(|id| ids.operation(&id))
+                        .collect(),
+                    shape: expand_value(&result.shape, ids)?,
+                    uses: knowledge(
+                        result
+                            .uses
+                            .map(|items| items.into_iter().map(|id| ids.operation(&id)).collect()),
+                        !result.closed.is_empty(),
+                        "callback result uses",
+                    )?,
+                })
+            })
+            .collect::<Result<Vec<_>, ContractFailure>>()?,
+    ))
 }
 
 impl From<WireCallDomain> for ClaimDomain {
@@ -4421,6 +4509,57 @@ mod tests {
             ))
             .is_err(),
             "an unknown event spelling is refused, not ignored"
+        );
+    }
+
+    #[test]
+    fn callback_result_censuses_round_trip_and_refuse_unknown_closed_domains() {
+        let original = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/reactive-ir/package-own-tracked-read-consumer/node_modules/reactive-package/solid-reactivity.json"
+        ));
+        let mut document: JsonValue = serde_json::from_slice(original).unwrap();
+        let call = &mut document["summaries"]["summary-watch-status"]["call"];
+        call["callbacks"] = json!([
+            {"from":{"arg":0},"operation":"producer"},
+            {"from":{"operation":"producer"},"operation":"use-result"}
+        ]);
+        call["operations"].as_array_mut().unwrap().extend([
+            json!({"id":"producer","kind":"invoke","at":{"event":"call","schedule":"same-stack"},
+                "tracking":"ambient-at-execution","owner":{"source":"ambient-at-execution"},"count":{"scope":"call","min":1,"max":1}}),
+            json!({"id":"use-result","kind":"invoke","protocol":"coerce","at":{"event":"call","schedule":"same-stack"},
+                "tracking":"ambient-at-execution","owner":{"source":"ambient-at-execution"},"count":{"scope":"call","min":0,"max":"many"}}),
+        ]);
+        call["edges"] = json!([{"kind":"data","from":"producer","to":"use-result"}]);
+        call["callbackResults"] = json!([{"producer":"producer","shape":"unknown","uses":["use-result"],"closed":["uses"]}]);
+        let kept = decode(&serde_json::to_vec(&document).unwrap())
+            .unwrap()
+            .normalize()
+            .unwrap();
+        let emitted = encode(
+            &kept,
+            &SidecarDigests {
+                proof: None,
+                probes: None,
+            },
+            false,
+        )
+        .unwrap();
+        let again = decode(&emitted).unwrap().normalize().unwrap();
+        assert_eq!(kept.semantic_digest(), again.semantic_digest());
+        assert_eq!(
+            again.artifact_cases()[0].exports["watchStatus"]
+                .call
+                .callback_results()
+                .len(),
+            1
+        );
+        document["summaries"]["summary-watch-status"]["call"]["callbackResults"][0]["closed"] =
+            json!(["recursive"]);
+        assert!(
+            decode(&serde_json::to_vec(&document).unwrap())
+                .and_then(|decoded| decoded.normalize())
+                .is_err()
         );
     }
 

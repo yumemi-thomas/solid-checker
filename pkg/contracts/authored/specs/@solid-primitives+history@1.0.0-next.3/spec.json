@@ -21,7 +21,7 @@
   ],
   "exports": {
     "createUndoHistory": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/history-createUndoHistory-top-level-read/node_modules/@solid-primitives/history/dist/index.js:40-80 \u2014 Browser result is exactly canUndo/canRedo/undo/redo. canUndo and canRedo read the created store through getTargetIndex (49-51,72-73). undo/redo are callable, never inert; their writes and captured source callbacks are unclaimed.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/history-createUndoHistory-top-level-read/node_modules/@solid-primitives/history/dist/index.js:40-80 \u2014 Browser result is exactly canUndo/canRedo/undo/redo. canUndo and canRedo read the created store through getTargetIndex (49-51,72-73). undo/redo are callable, never inert; their writes and captured source callbacks are unclaimed. Callback-result provenance draft: bare callable source branch only; arrays, options getters, restoration capture/state and undo/redo graphs remain open. Returns preserves the existing opaque undo/redo members.",
       "rule": "strict-read-untracked",
       "call": {
         "closed": [
@@ -81,6 +81,164 @@
                 }
               ]
             }
+          },
+          {
+            "id": "source-memos",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "history-state",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "resources": [
+              "history-state"
+            ]
+          },
+          {
+            "id": "history-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "source-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "restore-history-result",
+            "kind": "invoke",
+            "trigger": {
+              "event": "result-access"
+            },
+            "at": {
+              "event": "result-access",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "source-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "history-state",
+            "kind": "reactive-source"
+          }
+        ],
+        "computations": [
+          "source-memos"
+        ],
+        "creates": [
+          "history-state"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "history-source"
+          },
+          {
+            "from": {
+              "operation": "history-source",
+              "path": []
+            },
+            "operation": "restore-history-result"
+          }
+        ],
+        "edges": [
+          {
+            "kind": "data",
+            "from": "history-source",
+            "to": "restore-history-result"
+          }
+        ],
+        "callbackResults": [
+          {
+            "producer": "history-source",
+            "shape": "unknown",
+            "uses": [
+              "restore-history-result"
+            ],
+            "closed": [
+              "uses"
+            ]
           }
         ]
       },
@@ -93,7 +251,10 @@
           "rule": "strict-read-untracked",
           "why": "Both accessors read store.items/offset on every normal call."
         }
-      ]
+      ],
+      "resultClosures": {
+        "history-source": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/history-createUndoHistory-top-level-read/node_modules/@solid-primitives/history/dist/index.js:33-49 \u2014 Results are retained in store.items and invoked once on each qualifying synchronous jump under untrack at 64-68. Result-access here is the caller invocation stack, never a host queue. No recursive result call."
+      }
     }
   }
 }

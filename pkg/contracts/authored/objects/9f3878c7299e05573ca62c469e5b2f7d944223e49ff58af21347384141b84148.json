@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "0783c17c0bb86bf07129c05a020d4ea9a6469e8906afa3a454738e11760bea44",
+            "closureSha256": "5964863856f967b59110e27815ef74098688f6b9831378cb691f5ea97a469cd6",
             "path": "./dist/index.js",
             "sha256": "16918859df0fb6867d867f43a2ac2fd3eb9f1a5ab37d6fb124347fea746b079f"
           },
@@ -121,7 +121,7 @@
             },
             "tracking": "tracked",
             "count": {
-              "min": 0,
+              "min": 1,
               "max": "many",
               "scope": "call"
             },
@@ -228,7 +228,13 @@
           "returns",
           "creates"
         ],
-        "creates": []
+        "creates": [],
+        "callbackResults": [
+          {
+            "producer": "children-source",
+            "shape": "unknown"
+          }
+        ]
       },
       "shape": "callable"
     }
