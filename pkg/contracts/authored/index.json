@@ -364,8 +364,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/fdf999e6eabc0a45c33294c4612ee073a9331fe7ddefe84b1d7ea92b25e5acf8.json",
-      "documentDigest": "sha256:fdf999e6eabc0a45c33294c4612ee073a9331fe7ddefe84b1d7ea92b25e5acf8"
+      "document": "objects/9a0ec581aedd95813a1b4d313f46580bd337a1b16c50fce5d3388deba00fc47d.json",
+      "documentDigest": "sha256:9a0ec581aedd95813a1b4d313f46580bd337a1b16c50fce5d3388deba00fc47d"
     },
     {
       "packageName": "@solid-primitives/connectivity",
@@ -723,8 +723,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/a5679eea51bd01c23d4604f5c6edd527a3dd9f9d8ca1f0e7c69263e796d9ed2c.json",
-      "documentDigest": "sha256:a5679eea51bd01c23d4604f5c6edd527a3dd9f9d8ca1f0e7c69263e796d9ed2c"
+      "document": "objects/7c14e42ff66091de9e3eb5fd488672e6c4c73efa1e341c2f1bb0f47368b1f8a9.json",
+      "documentDigest": "sha256:7c14e42ff66091de9e3eb5fd488672e6c4c73efa1e341c2f1bb0f47368b1f8a9"
     },
     {
       "packageName": "@solid-primitives/event-bus",
@@ -788,8 +788,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/7f566e69484c7db483ebda60b96f65a4e572927fb91adb622ae10e9a32abd705.json",
-      "documentDigest": "sha256:7f566e69484c7db483ebda60b96f65a4e572927fb91adb622ae10e9a32abd705"
+      "document": "objects/bfd3d8a2d85c26ffe3092ddc4b56594ef3a7530c09d1f973808117e1128819db.json",
+      "documentDigest": "sha256:bfd3d8a2d85c26ffe3092ddc4b56594ef3a7530c09d1f973808117e1128819db"
     },
     {
       "packageName": "@solid-primitives/event-listener",
@@ -1643,6 +1643,39 @@
     {
       "packageName": "@solid-primitives/page-utilities",
       "specifier": "@solid-primitives/page-utilities",
+      "packageVersion": "3.0.0-next.0",
+      "packageIntegrity": "sha512-GmFq5Caqa6SHhJo8USTzZrNJsxqdqblI31y4nUC4w790kVwDpIBX2Ax9NcswFUV5mYTqNH5A943SwD8h00Xl4g==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:cfc039a5a3370d01aa9cbad85eafb9e7ff212ce165cf647b7b8abf6c42a8912a",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/3599f9914cd1be1b3e0e1eb84301d3dd6626b242d01177a73dbef8b17e922cb3.json",
+      "documentDigest": "sha256:3599f9914cd1be1b3e0e1eb84301d3dd6626b242d01177a73dbef8b17e922cb3"
+    },
+    {
+      "packageName": "@solid-primitives/page-utilities",
+      "specifier": "@solid-primitives/page-utilities",
       "packageVersion": "3.0.0-next.2",
       "packageIntegrity": "sha512-Jq6lq6nQmy+cIH/eyX/VtsfB/YDYp23PdkTsKVP4TQL4bLLqtw87U+HJg3Sr7Is0JEkbKhgtuIIIAfvEEaefTw==",
       "requestedEntrypoint": ".",
@@ -2127,8 +2160,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/8b09311028dd5247a39d1da84301805a7a5134a9c90bace95519f4a9c10831b4.json",
-      "documentDigest": "sha256:8b09311028dd5247a39d1da84301805a7a5134a9c90bace95519f4a9c10831b4"
+      "document": "objects/44e11a26d7fe72a1f21c4c8aabf668b2c5c82be283e363c5f4077e3fd5463a04.json",
+      "documentDigest": "sha256:44e11a26d7fe72a1f21c4c8aabf668b2c5c82be283e363c5f4077e3fd5463a04"
     },
     {
       "packageName": "@solid-primitives/resize-observer",
@@ -2815,8 +2848,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/ce92840df1f5bb74b81796daf819fd5cc7f6811cfaa6b6f3ea8ff94d40a35e3f.json",
-      "documentDigest": "sha256:ce92840df1f5bb74b81796daf819fd5cc7f6811cfaa6b6f3ea8ff94d40a35e3f"
+      "document": "objects/e1d7b5ed3be106974d850c6500e4b88eed6c2d3c8e52fb668bbd8588a1be8333.json",
+      "documentDigest": "sha256:e1d7b5ed3be106974d850c6500e4b88eed6c2d3c8e52fb668bbd8588a1be8333"
     },
     {
       "packageName": "@solid-primitives/utils",
@@ -2881,8 +2914,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/ce92840df1f5bb74b81796daf819fd5cc7f6811cfaa6b6f3ea8ff94d40a35e3f.json",
-      "documentDigest": "sha256:ce92840df1f5bb74b81796daf819fd5cc7f6811cfaa6b6f3ea8ff94d40a35e3f"
+      "document": "objects/e1d7b5ed3be106974d850c6500e4b88eed6c2d3c8e52fb668bbd8588a1be8333.json",
+      "documentDigest": "sha256:e1d7b5ed3be106974d850c6500e4b88eed6c2d3c8e52fb668bbd8588a1be8333"
     },
     {
       "packageName": "@solid-primitives/utils",

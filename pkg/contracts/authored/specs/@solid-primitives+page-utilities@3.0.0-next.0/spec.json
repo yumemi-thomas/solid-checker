@@ -1,0 +1,173 @@
+{
+  "package": "@solid-primitives/page-utilities",
+  "version": "3.0.0-next.0",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createPageVisibility": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+page-utilities@3.0.0-next.0_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/page-utilities/dist/index.js:18-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+utils@7.0.0-next.4_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+event-listener@3.0.0-next.3_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solidjs+signals@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2346-2355,3031-3060 \u2014 Independently audited next.0 behavior matches next.2 after formatting/export syntax differences; bytes and identity do not match. Browser-only draft, all pairs must run on next.0.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "visibility"
+            }
+          },
+          {
+            "id": "create-visibility",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "visibility"
+            ]
+          },
+          {
+            "id": "listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "hydration-settle",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "hydration-settle-owner",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "visibility",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "hydration-settle-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-visibility"
+        ],
+        "cleanups": [
+          "listener-cleanups"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks",
+          "creates"
+        ],
+        "reads": [],
+        "callbacks": [],
+        "computations": [
+          "hydration-settle"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+page-utilities@3.0.0-next.0_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/page-utilities/dist/index.js:18-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+utils@7.0.0-next.4_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+event-listener@3.0.0-next.3_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solidjs+signals@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2346-2355,3031-3060 \u2014 Browser normal return is the eager visibility signal accessor, no alternate shape.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+page-utilities@3.0.0-next.0_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/page-utilities/dist/index.js:18-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+utils@7.0.0-next.4_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+event-listener@3.0.0-next.3_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solidjs+signals@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2346-2355,3031-3060 \u2014 No package reactive source is read in the constructor. document.visibilityState and native listener setup follow P1; the later handler updates the signal without reading it.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+page-utilities@3.0.0-next.0_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/page-utilities/dist/index.js:18-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+utils@7.0.0-next.4_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+event-listener@3.0.0-next.3_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solidjs+signals@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2346-2355,3031-3060 \u2014 No caller callable is accepted. The native event handler and hydrating settle callback are internal functions. P1 covers document event dispatch; no caller function is invoked.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+page-utilities@3.0.0-next.0_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/page-utilities/dist/index.js:18-26; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+utils@7.0.0-next.4_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solid-primitives+event-listener@3.0.0-next.3_@solidjs+web@2.0.0-rc.4_solid-js@2.0.0-rc.4__solid-js@2.0.0-rc.4/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solidjs+signals@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2346-2355,3031-3060; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solidjs+signals@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:1942-1958; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/@solidjs+signals@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 \u2014 One eager signal. Hydration can register at most one onSettled child computation, only when the present owner accepts children; ownerless/leaf paths queue a one-shot without a child. Child owner is a leaf. Optional count 0..1 is retained; no guaranteed missing owner is inferred."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        },
+        {
+          "label": "hydration-read",
+          "rule": "strict-read-untracked",
+          "why": "Exercises the hydrating initialization branch and reads its actual returned signal in the component strict-read window versus JSX. The computation production is source-cited; this pair does not independently falsify its child-owner count."
+        }
+      ]
+    }
+  }
+}

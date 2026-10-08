@@ -22,7 +22,7 @@
   "hostFreeIdentity": "identity.host-free.json",
   "exports": {
     "createEventStack": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-toEffect-module-scope/node_modules/@solid-primitives/event-bus/dist/eventStack.js:6-33 — Partial reactive value member; bus cleanup is optional-owner; all domains remain open.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-toEffect-module-scope/node_modules/@solid-primitives/event-bus/dist/eventStack.js:6-33 \u2014 Partial reactive value member; bus cleanup is optional-owner; all domains remain open.",
       "rule": "strict-read-untracked",
       "call": {
         "operations": [
@@ -94,7 +94,7 @@
       ]
     },
     "toEffect": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-toEffect-module-scope/node_modules/@solid-primitives/event-bus/dist/utils.js:62-71 — Required-owner effect only; wrapper and captured-owner emit protocol stay open.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-toEffect-module-scope/node_modules/@solid-primitives/event-bus/dist/utils.js:62-71 \u2014 Required-owner effect only; wrapper and captured-owner emit protocol stay open.",
       "rule": "missing-owner",
       "call": {
         "operations": [
@@ -173,6 +173,100 @@
         "minZero": [],
         "closed": [],
         "closures": {}
+      }
+    },
+    "createEventBus": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "clear-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "listen",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "emit",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "clear",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "clear-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 tryOnCleanup registers only when an owner exists in browser dev.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 tryOnCleanup registers only when an owner exists in browser dev.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 tryOnCleanup registers only when an owner exists in browser dev.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 tryOnCleanup registers only when an owner exists in browser dev."
       }
     }
   }

@@ -18,10 +18,10 @@
             "element": "open-callable",
             "input": "open-callable",
             "makeClipboard": "open-callable",
-            "newClipboardItem": "open-callable",
+            "newClipboardItem": "authored-newClipboardItem",
             "newItem": "open-callable",
             "readClipboard": "open-callable",
-            "writeClipboard": "open-callable"
+            "writeClipboard": "authored-writeClipboard"
           },
           "resolution": {
             "runtimeBranch": "/exports/./import/default",
@@ -119,6 +119,84 @@
         "closed": [
           "returns"
         ]
+      },
+      "shape": "callable"
+    },
+    "authored-newClipboardItem": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "shape": "callable"
+    },
+    "authored-writeClipboard": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
       },
       "shape": "callable"
     }

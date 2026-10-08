@@ -277,7 +277,8 @@
           "creates",
           "invalidates",
           "cleanups",
-          "disposals"
+          "disposals",
+          "returns"
         ],
         "reads": [],
         "writes": [],

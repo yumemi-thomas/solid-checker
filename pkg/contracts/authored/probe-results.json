@@ -2194,6 +2194,50 @@
       "spec": "@solid-primitives+event-bus@3.0.0-next.3",
       "package": "@solid-primitives/event-bus",
       "version": "3.0.0-next.3",
+      "export": "createEventBus",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 4,
+            "column": 21
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read-browser/.solid-checker-authored-probes/_solid-primitives_event-bus_3.0.0-next.3_createEventBus/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+event-bus@3.0.0-next.3",
+      "package": "@solid-primitives/event-bus",
+      "version": "3.0.0-next.3",
       "export": "createEventStack",
       "solidRuntime": [
         {
@@ -2372,7 +2416,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_createEventListener/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-install/page-utilities-3.0.0-next.0/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_createEventListener/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -2417,7 +2461,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_createEventListener_accessor/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-install/page-utilities-3.0.0-next.0/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_createEventListener_accessor/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -2572,7 +2616,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_createEventListenerMap/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-install/page-utilities-3.0.0-next.0/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_createEventListenerMap/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -2653,7 +2697,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_createEventSignal/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-install/page-utilities-3.0.0-next.0/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_createEventSignal/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -2734,7 +2778,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_makeEventListener/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-install/page-utilities-3.0.0-next.0/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_makeEventListener/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -2815,7 +2859,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_makeEventListenerStack/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-install/page-utilities-3.0.0-next.0/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_makeEventListenerStack/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -2931,7 +2975,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_WindowEventListener/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-install/page-utilities-3.0.0-next.0/.solid-checker-authored-probes/_solid-primitives_event-listener_3.0.0-next.3_WindowEventListener/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -5944,6 +5988,116 @@
       "correct": []
     },
     {
+      "spec": "@solid-primitives+page-utilities@3.0.0-next.0",
+      "package": "@solid-primitives/page-utilities",
+      "version": "3.0.0-next.0",
+      "export": "createPageVisibility",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 4,
+            "column": 19
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+page-utilities@3.0.0-next.0",
+      "package": "@solid-primitives/page-utilities",
+      "version": "3.0.0-next.0",
+      "export": "createPageVisibility",
+      "label": "hydration-read",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 11,
+            "column": 18
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+page-utilities@3.0.0-next.0",
+      "package": "@solid-primitives/page-utilities",
+      "version": "3.0.0-next.0",
+      "export": "createPageVisibility",
+      "label": "leaf",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
       "spec": "@solid-primitives+page-utilities@3.0.0-next.2",
       "package": "@solid-primitives/page-utilities",
       "version": "3.0.0-next.2",
@@ -7894,7 +8048,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_createElementSize/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_createElementSize/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -7939,7 +8093,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_createElementSize_target-effect/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_createElementSize_target-effect/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -8020,7 +8174,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_createResizeObserver/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_createResizeObserver/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -8183,7 +8337,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_createWindowSize/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_createWindowSize/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -8227,7 +8381,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_makeResizeObserver/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_makeResizeObserver/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -8831,7 +8985,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-virtual/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createPreventScroll/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createPreventScroll/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -8965,7 +9119,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-virtual/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createScrollPosition_owner/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createScrollPosition_owner/main.tsx",
             "line": 8,
             "column": 32
           }

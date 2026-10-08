@@ -917,7 +917,8 @@
         "closed": [
           "reads",
           "creates",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": []
@@ -925,7 +926,8 @@
       "closures": {
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerStack.js:7-15; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:163-174 \u2014 Construction performs no reactive read; later add/remove dispatch remains in the open returned-method protocol.",
         "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerStack.js:7-15; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:163-174 \u2014 Exactly one direct onCleanup(execute) registration at construction, plus later-listener-cleanup for optional-owner tryOnCleanup registration when the returned adder is invoked. No later registration is attributed to construction. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
-        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerStack.js:7-15; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:163-174 \u2014 P1: No callable is passed at construction (only host target/options). The callback stack captures only package-created bound host removals. The future adder's handler argument has no constructor origin and is deliberately covered by the open returns domain, not an invented constructor callback."
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerStack.js:7-15; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:163-174 \u2014 P1: No callable is passed at construction (only host target/options). The callback stack captures only package-created bound host removals. The future adder's handler argument has no constructor origin and is deliberately covered by the open returns domain, not an invented constructor callback.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListenerStack.js:7-15 - Browser/server both return a two-item tuple. Keep both controls opaque; first member additionally returns a whole removal function. Closing factory returns does not certify listen/clear calls."
       }
     },
     "preventDefault": {
@@ -993,7 +995,8 @@
           "invalidates",
           "cleanups",
           "disposals",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "creates": [],
         "reads": [],
@@ -1009,7 +1012,8 @@
         "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
         "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
         "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
-        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 P1: The Event method has platform behavior; the only captured caller callback is the exact wrapped-handler result-access invocation, preserving invoking tracking and owner. This closes captured-callback enumeration, not the returned wrapper protocol."
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 \u2014 P1: The Event method has platform behavior; the only captured caller callback is the exact wrapped-handler result-access invocation, preserving invoking tracking and owner. This closes captured-callback enumeration, not the returned wrapper protocol.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:18-21 - CURRENT described-callable (ADR 0152) suffices: one captured callback invocation, same stack, ambient tracking and owner; returned callback result is discarded. Native Event.preventDefault uses P1. No new general returned graph needed."
       }
     },
     "stopPropagation": {
@@ -1077,7 +1081,8 @@
           "invalidates",
           "cleanups",
           "disposals",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "creates": [],
         "reads": [],
@@ -1093,7 +1098,8 @@
         "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
         "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
         "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 Wrapper construction only allocates a closure; it does not execute the callback or event method, read reactive state, register an owner, mutate reactive state, or dispose anything. Later wrapper execution is explicitly not declared inert.",
-        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 P1: The Event method has platform behavior; the only captured caller callback is the exact wrapped-handler result-access invocation, preserving invoking tracking and owner. This closes captured-callback enumeration, not the returned wrapper protocol."
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 \u2014 P1: The Event method has platform behavior; the only captured caller callback is the exact wrapped-handler result-access invocation, preserving invoking tracking and owner. This closes captured-callback enumeration, not the returned wrapper protocol.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/callbackWrappers.js:37-40 - CURRENT described-callable (ADR 0152) suffices, analogous to preventDefault; Event.stopPropagation is P1."
       }
     }
   }

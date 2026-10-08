@@ -108,6 +108,96 @@
           "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
         }
       ]
+    },
+    "writeClipboard": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open."
+      }
+    },
+    "newClipboardItem": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration."
+      }
     }
   }
 }

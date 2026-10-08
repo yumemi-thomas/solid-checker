@@ -815,7 +815,8 @@
         "closed": [
           "reads",
           "creates",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": []
@@ -885,7 +886,8 @@
           "invalidates",
           "cleanups",
           "disposals",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "creates": [],
         "reads": [],
@@ -959,7 +961,8 @@
           "invalidates",
           "cleanups",
           "disposals",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "creates": [],
         "reads": [],

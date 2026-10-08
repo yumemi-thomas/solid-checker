@@ -697,7 +697,8 @@
         "closed": [
           "reads",
           "creates",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": []
@@ -705,7 +706,8 @@
       "closures": {
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27 \u2014 Constructor allocates native observer and binds methods; no package reactive source read.",
         "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27 \u2014 Exactly one native observer and one direct onCleanup(disconnect) registration, observer-cleanup; methods defer observe/unobserve work. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
-        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27 \u2014 P1: The only caller callback is passed to ResizeObserver; resize-callback is external/ambient/0..many. observe/unobserve remain an open returned-method protocol."
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27 \u2014 P1: The only caller callback is passed to ResizeObserver; resize-callback is external/ambient/0..many. observe/unobserve remain an open returned-method protocol.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/dist/index.js:16-27 - Exactly {observe, unobserve} on both paths; opaque controls remain obligations. Native ResizeObserver and methods satisfy P1, existing handler and owner probes retained."
       },
       "probes": [
         {
