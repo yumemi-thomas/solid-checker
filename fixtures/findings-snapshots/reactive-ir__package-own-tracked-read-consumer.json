@@ -7,8 +7,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-own-tracked-read-consumer/App.tsx",
-      "start": 472,
-      "end": 484,
+      "start": 513,
+      "end": 525,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-own-tracked-read-consumer/App.tsx",
+      "start": 797,
+      "end": 817,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-own-tracked-read-consumer/App.tsx",
+      "start": 882,
+      "end": 898,
       "fixes": 0
     },
     {

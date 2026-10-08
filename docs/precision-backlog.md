@@ -1,5 +1,12 @@
 # Precision backlog
 
+## A package's own read through wrappers (2026-10-08)
+
+ADR 0246: a contract's own read stays package-internal (uncertifiable) when it
+reaches a component through a project wrapper; it was a proven violation.
+Still open: a package read inside an explicit `untrack` is projected as a plain
+untracked read, so the `createScrollPosition` closure stays withdrawn.
+
 ## Tracked callbacks that may not run (2026-10-08)
 
 ADR 0244: an accessor read in a closed, always-tracked, created-owner callback

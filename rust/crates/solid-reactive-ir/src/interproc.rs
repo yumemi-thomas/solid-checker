@@ -6391,9 +6391,15 @@ fn interprocedural_result_reads_for_file(
         for (direct, read) in effective {
             let accessor = read.display.to_string();
             // A summary read whose symbol is the callee itself is the export's
-            // own contracted `reads`, not a value passed in.
-            let package_internal =
-                read.symbol.as_str() == symbol && crate::contract_declared_state(&read.declaration);
+            // own contracted `reads`, not a value passed in. ADR 0246: so is
+            // one that reached this call through a project wrapper -- its
+            // symbol is still the contracted export whose state it reads, and
+            // the wrapper's call does not make that read the caller's.
+            let package_internal = crate::contract_declared_state(&read.declaration)
+                && (read.symbol.as_str() == symbol
+                    || lookup
+                        .contract_export_identity(read.symbol.as_str())
+                        .is_some());
             if seen.insert((
                 callee.path.clone(),
                 callee.start_byte,
