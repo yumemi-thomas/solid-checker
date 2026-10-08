@@ -1,0 +1,214 @@
+{
+  "package": "@solid-primitives/workers",
+  "version": "2.0.1-next.1",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createWorker": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:40-104 — In the browser normal completion returns exactly [native Worker with dynamic RPC methods, start, stop, native Set of export names]. It registers exactly onCleanup(terminate), creates and reads no Solid reactive node, and never invokes an original caller function value. Function bodies are serialized into distinct worker-realm functions, not called in the caller's realm. P1 Worker/Blob/URL/event dispatch, P2 method map. Source-reviewed browser draft only. Identity generation and case-attributed Chrome rc.13 probes are pending; this is not shipping evidence.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "unknown"
+                },
+                {
+                  "kind": "effectful-callable",
+                  "call": {
+                    "closed": [
+                      "reads",
+                      "creates",
+                      "callbacks",
+                      "returns"
+                    ],
+                    "reads": [],
+                    "creates": [],
+                    "callbacks": [],
+                    "returns": [
+                      "worker-start-return"
+                    ],
+                    "operations": [
+                      {
+                        "id": "worker-start-return",
+                        "kind": "return",
+                        "trigger": {
+                          "event": "call"
+                        },
+                        "at": {
+                          "event": "call",
+                          "schedule": "same-stack"
+                        },
+                        "tracking": "untracked",
+                        "count": {
+                          "min": 1,
+                          "max": 1,
+                          "scope": "call"
+                        },
+                        "output": "undefined"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "effectful-callable",
+                  "call": {
+                    "closed": [
+                      "reads",
+                      "creates",
+                      "callbacks",
+                      "returns"
+                    ],
+                    "reads": [],
+                    "creates": [],
+                    "callbacks": [],
+                    "returns": [
+                      "worker-stop-return"
+                    ],
+                    "operations": [
+                      {
+                        "id": "worker-stop-return",
+                        "kind": "return",
+                        "trigger": {
+                          "event": "call"
+                        },
+                        "at": {
+                          "event": "call",
+                          "schedule": "same-stack"
+                        },
+                        "tracking": "untracked",
+                        "count": {
+                          "min": 1,
+                          "max": 1,
+                          "scope": "call"
+                        },
+                        "output": "undefined"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "plain"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:40-104 — In the browser normal completion returns exactly [native Worker with dynamic RPC methods, start, stop, native Set of export names]. It registers exactly onCleanup(terminate), creates and reads no Solid reactive node, and never invokes an original caller function value. Function bodies are serialized into distinct worker-realm functions, not called in the caller's realm. P1 Worker/Blob/URL/event dispatch, P2 method map. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/utils.js:9-66 — setup registers a native message handler; on the main thread its RPC method map is empty and its callbacks map contains only internally allocated promise resolvers. buildWorkerCode serializes fns with Function.prototype.toString; it does not call them.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:40-104 — In the browser normal completion returns exactly [native Worker with dynamic RPC methods, start, stop, native Set of export names]. It registers exactly onCleanup(terminate), creates and reads no Solid reactive node, and never invokes an original caller function value. Function bodies are serialized into distinct worker-realm functions, not called in the caller's realm. P1 Worker/Blob/URL/event dispatch, P2 method map. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/utils.js:9-66 — setup registers a native message handler; on the main thread its RPC method map is empty and its callbacks map contains only internally allocated promise resolvers. buildWorkerCode serializes fns with Function.prototype.toString; it does not call them.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:40-104 — In the browser normal completion returns exactly [native Worker with dynamic RPC methods, start, stop, native Set of export names]. It registers exactly onCleanup(terminate), creates and reads no Solid reactive node, and never invokes an original caller function value. Function bodies are serialized into distinct worker-realm functions, not called in the caller's realm. P1 Worker/Blob/URL/event dispatch, P2 method map. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/utils.js:9-66 — setup registers a native message handler; on the main thread its RPC method map is empty and its callbacks map contains only internally allocated promise resolvers. buildWorkerCode serializes fns with Function.prototype.toString; it does not call them.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:40-104 — In the browser normal completion returns exactly [native Worker with dynamic RPC methods, start, stop, native Set of export names]. It registers exactly onCleanup(terminate), creates and reads no Solid reactive node, and never invokes an original caller function value. Function bodies are serialized into distinct worker-realm functions, not called in the caller's realm. P1 Worker/Blob/URL/event dispatch, P2 method map. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/utils.js:9-66 — setup registers a native message handler; on the main thread its RPC method map is empty and its callbacks map contains only internally allocated promise resolvers. buildWorkerCode serializes fns with Function.prototype.toString; it does not call them.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:40-104 — In the browser normal completion returns exactly [native Worker with dynamic RPC methods, start, stop, native Set of export names]. It registers exactly onCleanup(terminate), creates and reads no Solid reactive node, and never invokes an original caller function value. Function bodies are serialized into distinct worker-realm functions, not called in the caller's realm. P1 Worker/Blob/URL/event dispatch, P2 method map. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/utils.js:9-66 — setup registers a native message handler; on the main thread its RPC method map is empty and its callbacks map contains only internally allocated promise resolvers. buildWorkerCode serializes fns with Function.prototype.toString; it does not call them."
+      },
+      "memberClosures": {
+        "return.1": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:60-64 — start removes an old native listener and runs setup(worker, {}, callbacks). It registers no Solid cleanup/owner, reads no reactive state, calls no caller callable and completes undefined. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/utils.js:9-66 — setup registers a native message handler; on the main thread its RPC method map is empty and its callbacks map contains only internally allocated promise resolvers. buildWorkerCode serializes fns with Function.prototype.toString; it does not call them.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:60-64 — start removes an old native listener and runs setup(worker, {}, callbacks). It registers no Solid cleanup/owner, reads no reactive state, calls no caller callable and completes undefined. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/utils.js:9-66 — setup registers a native message handler; on the main thread its RPC method map is empty and its callbacks map contains only internally allocated promise resolvers. buildWorkerCode serializes fns with Function.prototype.toString; it does not call them.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:60-64 — start removes an old native listener and runs setup(worker, {}, callbacks). It registers no Solid cleanup/owner, reads no reactive state, calls no caller callable and completes undefined. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/utils.js:9-66 — setup registers a native message handler; on the main thread its RPC method map is empty and its callbacks map contains only internally allocated promise resolvers. buildWorkerCode serializes fns with Function.prototype.toString; it does not call them.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:60-64 — start removes an old native listener and runs setup(worker, {}, callbacks). It registers no Solid cleanup/owner, reads no reactive state, calls no caller callable and completes undefined. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/utils.js:9-66 — setup registers a native message handler; on the main thread its RPC method map is empty and its callbacks map contains only internally allocated promise resolvers. buildWorkerCode serializes fns with Function.prototype.toString; it does not call them."
+        },
+        "return.2": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:54-59,65-69 — stop removes a native listener and idempotently revokes the Blob URL/terminates the native Worker. No Solid reads, creates or caller callbacks; completion undefined.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:54-59,65-69 — stop removes a native listener and idempotently revokes the Blob URL/terminates the native Worker. No Solid reads, creates or caller callbacks; completion undefined.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:54-59,65-69 — stop removes a native listener and idempotently revokes the Blob URL/terminates the native Worker. No Solid reads, creates or caller callbacks; completion undefined.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/workers-createWorker-module-scope/node_modules/@solid-primitives/workers/dist/index.js:54-59,65-69 — stop removes a native listener and idempotently revokes the Blob URL/terminates the native Worker. No Solid reads, creates or caller callbacks; completion undefined."
+        }
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Direct onCleanup requires cleanup support on a present owner. Leaf misuse throws before returning the worker, which lives until the isolated page closes; the ordinary correct twin explicitly stops it."
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "997f5fb3afe124e1cfee7dd3ea6e26418bc84bf6616c6f78fb7b393cc395762d",
+            "path": "./dist/index.js",
+            "sha256": "09d447b0e21634d0bfa6fb4fe97cb952b3acff44ffc45afb7d6e4befa143c88d"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "76661221ed92ab9f577f7705a6e195f2963e70239e4708c197a21c3db1322ebf"
+          },
+          "exports": {
+            "Entries": "open-callable",
+            "Key": "open-callable",
+            "MapEntries": "open-callable",
+            "Rerun": "open-callable",
+            "SetValues": "open-callable",
+            "keyArray": "authored-keyArray"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-FvEYVbX0PpeCTKyL3x7e2wnbb8muIKMgU+cQue+UrkhRkg1HLrBbimymvMuyQgPeBSEdgMYaaMnQI/uCUHS4NQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "de69508405ec2e956b3b7e754255dad28df29c4605690a9a0e406a9fb4e6f3e3"
+    },
+    "name": "@solid-primitives/keyed",
+    "version": "3.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-keyArray": {
+      "call": {
+        "closed": [
+          "cleanups"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

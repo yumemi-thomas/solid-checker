@@ -1,0 +1,453 @@
+{
+  "package": "@solid-primitives/vibrate",
+  "version": "1.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createVibrate": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10,62-114 — Support is checked via navigator capability even in a browser. Unsupported path returns inert vibrating/start/stop without a signal, effect or cleanup. Supported path creates one scalar ownedWrite signal; a callable pattern is computed in one tracked split effect; direct onCleanup(stop) registers once. Both returns have exactly vibrating/start/stop/supported; the function members remain callable rather than falsely reactive/inert on both branches. No own reactive signal is read. Pattern also runs later via access(pattern) at start and native interval dispatch. P1 native navigator/timers; P2 data options. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/utils/dist/index.js:33,88 — Resolved @solid-primitives/utils@7.0.0-next.4 sets ownedWrite true and access invokes only zero-arity functions. Source-reviewed browser draft only. Identity generation and case-attributed Chrome rc.13 probes are pending; this is not shipping evidence. All positive pairs require real Vibration API support; no capability patch is proposed.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": [
+          "create-vibrating"
+        ],
+        "computations": [
+          "pattern-effect"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "vibrating",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "pattern-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create-vibrating",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "vibrating"
+            ]
+          },
+          {
+            "id": "pattern-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "pattern-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "pattern-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "pattern-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "pattern-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "pattern-start",
+            "kind": "invoke",
+            "trigger": {
+              "event": "result-access"
+            },
+            "at": {
+              "event": "result-access",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "pattern-interval",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "vibrating",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "start",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "stop",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "supported",
+                  "value": {
+                    "kind": "plain"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "pattern-compute"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "pattern-start"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "pattern-interval"
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10,62-114 — Support is checked via navigator capability even in a browser. Unsupported path returns inert vibrating/start/stop without a signal, effect or cleanup. Supported path creates one scalar ownedWrite signal; a callable pattern is computed in one tracked split effect; direct onCleanup(stop) registers once. Both returns have exactly vibrating/start/stop/supported; the function members remain callable rather than falsely reactive/inert on both branches. No own reactive signal is read. Pattern also runs later via access(pattern) at start and native interval dispatch. P1 native navigator/timers; P2 data options. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/utils/dist/index.js:33,88 — Resolved @solid-primitives/utils@7.0.0-next.4 sets ownedWrite true and access invokes only zero-arity functions.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10,62-114 — Support is checked via navigator capability even in a browser. Unsupported path returns inert vibrating/start/stop without a signal, effect or cleanup. Supported path creates one scalar ownedWrite signal; a callable pattern is computed in one tracked split effect; direct onCleanup(stop) registers once. Both returns have exactly vibrating/start/stop/supported; the function members remain callable rather than falsely reactive/inert on both branches. No own reactive signal is read. Pattern also runs later via access(pattern) at start and native interval dispatch. P1 native navigator/timers; P2 data options. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/utils/dist/index.js:33,88 — Resolved @solid-primitives/utils@7.0.0-next.4 sets ownedWrite true and access invokes only zero-arity functions.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10,62-114 — Support is checked via navigator capability even in a browser. Unsupported path returns inert vibrating/start/stop without a signal, effect or cleanup. Supported path creates one scalar ownedWrite signal; a callable pattern is computed in one tracked split effect; direct onCleanup(stop) registers once. Both returns have exactly vibrating/start/stop/supported; the function members remain callable rather than falsely reactive/inert on both branches. No own reactive signal is read. Pattern also runs later via access(pattern) at start and native interval dispatch. P1 native navigator/timers; P2 data options. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/utils/dist/index.js:33,88 — Resolved @solid-primitives/utils@7.0.0-next.4 sets ownedWrite true and access invokes only zero-arity functions.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10,62-114 — Support is checked via navigator capability even in a browser. Unsupported path returns inert vibrating/start/stop without a signal, effect or cleanup. Supported path creates one scalar ownedWrite signal; a callable pattern is computed in one tracked split effect; direct onCleanup(stop) registers once. Both returns have exactly vibrating/start/stop/supported; the function members remain callable rather than falsely reactive/inert on both branches. No own reactive signal is read. Pattern also runs later via access(pattern) at start and native interval dispatch. P1 native navigator/timers; P2 data options. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/utils/dist/index.js:33,88 — Resolved @solid-primitives/utils@7.0.0-next.4 sets ownedWrite true and access invokes only zero-arity functions.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10,62-114 — Support is checked via navigator capability even in a browser. Unsupported path returns inert vibrating/start/stop without a signal, effect or cleanup. Supported path creates one scalar ownedWrite signal; a callable pattern is computed in one tracked split effect; direct onCleanup(stop) registers once. Both returns have exactly vibrating/start/stop/supported; the function members remain callable rather than falsely reactive/inert on both branches. No own reactive signal is read. Pattern also runs later via access(pattern) at start and native interval dispatch. P1 native navigator/timers; P2 data options. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/utils/dist/index.js:33,88 — Resolved @solid-primitives/utils@7.0.0-next.4 sets ownedWrite true and access invokes only zero-arity functions."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "On supported hosts, the cleanup rejects a present leaf."
+        },
+        {
+          "label": "state-read",
+          "rule": "strict-read-untracked",
+          "why": "On supported hosts, returned vibrating is an eager real ownedWrite accessor. The case-file component read witnesses the positive signal creation without claiming this on the unsupported branch."
+        },
+        {
+          "label": "pattern-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "A callable pattern executes in tracked split-effect compute. Its case-file ordinary signal write throws only in misuse."
+        },
+        {
+          "label": "start-pattern",
+          "rule": "missing-owner",
+          "why": "Arm the case-file pattern only after construction; later start invokes it on the calling stack. A cleanup there has no owner after await; the correct twin restores the captured owner.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "interval-pattern",
+          "rule": "missing-owner",
+          "why": "The armed pattern's later native interval dispatch is ownerless; the correct twin restores owner inside the callback. Both stop after the first interval.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "isVibrationSupported": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10 — Browser result is only the native navigator capability boolean; no Solid reads, construction or caller callback. P1 navigator.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10 — Browser result is only the native navigator capability boolean; no Solid reads, construction or caller callback. P1 navigator.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10 — Browser result is only the native navigator capability boolean; no Solid reads, construction or caller callback. P1 navigator.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10 — Browser result is only the native navigator capability boolean; no Solid reads, construction or caller callback. P1 navigator.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:10 — Browser result is only the native navigator capability boolean; no Solid reads, construction or caller callback. P1 navigator."
+      }
+    },
+    "frequencyToPattern": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:133-137 — Published inputs are numeric primitives. Math operations return exactly an array of two numeric durations, no reactive reads, constructions or caller callback. P2 primitive coercion.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "array",
+              "element": {
+                "kind": "plain"
+              }
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:133-137 — Published inputs are numeric primitives. Math operations return exactly an array of two numeric durations, no reactive reads, constructions or caller callback. P2 primitive coercion.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:133-137 — Published inputs are numeric primitives. Math operations return exactly an array of two numeric durations, no reactive reads, constructions or caller callback. P2 primitive coercion.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:133-137 — Published inputs are numeric primitives. Math operations return exactly an array of two numeric durations, no reactive reads, constructions or caller callback. P2 primitive coercion.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/vibrate-createVibrate-module-scope/node_modules/@solid-primitives/vibrate/dist/index.js:133-137 — Published inputs are numeric primitives. Math operations return exactly an array of two numeric durations, no reactive reads, constructions or caller callback. P2 primitive coercion."
+      }
+    }
+  }
+}

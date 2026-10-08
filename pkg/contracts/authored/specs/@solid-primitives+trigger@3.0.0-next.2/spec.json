@@ -1,0 +1,111 @@
+{
+  "package": "@solid-primitives/trigger",
+  "version": "3.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createTrigger": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/set-ReactiveSet-leaf-owner/node_modules/@solid-primitives/trigger/dist/index.js:30-33 — Browser signal tuple. The dirty member remains opaque; the direct track read is attributable to the case file. Research draft; Chrome attribution/probe gate has not run. Do not ship before every listed pair passes.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "create-trigger",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "trigger"
+            ]
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "trigger"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "creates": [
+          "create-trigger"
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "trigger",
+            "kind": "reactive-source"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/set-ReactiveSet-leaf-owner/node_modules/@solid-primitives/trigger/dist/index.js:6-33 — Construction only creates a signal; no read is performed until the caller invokes track.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/set-ReactiveSet-leaf-owner/node_modules/@solid-primitives/trigger/dist/index.js:6-33 — One signal with initial undefined, equals:false and ownedWrite:true, and no owner, memo, effect or cleanup. A plain createSignal has no leaf-owner guard (rc.13 dev.js:2346-2354; dev-shared.js:5660-5705).",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/set-ReactiveSet-leaf-owner/node_modules/@solid-primitives/trigger/dist/index.js:6-33 — No caller callable is accepted or invoked by the constructor.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/set-ReactiveSet-leaf-owner/node_modules/@solid-primitives/trigger/dist/index.js:6-33 — The browser return is exactly [signal accessor, bound signal setter]. The declared dirty member stays callable, not a setter claim that would incorrectly forbid its ownedWrite:true writes."
+      }
+    }
+  }
+}

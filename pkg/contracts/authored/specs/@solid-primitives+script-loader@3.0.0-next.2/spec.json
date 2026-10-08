@@ -1,0 +1,207 @@
+{
+  "package": "@solid-primitives/script-loader",
+  "version": "3.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createScriptLoader": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solid-primitives/script-loader/dist/index.js:22-56 — Browser normal completion returns the fresh native HTMLScriptElement, constructs exactly the render effect and registers exactly one direct cleanup. It has no private reactive-source read or construction; the src callable runs in effect compute and its own body is callback behavior. P1 native DOM; P2 plain props. assign skips children. Renderer assign/ref: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solidjs/web/dist/web.dev.js:1076-1094,1794-1829,920-926; ref callbacks run unowned and are not claimed complete. Source-reviewed browser draft only. Identity generation and case-attributed Chrome rc.13 probes are pending; this is not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "src-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "script-src-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "src-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "script-src-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "script-src-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "src"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "script-src-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "computations": [
+          "src-effect"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "src"
+              ]
+            },
+            "operation": "src-compute"
+          }
+        ],
+        "reads": [],
+        "creates": [],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solid-primitives/script-loader/dist/index.js:22-56 — Browser normal completion returns the fresh native HTMLScriptElement, constructs exactly the render effect and registers exactly one direct cleanup. It has no private reactive-source read or construction; the src callable runs in effect compute and its own body is callback behavior. P1 native DOM; P2 plain props. assign skips children. Renderer assign/ref: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solidjs/web/dist/web.dev.js:1076-1094,1794-1829,920-926; ref callbacks run unowned and are not claimed complete.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solid-primitives/script-loader/dist/index.js:22-56 — Browser normal completion returns the fresh native HTMLScriptElement, constructs exactly the render effect and registers exactly one direct cleanup. It has no private reactive-source read or construction; the src callable runs in effect compute and its own body is callback behavior. P1 native DOM; P2 plain props. assign skips children. Renderer assign/ref: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solidjs/web/dist/web.dev.js:1076-1094,1794-1829,920-926; ref callbacks run unowned and are not claimed complete.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solid-primitives/script-loader/dist/index.js:22-56 — Browser normal completion returns the fresh native HTMLScriptElement, constructs exactly the render effect and registers exactly one direct cleanup. It has no private reactive-source read or construction; the src callable runs in effect compute and its own body is callback behavior. P1 native DOM; P2 plain props. assign skips children. Renderer assign/ref: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solidjs/web/dist/web.dev.js:1076-1094,1794-1829,920-926; ref callbacks run unowned and are not claimed complete.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solid-primitives/script-loader/dist/index.js:22-56 — Browser normal completion returns the fresh native HTMLScriptElement, constructs exactly the render effect and registers exactly one direct cleanup. It has no private reactive-source read or construction; the src callable runs in effect compute and its own body is callback behavior. P1 native DOM; P2 plain props. assign skips children. Renderer assign/ref: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/script-loader-createScriptLoader-module-scope/node_modules/@solidjs/web/dist/web.dev.js:1076-1094,1794-1829,920-926; ref callbacks run unowned and are not claimed complete."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The synchronous render-effect registration rejects the present onSettled leaf."
+        },
+        {
+          "label": "src-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The src callback is case-file code executed in tracked render-effect compute. Only misuse writes its ordinary caller signal."
+        }
+      ]
+    }
+  }
+}

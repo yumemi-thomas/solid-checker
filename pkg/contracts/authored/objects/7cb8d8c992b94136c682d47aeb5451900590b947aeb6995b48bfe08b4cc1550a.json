@@ -1,0 +1,244 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "b06138813967de8f6f45ed27ecc08eed4a5b5c71f1b5ba4d11d948f5243e2672",
+            "path": "./dist/index.js",
+            "sha256": "7711d1b01b9092fe8596acae50a7995889563423a10d1ca66c36a808f16cff0d"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "c2a18447c2431fc5070062df5b6596a347f07c2b87e3963a020c091a35ded085"
+          },
+          "exports": {
+            "createAbortable": "authored-createAbortable",
+            "createAggregated": "authored-createAggregated",
+            "fromJSONStream": "open-callable",
+            "fromStream": "open-callable",
+            "makeAbortable": "open-callable",
+            "makeRetrying": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-Op+3kB7DdrekwZwHtOpCk8gQ/jdIaKZfsjHu2IFfuItyQebv6FQmAGakeG4IDQi9IOcBViAxQRO1c5Vc6MDreA==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "5d5cc07cf0438e029a0b543bd86c69cc872d32caf08a2b01e5c969b0a50c22b4"
+    },
+    "name": "@solid-primitives/async",
+    "version": "0.0.101-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createAbortable": {
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "shape": "callable"
+    },
+    "authored-createAggregated": {
+      "call": {
+        "operations": [
+          {
+            "id": "aggregate-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "aggregate-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "computations": [
+          "aggregate-memo"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "aggregate-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "aggregate-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

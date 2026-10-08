@@ -56,4 +56,4 @@
   `package-contract-incomplete` notice (`chain(count())` from utils does the
   same). Before this slice `props` had no contract, so the path never applied
   there. `combineProps`'s own claim gained nothing on the ledger and is
-  withdrawn; the consumer fix is open.
+  withdrawn. The consumer fix is ADR 0237, which restores the finding.

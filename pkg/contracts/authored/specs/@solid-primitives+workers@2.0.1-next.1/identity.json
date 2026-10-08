@@ -1,0 +1,134 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/workers",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-rbzg3Pn8iN0gcRlhwF2FaE3afvLiHCUIE6A+UgfGQVnv34lwasU+dwaXX0Ru+kSoK2ulayuiV6ObifyWF78uOA==",
+      "snapshotRoot": "sha256:2e119cb743ab9aa676cb3ebc12660b9f7a125e9fc73e979d044ecab157d14bc6",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "20e557023969236a592253cefe58f806cdb466a7db74d4f1d8d35fead6cf257b",
+                  "path": "./dist/index.js",
+                  "sha256": "d33cc1cbd81d0b3e806efb3eb4fcc733b0f7e03eaeefc383ed4d4df6dcedde85"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "a6a26f742e3e506e3168824aa885ffcfab085621cc9785aa948b6633c56a92dc"
+                },
+                "exports": {
+                  "createReactiveWorker": "summary-a43b54febda5fd5c91535d6d0c02be7a5eb2bbd5f41d541d3f6d8fdd9da966f2",
+                  "createWorker": "summary-13d4cdcda6e2d1f6009e881a6ee64e2080087473069716cd1d3bcb059fbeb632",
+                  "createWorkerPool": "summary-de539c61f8e411e812122c3c0acb4db0ca77754f56d2bbc5e85ef5db3ed75fce",
+                  "createWorkerQuery": "summary-a3e686f249f2a2283f3fd26e0c25f14fbf5a69e91b8b1613d3449526bca34923"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-rbzg3Pn8iN0gcRlhwF2FaE3afvLiHCUIE6A+UgfGQVnv34lwasU+dwaXX0Ru+kSoK2ulayuiV6ObifyWF78uOA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "81ac115741f58b3f16229afbea0f02c04b9985322ce7bf2d20cb0c88eb8e5f83"
+          },
+          "name": "@solid-primitives/workers",
+          "version": "2.0.1-next.1"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-a43b54febda5fd5c91535d6d0c02be7a5eb2bbd5f41d541d3f6d8fdd9da966f2": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-13d4cdcda6e2d1f6009e881a6ee64e2080087473069716cd1d3bcb059fbeb632": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-de539c61f8e411e812122c3c0acb4db0ca77754f56d2bbc5e85ef5db3ed75fce": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-a3e686f249f2a2283f3fd26e0c25f14fbf5a69e91b8b1613d3449526bca34923": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "specifier": "@solid-primitives/workers/worker",
+      "requestedEntrypoint": "./worker",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/worker-scope.js",
+      "declarationTarget": "dist/worker-scope.d.ts",
+      "packageIntegrity": "sha512-rbzg3Pn8iN0gcRlhwF2FaE3afvLiHCUIE6A+UgfGQVnv34lwasU+dwaXX0Ru+kSoK2ulayuiV6ObifyWF78uOA==",
+      "snapshotRoot": "sha256:2e119cb743ab9aa676cb3ebc12660b9f7a125e9fc73e979d044ecab157d14bc6",
+      "identityDocument": {
+        "entrypoints": {
+          "./worker": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "24512e9a95295b166097af681f1cb776f9902f6bed2e2716997c27919daf2c3a",
+                  "path": "./dist/worker-scope.js",
+                  "sha256": "1d643ddd95d01766623c7804a152770381cf47af7da0bc8600822a08e5647296"
+                },
+                "declarations": {
+                  "path": "./dist/worker-scope.d.ts",
+                  "sha256": "095fa1376d66f44d20936ca55ffda7345bfc1dc219cfcdce2fe5301755e1e389"
+                },
+                "exports": {
+                  "workerScope": "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1worker/import/default",
+                  "typesBranch": "/exports/.~1worker/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-rbzg3Pn8iN0gcRlhwF2FaE3afvLiHCUIE6A+UgfGQVnv34lwasU+dwaXX0Ru+kSoK2ulayuiV6ObifyWF78uOA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "81ac115741f58b3f16229afbea0f02c04b9985322ce7bf2d20cb0c88eb8e5f83"
+          },
+          "name": "@solid-primitives/workers",
+          "version": "2.0.1-next.1"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

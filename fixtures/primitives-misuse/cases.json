@@ -1473,10 +1473,24 @@
       "rule": "missing-owner",
       "kind": "uncertifiable",
       "hosts": [
-        "none",
-        "browser"
+        "none"
       ],
       "why": "The certified summary of makeBroadcastChannel states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "misuse": "import { makeBroadcastChannel } from \"@solid-primitives/broadcast-channel\";\n\nmakeBroadcastChannel<string>(\"room\");\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { makeBroadcastChannel } from \"@solid-primitives/broadcast-channel\";\n\ncreateRoot(dispose => {\n  makeBroadcastChannel<string>(\"room\");\n  return dispose;\n});\n"
+    },
+    {
+      "id": "broadcast-channel-makeBroadcastChannel-module-scope-browser",
+      "package": "@solid-primitives/broadcast-channel",
+      "version": "1.0.0-next.2",
+      "entrypoint": ".",
+      "export": "makeBroadcastChannel",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "browser"
+      ],
+      "why": "The browser build calls `onCleanup(close)` unconditionally before both the cached and the fresh return (`dist/index.js:61`); the authored contract states that, and Chrome on rc.13 raises NO_OWNER_CLEANUP for this call. Called at module scope there is no owner, so the channel is never closed.",
       "misuse": "import { makeBroadcastChannel } from \"@solid-primitives/broadcast-channel\";\n\nmakeBroadcastChannel<string>(\"room\");\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { makeBroadcastChannel } from \"@solid-primitives/broadcast-channel\";\n\ncreateRoot(dispose => {\n  makeBroadcastChannel<string>(\"room\");\n  return dispose;\n});\n"
     },
@@ -1817,10 +1831,24 @@
       "rule": "missing-owner",
       "kind": "uncertifiable",
       "hosts": [
-        "none",
-        "browser"
+        "none"
       ],
       "why": "The certified summary of createScriptLoader states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "misuse": "import { createScriptLoader } from \"@solid-primitives/script-loader\";\n\ncreateScriptLoader({ src: \"/script.js\" });\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createScriptLoader } from \"@solid-primitives/script-loader\";\n\ncreateRoot(dispose => {\n  createScriptLoader({ src: \"/script.js\" });\n  return dispose;\n});\n"
+    },
+    {
+      "id": "script-loader-createScriptLoader-module-scope-browser",
+      "package": "@solid-primitives/script-loader",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createScriptLoader",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "browser"
+      ],
+      "why": "In the browser build `isServer` is false, so createScriptLoader always registers its cleanup on the ambient owner; the authored contract states that, and Chrome on rc.13 raises NO_OWNER_CLEANUP for this call. Called at module scope there is no owner, so the script element is never removed.",
       "misuse": "import { createScriptLoader } from \"@solid-primitives/script-loader\";\n\ncreateScriptLoader({ src: \"/script.js\" });\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createScriptLoader } from \"@solid-primitives/script-loader\";\n\ncreateRoot(dispose => {\n  createScriptLoader({ src: \"/script.js\" });\n  return dispose;\n});\n"
     },
@@ -2082,10 +2110,24 @@
       "rule": "missing-owner",
       "kind": "uncertifiable",
       "hosts": [
-        "none",
-        "browser"
+        "none"
       ],
       "why": "The certified summary of createWorker states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "misuse": "import { createWorker } from \"@solid-primitives/workers\";\n\ncreateWorker({ add: (a: number, b: number) => a + b });\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createWorker } from \"@solid-primitives/workers\";\n\ncreateRoot(dispose => {\n  createWorker({ add: (a: number, b: number) => a + b });\n  return dispose;\n});\n"
+    },
+    {
+      "id": "workers-createWorker-module-scope-browser",
+      "package": "@solid-primitives/workers",
+      "version": "2.0.1-next.1",
+      "entrypoint": ".",
+      "export": "createWorker",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "browser"
+      ],
+      "why": "In the browser build createWorker always registers the worker's termination on the ambient owner; the authored contract states that, and Chrome on rc.13 raises NO_OWNER_CLEANUP for this call. Called at module scope there is no owner, so the worker is never terminated.",
       "misuse": "import { createWorker } from \"@solid-primitives/workers\";\n\ncreateWorker({ add: (a: number, b: number) => a + b });\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createWorker } from \"@solid-primitives/workers\";\n\ncreateRoot(dispose => {\n  createWorker({ add: (a: number, b: number) => a + b });\n  return dispose;\n});\n"
     },
@@ -2117,10 +2159,24 @@
       "kind": "uncertifiable",
       "hosts": [
         "none",
-        "browser",
         "node"
       ],
       "why": "The certified summary of keyArray states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "misuse": "import { keyArray } from \"@solid-primitives/keyed\";\n\nkeyArray(() => [1, 2], item => item, value => value());\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { keyArray } from \"@solid-primitives/keyed\";\n\ncreateRoot(dispose => {\n  keyArray(() => [1, 2], item => item, value => value());\n  return dispose;\n});\n"
+    },
+    {
+      "id": "keyed-keyArray-module-scope-browser",
+      "package": "@solid-primitives/keyed",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "keyArray",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "browser"
+      ],
+      "why": "In the browser build `isServer` is false, so keyArray always registers its cleanup on the ambient owner; the authored contract states that, and Chrome on rc.13 raises NO_OWNER_CLEANUP for this call (with `@solid-primitives/utils` installed by the app, which keyed imports but does not declare). Called at module scope there is no owner, so the mapping is never disposed.",
       "misuse": "import { keyArray } from \"@solid-primitives/keyed\";\n\nkeyArray(() => [1, 2], item => item, value => value());\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { keyArray } from \"@solid-primitives/keyed\";\n\ncreateRoot(dispose => {\n  keyArray(() => [1, 2], item => item, value => value());\n  return dispose;\n});\n"
     },

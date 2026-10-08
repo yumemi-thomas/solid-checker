@@ -1,5 +1,13 @@
 # Precision backlog
 
+## Solid Primitives batch 4 (2026-10-08)
+
+ADR 0238: thirteen more primitive packages enter the authored tier, and all
+47 probe pairs pass. Browser ledger: 47 of 132 report correctly (was 40).
+Still open: `createVibrate` (its registration depends on browser capability),
+and the correct twins of `keyArray`, `tap`, `until` and `createAggregated`,
+whose function-valued returns and arguments the format cannot state.
+
 ## Eager arguments to callback slots (2026-10-08)
 
 ADR 0237: an argument to a contract callback slot (`deferred` or open) is

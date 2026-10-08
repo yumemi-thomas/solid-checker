@@ -1,0 +1,77 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/focus",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-OPi75QpOJ3L/Ea9oT1MYrpsGz5z0nyeR40MAjAzcP6lKxPSrpN/3UbFL2I/oLKbPM+7fgIBfW0iwyvzSjVxtsg==",
+      "snapshotRoot": "sha256:ed4a2e6cdf6573cfc845fd525c6cf8b4f11c704ceae698bc93e884129f7b35fe",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "275f3d49fb2d7f48132b8ba7dbc69e350b2d7984b78159b9a9317bbee49c812e",
+                  "path": "./dist/index.js",
+                  "sha256": "7de63f96a27d1fa6c683b91a2749dcdcfcd6536896287d7307904a3290a14496"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "064cc113fbfbf72b59637b17be6804436293472fe2b1230c75be3b1176bd7440"
+                },
+                "exports": {
+                  "autofocus": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createAutofocus": "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055",
+                  "createFocusGroup": "summary-726cdd96e0787bfc574dc35341aaa2823fdcb1948021bf978e5d94a6d648001a",
+                  "createFocusRestore": "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055",
+                  "createFocusSignal": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createFocusTrap": "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055",
+                  "getFocusableTreeWalker": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "makeFocusListener": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-OPi75QpOJ3L/Ea9oT1MYrpsGz5z0nyeR40MAjAzcP6lKxPSrpN/3UbFL2I/oLKbPM+7fgIBfW0iwyvzSjVxtsg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "da0dff83bb011bfa673b1a421a539da6444bfee56d6d2bafd72dbb465cb03b8b"
+          },
+          "name": "@solid-primitives/focus",
+          "version": "1.0.0-next.4"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-726cdd96e0787bfc574dc35341aaa2823fdcb1948021bf978e5d94a6d648001a": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

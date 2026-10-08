@@ -1,0 +1,104 @@
+{
+  "package": "@solid-primitives/keyed",
+  "version": "3.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "keyArray": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyed-keyArray-module-scope/node_modules/@solid-primitives/keyed/dist/index.js:19-89 — Browser construction synchronously registers exactly one onCleanup at line 28. Later returned-function calls perform item invocation, keyed roots/signals, map/fallback callbacks and disposals. Only the direct cleanup registration domain is closed; returned behavior is not certified inert. Source-reviewed browser draft only. Identity generation and case-attributed Chrome rc.13 probes are pending; this is not shipping evidence. Local runtime import is additionally blocked by missing @solid-primitives/utils.",
+      "call": {
+        "closed": [
+          "cleanups"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "closures": {
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyed-keyArray-module-scope/node_modules/@solid-primitives/keyed/dist/index.js:19-89 — Browser construction synchronously registers exactly one onCleanup at line 28. Later returned-function calls perform item invocation, keyed roots/signals, map/fallback callbacks and disposals. Only the direct cleanup registration domain is closed; returned behavior is not certified inert."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The direct cleanup rejects a present leaf before any returned mapper is called."
+        }
+      ]
+    }
+  }
+}

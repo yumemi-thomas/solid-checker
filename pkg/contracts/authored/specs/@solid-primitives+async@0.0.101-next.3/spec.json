@@ -1,0 +1,273 @@
+{
+  "package": "@solid-primitives/async",
+  "version": "0.0.101-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createAggregated": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:199-207 — Direct memo return. Source callback tracking is modeled using the existing authored memo pattern; data iteration and toString prevent callbacks closure. Research draft; Chrome attribution/probe gate has not run. Do not ship before every listed pair passes.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "aggregate-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "aggregate-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "computations": [
+          "aggregate-memo"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "aggregate-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "aggregate-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:178-207 — No package-owned signal is read at construction; res() is explicit caller execution, and returned data traversal follows P2. Getter/iterator/coercion callbacks of caller data keep callbacks open.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:178-207 — Exactly one memo/computation is created by 200-206 and no other Solid primitive or cleanup. Optional memoOptions are forwarded; ordinary caller option/data getters follow P2.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:178-207 — The return is exactly the createMemo accessor; the aggregate value union is not claimed plain. Its computation can suspend or throw; async and throw behavior stays unclaimed."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Memo works ownerless but rejects a present leaf owner; do not claim a missing-owner defect."
+        },
+        {
+          "label": "tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "A case-file source callback writes a separate non-ownedWrite signal while evaluated by the memo.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "createAbortable": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 — makeAbortable plus required onCleanup; its stateful returned functions stay opaque. Research draft; Chrome attribution/probe gate has not run. Do not ship before every listed pair passes.",
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 — No reactive state exists here. AbortController construction happens only later inside the opaque signal member.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 — No Solid signal, owner, memo or effect is created. Constructor registers exactly the stated cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 — chainTo is a Map key; no caller callable is invoked during construction.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 — Exactly three functions are returned, none is a reactive accessor. Their later calls retain ADR 0234 obligations.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 — Exactly one onCleanup(abort), unconditionally at 127."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "onCleanup rejects an owner-backed onSettled leaf."
+        }
+      ]
+    }
+  }
+}

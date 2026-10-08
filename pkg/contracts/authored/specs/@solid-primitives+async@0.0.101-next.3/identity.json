@@ -1,0 +1,83 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/async",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-Op+3kB7DdrekwZwHtOpCk8gQ/jdIaKZfsjHu2IFfuItyQebv6FQmAGakeG4IDQi9IOcBViAxQRO1c5Vc6MDreA==",
+      "snapshotRoot": "sha256:e69dce99ecef69f1d1f3500499f2f0e56a5c8f97496a9eb2f1f1cc52d4bdfbed",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "b06138813967de8f6f45ed27ecc08eed4a5b5c71f1b5ba4d11d948f5243e2672",
+                  "path": "./dist/index.js",
+                  "sha256": "7711d1b01b9092fe8596acae50a7995889563423a10d1ca66c36a808f16cff0d"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "c2a18447c2431fc5070062df5b6596a347f07c2b87e3963a020c091a35ded085"
+                },
+                "exports": {
+                  "createAbortable": "summary-3cac484f480bb8d81a0348e1ff9d48b53c84b4f0e2ca1d10da09db4e63be6657",
+                  "createAggregated": "summary-22cfcc1d1c8afa4c31b192e6c78a682feb425964297ffab19d15b7850ec6db6f",
+                  "fromJSONStream": "summary-1a4509d036b0a09d98cd8c756b677239c1a8f12ae6dc7ac471016523970cb89f",
+                  "fromStream": "summary-1a4509d036b0a09d98cd8c756b677239c1a8f12ae6dc7ac471016523970cb89f",
+                  "makeAbortable": "summary-fa480e5fc47e2db1ef8c42931b5e8f6d793e93c154e8960d77b7b0e699467441",
+                  "makeRetrying": "summary-e926c58cf9bf06dbc5f57539588ece7d8cd4aee659b0376b93141355e9b9eb7b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-Op+3kB7DdrekwZwHtOpCk8gQ/jdIaKZfsjHu2IFfuItyQebv6FQmAGakeG4IDQi9IOcBViAxQRO1c5Vc6MDreA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "5d5cc07cf0438e029a0b543bd86c69cc872d32caf08a2b01e5c969b0a50c22b4"
+          },
+          "name": "@solid-primitives/async",
+          "version": "0.0.101-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-3cac484f480bb8d81a0348e1ff9d48b53c84b4f0e2ca1d10da09db4e63be6657": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-22cfcc1d1c8afa4c31b192e6c78a682feb425964297ffab19d15b7850ec6db6f": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-1a4509d036b0a09d98cd8c756b677239c1a8f12ae6dc7ac471016523970cb89f": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-fa480e5fc47e2db1ef8c42931b5e8f6d793e93c154e8960d77b7b0e699467441": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-e926c58cf9bf06dbc5f57539588ece7d8cd4aee659b0376b93141355e9b9eb7b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}
