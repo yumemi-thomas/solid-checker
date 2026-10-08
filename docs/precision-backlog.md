@@ -1,5 +1,12 @@
 # Precision backlog
 
+## Values returned through createRoot (2026-10-09)
+
+ADR 0257: `createRoot(fn)` returns `fn`'s value, but the checker does not
+carry a contract's returned accessor through it. A module-level
+`const now = createRoot(() => createPolled(...))` read untracked in a
+component is therefore not proven (three ledger cases).
+
 ## Returned-graph captures (2026-10-08)
 
 ADR 0256: a returned graph may invoke or read a captured factory argument,

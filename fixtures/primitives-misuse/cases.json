@@ -444,9 +444,9 @@
         "none",
         "browser"
       ],
-      "why": "createPolled returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
-      "misuse": "import { createPolled } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const now = createPolled(() => Date.now(), 1000);\n  const current = now();\n  return <p>{String(current)}</p>;\n}\n",
-      "correct": "import { createPolled } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const now = createPolled(() => Date.now(), 1000);\n  return <p>{String(now())}</p>;\n}\n"
+      "why": "createPolled returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates. The primitive reads its own state untracked while it is constructed, so constructing it inside a component warns STRICT_READ_UNTRACKED whatever the caller does (ADR 0257). Both twins therefore build it in a module-level createRoot, so only the read position differs; Chrome on rc.13 warns for the misuse and is silent for the correct twin.",
+      "misuse": "import { createRoot } from \"solid-js\";\nimport { createPolled } from \"@solid-primitives/timer\";\n\n// Built outside any component, so only the read below is under test.\nconst now = createRoot(() => createPolled(() => Date.now(), 1000));\n\nexport default function App() {\n  const current = now();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createPolled } from \"@solid-primitives/timer\";\n\n// Built outside any component, so only the read below is under test.\nconst now = createRoot(() => createPolled(() => Date.now(), 1000));\n\nexport default function App() {\n  return <p>{String(now())}</p>;\n}\n"
     },
     {
       "id": "timer-createIntervalCounter-top-level-read",
@@ -460,9 +460,9 @@
         "none",
         "browser"
       ],
-      "why": "createIntervalCounter returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
-      "misuse": "import { createIntervalCounter } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const count = createIntervalCounter(1000);\n  const current = count();\n  return <p>{String(current)}</p>;\n}\n",
-      "correct": "import { createIntervalCounter } from \"@solid-primitives/timer\";\n\nexport default function App() {\n  const count = createIntervalCounter(1000);\n  return <p>{String(count())}</p>;\n}\n"
+      "why": "createIntervalCounter returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates. The primitive reads its own state untracked while it is constructed, so constructing it inside a component warns STRICT_READ_UNTRACKED whatever the caller does (ADR 0257). Both twins therefore build it in a module-level createRoot, so only the read position differs; Chrome on rc.13 warns for the misuse and is silent for the correct twin.",
+      "misuse": "import { createRoot } from \"solid-js\";\nimport { createIntervalCounter } from \"@solid-primitives/timer\";\n\n// Built outside any component, so only the read below is under test.\nconst count = createRoot(() => createIntervalCounter(1000));\n\nexport default function App() {\n  const current = count();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createIntervalCounter } from \"@solid-primitives/timer\";\n\n// Built outside any component, so only the read below is under test.\nconst count = createRoot(() => createIntervalCounter(1000));\n\nexport default function App() {\n  return <p>{String(count())}</p>;\n}\n"
     },
     {
       "id": "pointer-createPointerListeners-module-scope",
@@ -604,9 +604,9 @@
         "none",
         "browser"
       ],
-      "why": "createPagination returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
-      "misuse": "import { createPagination } from \"@solid-primitives/pagination\";\n\nexport default function App() {\n  const [, page] = createPagination({ pages: 10 });\n  const current = page();\n  return <p>{String(current)}</p>;\n}\n",
-      "correct": "import { createPagination } from \"@solid-primitives/pagination\";\n\nexport default function App() {\n  const [, page] = createPagination({ pages: 10 });\n  return <p>{String(page())}</p>;\n}\n"
+      "why": "createPagination returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates. The primitive reads its own state untracked while it is constructed, so constructing it inside a component warns STRICT_READ_UNTRACKED whatever the caller does (ADR 0257). Both twins therefore build it in a module-level createRoot, so only the read position differs; Chrome on rc.13 warns for the misuse and is silent for the correct twin.",
+      "misuse": "import { createRoot } from \"solid-js\";\nimport { createPagination } from \"@solid-primitives/pagination\";\n\n// Built outside any component, so only the read below is under test.\nconst [, page] = createRoot(() => createPagination({ pages: 10 }));\n\nexport default function App() {\n  const current = page();\n  return <p>{String(current)}</p>;\n}\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createPagination } from \"@solid-primitives/pagination\";\n\n// Built outside any component, so only the read below is under test.\nconst [, page] = createRoot(() => createPagination({ pages: 10 }));\n\nexport default function App() {\n  return <p>{String(page())}</p>;\n}\n"
     },
     {
       "id": "pagination-createSegment-top-level-read",
@@ -799,22 +799,6 @@
       "why": "useKeyDownList returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
       "misuse": "import { useKeyDownList } from \"@solid-primitives/keyboard\";\n\nexport default function App() {\n  const keys = useKeyDownList();\n  const current = keys().length;\n  return <p>{String(current)}</p>;\n}\n",
       "correct": "import { useKeyDownList } from \"@solid-primitives/keyboard\";\n\nexport default function App() {\n  const keys = useKeyDownList();\n  return <p>{String(keys().length)}</p>;\n}\n"
-    },
-    {
-      "id": "props-combineProps-top-level-read",
-      "package": "@solid-primitives/props",
-      "version": "4.0.0-next.3",
-      "entrypoint": ".",
-      "export": "combineProps",
-      "class": "argumentRead",
-      "rule": "strict-read-untracked",
-      "hosts": [
-        "none",
-        "browser"
-      ],
-      "why": "combineProps returns a merged props proxy whose members read the component's props. Reading one at the component's top level reads it once, untracked.",
-      "misuse": "import { combineProps } from \"@solid-primitives/props\";\n\nexport default function Button(props: { class?: string }) {\n  const merged = combineProps(props, { class: \"button\" });\n  const current = merged.class;\n  return <button class={current}>go</button>;\n}\n",
-      "correct": "import { combineProps } from \"@solid-primitives/props\";\n\nexport default function Button(props: { class?: string }) {\n  const merged = combineProps(props, { class: \"button\" });\n  return <button class={merged.class}>go</button>;\n}\n"
     },
     {
       "id": "history-createUndoHistory-top-level-read",
