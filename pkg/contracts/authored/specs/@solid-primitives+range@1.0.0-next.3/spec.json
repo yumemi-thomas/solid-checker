@@ -305,7 +305,7 @@
         {
           "label": "initial-step",
           "rule": "strict-read-untracked",
-          "why": "getStep is invoked before onCleanup in the ambient component body; the correct constant callback has no reactive read."
+          "why": "getStep is invoked before onCleanup (dist/mapRange.js:28-29) in the ambient component body. A case-file callback invokes step() so the diagnosed operation is application code, rather than a bare accessor invoked directly by the package; the constant callback twin remains clean."
         }
       ]
     }

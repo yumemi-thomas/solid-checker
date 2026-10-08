@@ -6241,43 +6241,6 @@
       "package": "@solid-primitives/pagination",
       "version": "1.0.0-next.8",
       "export": "createPagination",
-      "label": "constructor-read",
-      "solidRuntime": [
-        {
-          "name": "solid-js",
-          "version": "2.0.0-rc.13"
-        },
-        {
-          "name": "@solidjs/signals",
-          "version": "2.0.0-rc.13"
-        },
-        {
-          "name": "@solidjs/web",
-          "version": "2.0.0-rc.13"
-        }
-      ],
-      "artifacts": [
-        "dist/index.js"
-      ],
-      "rule": "strict-read-untracked",
-      "verdict": "warned-unattributed",
-      "misuse": [
-        {
-          "code": "STRICT_READ_UNTRACKED",
-          "site": {
-            "file": "case",
-            "line": 3,
-            "column": 20
-          }
-        }
-      ],
-      "correct": []
-    },
-    {
-      "spec": "@solid-primitives+pagination@1.0.0-next.8",
-      "package": "@solid-primitives/pagination",
-      "version": "1.0.0-next.8",
-      "export": "createPagination",
       "label": "props",
       "solidRuntime": [
         {
@@ -7588,14 +7551,14 @@
         "dist/index.js"
       ],
       "rule": "strict-read-untracked",
-      "verdict": "warned-unattributed",
+      "verdict": "passed",
       "misuse": [
         {
           "code": "STRICT_READ_UNTRACKED",
           "site": {
             "file": "case",
-            "line": 6,
-            "column": 3
+            "line": 7,
+            "column": 36
           }
         }
       ],
@@ -11084,14 +11047,14 @@
         "dist/index.js"
       ],
       "rule": "strict-read-untracked",
-      "verdict": "warned-unattributed",
+      "verdict": "passed",
       "misuse": [
         {
           "code": "STRICT_READ_UNTRACKED",
           "site": {
             "file": "case",
-            "line": 6,
-            "column": 3
+            "line": 7,
+            "column": 21
           }
         }
       ],

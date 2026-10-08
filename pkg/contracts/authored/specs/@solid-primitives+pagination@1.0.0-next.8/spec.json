@@ -258,7 +258,7 @@
       ]
     },
     "createPagination": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:70-267 \u2014 The constructor unconditionally reads opts() at line 72. Its private read is the caller stack, not tracked compute. Browser draft; Chrome probes pending, not shipping evidence.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:70-267 \u2014 Returned-value claim only. The private opts() read at line 72 remains package behavior: the ledger excludes its strict-read warning at a package-call site. Reads, creates and callbacks stay open; no caller read is inferred from the constructor.",
       "call": {
         "operations": [
           {
@@ -296,39 +296,10 @@
                 }
               ]
             }
-          },
-          {
-            "id": "constructor-options-read",
-            "kind": "read",
-            "trigger": {
-              "event": "call"
-            },
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "tracking": "ambient-at-execution",
-            "count": {
-              "min": 1,
-              "max": 1,
-              "scope": "call"
-            },
-            "inputs": [
-              {
-                "kind": "reactive",
-                "role": "accessor"
-              }
-            ],
-            "owner": {
-              "source": "ambient-at-execution"
-            }
           }
         ],
         "returns": [
           "return"
-        ],
-        "reads": [
-          "constructor-options-read"
         ],
         "closed": [
           "returns"
@@ -343,11 +314,6 @@
           "label": "props",
           "rule": "strict-read-untracked",
           "why": "The exact returned reactive leaf is read under a component strict-read window versus JSX tracking. OwnedWrite affects writes, never this read check."
-        },
-        {
-          "label": "constructor-read",
-          "rule": "strict-read-untracked",
-          "why": "Isolate the private opts() constructor read: correct wraps only construction in untrack; both render page in JSX."
         }
       ]
     }

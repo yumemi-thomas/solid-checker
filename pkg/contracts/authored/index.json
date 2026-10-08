@@ -1735,8 +1735,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/8bccaa9cef02f5e779d525f0b8010e2d58b875a733da094781380f464fbb2bc3.json",
-      "documentDigest": "sha256:8bccaa9cef02f5e779d525f0b8010e2d58b875a733da094781380f464fbb2bc3"
+      "document": "objects/f6e781fd44c4d7b9bad80b3911b652785515864719107da46ae2ac382de89708.json",
+      "documentDigest": "sha256:f6e781fd44c4d7b9bad80b3911b652785515864719107da46ae2ac382de89708"
     },
     {
       "packageName": "@solid-primitives/permission",
@@ -1997,8 +1997,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/57126f64b2fd499439fdff090508748d6c2a2258a7d7a7e14cc763e30c129952.json",
-      "documentDigest": "sha256:57126f64b2fd499439fdff090508748d6c2a2258a7d7a7e14cc763e30c129952"
+      "document": "objects/159d87cd738756bfdd8b3e5fae25e801d660a3d41ac5b6e4bf17e82e07607482.json",
+      "documentDigest": "sha256:159d87cd738756bfdd8b3e5fae25e801d660a3d41ac5b6e4bf17e82e07607482"
     },
     {
       "packageName": "@solid-primitives/range",
@@ -2750,6 +2750,39 @@
       ],
       "document": "objects/cc0955ea24388f3fd24e7cba0303825c149be29973966fdd797f47c0733f6a60.json",
       "documentDigest": "sha256:cc0955ea24388f3fd24e7cba0303825c149be29973966fdd797f47c0733f6a60"
+    },
+    {
+      "packageName": "@solid-primitives/tween",
+      "specifier": "@solid-primitives/tween",
+      "packageVersion": "2.0.0-next.2",
+      "packageIntegrity": "sha512-eE64OwV3Ybeiun1RfR0bQOxeyT/xk8X5eq8dQyEH4/qEphrb0o5FCTd/S40hlbh2yaxGW+x02/w1KaRUXKQe/Q==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:88fdd212e2836b17e588510d6a7ce372e5ed1bedc794defbb2f5b40f7416a252",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/e1c98104c831d4f5431f276aac07ce690e51a7da8fd17d2668ed80e3955dec65.json",
+      "documentDigest": "sha256:e1c98104c831d4f5431f276aac07ce690e51a7da8fd17d2668ed80e3955dec65"
     },
     {
       "packageName": "@solid-primitives/utils",

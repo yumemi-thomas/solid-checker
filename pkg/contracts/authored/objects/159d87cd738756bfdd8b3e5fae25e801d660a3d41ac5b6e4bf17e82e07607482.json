@@ -18,7 +18,7 @@
             "Repeat": "open-callable",
             "createNumericRange": "open-callable",
             "indexRange": "open-callable",
-            "mapRange": "open-callable",
+            "mapRange": "authored-mapRange",
             "repeat": "authored-repeat"
           },
           "resolution": {
@@ -45,6 +45,93 @@
   "summaries": {
     "open-callable": {
       "call": {},
+      "shape": "callable"
+    },
+    "authored-mapRange": {
+      "call": {
+        "operations": [
+          {
+            "id": "initial-step",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "initial-step"
+          }
+        ],
+        "closed": [
+          "cleanups"
+        ]
+      },
       "shape": "callable"
     },
     "authored-repeat": {

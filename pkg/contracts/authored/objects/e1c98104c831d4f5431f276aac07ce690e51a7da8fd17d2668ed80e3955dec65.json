@@ -1,27 +1,43 @@
 {
-  "package": "@solid-primitives/tween",
-  "version": "2.0.0-next.2",
-  "solidRuntime": [
-    {
-      "name": "solid-js",
-      "version": "2.0.0-rc.13",
-      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
-    },
-    {
-      "name": "@solidjs/signals",
-      "version": "2.0.0-rc.13",
-      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
-    },
-    {
-      "name": "@solidjs/web",
-      "version": "2.0.0-rc.13",
-      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "de1d2c00f5ef1bebfd9b20a1c29c9d89ca5d36a8b99e46bb1209cb350f294f8e",
+            "path": "./dist/index.js",
+            "sha256": "99a8d0e0b702b59a3e7064cd0a1ca24592a7e61299fb635c5edac34c8c26f925"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "209b99104cfd63cd54b5d12d8d2b90764e31378e5f59d13e372596c2e87b521e"
+          },
+          "exports": {
+            "createTween": "authored-createTween"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
     }
-  ],
-  "identity": "identity.json",
-  "exports": {
-    "createTween": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/tween-createTween-module-scope/node_modules/@solid-primitives/tween/dist/index.js:26-48 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-eE64OwV3Ybeiun1RfR0bQOxeyT/xk8X5eq8dQyEH4/qEphrb0o5FCTd/S40hlbh2yaxGW+x02/w1KaRUXKQe/Q==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "cf3f1dea88bfd0be98f24dea599de00f9abc1e7854d229dc83b880aba023b819"
+    },
+    "name": "@solid-primitives/tween",
+    "version": "2.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createTween": {
       "call": {
         "operations": [
           {
@@ -274,78 +290,7 @@
           "callbacks"
         ]
       },
-      "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/tween-createTween-module-scope/node_modules/@solid-primitives/tween/dist/index.js:26-48 \u2014 Exactly one current signal and one split effect; target invoked initially in ambient context, in tracked compute, and on the final native frame. Optional ease invoked only on native frames. Only own current read is queued untracked apply, not constructor. Effect apply returns frame cancellation; cleanup/disposal domains remain open.",
-        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/tween-createTween-module-scope/node_modules/@solid-primitives/tween/dist/index.js:26-48 \u2014 Exactly one current signal and one split effect; target invoked initially in ambient context, in tracked compute, and on the final native frame. Optional ease invoked only on native frames. Only own current read is queued untracked apply, not constructor. Effect apply returns frame cancellation; cleanup/disposal domains remain open.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/tween-createTween-module-scope/node_modules/@solid-primitives/tween/dist/index.js:26-48 \u2014 Exactly one current signal and one split effect; target invoked initially in ambient context, in tracked compute, and on the final native frame. Optional ease invoked only on native frames. Only own current read is queued untracked apply, not constructor. Effect apply returns frame cancellation; cleanup/disposal domains remain open.",
-        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/tween-createTween-module-scope/node_modules/@solid-primitives/tween/dist/index.js:26-48 \u2014 Exactly one current signal and one split effect; target invoked initially in ambient context, in tracked compute, and on the final native frame. Optional ease invoked only on native frames. Only own current read is queued untracked apply, not constructor. Effect apply returns frame cancellation; cleanup/disposal domains remain open."
-      },
-      "rule": "strict-read-untracked",
-      "probes": [
-        {
-          "label": "owner",
-          "rule": "missing-owner",
-          "why": "Same ownerless call as module scope, triggered after capture starts. Correct twin restores the captured component owner; no returned value is read.",
-          "scenario": [
-            {
-              "action": "click",
-              "selector": "#target"
-            },
-            {
-              "action": "wait-for-text",
-              "selector": "#done",
-              "text": "done"
-            }
-          ]
-        },
-        {
-          "label": "leaf",
-          "rule": "leaf-owner-forbidden-call",
-          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
-        },
-        {
-          "label": "initial-target",
-          "rule": "strict-read-untracked",
-          "why": "Initial target() (dist/index.js:28) executes before the effect in the component strict-read window. A case-file callback invokes source() so the diagnosed operation is application code, rather than a bare accessor invoked directly by the package; the constant callback twin remains clean."
-        },
-        {
-          "label": "target-tracking",
-          "rule": "reactive-write-in-owned-scope",
-          "why": "Second target invocation is effect compute; first ambient invocation deliberately does not write."
-        },
-        {
-          "label": "host-target",
-          "rule": "missing-owner",
-          "why": "Real animation frame invokes the captured target on the native host stack. Correct twin restores the component owner.",
-          "scenario": [
-            {
-              "action": "click",
-              "selector": "#target"
-            },
-            {
-              "action": "wait-for-text",
-              "selector": "#done",
-              "text": "done"
-            }
-          ]
-        },
-        {
-          "label": "host-ease",
-          "rule": "missing-owner",
-          "why": "Real animation frame invokes the captured ease on the native host stack. Correct twin restores the component owner.",
-          "scenario": [
-            {
-              "action": "click",
-              "selector": "#target"
-            },
-            {
-              "action": "wait-for-text",
-              "selector": "#done",
-              "text": "done"
-            }
-          ]
-        }
-      ]
+      "shape": "callable"
     }
   }
 }
