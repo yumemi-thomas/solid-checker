@@ -1103,10 +1103,24 @@
       "rule": "missing-owner",
       "kind": "uncertifiable",
       "hosts": [
-        "none",
-        "browser"
+        "none"
       ],
       "why": "createMutationObserver registers `onSettled(start)` and `onCleanup(stop)` only `if (isSupported)`, and `isSupported` is `!isServer`, so a call may register nothing and the generator states `min: 0` (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "misuse": "import { createMutationObserver } from \"@solid-primitives/mutation-observer\";\n\ncreateMutationObserver(document.body, { childList: true }, records => console.log(records.length));\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createMutationObserver } from \"@solid-primitives/mutation-observer\";\n\ncreateRoot(dispose => {\n  createMutationObserver(document.body, { childList: true }, records => console.log(records.length));\n  return dispose;\n});\n"
+    },
+    {
+      "id": "mutation-observer-createMutationObserver-module-scope-browser",
+      "package": "@solid-primitives/mutation-observer",
+      "version": "3.0.0-next.2",
+      "entrypoint": ".",
+      "export": "createMutationObserver",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "browser"
+      ],
+      "why": "In the browser build `isSupported` is true, so createMutationObserver always registers `onCleanup(stop)` on the ambient owner; the authored contract states it, and Chrome on rc.13 raises NO_OWNER_CLEANUP for this call. Called at module scope there is no owner, so the observer is never disconnected.",
       "misuse": "import { createMutationObserver } from \"@solid-primitives/mutation-observer\";\n\ncreateMutationObserver(document.body, { childList: true }, records => console.log(records.length));\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createMutationObserver } from \"@solid-primitives/mutation-observer\";\n\ncreateRoot(dispose => {\n  createMutationObserver(document.body, { childList: true }, records => console.log(records.length));\n  return dispose;\n});\n"
     },

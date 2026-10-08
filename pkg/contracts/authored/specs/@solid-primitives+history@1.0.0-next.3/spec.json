@@ -1,0 +1,99 @@
+{
+  "package": "@solid-primitives/history",
+  "version": "1.0.0-next.3",
+  "identity": "identity.json",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "createUndoHistory": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/history-createUndoHistory-top-level-read/node_modules/@solid-primitives/history/dist/index.js:40-80 \u2014 Browser result is exactly canUndo/canRedo/undo/redo. canUndo and canRedo read the created store through getTargetIndex (49-51,72-73). undo/redo are callable, never inert; their writes and captured source callbacks are unclaimed.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": [
+          "returns"
+        ],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "canUndo",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "canRedo",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "undo",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "redo",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/history-createUndoHistory-top-level-read/node_modules/@solid-primitives/history/dist/index.js:40-80 \u2014 Browser result is exactly canUndo/canRedo/undo/redo. canUndo and canRedo read the created store through getTargetIndex (49-51,72-73). undo/redo are callable, never inert; their writes and captured source callbacks are unclaimed."
+      },
+      "probes": [
+        {
+          "label": "canRedo",
+          "rule": "strict-read-untracked",
+          "why": "Both accessors read store.items/offset on every normal call."
+        }
+      ]
+    }
+  }
+}

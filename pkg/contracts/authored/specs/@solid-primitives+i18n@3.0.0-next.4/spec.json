@@ -1,0 +1,229 @@
+{
+  "package": "@solid-primitives/i18n",
+  "version": "3.0.0-next.4",
+  "identity": "identity.json",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "template": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup."
+      }
+    },
+    "identityResolveTemplate": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup."
+      }
+    },
+    "missingKeyAsPath": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup."
+      }
+    },
+    "translator": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207 \u2014 dict is captured only in the result and invoked later, in that result caller's context (result-access). No own reactive source/owner is created. Dictionary-value functions, the resolver, missing-key callbacks and arbitrary result alternatives keep callbacks and returns OPEN; this is not an inert described-callable.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "dictionary-at-result"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "dictionary-at-result",
+            "kind": "invoke",
+            "trigger": {
+              "event": "result-access"
+            },
+            "at": {
+              "event": "result-access",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207 \u2014 dict is captured only in the result and invoked later, in that result caller's context (result-access). No own reactive source/owner is created. Dictionary-value functions, the resolver, missing-key callbacks and arbitrary result alternatives keep callbacks and returns OPEN; this is not an inert described-callable.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207 \u2014 dict is captured only in the result and invoked later, in that result caller's context (result-access). No own reactive source/owner is created. Dictionary-value functions, the resolver, missing-key callbacks and arbitrary result alternatives keep callbacks and returns OPEN; this is not an inert described-callable."
+      }
+    }
+  }
+}

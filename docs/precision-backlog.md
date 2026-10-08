@@ -12,6 +12,18 @@ Slice 3b: ten more packages. Browser ledger: 36 report correctly (was 26) of
 missing-owner warning in the browser build). `mapRange` and `createTween` do
 not ship.
 
+Slice 3c: ten more packages, all pairs passing. Browser ledger: 40 report
+correctly (was 36) of 128 cases; `createMutationObserver`'s module-scope case
+is split by host and its browser half proves the misuse.
+
+- **Open false negative (pre-existing consumer bug):** an eager reactive read
+  inside an argument of a contracted export whose `callbacks` domain is open
+  is dropped, leaving only a `package-contract-incomplete` notice
+  (`chain(count())` in a component body). Giving `props` a contract lost one
+  corpus violation this way (`app-game` `solid-props-proxy/example-3.tsx:105`).
+  The batch also added two true-positive corpus violations (`createRAF`'s
+  `start()` in a component body).
+
 ## A returned member may state what calling it does (2026-10-08)
 
 ADR 0235: a new contract value, `effectful-callable`, gives a member of a

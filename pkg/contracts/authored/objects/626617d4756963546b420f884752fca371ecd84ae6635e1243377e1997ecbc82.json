@@ -1,0 +1,95 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "18d7c74b9e1c3a2fd16bfe82ca5b363338db013f64872612503df50b4e06021f",
+            "path": "./dist/index.js",
+            "sha256": "d20f97f4adf33d02f468c7acedb3ce1bb96335c7a5c03b4f9ad8cb92fd50b3da"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "bd54f0c06aa4e27939a7a2bc46e1017dc27484b8eb89b9f8a88219797fa907ae"
+          },
+          "exports": {
+            "combineHandlers": "open-callable",
+            "combineProps": "open-callable",
+            "combineStyle": "open-callable",
+            "createPropsPredicate": "open-callable",
+            "filterProps": "open-callable",
+            "partitionProps": "open-callable",
+            "propTraps": "open-plain",
+            "stringStyleToObject": "authored-stringStyleToObject"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-V2Gn96sQLLhwyiAcGogExqP8+5++Itv0/KBQMNiNp/ldNwbQkr8Q11Ku5VXswYFiFmuiHJ/pGANfwzgsla7zpA==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "c474e3add7bab1324f4cfcdb0c6ecce5e2dd84c809e78dca9c6d76c4a827e6b7"
+    },
+    "name": "@solid-primitives/props",
+    "version": "4.0.0-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "open-plain": {
+      "call": {},
+      "shape": "plain"
+    },
+    "authored-stringStyleToObject": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

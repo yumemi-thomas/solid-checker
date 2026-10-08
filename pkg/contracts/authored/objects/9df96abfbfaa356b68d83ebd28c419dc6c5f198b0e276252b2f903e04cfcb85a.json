@@ -1,0 +1,136 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "a3c8602dd9a33a3f22fb6d1975c38533213707bc5b4885220378f0a56b72f9f5",
+            "path": "./dist/index.js",
+            "sha256": "a1c0307ef2d8db431ef828cc87f7aa8daa5a1cb574ee8208e83ddf40168202a4"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "c5a86ec69a53ef73927f2df4196009b954470aeaeb4378e33cfa4f72a91e9479"
+          },
+          "exports": {
+            "createBranch": "open-callable",
+            "createCallback": "open-callable",
+            "createDisposable": "open-callable",
+            "createHydratableSingletonRoot": "open-callable",
+            "createRootPool": "authored-createRootPool",
+            "createSharedRoot": "open-callable",
+            "createSingletonRoot": "open-callable",
+            "createSubRoot": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-QGoy8R+8v+9I8mET50wMwu0uawkQvFFcv67S+vKJ8xP5jPrQXdxuNMckUTKUy2shR3rIRpR0oLzss0Vy0oLkPg==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "63ae8e4ecd878faf20803ad02b4daef4317f6c8e2c752e7ce446cba8de74a023"
+    },
+    "name": "@solid-primitives/rootless",
+    "version": "2.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createRootPool": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
+        "creates": [],
+        "cleanups": [
+          "microtask-cleanup",
+          "pool-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "microtask-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "pool-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

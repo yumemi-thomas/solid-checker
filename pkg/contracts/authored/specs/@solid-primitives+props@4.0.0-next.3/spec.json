@@ -1,0 +1,69 @@
+{
+  "package": "@solid-primitives/props",
+  "version": "4.0.0-next.3",
+  "identity": "identity.json",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "stringStyleToObject": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/props-combineProps-top-level-read/node_modules/@solid-primitives/props/dist/combineProps.js:13-18 \u2014 Returns a fresh object with string values from the typed style string and native regex matching. P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/props-combineProps-top-level-read/node_modules/@solid-primitives/props/dist/combineProps.js:13-18 \u2014 Returns a fresh object with string values from the typed style string and native regex matching. P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/props-combineProps-top-level-read/node_modules/@solid-primitives/props/dist/combineProps.js:13-18 \u2014 Returns a fresh object with string values from the typed style string and native regex matching. P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/props-combineProps-top-level-read/node_modules/@solid-primitives/props/dist/combineProps.js:13-18 \u2014 Returns a fresh object with string values from the typed style string and native regex matching. P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/props-combineProps-top-level-read/node_modules/@solid-primitives/props/dist/combineProps.js:13-18 \u2014 Returns a fresh object with string values from the typed style string and native regex matching. P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup."
+      }
+    }
+  }
+}

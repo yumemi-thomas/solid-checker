@@ -1,0 +1,147 @@
+{
+  "package": "@solid-primitives/deep",
+  "version": "1.0.0-next.3",
+  "identity": "identity.json",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "trackStore": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/deep/dist/track-store.js:22-31 \u2014 Traversal returns exactly argument 0. It performs possible store/data member reads in the caller context; empty/non-store/seen nodes may skip reads. No package-defined source, owner, computation or cleanup. reads and callbacks remain OPEN for recursive arbitrary getters and array iteration.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": [
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          }
+        ]
+      },
+      "closures": {
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/deep/dist/track-store.js:22-31 \u2014 Traversal returns exactly argument 0. It performs possible store/data member reads in the caller context; empty/non-store/seen nodes may skip reads. No package-defined source, owner, computation or cleanup. reads and callbacks remain OPEN for recursive arbitrary getters and array iteration.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/deep/dist/track-store.js:22-31 \u2014 Traversal returns exactly argument 0. It performs possible store/data member reads in the caller context; empty/non-store/seen nodes may skip reads. No package-defined source, owner, computation or cleanup. reads and callbacks remain OPEN for recursive arbitrary getters and array iteration."
+      }
+    },
+    "trackDeep": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/deep/dist/track-deep.js:22-33 \u2014 Traversal returns exactly argument 0. It performs possible store/data member reads in the caller context; empty/non-store/seen nodes may skip reads. No package-defined source, owner, computation or cleanup. reads and callbacks remain OPEN for recursive arbitrary getters and array iteration.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": [
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          }
+        ]
+      },
+      "closures": {
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/deep/dist/track-deep.js:22-33 \u2014 Traversal returns exactly argument 0. It performs possible store/data member reads in the caller context; empty/non-store/seen nodes may skip reads. No package-defined source, owner, computation or cleanup. reads and callbacks remain OPEN for recursive arbitrary getters and array iteration.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/deep/dist/track-deep.js:22-33 \u2014 Traversal returns exactly argument 0. It performs possible store/data member reads in the caller context; empty/non-store/seen nodes may skip reads. No package-defined source, owner, computation or cleanup. reads and callbacks remain OPEN for recursive arbitrary getters and array iteration."
+      }
+    },
+    "deepTrack": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/deep/dist/track-deep.js:22-37 \u2014 Traversal returns exactly argument 0. It performs possible store/data member reads in the caller context; empty/non-store/seen nodes may skip reads. No package-defined source, owner, computation or cleanup. reads and callbacks remain OPEN for recursive arbitrary getters and array iteration.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": [
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          }
+        ]
+      },
+      "closures": {
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/deep/dist/track-deep.js:22-37 \u2014 Traversal returns exactly argument 0. It performs possible store/data member reads in the caller context; empty/non-store/seen nodes may skip reads. No package-defined source, owner, computation or cleanup. reads and callbacks remain OPEN for recursive arbitrary getters and array iteration.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/deep/dist/track-deep.js:22-37 \u2014 Traversal returns exactly argument 0. It performs possible store/data member reads in the caller context; empty/non-store/seen nodes may skip reads. No package-defined source, owner, computation or cleanup. reads and callbacks remain OPEN for recursive arbitrary getters and array iteration."
+      }
+    }
+  }
+}

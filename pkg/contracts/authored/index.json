@@ -400,6 +400,39 @@
       "documentDigest": "sha256:372fd505d0867eec428a504b4884595c6473dfa00307bf5fe458c4b6aacf1476"
     },
     {
+      "packageName": "@solid-primitives/deep",
+      "specifier": "@solid-primitives/deep",
+      "packageVersion": "1.0.0-next.3",
+      "packageIntegrity": "sha512-PYus+PGfzKxLlumt7x25MvDh3vFrfcoUrus8byeboJEQcD+KTFHwi4Jt4ZmKHDJD+ZjtM3S81z3Ibt50LP5fuA==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:9bf3552b6bafbd1fedf084b9f3b6140884782ba109ea7b724e8cedc31cb6e382",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/45aab96e485e5e0646cb342a4cee72442dc0aec285becf7d8cf422286bfaf1ba.json",
+      "documentDigest": "sha256:45aab96e485e5e0646cb342a4cee72442dc0aec285becf7d8cf422286bfaf1ba"
+    },
+    {
       "packageName": "@solid-primitives/devices",
       "specifier": "@solid-primitives/devices",
       "packageVersion": "3.0.0-next.2",
@@ -629,6 +662,72 @@
       "documentDigest": "sha256:491b88da747b8ec28e0c9643aebf0140e9e524013d923edad3c0f548ad9a5ee6"
     },
     {
+      "packageName": "@solid-primitives/history",
+      "specifier": "@solid-primitives/history",
+      "packageVersion": "1.0.0-next.3",
+      "packageIntegrity": "sha512-bSigepNsLx1M30c+pCdjgamlOuwJoeGROvQJS9nk+TykeR8cmklzfQ9l4J/zFxpaI8KDW6trEZ2hgj/HcSQsYQ==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:62e0d1545407d878de0aaa572a6c7cdfba0c626e5868bd6dbffabcf71d2027fd",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/654818fec027f76b356de03a041876351a3fe74f191f3bbb19682816b9dcd774.json",
+      "documentDigest": "sha256:654818fec027f76b356de03a041876351a3fe74f191f3bbb19682816b9dcd774"
+    },
+    {
+      "packageName": "@solid-primitives/i18n",
+      "specifier": "@solid-primitives/i18n",
+      "packageVersion": "3.0.0-next.4",
+      "packageIntegrity": "sha512-r5ZwXcxsE0NEC4MCs5nphs9gnEdDkvZ5zp3P/I0h0wHHXBQi1fuXkQv857HBgTi2Mwja7vS5D6nePyQQxd9q/A==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:7ea61a78ee9de2214c2a68ce9388137552e1365577761e3afd8fa91d43828d2a",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/67c31e887b25af337ad26a97846a3352f2555dffc163993cdca3f6944138eb64.json",
+      "documentDigest": "sha256:67c31e887b25af337ad26a97846a3352f2555dffc163993cdca3f6944138eb64"
+    },
+    {
       "packageName": "@solid-primitives/intersection-observer",
       "specifier": "@solid-primitives/intersection-observer",
       "packageVersion": "3.0.0-next.3",
@@ -792,6 +891,72 @@
       "documentDigest": "sha256:0e26eeb1a52a43a26f99058d8372c2e13f285d1850e3d1cdd85af9b234c2279e"
     },
     {
+      "packageName": "@solid-primitives/map",
+      "specifier": "@solid-primitives/map",
+      "packageVersion": "1.0.0-next.2",
+      "packageIntegrity": "sha512-9TipViAZvtT9sNCJuriC7SbKTDA9THKseAxeGWmtvEcWEupwdCTsb/mA8qoobmo+rTgkkhYLyc2N+jHGH4KykQ==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:d44f8aa740856b8ea65ca2389d792038f38af49638f878864f2e1c560f64d495",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/e8f3a10450dbf81751484647dbf138793dddca762b49353b329a0717f05abdbd.json",
+      "documentDigest": "sha256:e8f3a10450dbf81751484647dbf138793dddca762b49353b329a0717f05abdbd"
+    },
+    {
+      "packageName": "@solid-primitives/marker",
+      "specifier": "@solid-primitives/marker",
+      "packageVersion": "2.0.0-next.2",
+      "packageIntegrity": "sha512-Ogce24Mbow9or2cI+fCh4eP9H6OWCX8zWJFo8y5z390IUBdTeA+QGYaK6QY/VpeUwCR1yVvJemyA2DvmwFMSzQ==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:4c9e4fc7dc80fb58c1f757245afbb4b32864117fddcc4816176ff014a5d72d27",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/ad46d73405032905b671d9bd82b9fe986339c432d099b56dc92f53a11a005e64.json",
+      "documentDigest": "sha256:ad46d73405032905b671d9bd82b9fe986339c432d099b56dc92f53a11a005e64"
+    },
+    {
       "packageName": "@solid-primitives/media",
       "specifier": "@solid-primitives/media",
       "packageVersion": "4.0.0-next.2",
@@ -888,6 +1053,39 @@
       ],
       "document": "objects/24747b7ddd235233e0bba9c12fd815a8d4ee9aa7ced363f0b4b1005577b17635.json",
       "documentDigest": "sha256:24747b7ddd235233e0bba9c12fd815a8d4ee9aa7ced363f0b4b1005577b17635"
+    },
+    {
+      "packageName": "@solid-primitives/mutation-observer",
+      "specifier": "@solid-primitives/mutation-observer",
+      "packageVersion": "3.0.0-next.2",
+      "packageIntegrity": "sha512-QbBVd/3B4vLJh7Hbd2nbW2AVXOrWeRNvXIojkS8cr2DfnnT2/+MAOl7gJmowuIfbZmoLBvgCFmaBnNXg31BzVQ==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:cb44e47e0f854d06782c2cad0a295979d85faee5a7993a48306a101846c98ace",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/be7b020655b4ad6224be235ab0cf37479b560063cab36dffed54b9268c19f819.json",
+      "documentDigest": "sha256:be7b020655b4ad6224be235ab0cf37479b560063cab36dffed54b9268c19f819"
     },
     {
       "packageName": "@solid-primitives/notification",
@@ -1088,6 +1286,39 @@
       "documentDigest": "sha256:c286ca9cbebd7c68f1a94db7e275da95fde7b2938ae569ecc65bd28f32201957"
     },
     {
+      "packageName": "@solid-primitives/props",
+      "specifier": "@solid-primitives/props",
+      "packageVersion": "4.0.0-next.3",
+      "packageIntegrity": "sha512-V2Gn96sQLLhwyiAcGogExqP8+5++Itv0/KBQMNiNp/ldNwbQkr8Q11Ku5VXswYFiFmuiHJ/pGANfwzgsla7zpA==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:68a2df131dd7c8ab636b89bc9d580b11ef76f7b473773c4aae13541243c600c8",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/626617d4756963546b420f884752fca371ecd84ae6635e1243377e1997ecbc82.json",
+      "documentDigest": "sha256:626617d4756963546b420f884752fca371ecd84ae6635e1243377e1997ecbc82"
+    },
+    {
       "packageName": "@solid-primitives/raf",
       "specifier": "@solid-primitives/raf",
       "packageVersion": "4.0.0-next.2",
@@ -1282,6 +1513,72 @@
       ],
       "document": "objects/13ec042cdbe30caace402b64c83b1fa63cb375829b47f6e502a92361a333b42b.json",
       "documentDigest": "sha256:13ec042cdbe30caace402b64c83b1fa63cb375829b47f6e502a92361a333b42b"
+    },
+    {
+      "packageName": "@solid-primitives/rootless",
+      "specifier": "@solid-primitives/rootless",
+      "packageVersion": "2.0.0-next.2",
+      "packageIntegrity": "sha512-QGoy8R+8v+9I8mET50wMwu0uawkQvFFcv67S+vKJ8xP5jPrQXdxuNMckUTKUy2shR3rIRpR0oLzss0Vy0oLkPg==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:a27e0f7668a6bf6a60c9c1a353af831420f9f920fcf9bc5b4870a18063f7be99",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/9df96abfbfaa356b68d83ebd28c419dc6c5f198b0e276252b2f903e04cfcb85a.json",
+      "documentDigest": "sha256:9df96abfbfaa356b68d83ebd28c419dc6c5f198b0e276252b2f903e04cfcb85a"
+    },
+    {
+      "packageName": "@solid-primitives/scheduled",
+      "specifier": "@solid-primitives/scheduled",
+      "packageVersion": "2.0.0-next.2",
+      "packageIntegrity": "sha512-vf1yRmo9gAIl/FirPlb3uE3MKtfJ/yY5MjE29PLk/hpdfcqI0n2EZVKAXyBepsW2qxBsIBKjug1eczLYaydNrw==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:c40854c5c7cd241fb4882da71ae49aad864d7b4aaac023bb664703e6e53078b8",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/06c6e3b969d7ef1d1f6039939fa12335d1dfb4dd54be1699ddde04a5bfcf3cf0.json",
+      "documentDigest": "sha256:06c6e3b969d7ef1d1f6039939fa12335d1dfb4dd54be1699ddde04a5bfcf3cf0"
     },
     {
       "packageName": "@solid-primitives/scroll",
@@ -1870,6 +2167,39 @@
       ],
       "document": "objects/4f94afea98d8af9f7e7457eee14764f997767303f8244a7530099ec128e8ebc4.json",
       "documentDigest": "sha256:4f94afea98d8af9f7e7457eee14764f997767303f8244a7530099ec128e8ebc4"
+    },
+    {
+      "packageName": "@solid-primitives/video",
+      "specifier": "@solid-primitives/video",
+      "packageVersion": "1.0.0-next.3",
+      "packageIntegrity": "sha512-M+R6HGvKMqRXy9mGEwpyq+IAZew7kBEJYfL58i+1QGuuTGtiCQjeXGME7fe4UG/mDldW56WA/TRSJEGeF8kQxg==",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "snapshotRoot": "sha256:4a72261603b0bb12a67d9be1d39d2a0e9a5215871f1437141dc56d49d2ffc85f",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/a819c88b2161e7bd2abeb8990437b4dd0b0307cae2852b7b48e4051d1c5e34e8.json",
+      "documentDigest": "sha256:a819c88b2161e7bd2abeb8990437b4dd0b0307cae2852b7b48e4051d1c5e34e8"
     },
     {
       "packageName": "@solid-primitives/websocket",
