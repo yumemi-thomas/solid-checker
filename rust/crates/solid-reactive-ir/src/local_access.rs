@@ -1104,6 +1104,21 @@ impl LocalAccessContext<'_, '_> {
             let Some(call) = file.ast.calls.iter().find(|call| call.span == initializer) else {
                 continue;
             };
+            // ADR 0259: a resolved root passthrough that returns the factory
+            // call directly hands this binding exactly that call's value, so
+            // the outer destructuring is the factory call's destructuring.
+            let call = match crate::callback_return::resolve(self.lookup, file, call) {
+                Some(passthrough)
+                    if !file.ast.bindings.iter().any(|inner| {
+                        inner.initializer.is_some_and(|value| {
+                            file.ast.peel_ts_sugar_span(value) == passthrough.created.span
+                        })
+                    }) =>
+                {
+                    passthrough.created
+                }
+                _ => call,
+            };
             let Some((returned, _)) = self
                 .lookup
                 .callee_symbol(file, call.callee)

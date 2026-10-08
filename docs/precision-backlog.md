@@ -28722,3 +28722,13 @@ roots, named or non-literal callbacks, conditional or multiple returns, and
 escaping or container bindings. The `createPolled` and `createPagination`
 top-level-read twins still need spec claims (callbacks; reactive reads and
 owner requirements) before their correct use is clean.
+
+## createPagination reads and root destructuring (2026-10-09, ADR 0260)
+
+`createPagination` closes reads and creates (owner requirements known); its
+construction read stays ambient, so component-body calls carry an
+uncertifiable strict-read obligation, and its options callback is a partial
+row. Outer destructuring of a resolved createRoot passthrough is the inner
+factory call's destructuring. Open: `createPolled` callbacks (async-iterable
+poll results need result-of-result vocabulary) and its `Date.now()` initializer
+obligation; createIntervalCounter's twin.
