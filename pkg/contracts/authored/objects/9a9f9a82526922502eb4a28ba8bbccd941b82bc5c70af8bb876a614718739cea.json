@@ -15,7 +15,7 @@
           "exports": {
             "createPerPointerListeners": "open-callable",
             "createPointerList": "open-callable",
-            "createPointerListeners": "open-callable",
+            "createPointerListeners": "authored-createPointerListeners",
             "createPointerPosition": "authored-createPointerPosition",
             "getPositionToElement": "open-callable",
             "pointerHover": "open-callable",
@@ -45,6 +45,249 @@
   "summaries": {
     "open-callable": {
       "call": {},
+      "shape": "callable"
+    },
+    "authored-createPointerListeners": {
+      "call": {
+        "operations": [
+          {
+            "id": "config-get",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "protocol": "get"
+          },
+          {
+            "id": "listener-effects",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "pointer-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "target",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "pointer-listener-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "pointer-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "target"
+                  ],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "target",
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          },
+          {
+            "id": "handler-onDown",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "onDown"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "handler-ondown",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "ondown"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "pointer-listener-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [],
+        "computations": [
+          "listener-effects"
+        ],
+        "reads": [],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "config-get"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "target"
+              ]
+            },
+            "operation": "target"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "onDown"
+              ]
+            },
+            "operation": "handler-onDown"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "ondown"
+              ]
+            },
+            "operation": "handler-ondown"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ]
+      },
       "shape": "callable"
     },
     "authored-createPointerPosition": {

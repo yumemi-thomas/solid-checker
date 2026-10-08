@@ -21,7 +21,7 @@
   "identity": "identity.json",
   "exports": {
     "createIntersectionObserver": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Complete constructor/private deferred read census; existing probes apply. Research draft pending admission.",
       "call": {
         "operations": [
           {
@@ -262,6 +262,32 @@
                 }
               ]
             }
+          },
+          {
+            "id": "is-visible-entries-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "inputs": [
+              {
+                "kind": "store",
+                "resource": "entries"
+              }
+            ]
           }
         ],
         "returns": [
@@ -318,14 +344,19 @@
           "returns",
           "creates",
           "callbacks",
-          "cleanups"
+          "cleanups",
+          "reads"
+        ],
+        "reads": [
+          "is-visible-entries-read"
         ]
       },
       "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 \u2014 Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque and its reads keep reads open.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 \u2014 Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque and its reads keep reads open.",
-        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 \u2014 Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque and its reads keep reads open.",
-        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 \u2014 Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque and its reads keep reads open."
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque; its private store reads are separately enumerated as deferred in the reads census.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque; its private store reads are separately enumerated as deferred in the reads census.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque; its private store reads are separately enumerated as deferred in the reads census.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque; its private store reads are separately enumerated as deferred in the reads census.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — No package-owned store read at construction. access(options) is the existing untracked caller invocation, elements/options computes are existing tracked invocations, native entry copies and mutation draft are host/plain mutation data under P1/P2. The returned isVisible function reads entries only when later called; opaque member remains an obligation."
       },
       "rule": "missing-owner",
       "scenario": [
@@ -368,7 +399,7 @@
       ]
     },
     "createVisibilityObserver": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 — Complete constructor/private deferred read census; existing probes apply. Research draft pending admission.",
       "call": {
         "operations": [
           {
@@ -511,6 +542,60 @@
                 }
               ]
             }
+          },
+          {
+            "id": "visible-result-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "visible"
+              }
+            ],
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "previous-visible-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "visible"
+              }
+            ],
+            "owner": {
+              "source": "none"
+            }
           }
         ],
         "returns": [
@@ -547,13 +632,19 @@
         "closed": [
           "returns",
           "creates",
-          "cleanups"
+          "cleanups",
+          "reads"
+        ],
+        "reads": [
+          "visible-result-read",
+          "previous-visible-read"
         ]
       },
       "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 \u2014 One ownedWrite signal, two direct cleanup registrations, and one effect only for the callable element path permitted by the published Element|Accessor types. Browser always returns the visible signal wrapper; initial sentinel may throw NotReadyError.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 \u2014 One ownedWrite signal, two direct cleanup registrations, and one effect only for the callable element path permitted by the published Element|Accessor types. Browser always returns the visible signal wrapper; initial sentinel may throw NotReadyError.",
-        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 \u2014 One ownedWrite signal, two direct cleanup registrations, and one effect only for the callable element path permitted by the published Element|Accessor types. Browser always returns the visible signal wrapper; initial sentinel may throw NotReadyError."
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 — One ownedWrite signal, two direct cleanup registrations, and one effect only for the callable element path permitted by the published Element|Accessor types. Browser always returns the visible signal wrapper; initial sentinel may throw NotReadyError.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 — One ownedWrite signal, two direct cleanup registrations, and one effect only for the callable element path permitted by the published Element|Accessor types. Browser always returns the visible signal wrapper; initial sentinel may throw NotReadyError.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 — One ownedWrite signal, two direct cleanup registrations, and one effect only for the callable element path permitted by the published Element|Accessor types. Browser always returns the visible signal wrapper; initial sentinel may throw NotReadyError.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 — No package-private reactive source is read during construction. rawVisible() in the returned wrapper runs on later result use; previous rawVisible is explicitly untracked on native event delivery when a custom setter exists. Setter factory/element reads belong to caller-code execution, not private source reads. P1/P2 cover native observer/options data."
       },
       "rule": "missing-owner",
       "scenario": [

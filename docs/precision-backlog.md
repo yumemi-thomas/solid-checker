@@ -1,5 +1,14 @@
 # Precision backlog
 
+## Solid Primitives batch 5 (2026-10-08)
+
+ADR 0240: seven specs close reads and creates, and five exports gain claims.
+Browser ledger: 63 of 129 report correctly. Three module-scope expectations
+were corrected: their listeners use `tryOnCleanup`, and Chrome is silent.
+Still open: `createPointerListeners` callbacks (arbitrary config keys become
+handlers), `createMicrotask` returns (a stateful function), and
+`createPageLeaveBlocker`, whose ledger case still fails.
+
 ## Tracked reads under a created owner (2026-10-08)
 
 ADR 0239: a contract read stated `tracked` under an owner the export creates

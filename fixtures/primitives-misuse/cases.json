@@ -1202,10 +1202,9 @@
       "rule": "missing-owner",
       "hosts": [
         "none",
-        "browser",
         "node"
       ],
-      "why": "createConnectivitySignal registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "createConnectivitySignal registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed. Not a misuse in the browser build (ADR 0240): the listener is registered through `tryOnCleanup` (utils/dist/index.js:149), which adds a cleanup only when an owner exists, so module scope leaks nothing Solid tracks, and Chrome on rc.13 is silent. The browser host is therefore not a case here.",
       "misuse": "import { createConnectivitySignal } from \"@solid-primitives/connectivity\";\n\ncreateConnectivitySignal();\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createConnectivitySignal } from \"@solid-primitives/connectivity\";\n\ncreateRoot(dispose => {\n  createConnectivitySignal();\n  return dispose;\n});\n"
     },
@@ -1236,10 +1235,9 @@
       "rule": "missing-owner",
       "hosts": [
         "none",
-        "browser",
         "node"
       ],
-      "why": "createMediaQuery registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "createMediaQuery registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed. Not a misuse in the browser build (ADR 0240): the listener is registered through `tryOnCleanup` (utils/dist/index.js:149), which adds a cleanup only when an owner exists, so module scope leaks nothing Solid tracks, and Chrome on rc.13 is silent. The browser host is therefore not a case here.",
       "misuse": "import { createMediaQuery } from \"@solid-primitives/media\";\n\ncreateMediaQuery(\"(min-width: 800px)\");\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createMediaQuery } from \"@solid-primitives/media\";\n\ncreateRoot(dispose => {\n  createMediaQuery(\"(min-width: 800px)\");\n  return dispose;\n});\n"
     },
@@ -1321,10 +1319,9 @@
       "rule": "missing-owner",
       "hosts": [
         "none",
-        "browser",
         "node"
       ],
-      "why": "createActiveElement registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
+      "why": "createActiveElement registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed. Not a misuse in the browser build (ADR 0240): the listener is registered through `tryOnCleanup` (utils/dist/index.js:149), which adds a cleanup only when an owner exists, so module scope leaks nothing Solid tracks, and Chrome on rc.13 is silent. The browser host is therefore not a case here.",
       "misuse": "import { createActiveElement } from \"@solid-primitives/active-element\";\n\ncreateActiveElement();\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createActiveElement } from \"@solid-primitives/active-element\";\n\ncreateRoot(dispose => {\n  createActiveElement();\n  return dispose;\n});\n"
     },

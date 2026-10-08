@@ -798,6 +798,128 @@
           "disposals": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs."
         }
       }
+    },
+    "createMicrotask": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 — Honest partial claim: whole returned wrapper remains opaque, so returns stays open (ADR 0234). Other constructor domains are exhausted; probes pending.",
+      "rule": "missing-owner",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Unconditional onCleanup throws in a leaf."
+        },
+        {
+          "label": "queued-callback",
+          "rule": "missing-owner",
+          "why": "After invoking the returned wrapper, fn runs on the native microtask stack; cleanup in fn lacks owner unless fn restores the captured owner.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "call": {
+        "operations": [
+          {
+            "id": "microtask-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "queued-fn",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "queued"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ],
+        "cleanups": [
+          "microtask-cleanup"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "queued-fn"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 — Counter and captured args are ordinary local data. Constructor and wrapper read no package reactive source; fn is the separately described caller invocation.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 — No signal or computed owner is created; the sole owner operation is onCleanup, listed in cleanups.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 — The only caller-code invocation is fn(...args) in queueMicrotask, later and only for the final noncancelled task. Minimum zero covers an unused wrapper, batching and cleanup cancellation.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 — onCleanup(() => calls = 0) occurs exactly once on construction, with no other explicit cleanup registration."
+      }
     }
   }
 }

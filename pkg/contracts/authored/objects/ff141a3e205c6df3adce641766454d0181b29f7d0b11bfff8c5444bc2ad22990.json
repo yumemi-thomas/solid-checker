@@ -18,7 +18,7 @@
             "createLazyMemo": "authored-createLazyMemo",
             "createMemoCache": "authored-createMemoCache",
             "createPureReaction": "open-callable",
-            "createReducer": "open-callable",
+            "createReducer": "authored-createReducer",
             "createWritableMemo": "open-callable"
           },
           "resolution": {
@@ -277,6 +277,275 @@
         ],
         "reads": [
           "delayed-cache-read"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-createReducer": {
+      "call": {
+        "operations": [
+          {
+            "id": "reducer-state-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "reducer-state"
+            ]
+          },
+          {
+            "id": "reducer-initial-compute",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "reducer-initial-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "initial-value",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "reducer-initial-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "reducer-initial-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-get",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "protocol": "get"
+          },
+          {
+            "id": "dispatcher",
+            "kind": "invoke",
+            "trigger": {
+              "event": "result-access"
+            },
+            "at": {
+              "event": "result-access",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "equals",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 2,
+                  "path": [
+                    "equals"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "reducer-state"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "reducer-state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "reducer-initial-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [
+          "reducer-state-production"
+        ],
+        "computations": [
+          "reducer-initial-compute"
+        ],
+        "reads": [],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "initial-value"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "options-get"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "dispatcher"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": [
+                "equals"
+              ]
+            },
+            "operation": "equals"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
         ]
       },
       "shape": "callable"

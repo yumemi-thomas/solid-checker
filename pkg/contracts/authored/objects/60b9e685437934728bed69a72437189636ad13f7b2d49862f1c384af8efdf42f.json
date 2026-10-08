@@ -17,7 +17,7 @@
             "WindowEventListener": "open-callable",
             "createEventListener": "authored-createEventListener",
             "createEventListenerMap": "open-callable",
-            "createEventSignal": "open-callable",
+            "createEventSignal": "authored-createEventSignal",
             "eventListener": "open-callable",
             "makeEventListener": "open-callable",
             "makeEventListenerStack": "open-callable",
@@ -259,6 +259,218 @@
         ],
         "creates": [],
         "reads": []
+      },
+      "shape": "callable"
+    },
+    "authored-createEventSignal": {
+      "call": {
+        "operations": [
+          {
+            "id": "event-state-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "event-state"
+            ]
+          },
+          {
+            "id": "listener-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "event-state"
+            }
+          },
+          {
+            "id": "target",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "type",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 1,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "event-state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "listener-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [
+          "event-state-production"
+        ],
+        "computations": [
+          "listener-effect"
+        ],
+        "reads": [],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "target"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "type"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ]
       },
       "shape": "callable"
     }

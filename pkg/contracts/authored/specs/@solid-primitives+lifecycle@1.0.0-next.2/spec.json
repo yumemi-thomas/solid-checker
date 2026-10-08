@@ -22,7 +22,7 @@
   "hostFreeIdentity": "identity.host-free.json",
   "exports": {
     "createIsMounted": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24 — Returned signal only; onSettled deliberately tolerates no owner on rc.13.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-top-level-read/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060,1942-1958,2346-2355 — Source-cited browser creates census; optional settled child production does not assert hydration or a children-capable owner at every call. Research draft, not newly probed admission evidence.",
       "rule": "strict-read-untracked",
       "call": {
         "operations": [
@@ -44,7 +44,57 @@
             },
             "output": {
               "kind": "reactive",
-              "role": "accessor"
+              "role": "accessor",
+              "resource": "mounted"
+            }
+          },
+          {
+            "id": "create-mounted",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "mounted"
+            ]
+          },
+          {
+            "id": "mounted-settle",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "mounted-settle-owner",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
             }
           }
         ],
@@ -54,16 +104,41 @@
         "closed": [
           "returns",
           "reads",
-          "callbacks"
+          "callbacks",
+          "creates"
         ],
         "reads": [],
-        "callbacks": []
+        "callbacks": [],
+        "resources": [
+          {
+            "id": "mounted-settle-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "mounted",
+            "kind": "reactive-source"
+          }
+        ],
+        "creates": [
+          "create-mounted"
+        ],
+        "computations": [
+          "mounted-settle"
+        ]
       },
       "closures": {
         "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24 — Browser returns exactly the plain signal accessor.",
         "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24 — No package accessor is read; the settle callback only writes a constant true.",
-        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24 — No caller callable or data argument exists. The onSettled callback is package-defined."
-      }
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24 — No caller callable or data argument exists. The onSettled callback is package-defined.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-top-level-read/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060,1942-1958,2346-2355 — One eager value signal. onSettled creates at most one child tracked computation only when a present owner admits children; otherwise it queues an unowned one-shot, creating no owner. The child is a leaf (children/cleanup forbidden). No required missing-owner claim. The browser calls onSettled unconditionally; its owner production remains 0..1."
+      },
+      "probes": [
+        {
+          "label": "settle-read",
+          "rule": "strict-read-untracked",
+          "why": "Exercises the settled signal and reads its actual returned signal in the component strict-read window versus JSX. The computation production is source-cited; this pair does not independently falsify its child-owner count."
+        }
+      ]
     },
     "onElementConnect": {
       "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:55-61 — Conditional required cleanup owner and two caller execution phases; connected return remains open.",

@@ -292,6 +292,32 @@
                 }
               ]
             }
+          },
+          {
+            "id": "is-visible-entries-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "inputs": [
+              {
+                "kind": "store",
+                "resource": "entries"
+              }
+            ]
           }
         ],
         "returns": [
@@ -348,7 +374,11 @@
           "returns",
           "creates",
           "callbacks",
-          "cleanups"
+          "cleanups",
+          "reads"
+        ],
+        "reads": [
+          "is-visible-entries-read"
         ]
       },
       "shape": "callable"
@@ -500,6 +530,60 @@
                 }
               ]
             }
+          },
+          {
+            "id": "visible-result-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "visible"
+              }
+            ],
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "previous-visible-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "visible"
+              }
+            ],
+            "owner": {
+              "source": "none"
+            }
           }
         ],
         "returns": [
@@ -536,7 +620,12 @@
         "closed": [
           "returns",
           "creates",
-          "cleanups"
+          "cleanups",
+          "reads"
+        ],
+        "reads": [
+          "visible-result-read",
+          "previous-visible-read"
         ]
       },
       "shape": "callable"

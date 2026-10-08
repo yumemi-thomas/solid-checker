@@ -21,7 +21,7 @@
   "identity": "identity.json",
   "exports": {
     "createActiveElement": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/active-element/dist/index.js:34-39 \u2014 Creates stays open because createHydratableSignal has a hydration-only onSettled registration, not covered by these browser-render pairs. Browser draft; Chrome probes pending, not shipping evidence.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-top-level-read/node_modules/@solid-primitives/active-element/dist/index.js:34-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060,1942-1958,2346-2355 — Source-cited browser creates census; optional settled child production does not assert hydration or a children-capable owner at every call. Research draft, not newly probed admission evidence.",
       "call": {
         "operations": [
           {
@@ -87,12 +87,45 @@
               "requires": "unconstrained",
               "requiresCleanup": "required"
             }
+          },
+          {
+            "id": "hydration-settle",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "hydration-settle-owner",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
           }
         ],
         "resources": [
           {
             "id": "active",
             "kind": "reactive-source"
+          },
+          {
+            "id": "hydration-settle-owner",
+            "kind": "owner"
           }
         ],
         "returns": [
@@ -107,15 +140,20 @@
         "closed": [
           "returns",
           "reads",
-          "callbacks"
+          "callbacks",
+          "creates"
         ],
         "reads": [],
-        "callbacks": []
+        "callbacks": [],
+        "computations": [
+          "hydration-settle"
+        ]
       },
       "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/active-element/dist/index.js:34-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 \u2014 Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
-        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/active-element/dist/index.js:34-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 \u2014 Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
-        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/active-element/dist/index.js:34-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 \u2014 Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function."
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/active-element/dist/index.js:34-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 — Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/active-element/dist/index.js:34-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 — Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/active-element/dist/index.js:34-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 — Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-top-level-read/node_modules/@solid-primitives/active-element/dist/index.js:34-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/active-element-createActiveElement-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060,1942-1958,2346-2355 — One eager value signal. onSettled creates at most one child tracked computation only when a present owner admits children; otherwise it queues an unowned one-shot, creating no owner. The child is a leaf (children/cleanup forbidden). No required missing-owner claim. Hydration additionally gates that 0..1 computation."
       },
       "rule": "strict-read-untracked",
       "probes": [
@@ -123,6 +161,11 @@
           "label": "leaf",
           "rule": "leaf-owner-forbidden-call",
           "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        },
+        {
+          "label": "hydration-read",
+          "rule": "strict-read-untracked",
+          "why": "Exercises the hydrating initialization branch and reads its actual returned signal in the component strict-read window versus JSX. The computation production is source-cited; this pair does not independently falsify its child-owner count."
         }
       ]
     }

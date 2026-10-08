@@ -21,7 +21,7 @@
   "identity": "identity.json",
   "exports": {
     "createFullscreen": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-module-scope/node_modules/@solid-primitives/fullscreen/dist/index.js:47-70 \u2014 Direct onCleanup at line 62 is unconditional for every browser ref form. Browser draft; Chrome probes pending, not shipping evidence.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/fullscreen/dist/index.js:47-70; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88,149; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 — Complete source-cited browser reads/creates/callback census. Opaque enter/exit controls remain as authored. New ref pairs pending execution.",
       "call": {
         "operations": [
           {
@@ -50,7 +50,8 @@
                   "name": "isActive",
                   "value": {
                     "kind": "reactive",
-                    "role": "accessor"
+                    "role": "accessor",
+                    "resource": "active"
                   }
                 },
                 {
@@ -89,20 +90,270 @@
               "requires": "required",
               "requiresCleanup": "required"
             }
+          },
+          {
+            "id": "create-active",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "active"
+            ]
+          },
+          {
+            "id": "listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "ref-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "ref-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "ref-initial",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "ref-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "ref-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "ref-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "ref-event",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup-active-read",
+            "kind": "read",
+            "trigger": {
+              "event": "cleanup"
+            },
+            "at": {
+              "event": "cleanup",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "active"
+              }
+            ]
           }
         ],
         "returns": [
           "return"
         ],
         "cleanups": [
-          "cleanup"
+          "cleanup",
+          "listener-cleanup"
         ],
         "closed": [
-          "returns"
+          "returns",
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "resources": [
+          {
+            "id": "active",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "ref-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [
+          "create-active"
+        ],
+        "computations": [
+          "ref-effect"
+        ],
+        "reads": [
+          "cleanup-active-read"
+        ],
+        "callbacks": [
+          {
+            "operation": "ref-initial",
+            "from": {
+              "arg": 0,
+              "path": []
+            }
+          },
+          {
+            "operation": "ref-compute",
+            "from": {
+              "arg": 0,
+              "path": []
+            }
+          },
+          {
+            "operation": "ref-event",
+            "from": {
+              "arg": 0,
+              "path": []
+            }
+          }
         ]
       },
       "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-module-scope/node_modules/@solid-primitives/fullscreen/dist/index.js:47-70 \u2014 Exactly { enter, exit, isActive }; isActive is the unconditional browser signal, and enter/exit remain opaque callables."
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-module-scope/node_modules/@solid-primitives/fullscreen/dist/index.js:47-70 — Exactly { enter, exit, isActive }; isActive is the unconditional browser signal, and enter/exit remain opaque callables.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/fullscreen/dist/index.js:47-70; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88,149; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 — Exactly one browser signal, one effect only for a callable ref, optional listener cleanup, and unconditional direct cleanup. Native fullscreen objects/methods satisfy P1. The effect owns children and supports cleanup; no other Solid owner is created.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/fullscreen/dist/index.js:47-70; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88,149; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 — Construction reads only native document fields (P1), plain options (P2), and the explicit caller ref invocation. isActive() in cleanup is the sole package-private accessor read, 0..1 because exitOnCleanup can skip it; its cleanup timing excludes attribution to construction. Returned isActive is the already modeled signal accessor.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/fullscreen/dist/index.js:47-70; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88,149; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 — Callable ref has initial access(ref), tracked effect compute, and native fullscreenchange access(ref). access invokes only zero-length functions, so its two sites have lower bound zero. The direct effect always accepts callable ref, but its execution/reexecution count stays conservative. Native event delivery is external and does not capture the constructor owner. enter/exit call only host methods."
       },
       "rule": "strict-read-untracked",
       "probes": [
@@ -115,6 +366,37 @@
           "label": "leaf",
           "rule": "leaf-owner-forbidden-call",
           "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        },
+        {
+          "label": "initial-ref-read",
+          "rule": "strict-read-untracked",
+          "why": "Initial access(ref) runs synchronously in the component strict-read window; correct explicitly untracks that read."
+        },
+        {
+          "label": "ref-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Skip the synchronous initial ref access; the second call occurs in tracked effect compute and only misuse writes."
+        },
+        {
+          "label": "ref-owner",
+          "rule": "missing-owner",
+          "why": "Callable ref adds a guaranteed browser effect; ownerless construction emits NO_OWNER_EFFECT as well as the preexisting direct cleanup warning."
+        },
+        {
+          "label": "event-ref-owner",
+          "rule": "missing-owner",
+          "why": "Native fullscreenchange calls access(ref) outside its construction owner; only correct restores that owner before registering cleanup.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
         }
       ]
     }

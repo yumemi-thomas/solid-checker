@@ -105,12 +105,45 @@
               "requires": "unconstrained",
               "requiresCleanup": "required"
             }
+          },
+          {
+            "id": "hydration-settle",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "hydration-settle-owner",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
           }
         ],
         "resources": [
           {
             "id": "active",
             "kind": "reactive-source"
+          },
+          {
+            "id": "hydration-settle-owner",
+            "kind": "owner"
           }
         ],
         "returns": [
@@ -125,10 +158,14 @@
         "closed": [
           "returns",
           "reads",
-          "callbacks"
+          "callbacks",
+          "creates"
         ],
         "reads": [],
-        "callbacks": []
+        "callbacks": [],
+        "computations": [
+          "hydration-settle"
+        ]
       },
       "shape": "callable"
     },
