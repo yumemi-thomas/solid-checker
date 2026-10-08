@@ -412,6 +412,7 @@ fn return_operation() -> Operation {
         at: Some(Event::Call),
         schedule: Some(Schedule::SameStack),
         tracking: Tracking::Untracked,
+        strict_read: None,
         owner: OwnerRelation::default(),
         cardinality: Cardinality::default(),
         inputs: vec![],

@@ -8985,7 +8985,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createPreventScroll/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createScrollPosition-module-scope/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createPreventScroll/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -9051,6 +9051,7 @@
       "package": "@solid-primitives/scroll",
       "version": "3.0.0-next.4",
       "export": "createScrollPosition",
+      "strictReadProbeDigest": "832cf28b8adbab94b77d34ae1d45a57431442995bf04f3991a24abfad5c4311d",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -9088,6 +9089,7 @@
       "version": "3.0.0-next.4",
       "export": "createScrollPosition",
       "label": "owner",
+      "strictReadProbeDigest": "cfc16962b37a0b01afda9a3a8a25bbd4b1a75a9864671be9b0dfe463277c5f50",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -9119,7 +9121,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createScrollPosition_owner/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createScrollPosition-module-scope/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createScrollPosition_owner/main.tsx",
             "line": 8,
             "column": 32
           }

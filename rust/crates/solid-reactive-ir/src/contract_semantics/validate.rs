@@ -456,6 +456,14 @@ fn normalize_operation(
     nested: bool,
 ) -> Result<(), ModelError> {
     let op_path = format!("{path}.operation.{}", operation.id.0);
+    if operation.strict_read.is_some()
+        && (operation.kind != OperationKind::Read || operation.tracking != Tracking::Untracked)
+    {
+        return contradiction(
+            format!("{op_path}.strictRead"),
+            "strictRead cleared is valid only on a read with untracked tracking",
+        );
+    }
     if let Some(guard) = &mut operation.guard {
         super::guards::normalize_guard(guard, &format!("{op_path}.guard"))?;
     }

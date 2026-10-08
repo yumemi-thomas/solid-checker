@@ -44,6 +44,7 @@ fn operation(id: &str, kind: OperationKind) -> Operation {
         at: Some(Event::Call),
         schedule: Some(Schedule::SameStack),
         tracking: Tracking::Untracked,
+        strict_read: None,
         owner: OwnerRelation {
             source: OwnerSource::None,
             requirements: OwnerRequirements {
@@ -1239,6 +1240,89 @@ fn semantic_model_v1_digest_algorithm_and_golden_vector_are_frozen() {
 /// a contract keeps authenticating. This pins the other half — that a contract
 /// which *does* state provenance lands in its own family, under its own
 /// domain, with its own frozen vector.
+#[test]
+fn strict_read_clearing_is_explicit_and_validated() {
+    let read = |tracking, kind| {
+        let mut operation = operation("read", kind);
+        operation.tracking = tracking;
+        operation.strict_read = Some(StrictRead::Cleared);
+        operation
+    };
+    let kept = proposal_with(
+        ValueShape::Callable,
+        call(vec![read(Tracking::Untracked, OperationKind::Read)], vec![]),
+    )
+    .normalize()
+    .unwrap();
+    assert_eq!(
+        kept.artifact_cases()[0].exports["createResource"]
+            .call
+            .operations[0]
+            .strict_read,
+        Some(StrictRead::Cleared)
+    );
+    for tracking in [
+        Tracking::Tracked,
+        Tracking::AmbientAtExecution,
+        Tracking::Unknown,
+    ] {
+        let refused = proposal_with(
+            ValueShape::Callable,
+            call(vec![read(tracking, OperationKind::Read)], vec![]),
+        )
+        .normalize()
+        .unwrap_err();
+        assert!(refused.to_string().contains("strictRead"), "{refused}");
+    }
+    for kind in [
+        OperationKind::Invoke,
+        OperationKind::Return,
+        OperationKind::Write,
+        OperationKind::Invalidate,
+        OperationKind::Create,
+        OperationKind::Cleanup,
+        OperationKind::Dispose,
+        OperationKind::Compute,
+    ] {
+        let refused = proposal_with(
+            ValueShape::Callable,
+            call(vec![read(Tracking::Untracked, kind)], vec![]),
+        )
+        .normalize()
+        .unwrap_err();
+        assert!(refused.to_string().contains("strictRead"), "{refused}");
+    }
+    let Err(refused) = certification::proof_policy_2().inspect_candidates(&kept) else {
+        panic!("certification must refuse a strict-read clearing");
+    };
+    assert!(refused.to_string().contains("not certifiable"));
+}
+
+#[test]
+fn strict_read_clearing_binds_digest_and_recipe_value() {
+    let contract = |cleared: bool| {
+        let mut read = operation("read", OperationKind::Read);
+        read.strict_read = cleared.then_some(StrictRead::Cleared);
+        proposal_with(ValueShape::Plain, call(vec![read], vec![]))
+            .normalize()
+            .unwrap()
+    };
+    let plain = contract(false);
+    let cleared = contract(true);
+    assert_ne!(plain.semantic_digest(), cleared.semantic_digest());
+    for path in [
+        READS,
+        SemanticClaimPath::Operation(OperationId("read".into())),
+    ] {
+        assert_ne!(
+            address_of(&plain, "server-import", path.clone(), "closure"),
+            address_of(&cleared, "server-import", path, "closure")
+        );
+    }
+    // The existing legacy/provenance/protocol golden vectors in this module
+    // remain unchanged and exercise the strict_read: None encoding.
+}
+
 #[test]
 fn composed_provenance_digest_family_is_separate_and_frozen() {
     assert_eq!(

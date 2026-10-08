@@ -305,6 +305,10 @@
         "trigger": { "$ref": "#/$defs/trigger" },
         "at": { "$ref": "#/$defs/executionPoint" },
         "tracking": { "enum": ["tracked", "untracked", "ambient-at-execution"] },
+        "strictRead": {
+          "const": "cleared",
+          "description": "Explicit assertion that this read executes with strict-read checking cleared. Valid only on a read with untracked tracking. Absence establishes no strict-read clearing."
+        },
         "owner": { "$ref": "#/$defs/owner" },
         "count": { "$ref": "#/$defs/cardinality" },
         "inputs": {
@@ -325,6 +329,13 @@
         }
       },
       "allOf": [
+        {
+          "if": { "required": ["strictRead"] },
+          "then": {
+            "required": ["tracking"],
+            "properties": { "kind": { "const": "read" }, "tracking": { "const": "untracked" } }
+          }
+        },
         {
           "if": { "required": ["protocol"], "properties": { "protocol": { "enum": ["get-enumerable-string-values", "get-own-enumerable-values"] } } },
           "then": {

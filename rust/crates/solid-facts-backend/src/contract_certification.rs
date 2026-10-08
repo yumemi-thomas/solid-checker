@@ -7425,6 +7425,7 @@ mod tests {
             at: Some(Event::Call),
             schedule: Some(Schedule::SameStack),
             tracking: Tracking::Untracked,
+            strict_read: None,
             owner: OwnerRelation {
                 source: OwnerSource::AmbientAtExecution,
                 productions: KnowledgeSet::complete(vec![]),
@@ -25562,6 +25563,7 @@ export const value = phantom;
                     at: Some(Event::Call),
                     schedule: Some(Schedule::SameStack),
                     tracking: Tracking::Untracked,
+                    strict_read: None,
                     owner: OwnerRelation::default(),
                     cardinality: Cardinality {
                         scope: Some(CardinalityScope::Call),
@@ -25895,6 +25897,7 @@ export const value = phantom;
                         at: Some(Event::Call),
                         schedule: Some(Schedule::SameStack),
                         tracking: Tracking::Untracked,
+                        strict_read: None,
                         owner: OwnerRelation::default(),
                         cardinality: Cardinality {
                             scope: Some(CardinalityScope::Call),
@@ -26128,6 +26131,7 @@ export const value = phantom;
                     at: Some(Event::Call),
                     schedule: Some(Schedule::SameStack),
                     tracking: Tracking::Untracked,
+                    strict_read: None,
                     owner: OwnerRelation::default(),
                     cardinality: Cardinality {
                         scope: Some(CardinalityScope::Call),

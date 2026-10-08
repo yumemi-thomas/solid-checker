@@ -311,6 +311,19 @@ impl ProofPolicy2 {
 
         for artifact in &mut artifact_cases {
             for (export_name, export) in &mut artifact.exports {
+                // No census establishes the strict-read label at a read.
+                // Only an authored, cited and probed contract can state this.
+                if export
+                    .call
+                    .operations
+                    .iter()
+                    .any(|operation| operation.strict_read.is_some())
+                {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "a strictRead cleared assertion is not certifiable".into(),
+                    });
+                }
                 // ADR 0235: no census proves what a returned member's call
                 // does; only an authored, probed contract states it.
                 if export.call.operations.iter().any(|operation| {
@@ -2142,6 +2155,7 @@ mod tests {
             at: None,
             schedule: None,
             tracking: Tracking::Unknown,
+            strict_read: None,
             owner: OwnerRelation::default(),
             cardinality,
             inputs: Vec::new(),

@@ -1501,6 +1501,7 @@ fn operation(
         at: Some(Event::Call),
         schedule: Some(Schedule::SameStack),
         tracking: Tracking::Untracked,
+        strict_read: None,
         owner: OwnerRelation::default(),
         cardinality: Cardinality {
             scope: Some(CardinalityScope::Call),

@@ -363,6 +363,7 @@ fn operation(id: &str, kind: OperationKind, event: Event, min: u32) -> Operation
         at: Some(event),
         schedule: Some(Schedule::SameStack),
         tracking: Tracking::Untracked,
+        strict_read: None,
         owner: owner_none(),
         cardinality: Cardinality {
             scope: Some(CardinalityScope::Call),

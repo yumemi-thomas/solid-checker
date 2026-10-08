@@ -560,6 +560,13 @@ fn project_reactive_reads(
         if operation_reads_under_its_own_computation(operation) {
             continue;
         }
+        // An explicit clearing states that this occurrence neither subscribes
+        // nor enters a strict-read window. Keep it in the normalized census,
+        // but seed no caller read or package-internal notice, including through
+        // project wrappers. Untracked alone supplies no such assertion.
+        if operation.strict_read == Some(crate::contract_semantics::StrictRead::Cleared) {
+            continue;
+        }
         match operation.inputs.first() {
             // Carry the whole path back. Keeping only `path.last()` would
             // round-trip an accepted `["modifiers", "includes"]` down into a
@@ -1221,6 +1228,7 @@ mod owner_requirement_projection_tests {
             at: Some(Event::Call),
             schedule: Some(Schedule::SameStack),
             tracking: Tracking::Untracked,
+            strict_read: None,
             owner: OwnerRelation::default(),
             cardinality: Cardinality {
                 scope: Some(CardinalityScope::Call),
@@ -1283,6 +1291,42 @@ mod owner_requirement_projection_tests {
             disposals: KnowledgeSet::Unknown,
             computations: KnowledgeSet::Unknown,
         }
+    }
+
+    #[test]
+    fn only_an_explicit_strict_read_clearing_excludes_a_call_read() {
+        use crate::contract_semantics::{ReactiveRole, StrictRead};
+        let mut read = operation("read", OperationKind::Read, &[]);
+        read.inputs = vec![ValueShape::Reactive {
+            role: ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        }];
+        let mut known = claims();
+        known.reads = KnowledgeSet::Complete(vec![read.id.clone()]);
+        let mut subject = export(known, vec![read], Vec::new());
+        let mut open = BTreeSet::new();
+        let projected = super::project_reactive_reads(&subject, &mut open);
+        assert!(matches!(projected, ContractClaim::Known(reads) if reads.len() == 1));
+        assert!(!open.contains(&ClaimDomain::Reads));
+        subject.call.operations[0].strict_read = Some(StrictRead::Cleared);
+        assert!(matches!(super::project_reactive_reads(&subject, &mut open),
+            ContractClaim::Known(reads) if reads.is_empty()));
+        assert_eq!(
+            subject.call.claims().reads.items().len(),
+            1,
+            "the real occurrence stays known"
+        );
+        assert!(!open.contains(&ClaimDomain::Reads));
+        let mut partial = claims();
+        partial.reads = KnowledgeSet::Partial(vec![subject.call.operations[0].id.clone()]);
+        let partial = export(partial, subject.call.operations.clone(), Vec::new());
+        assert!(matches!(super::project_reactive_reads(&partial, &mut open),
+            ContractClaim::Known(reads) if reads.is_empty()));
+        assert!(
+            open.contains(&ClaimDomain::Reads),
+            "clearing does not close an open census"
+        );
     }
 
     /// ADR 0179: only an unguarded, `ambient-at-call`, synchronous,

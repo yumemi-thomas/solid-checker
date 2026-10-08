@@ -224,6 +224,7 @@ mod tests {
             at: None,
             schedule: None,
             tracking: solid_reactive_ir::contract_semantics::Tracking::Unknown,
+            strict_read: None,
             cardinality: solid_reactive_ir::contract_semantics::Cardinality {
                 min: Some(1),
                 max: Some(UpperBound::Many),

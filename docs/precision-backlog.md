@@ -1,5 +1,14 @@
 # Precision backlog
 
+## Explicit strict-read clearing (2026-10-08)
+
+ADR 0247: a contract read may state `strictRead: cleared` (an unlabelled
+`untrack`). Such a read is neither a caller strict read nor a package-internal
+notice. Package-internal reads no longer claim that Solid warns. Still open: a
+read in a labelled `untrack`, or one whose clearing the contract does not
+state, stays an obligation; a read's execution context is still not preserved
+through summaries in general.
+
 ## A package's own read through wrappers (2026-10-08)
 
 ADR 0246: a contract's own read stays package-internal (uncertifiable) when it

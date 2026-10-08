@@ -655,6 +655,182 @@
                 "role": "accessor"
               }
             ]
+          },
+          {
+            "id": "scroll-version-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "scroll-version"
+            ]
+          },
+          {
+            "id": "scroll-key-memos",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 2,
+              "max": 2,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "scroll-key-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "scroll-optional-settle",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "scroll-settle-owner",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
+          },
+          {
+            "id": "scroll-version-compute-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "scroll-version"
+              }
+            ],
+            "owner": {
+              "source": "created",
+              "resource": "derived-position-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "derived-position-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "scroll-initial-memo-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "strictRead": "cleared",
+            "why": "rust/target/primitives-checkpoint/misuse/scroll-createScrollPosition-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:98 calls untrack(fnMemo) without a second argument; rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5863-5887 sets tracking=false and strictRead=strictReadLabel || false, then restores both. This occurrence has no subscription and no strict-read window. The spread Gets occur after untrack returns and are not covered by this fact."
+          },
+          {
+            "id": "scroll-key-compute-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "owner": {
+              "source": "created",
+              "resource": "scroll-key-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "scroll-key-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
           }
         ],
         "callbacks": [
@@ -675,7 +851,9 @@
         ],
         "computations": [
           "scroll-listener",
-          "derived-position"
+          "derived-position",
+          "scroll-key-memos",
+          "scroll-optional-settle"
         ],
         "resources": [
           {
@@ -685,6 +863,18 @@
           {
             "id": "derived-position-owner",
             "kind": "owner"
+          },
+          {
+            "id": "scroll-version",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "scroll-key-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "scroll-settle-owner",
+            "kind": "owner"
           }
         ],
         "returns": [
@@ -692,25 +882,22 @@
         ],
         "closed": [
           "returns",
-          "callbacks"
+          "callbacks",
+          "reads",
+          "creates"
         ],
         "reads": [
-          "derived-key-memo-read"
+          "derived-key-memo-read",
+          "scroll-version-compute-read",
+          "scroll-initial-memo-read",
+          "scroll-key-compute-read"
+        ],
+        "creates": [
+          "scroll-version-production"
         ]
       },
-      "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:97-108 \u2014 Derived static store always returns x/y memo-backed getters whose memos already exist, unlike lazy static store.",
-        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:97-108 \u2014 P1: Geometry/listener methods are host behavior. The sole public callable, target, has two exact tracked invocation roles: effect compute and derived memo compute. Hydration suppresses some derived invocations (count remains 0..many), without adding a new callback origin; reads/creates stay open."
-      },
-      "probes": [
-        {
-          "label": "owner",
-          "rule": "leaf-owner-forbidden-call",
-          "why": "Derived static-store memos and render-effect are forbidden in an owned leaf."
-        }
-      ],
       "hostFree": {
-        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; Server does not return early: both construct derived-position and scroll-listener computation owners, and return the derived static store. Server line 53 skips target-derived, which already has minimum zero; line 64 still invokes callable target tracked in scroll-listener-owner. Server line 61 skips onSettled and lines 65/72 skip listener attachment; those add no contradictory claimed operation. All domain closures are unchanged: creates and reads stay open. Derived-store memo/getter construction: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:97-108. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; Server does not return early: both construct derived-position and scroll-listener computation owners, and return the derived static store. Server line 53 skips target-derived, which already has minimum zero; line 64 still invokes callable target tracked in scroll-listener-owner. Server line 61 skips onSettled and lines 65/72 skip listener attachment; those add no contradictory claimed operation. All domain closures are unchanged: creates and reads stay open. Derived-store memo/getter construction: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:97-108. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). ADR 0247 re-review: the browser claim's added operations also hold on the server build. scrollPosition.js:55 creates the version signal unconditionally (scroll-version-production, min 1), and static-store/dist/index.js:98-105 builds the derived memo and one key memo per key of the two-key position object with no isServer branch (scroll-key-memos, min 2). The onSettled compute skipped on the server (scrollPosition.js:61) is already scroll-optional-settle with min 0.",
         "minZero": [],
         "closed": [
           "returns",
@@ -720,7 +907,20 @@
           "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; Server does not return early: both construct derived-position and scroll-listener computation owners, and return the derived static store. Server line 53 skips target-derived, which already has minimum zero; line 64 still invokes callable target tracked in scroll-listener-owner. Server line 61 skips onSettled and lines 65/72 skip listener attachment; those add no contradictory claimed operation. All domain closures are unchanged: creates and reads stay open. Derived-store memo/getter construction: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:97-108. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:97-108 \u2014 Derived static store always returns x/y memo-backed getters whose memos already exist, unlike lazy static store.",
           "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; Server does not return early: both construct derived-position and scroll-listener computation owners, and return the derived static store. Server line 53 skips target-derived, which already has minimum zero; line 64 still invokes callable target tracked in scroll-listener-owner. Server line 61 skips onSettled and lines 65/72 skip listener attachment; those add no contradictory claimed operation. All domain closures are unchanged: creates and reads stay open. Derived-store memo/getter construction: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:97-108. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:97-108 \u2014 P1: Geometry/listener methods are host behavior. The sole public callable, target, has two exact tracked invocation roles: effect compute and derived memo compute. Hydration suppresses some derived invocations (count remains 0..many), without adding a new callback origin; reads/creates stay open."
         }
-      }
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:97-108 \u2014 Derived static store always returns x/y memo-backed getters whose memos already exist, unlike lazy static store.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../static-store/dist/index.js:97-108 \u2014 P1: Geometry/listener methods are host behavior. The sole public callable, target, has two exact tracked invocation roles: effect compute and derived memo compute. Hydration suppresses some derived invocations (count remains 0..many), without adding a new callback origin; reads/creates stay open.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78 - Version signal, derived memo plus two x/y key memos, listener effect and possible hydration/settle child. Read version/fnMemo in owned computes, fnMemo explicitly untracked in static-store initialization, and key memos later at Get. Constructor domains can be cited with current operations; explicit untrack read projection remains a consumer precision caveat.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/static-store/dist/index.js:97-107 eager derived/key memos and initial untrack(fnMemo); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createScrollPosition-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060 optional onSettled child versus queued unowned/leaf branch.; strictRead clearing: rust/target/primitives-checkpoint/misuse/scroll-createScrollPosition-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:98 calls untrack(fnMemo) without a second argument; rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5863-5887 sets tracking=false and strictRead=strictReadLabel || false, then restores both. This occurrence has no subscription and no strict-read window. The spread Gets occur after untrack returns and are not covered by this fact.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/scroll/dist/scrollPosition.js:49-78 - Version signal, derived memo plus two x/y key memos, listener effect and possible hydration/settle child. Read version/fnMemo in owned computes, fnMemo explicitly untracked in static-store initialization, and key memos later at Get. Constructor domains can be cited with current operations; explicit untrack read projection remains a consumer precision caveat.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/static-store/dist/index.js:97-107 eager derived/key memos and initial untrack(fnMemo); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createScrollPosition-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060 optional onSettled child versus queued unowned/leaf branch."
+      },
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Derived static-store memos and render-effect are forbidden in an owned leaf."
+        }
+      ]
     }
   }
 }

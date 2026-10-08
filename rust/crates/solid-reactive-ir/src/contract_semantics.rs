@@ -1978,6 +1978,15 @@ pub struct ComposedFrom {
     pub operation: OperationId,
 }
 
+/// An explicitly established strict-read execution context. Absence states
+/// no fact about strict-read warnings, including on an untracked operation.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum StrictRead {
+    /// The read executes with the strict-read window cleared. Valid only on
+    /// a read whose tracking is untracked; never inferred from tracking alone.
+    Cleared,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Operation {
     pub id: OperationId,
@@ -1987,6 +1996,8 @@ pub struct Operation {
     pub at: Option<Event>,
     pub schedule: Option<Schedule>,
     pub tracking: Tracking,
+    /// Only an explicit contract assertion can clear strict-read attribution.
+    pub strict_read: Option<StrictRead>,
     pub owner: OwnerRelation,
     pub cardinality: Cardinality,
     pub inputs: Vec<ValueShape>,

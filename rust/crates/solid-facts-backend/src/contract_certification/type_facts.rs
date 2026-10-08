@@ -21564,6 +21564,7 @@ mod tests {
             at: None,
             schedule: None,
             tracking: solid_reactive_ir::contract_semantics::Tracking::Unknown,
+            strict_read: None,
             owner: solid_reactive_ir::contract_semantics::OwnerRelation::default(),
             cardinality,
             inputs: Vec::new(),
@@ -24787,6 +24788,7 @@ mod tests {
             at: None,
             schedule: None,
             tracking: solid_reactive_ir::contract_semantics::Tracking::Unknown,
+            strict_read: None,
             owner: solid_reactive_ir::contract_semantics::OwnerRelation {
                 requirements: solid_reactive_ir::contract_semantics::OwnerRequirements {
                     cleanup: Requirement::Required,
@@ -33380,6 +33382,7 @@ mod tests {
             at: Some(Event::Call),
             schedule: Some(Schedule::SameStack),
             tracking: Tracking::Untracked,
+            strict_read: None,
             owner: OwnerRelation::default(),
             cardinality: Cardinality::default(),
             inputs: vec![],

@@ -20,6 +20,7 @@ fn operation(id: &str, min: u32) -> Operation {
         at: Some(Event::Call),
         schedule: Some(Schedule::SameStack),
         tracking: Tracking::Untracked,
+        strict_read: None,
         owner: OwnerRelation {
             source: OwnerSource::None,
             lifetime: Some(Lifetime::Call),

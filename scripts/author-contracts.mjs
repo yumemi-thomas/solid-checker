@@ -51,6 +51,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { propertyGetProbeDigest, validatePropertyGets } from "./lib/property-get-contracts.mjs";
 
+import { strictReadProbeDigest, strictReadWireCall, validateStrictReads } from "./lib/strict-read-contracts.mjs";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TIER = join(ROOT, "pkg/contracts/authored");
 const EMBEDDED = join(ROOT, "rust/crates/solid-facts-backend/src/authored_contracts/embedded.rs");
@@ -108,6 +110,7 @@ function validateMemberClosures(where, claim) {
 }
 
 function validateClosures(where, claim) {
+  validateStrictReads(where, claim);
   const closed = claim.call?.closed ?? [];
   const closures = claim.closures ?? {};
   for (const domain of closed) {
@@ -324,6 +327,11 @@ function probe(browser) {
       misuse: readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       correct: readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8")
     })));
+    const strictReadDigests = new Map(cases.map(entry => {
+      const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
+      return [entry.id, strictReadProbeDigest(spec, entry.export, pair,
+        entry.misuse, entry.correct, certifiedCases(spec))];
+    }));
     const scratch = mkdtempSync(join(tmpdir(), "solid-checker-authored-"));
     // Bind the bytes handed to the ledger before execution. Re-reading a
     // changed pair after a run must never stamp old observations as new input.
@@ -342,9 +350,11 @@ function probe(browser) {
     for (const row of read(join(scratch, "out.json")).results) {
       const label = labels.get(row.id);
       const probeDigest = probeDigests.get(row.id);
+      const strictReadDigest = strictReadDigests.get(row.id);
       results.push({ spec: spec.name, package: spec.package, version: spec.version, export: row.export,
         ...(label ? { label } : {}),
         ...(probeDigest ? { propertyGetProbeDigest: probeDigest } : {}),
+        ...(strictReadDigest ? { strictReadProbeDigest: strictReadDigest } : {}),
         solidRuntime: identity.runtime, artifacts: identity.artifacts, rule: row.rule,
         verdict: row.runtime === "detected" ? "passed" : row.runtime,
         misuse: (row.misuse.diagnostics ?? []).map(({ code, site }) => ({ code, site })),
@@ -399,10 +409,14 @@ function passed(spec, name) {
     const probeDigest = propertyGetProbeDigest(spec, name, pair,
       readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
+    const strictReadDigest = strictReadProbeDigest(spec, name, pair,
+      readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
+      readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
     return results.some(row => row.spec === spec.name && row.export === name
       && (row.label ?? undefined) === pair.label && row.verdict === "passed"
       && JSON.stringify(row.solidRuntime) === runtime
-      && (!probeDigest || row.propertyGetProbeDigest === probeDigest));
+      && (!probeDigest || row.propertyGetProbeDigest === probeDigest)
+      && (!strictReadDigest || row.strictReadProbeDigest === strictReadDigest));
   });
 }
 
@@ -504,7 +518,7 @@ function author(spec, bundle, hostFree = false) {
         let id = `open-${shape}`;
         if (call && passed(spec, name)) {
           id = `authored-${name}`;
-          summaries[id] = { call, shape };
+          summaries[id] = { call: strictReadWireCall(call), shape };
           shipped.push(name);
         } else summaries[id] = { call: {}, shape };
         artifactCase.exports[name] = stability ? { stability, summary: id } : id;

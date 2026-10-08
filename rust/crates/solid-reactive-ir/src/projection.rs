@@ -1188,12 +1188,10 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if read.is_uncertifiable() {
                 finding.kind = "uncertifiable".into();
             }
-            // A read the called export makes of its own reactive state, as
-            // its package contract declares it, happens inside the package's
-            // implementation while it runs. Solid's dev build warns about it
-            // in this component, but the call site controls nothing about it:
-            // the same warning fires for every correct use. It is the
-            // package's behaviour, not proven misuse here.
+            // A package-owned read is an implementation obligation. Its
+            // compact row does not establish a strict-read warning: untracked
+            // tracking alone cannot distinguish a labelled strict window
+            // from a clearing. Explicitly cleared reads never reach this row.
             // A read attributed through another function's summary: whether
             // it runs while this call does is not established.
             if read.summary_attributed && !read.package_internal && finding.kind != "uncertifiable"
@@ -1207,8 +1205,8 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if read.package_internal {
                 finding.kind = "uncertifiable".into();
                 finding.message = format!(
-                    "{} reads reactive state of its own while it runs, outside any tracking scope, as its package contract declares; Solid's dev build warns STRICT_READ_UNTRACKED here for every use of it, so this is the package's implementation rather than misuse at this call: {}",
-                    read.via, finding.message
+                    "{}'s package contract states a read of its own reactive state while it runs, but its strict-read execution context here is not established; whether Solid emits STRICT_READ_UNTRACKED remains uncertifiable, so this is a package-implementation obligation rather than proven misuse at this call",
+                    read.via
                 );
             }
         }
@@ -1408,6 +1406,41 @@ mod tests {
 
     use super::*;
     use crate::{ActionInvocation, AsyncRead, ExecutionRole};
+
+    #[test]
+    fn a_package_owned_read_never_promises_a_runtime_warning() {
+        let read = crate::ReactiveRead {
+            package_internal: true,
+            summary_attributed: false,
+            kind: "accessor".into(),
+            accessor: "package.read".into(),
+            location: location(20),
+            declaration: location(10),
+            execution: ExecutionRole::UntrackedRendering,
+            context: "Panel".into(),
+            via: "package.read".into(),
+            origin: None,
+            origin_context: "".into(),
+            uncertain: false,
+            missing_jsx_census: false,
+            host_callback_timing: false,
+            project_consumer_non_strict: false,
+            callback_invocation_unproven: false,
+            callee_callback_timing: false,
+        };
+        let finding = project_finding(
+            FindingSeed::StrictRead(&read),
+            &RecordingCatalog(CatalogCapabilities::SOLID_2),
+        );
+        assert_eq!(finding.kind, "uncertifiable");
+        assert!(
+            finding
+                .message
+                .contains("whether Solid emits STRICT_READ_UNTRACKED remains uncertifiable")
+        );
+        assert!(!finding.message.contains("for every use"));
+        assert!(!finding.message.contains("outside any tracking scope"));
+    }
 
     struct RecordingCatalog(CatalogCapabilities);
 

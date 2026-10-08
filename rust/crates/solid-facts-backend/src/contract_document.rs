@@ -22,7 +22,7 @@ use solid_reactive_ir::contract_semantics::{
     OperationEdge, OperationId, OperationKind, OwnerCapabilities, OwnerProduction, OwnerRelation,
     OwnerRequirements, OwnerSource, PackageIdentity, ReactiveRole, Requirement, ResolutionStep,
     Resource, ResourceCapability, ResourceId, ResourceKind, ResourceState, SEMANTIC_MODEL_VERSION,
-    Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound, ValueKind, ValueShape,
+    Schedule, StabilityKnowledge, StrictRead, Tracking, Trigger, UpperBound, ValueKind, ValueShape,
     ValueSource,
 };
 
@@ -648,6 +648,14 @@ fn compact_operation(
     }
     if operation.tracking != Tracking::Unknown {
         object.insert("tracking".into(), json!(tracking_name(operation.tracking)));
+    }
+    if let Some(strict_read) = operation.strict_read {
+        object.insert(
+            "strictRead".into(),
+            json!(match strict_read {
+                StrictRead::Cleared => "cleared",
+            }),
+        );
     }
     if operation.owner != OwnerRelation::default() {
         object.insert("owner".into(), compact_owner(&operation.owner, ids)?);
@@ -1677,6 +1685,8 @@ enum WireMemberClass {
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct WireOperation {
+    #[serde(default, deserialize_with = "deserialize_strict_read")]
+    strict_read: Option<WireStrictRead>,
     id: String,
     kind: WireOperationKind,
     #[serde(default)]
@@ -1704,6 +1714,20 @@ struct WireOperation {
     /// refuses the document through `deny_unknown_fields`, which is intended.
     #[serde(default)]
     protocol: Option<WireInvokeProtocol>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+enum WireStrictRead {
+    #[serde(rename = "cleared")]
+    Cleared,
+}
+
+// Omission means no assertion; a stated null is not an omitted assertion.
+fn deserialize_strict_read<'de, D>(deserializer: D) -> Result<Option<WireStrictRead>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    WireStrictRead::deserialize(deserializer).map(Some)
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -3127,6 +3151,9 @@ fn expand_operation(operation: WireOperation, ids: &IdScope) -> Result<Operation
         at,
         schedule,
         tracking: operation.tracking.map_or(Tracking::Unknown, Into::into),
+        strict_read: operation.strict_read.map(|strict_read| match strict_read {
+            WireStrictRead::Cleared => StrictRead::Cleared,
+        }),
         owner,
         cardinality,
         inputs: operation
@@ -4356,6 +4383,59 @@ mod tests {
         );
     }
 
+    #[test]
+    fn strict_read_clearing_round_trips_and_refuses_other_contexts() {
+        let document = |tracking: Option<&str>, strict_read: Option<&str>, kind: &str| {
+            let mut operation = json!({"id":"read", "kind":kind,
+                "trigger":{"event":"call"}, "at":{"event":"call","schedule":"same-stack"},
+                "inputs":[{"kind":"reactive","role":"accessor"}]});
+            if let Some(tracking) = tracking {
+                operation["tracking"] = json!(tracking);
+            }
+            if let Some(strict_read) = strict_read {
+                operation["strictRead"] = json!(strict_read);
+            }
+            serde_json::to_vec(&json!({"format":"solid-reactivity-contract", "schemaVersion":1,
+                "semanticModelVersion":1, "package":{"name":"consumer","version":"1.0.0",
+                    "integrity":"sha512:test","manifest":{"path":"package.json","sha256":"a".repeat(64)}},
+                "summaries":{"fn":{"shape":"callable","call":{"closed":["reads"],
+                    "reads":["read"], "operations":[operation]}}},
+                "entrypoints":{".":{"artifact":{"path":"index.js","sha256":"b".repeat(64),
+                    "closureSha256":"c".repeat(64)},"declarations":{"path":"index.d.ts","sha256":"d".repeat(64)},
+                    "exports":{"make":"fn"}}},"sidecars":{}})).unwrap()
+        };
+        let plain = normalized(&document(Some("untracked"), None, "read"));
+        let kept = normalized(&document(Some("untracked"), Some("cleared"), "read"));
+        let encoded = encode(&kept, &SidecarDigests::default(), true).unwrap();
+        assert!(String::from_utf8_lossy(&encoded).contains("strictRead"));
+        assert_eq!(normalized(&encoded), kept);
+        assert_ne!(plain.semantic_digest(), kept.semantic_digest());
+        let encoded_plain = encode(&plain, &SidecarDigests::default(), true).unwrap();
+        assert!(!String::from_utf8_lossy(&encoded_plain).contains("strictRead"));
+        for tracking in [None, Some("tracked"), Some("ambient-at-execution")] {
+            assert!(
+                decode(&document(tracking, Some("cleared"), "read"))
+                    .and_then(|decoded| decoded.normalize())
+                    .is_err()
+            );
+        }
+        assert!(decode(&document(Some("untracked"), Some("unknown"), "read")).is_err());
+        let null = String::from_utf8(document(Some("untracked"), Some("cleared"), "read"))
+            .unwrap()
+            .replace(r#""strictRead":"cleared""#, r#""strictRead":null"#);
+        assert!(decode(null.as_bytes()).is_err());
+        assert!(
+            decode(&document(Some("untracked"), Some("cleared"), "write"))
+                .and_then(|decoded| decoded.normalize())
+                .is_err()
+        );
+        assert!(
+            solid_reactive_ir::contract_semantics::certification::proof_policy_2()
+                .inspect_candidates(&kept)
+                .is_err()
+        );
+    }
+
     /// ADR 0235: an `effectful-callable` member round-trips with its own
     /// call graph in the export's id namespace, names the export's resources,
     /// moves the digest, and is refused anywhere but directly inside a
@@ -4396,6 +4476,19 @@ mod tests {
             kept,
             "the member survives the round trip"
         );
+        // A member-only clearing selects the digest family recursively and
+        // survives encoding, even when no outer operation states the field.
+        let member_read = member("start-read", "running").replace(
+            r#""tracking":"ambient-at-execution""#,
+            r#""tracking":"untracked","strictRead":"cleared""#,
+        );
+        let cleared = normalized(&document(&outer(&tuple(&member_read))));
+        let encoded_cleared = encode(&cleared, &SidecarDigests::default(), true).unwrap();
+        assert_eq!(normalized(&encoded_cleared), cleared);
+        let uncleared = normalized(&document(&outer(&tuple(
+            &member_read.replace(r#","strictRead":"cleared""#, ""),
+        ))));
+        assert_ne!(uncleared.semantic_digest(), cleared.semantic_digest());
         let opaque = normalized(&document(&outer(&tuple(r#""callable""#))));
         assert_ne!(opaque.semantic_digest(), kept.semantic_digest());
         // No census proves what a member's call does: certification refuses.

@@ -143,6 +143,14 @@ Tracking is independent of scheduling and ownership:
 the caller's eventual tracking state. It is not normalized prematurely to
 tracked or untracked.
 
+A read with `untracked` tracking may also state `strictRead: cleared` (ADR
+0247): it runs with Solid's strict-read check cleared, as inside an
+unlabelled `untrack(fn)`, so it neither subscribes nor warns. `untracked`
+alone does not say this: a labelled `untrack(fn, label)` clears tracking but
+can still warn, and a generated `untracked` proves no clearing. The field is
+valid only on an untracked read, needs its own citation, and is never
+certified or proposed.
+
 **[Decision 2026-09-25]** the generator states an `invoke`'s tracking per
 execution word, and `untracked` only where a clearing is proven
 (`ContractCallback::clears_tracking`):

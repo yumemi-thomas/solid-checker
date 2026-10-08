@@ -46,6 +46,7 @@ fn operation(id: &str, min: u32) -> Operation {
         at: Some(solid_reactive_ir::contract_semantics::Event::Call),
         schedule: Some(Schedule::SameStack),
         tracking: Tracking::Untracked,
+        strict_read: None,
         owner: OwnerRelation {
             source: OwnerSource::None,
             requirements: OwnerRequirements {

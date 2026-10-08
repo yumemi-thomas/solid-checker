@@ -86,7 +86,16 @@ pub(super) fn semantic_digest(
                 .any(Operation::is_result_access)
         })
     });
+    let strict_reads = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| has_strict_read(&export.call))
+    });
     let mut writer = CanonicalWriter::new();
+    if strict_reads {
+        writer.text("solid-checker:semantic-strict-read:v1");
+    }
+    writer.strict_reads = strict_reads;
     if result_access {
         writer.text(SEMANTIC_RESULT_ACCESS_MARKER);
     }
@@ -262,6 +271,13 @@ pub(super) fn recipe_address(
         writer.text(SEMANTIC_INVOKE_PROTOCOL_MARKER);
         writer.invoke_protocols = true;
     }
+    if operations.iter().any(|operation| {
+        operation.strict_read.is_some()
+            || operation.output.as_ref().is_some_and(value_has_strict_read)
+    }) {
+        writer.text("solid-checker:semantic-strict-read:v1");
+        writer.strict_reads = true;
+    }
     writer.local_ids = true;
     writer.address_case = Some(artifact_case.id.clone());
     writer.composed_provenance = true;
@@ -299,8 +315,33 @@ fn local_id(value: &str, marker: &str) -> String {
     }
 }
 
+// Normalization admits effectful calls only as direct returned members, but
+// recursively visit their containers here so no nested operation escapes the
+// digest-family selection. The operation encoder uses the same writer.
+fn has_strict_read(call: &CallSemantics) -> bool {
+    call.operations.iter().any(|operation| {
+        operation.strict_read.is_some()
+            || operation.output.as_ref().is_some_and(value_has_strict_read)
+    })
+}
+
+fn value_has_strict_read(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::EffectfulCallable(call) => has_strict_read(call),
+        ValueShape::Tuple(items) => items.items().iter().any(value_has_strict_read),
+        ValueShape::Object(properties) => properties
+            .items()
+            .iter()
+            .any(|property| value_has_strict_read(&property.value)),
+        _ => false,
+    }
+}
+
 struct CanonicalWriter {
     hash: Sha256,
+    /// A separate family: contracts and recipe values with no strict-read
+    /// assertion retain their previous byte stream, including absent fields.
+    strict_reads: bool,
     /// Whether operation and resource ids are written with their artifact-case
     /// prefix removed. Set only by [`recipe_address`]; false everywhere else,
     /// so every other digest writes every id verbatim, byte for byte.
@@ -344,6 +385,7 @@ impl CanonicalWriter {
     fn new() -> Self {
         Self {
             hash: Sha256::new(),
+            strict_reads: false,
             local_ids: false,
             address_case: None,
             composed_provenance: false,
@@ -747,6 +789,13 @@ impl CanonicalWriter {
             writer.schedule(*schedule);
         });
         self.tracking(operation.tracking);
+        if self.strict_reads {
+            self.option(operation.strict_read.as_ref(), |writer, strict_read| {
+                writer.u8(match strict_read {
+                    StrictRead::Cleared => 0,
+                });
+            });
+        }
         self.owner(&operation.owner);
         self.cardinality(&operation.cardinality);
         self.sequence(&operation.inputs, Self::value);

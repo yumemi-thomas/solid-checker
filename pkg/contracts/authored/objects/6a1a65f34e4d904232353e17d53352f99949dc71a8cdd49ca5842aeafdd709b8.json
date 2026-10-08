@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "4ecbe90c118c3cd7f4d516ff7637230040d682f7153298fac9d37294eaff1115",
+            "closureSha256": "f98c0743e35c71e5f30f58837abaf7024699e2b835d387983abb744070534c1a",
             "path": "./dist/index.js",
             "sha256": "00fddd681e81a6c243a9b93a40be059e75e264d05d61a10398be368c1e7cbc56"
           },
@@ -57,7 +57,7 @@
             },
             "tracking": "untracked",
             "count": {
-              "min": 1,
+              "min": 0,
               "max": 1,
               "scope": "call"
             },
@@ -86,7 +86,7 @@
             },
             "tracking": "untracked",
             "count": {
-              "min": 1,
+              "min": 0,
               "max": 1,
               "scope": "call"
             },
@@ -115,7 +115,7 @@
             },
             "tracking": "untracked",
             "count": {
-              "min": 1,
+              "min": 0,
               "max": 1,
               "scope": "call"
             },
@@ -634,6 +634,181 @@
                 "role": "accessor"
               }
             ]
+          },
+          {
+            "id": "scroll-version-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "scroll-version"
+            ]
+          },
+          {
+            "id": "scroll-key-memos",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 2,
+              "max": 2,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "scroll-key-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "scroll-optional-settle",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "scroll-settle-owner",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
+          },
+          {
+            "id": "scroll-version-compute-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "scroll-version"
+              }
+            ],
+            "owner": {
+              "source": "created",
+              "resource": "derived-position-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "derived-position-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "scroll-initial-memo-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "strictRead": "cleared"
+          },
+          {
+            "id": "scroll-key-compute-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "owner": {
+              "source": "created",
+              "resource": "scroll-key-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "scroll-key-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
           }
         ],
         "callbacks": [
@@ -654,7 +829,9 @@
         ],
         "computations": [
           "scroll-listener",
-          "derived-position"
+          "derived-position",
+          "scroll-key-memos",
+          "scroll-optional-settle"
         ],
         "resources": [
           {
@@ -663,6 +840,18 @@
           },
           {
             "id": "derived-position-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "scroll-version",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "scroll-key-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "scroll-settle-owner",
             "kind": "owner"
           }
         ],
@@ -674,7 +863,13 @@
           "callbacks"
         ],
         "reads": [
-          "derived-key-memo-read"
+          "derived-key-memo-read",
+          "scroll-version-compute-read",
+          "scroll-initial-memo-read",
+          "scroll-key-compute-read"
+        ],
+        "creates": [
+          "scroll-version-production"
         ]
       },
       "shape": "callable"
