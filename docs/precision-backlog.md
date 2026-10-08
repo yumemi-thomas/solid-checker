@@ -5,7 +5,10 @@
 ADR 0257: `createRoot(fn)` returns `fn`'s value, but the checker does not
 carry a contract's returned accessor through it. A module-level
 `const now = createRoot(() => createPolled(...))` read untracked in a
-component is therefore not proven (three ledger cases).
+component is therefore not proven (three ledger cases). Resolved by ADR 0259
+for single-return literal callbacks. Pagination and createIntervalCounter now
+report correctly (ADRs 0260, 0261); createPolled's top-level read still keeps
+package-contract-incomplete for callbacks.
 
 ## Returned-graph captures (2026-10-08)
 
@@ -28761,3 +28764,15 @@ Still refused: dynamic/annotated values, object coercion operands, unknown,
 shadowed or typed local receivers, computed/optional/unreviewed calls, Recovery,
 multiple or incomplete returns, async/named callbacks, and other result uses.
 No published signature, contract spec or finding snapshot was changed.
+
+## Shallow callback-result Get (2026-10-09, ADR 0263)
+
+A fresh complete-literal object can discharge an empty-path Get in a closed
+callback-result use census at call on the same stack. Unknown property values
+are allowed: this proves only Get dispatch, not later use of the value. The
+unpatched built-in prototype premise (ADR 0190) covers missing keys. Methods,
+accessors, spreads, computed keys, prototype replacement, arrays, dynamic
+returns and paths into property values remain uncertifiable. Later events or
+schedules still need an escape/mutation proof; the current undefined-return
+non_escaping projection is insufficient. Empty literals have no structure fact
+and remain uncertifiable. Fixture: package-derived-get-consumer.

@@ -2846,7 +2846,19 @@ fn callback_result_completion_is_plain_data(
             InvokeProtocol::Call => {
                 primitive && use_.callable_only && use_.operation.cardinality.min == Some(0)
             }
-            InvokeProtocol::Get | InvokeProtocol::Coerce => primitive,
+            InvokeProtocol::Get => {
+                // This is the receiver's shallow Get, not a use of the
+                // property value. The closed census and empty paths above
+                // must also exclude calls/iteration of values read from it.
+                // A missing key reaches the unpatched built-in prototype
+                // premise (ADR 0190). Retained uses still need an independent
+                // escape/mutation proof; `non_escaping` only checks returns.
+                primitive
+                    || (plain_object
+                        && use_.operation.at == Some(crate::contract_semantics::Event::Call)
+                        && use_.operation.schedule == Some(Schedule::SameStack))
+            }
+            InvokeProtocol::Coerce => primitive,
             InvokeProtocol::Iterate => primitive,
             // A fresh literal object has no getters, spreads, computed keys,
             // prototype replacement or method definitions. Later retained
@@ -3085,6 +3097,85 @@ mod callback_result_tests {
         let mut no_trigger = result;
         no_trigger.producer.trigger = None;
         assert!(!tracked("take(() => () => read())", &no_trigger));
+    }
+
+    #[test]
+    fn shallow_result_get_requires_fresh_data_and_refuses_value_traversal() {
+        let mut get = result(InvokeProtocol::Get, false);
+        // The factory may return a different object (a static store). The
+        // initial same-stack Get needs no retained-result escape proof.
+        get.non_escaping = false;
+        for source in [
+            "take(() => ({ value: read() }))",
+            "take(() => { write(); return { value: read() }; })",
+            "take(() => ({ value }))",
+            "take(() => ({ other: unknown }))",
+            "take(() => ({ value: () => read() }))",
+            "take(() => ({ value: { get nested() { return read(); } } }))",
+            "take((() => ({ value: read() })) satisfies (() => object))",
+        ] {
+            assert!(clean(source, &get), "{source}");
+        }
+        for source in [
+            "take(() => ({ get value() { return read(); } }))",
+            "take(() => ({ set value(v) {} }))",
+            "take(() => ({ value() { return read(); } }))",
+            "take(() => ({ ...other }))",
+            "take(() => ({ [key]: unknown }))",
+            "take(() => ({ __proto__: other, value: unknown }))",
+            "take(() => ({ value: 1, value: 2 }))",
+            "take(() => [unknown])",
+            "take(() => other)",
+            "take(() => other as { value: unknown })",
+            "take(() => new Proxy({}, handler))",
+            "take(async () => ({ value: unknown }))",
+            "take(producer)",
+            // Empty literals currently have no ReturnStructureFact.
+            "take(() => ({}))",
+        ] {
+            assert!(!clean(source, &get), "{source}");
+        }
+        let source = "take(() => ({ value: unknown }))";
+        let root_get = get.uses.items()[0].clone();
+        for protocol in [
+            InvokeProtocol::Call,
+            InvokeProtocol::Iterate,
+            InvokeProtocol::Get,
+        ] {
+            let mut member = root_get.clone();
+            member.path = vec!["value".into()];
+            member.operation = operation(protocol);
+            get.uses = KnowledgeSet::Complete(vec![root_get.clone(), member]);
+            assert!(!clean(source, &get));
+        }
+        for (at, schedule) in [
+            (Some(Event::ResultAccess), Some(Schedule::SameStack)),
+            (Some(Event::Call), Some(Schedule::Queued)),
+            (Some(Event::Call), Some(Schedule::External)),
+            (None, Some(Schedule::SameStack)),
+            (Some(Event::Call), None),
+        ] {
+            let mut later = root_get.clone();
+            later.operation.at = at;
+            later.operation.schedule = schedule;
+            get.uses = KnowledgeSet::Complete(vec![later]);
+            for non_escaping in [false, true] {
+                get.non_escaping = non_escaping;
+                assert!(!clean(source, &get));
+            }
+        }
+        get.uses = KnowledgeSet::Partial(vec![root_get.clone()]);
+        assert!(!clean(source, &get));
+        get.uses = KnowledgeSet::Complete(vec![root_get.clone()]);
+        get.parameter_path = vec!["produce".into()];
+        assert!(!clean(source, &get));
+        get.parameter_path.clear();
+        let mut spread = root_get;
+        spread.operation = operation(InvokeProtocol::GetOwnEnumerableValues);
+        let mut uses = get.uses.items().to_vec();
+        uses.push(spread);
+        get.uses = KnowledgeSet::Complete(uses);
+        assert!(clean(source, &get));
     }
 
     #[test]

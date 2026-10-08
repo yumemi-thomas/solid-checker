@@ -335,3 +335,5 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/root-callback-return/node_modules/**
 !fixtures/reactive-ir/package-scalar-result-consumer/node_modules/
 !fixtures/reactive-ir/package-scalar-result-consumer/node_modules/**
+!fixtures/reactive-ir/package-derived-get-consumer/node_modules/
+!fixtures/reactive-ir/package-derived-get-consumer/node_modules/**
