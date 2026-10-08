@@ -1,5 +1,25 @@
 # Precision backlog
 
+## Solid Primitives batch 2 (2026-10-08)
+
+ADR 0229 adds eight packages to the authored tier: `cursor`, `date`,
+`signal-builders`, `pointer`, `event-bus`, `set`, `static-store` and
+`lifecycle`. That is 21 export rows and 52 probe pairs, all passing in Chrome
+on rc.13.
+
+- **Gained:** the primitives ledger's browser host reports 16 cases
+  correctly, up from 10. The timer module-scope case is split by host: the
+  browser half expects the violation Chrome shows. No correct twin has a
+  violation.
+- **Proven but not clean:** in seven browser cases the misuse is proven, but
+  the correct twin keeps a `package-contract-incomplete` notice for a domain
+  left open.
+- **Corpus:** 555 violations and 3,424 uncertifiable, both unchanged.
+- **Open:** three ledger expectations look wrong from the source
+  (`ReactiveSet.has`, `createStaticStore`, `createIsMounted` at module
+  scope); they wait for runtime evidence. The none and node hosts have no
+  primitive contract.
+
 ## The certified contract tier is retired (2026-10-08)
 
 ADR 0228 deletes `pkg/contracts/accepted/` (1,876 bundles, 126 packages), its

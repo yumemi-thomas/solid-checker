@@ -1,0 +1,385 @@
+{
+  "package": "@solid-primitives/cursor",
+  "version": "1.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createBodyCursor": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108 — Browser-only source-supported draft; every probe is pending.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "cursor-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "argument-0",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "cursor-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "argument-0"
+          }
+        ],
+        "computations": [
+          "cursor-effect"
+        ],
+        "resources": [
+          {
+            "id": "cursor-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108 — Browser construction has no return expression and completes with undefined.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:101-106 — P1: DOM style accesses are native host operations. Caller accessor reads belong to the explicit tracked callback rows; no own reactive source is read.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108 — Exactly one createEffect computation, requiring an ambient owner that accepts children. Its apply-returned DOM restoration cleanup belongs to the effect; there is no other reactive owner construction.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly the cursor accessor (and, for createElementCursor, callable target and callable cursor). access invokes only zero-arity functions, so guarded rows make no positive lower-count promise. P1 excludes reactive style methods."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The unconditional browser effect rejects a present leaf owner."
+        },
+        {
+          "label": "cursor-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The caller accessor executes inside effect compute; the twins read the same signal and only misuse writes there.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "createElementCursor": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81 — Browser-only source-supported draft; every probe is pending.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "cursor-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "argument-0",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "cursor-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "argument-1",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "cursor-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "argument-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "argument-1"
+          }
+        ],
+        "computations": [
+          "cursor-effect"
+        ],
+        "resources": [
+          {
+            "id": "cursor-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81 — Browser construction has no return expression and completes with undefined.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:73-77 — P1: DOM style accesses are native host operations. Caller accessor reads belong to the explicit tracked callback rows; no own reactive source is read.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81 — Exactly one createEffect computation, requiring an ambient owner that accepts children. Its apply-returned DOM restoration cleanup belongs to the effect; there is no other reactive owner construction.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly the cursor accessor (and, for createElementCursor, callable target and callable cursor). access invokes only zero-arity functions, so guarded rows make no positive lower-count promise. P1 excludes reactive style methods."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The unconditional browser effect rejects a present leaf owner."
+        },
+        {
+          "label": "target-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The caller accessor executes inside effect compute; the twins read the same signal and only misuse writes there.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "cursor-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The caller accessor executes inside effect compute; the twins read the same signal and only misuse writes there.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

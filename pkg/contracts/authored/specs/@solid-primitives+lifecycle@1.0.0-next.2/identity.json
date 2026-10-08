@@ -1,0 +1,72 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/lifecycle",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-ifkep0MGrO8Fqyy+XuJSYtxU/uFVcQuPTzaBUrtTlCqYkcPxRlrwoN/B45JnfcZ+J4L5noL6yuwKqtjXbTxepw==",
+      "snapshotRoot": "sha256:7c909b384145d3fa5e8b17eccfc1cad15c434d7eab2464be83a06d109b88be9b",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "09279f67f5d7657e5d6d16d7504daf322eb404d6d54e5cef9f1a5f882d6e7d93",
+                  "path": "./dist/index.js",
+                  "sha256": "4faaec6291d7695dba1712b8167953f3e93ed18649d72734933a7c52b15676e5"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "f7b8d099f380e647c96ae9041e13d980ea3d638e96d07fcf98b88be3a1f97884"
+                },
+                "exports": {
+                  "createIsMounted": "summary-9c626b933b662e7602b256e887245cc547d093da81734abf524a3077b72c146f",
+                  "isHydrated": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "onElementConnect": "summary-3c1a24a47f44ddcd356b9fd198ef7675c530b7b475b75bfa9f5b921f7e1df299"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-ifkep0MGrO8Fqyy+XuJSYtxU/uFVcQuPTzaBUrtTlCqYkcPxRlrwoN/B45JnfcZ+J4L5noL6yuwKqtjXbTxepw==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "112bc8c2dadd4360bd8e1ec86be68210cc8ceac943582a04d0587f1201f36b82"
+          },
+          "name": "@solid-primitives/lifecycle",
+          "version": "1.0.0-next.2"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-9c626b933b662e7602b256e887245cc547d093da81734abf524a3077b72c146f": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-3c1a24a47f44ddcd356b9fd198ef7675c530b7b475b75bfa9f5b921f7e1df299": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,225 @@
+{
+  "package": "@solid-primitives/lifecycle",
+  "version": "1.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createIsMounted": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24 — Returned signal only; onSettled deliberately tolerates no owner on rc.13.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24 — Browser returns exactly the plain signal accessor.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24 — No package accessor is read; the settle callback only writes a constant true.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:17-24 — No caller callable or data argument exists. The onSettled callback is package-defined."
+      }
+    },
+    "onElementConnect": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:55-61 — Conditional required cleanup owner and two caller execution phases; connected return remains open.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "resize-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "isConnected"
+                  ],
+                  "literal": false
+                }
+              ]
+            }
+          },
+          {
+            "id": "connected-callback",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "isConnected"
+                  ],
+                  "literal": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "resize-callback",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "isConnected"
+                  ],
+                  "literal": false
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "resize-cleanup"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "connected-callback"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "resize-callback"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:55-61 — P1: Element.isConnected and ResizeObserver operations are native host data; callback reads belong to the two explicit caller invocations.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:55-61 — The disconnected branch registers precisely onCleanup, requiring ambient cleanup support. No Solid computation or other reactive child owner is created. P1 ResizeObserver is a native observer.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/lifecycle-createIsMounted-module-scope/node_modules/@solid-primitives/lifecycle/dist/index.js:55-61 — fn is invoked directly if already connected, otherwise on native ResizeObserver delivery once connection is observed. Preserve the construction-time isConnected guards and both execution contexts; no blanket deferred claim."
+      },
+      "probes": [
+        {
+          "label": "connected-callback",
+          "rule": "strict-read-untracked",
+          "why": "An already-connected document.body invokes the callback inline; only misuse reads its signal without explicit untrack."
+        },
+        {
+          "label": "resize-callback",
+          "rule": "missing-owner",
+          "why": "A connected-after-setup native ResizeObserver callback has no captured owner; only misuse calls onCleanup without restoring the construction owner.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

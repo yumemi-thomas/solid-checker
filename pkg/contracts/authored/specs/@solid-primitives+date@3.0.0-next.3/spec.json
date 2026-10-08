@@ -1,0 +1,429 @@
+{
+  "package": "@solid-primitives/date",
+  "version": "3.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createDate": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/primitives.js:14-18 — Function-form signal derives Date, even for a static init; setter behavior is left open.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "date-derived",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "date-derived-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "init",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "date-derived-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "date-derived-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "init"
+          }
+        ],
+        "computations": [
+          "date-derived"
+        ],
+        "resources": [
+          {
+            "id": "date-derived-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/primitives.js:14-18; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/utils.js:8 — No package-owned reactive read during construction. The initial value accessor executes in the explicit derived computation; primitive string/number conversion and standard Date identity are plain.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/primitives.js:14-18 — createSignal(function) is one optional-owner computed node, not a plain signal; rc.13 dev.js:2346-2354 and dev-shared.js:5633-5651. A present owner must accept children; no owner is required to exist."
+      },
+      "probes": [
+        {
+          "label": "init-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The function-form signal computes its initial accessor under tracking.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Function-form createSignal creates a computed node and rejects a leaf."
+        }
+      ]
+    },
+    "createDateNow": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/primitives.js:41-54 — Browser effect exists even for disabled interval; manual update remains a stateful callable.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "date-clock-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "date-clock-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "interval",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "date-clock-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "date-clock-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "interval"
+          }
+        ],
+        "computations": [
+          "date-clock-effect"
+        ],
+        "resources": [
+          {
+            "id": "date-clock-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/primitives.js:41-54 — No package-owned accessor is read. interval is the explicit tracked callback; Date and native timers are P1/plain platform data.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/primitives.js:41-54 — One plain signal and one required-owner effect; the signal allocates no child computation. The effect is the complete reactive owner census. Timer cleanup is returned from apply.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/primitives.js:41-54 — The only caller callable is interval, conditionally invoked in compute. update and the timer handler are package-defined closures; native setInterval runs later under P1."
+      },
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "Even numeric zero interval constructs createEffect and emits NO_OWNER_EFFECT outside an owner."
+        },
+        {
+          "label": "interval-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The callable interval executes under tracked effect compute.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Unconditional effect construction rejects an owned leaf."
+        }
+      ]
+    },
+    "getCountdown": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/utils.js:23-29 — Pure, closure-only; returns an opaque plain value, not a reactive store.",
+      "call": {
+        "operations": [
+          {
+            "id": "numeric-coercion",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "numeric-coercion"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/utils.js:23-29 — Pure arithmetic on the published number input produces a fresh object of numeric values. No Solid API, accessor or owner registration. Any nonprimitive runtime coercion of argument 0 is retained as possible ambient coerce, not declared inert. P2 plain numeric data.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/utils.js:23-29 — Pure arithmetic on the published number input produces a fresh object of numeric values. No Solid API, accessor or owner registration. Any nonprimitive runtime coercion of argument 0 is retained as possible ambient coerce, not declared inert. P2 plain numeric data.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/utils.js:23-29 — Pure arithmetic on the published number input produces a fresh object of numeric values. No Solid API, accessor or owner registration. Any nonprimitive runtime coercion of argument 0 is retained as possible ambient coerce, not declared inert. P2 plain numeric data.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/date-createDate-top-level-read/node_modules/@solid-primitives/date/dist/utils.js:23-29 — Pure arithmetic on the published number input produces a fresh object of numeric values. No Solid API, accessor or owner registration. Any nonprimitive runtime coercion of argument 0 is retained as possible ambient coerce, not declared inert. P2 plain numeric data."
+      }
+    }
+  }
+}

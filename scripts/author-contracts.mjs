@@ -86,6 +86,20 @@ function validateClosures(where, claim) {
   }
 }
 
+/**
+ * The decoder refuses an operation run under a `created` owner whose own
+ * `productions` do not name that owner (validate.rs), and one undecodable
+ * authored document fails every project. Refuse it here, before it ships.
+ */
+function validateCreatedOwners(where, value) {
+  if (Array.isArray(value)) return value.forEach(item => validateCreatedOwners(where, item));
+  if (!value || typeof value !== "object") return;
+  if (value.source === "created" && typeof value.resource === "string")
+    assert((value.productions ?? []).some(production => production?.resource === value.resource),
+      `${where}: created owner ${value.resource} is not named by its own productions`);
+  for (const item of Object.values(value)) validateCreatedOwners(where, item);
+}
+
 // A directory whose name starts with `_` holds probe pairs that several specs
 // share (`"pairs"` in spec.json, relative to the spec); it is not a spec.
 const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("_")).sort().map(name => {
@@ -94,6 +108,7 @@ const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("
   for (const [name, claim] of Object.entries(spec.exports)) {
     validatePropertyGets(claim.call);
     validateClosures(`${spec.package}@${spec.version}#${name}`, claim);
+    validateCreatedOwners(`${spec.package}@${spec.version}#${name}`, claim.call);
   }
   // ADR 0208: a spec about one patched install is named for its patch.
   const base = `${spec.package.replace("/", "+")}@${spec.version}`;

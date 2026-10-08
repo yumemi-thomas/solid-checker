@@ -14,10 +14,24 @@
       "kind": "uncertifiable",
       "hosts": [
         "none",
-        "browser",
         "node"
       ],
-      "why": "The certified summary of createTimer states owner requirements whose every count is `min: 0`: its body registers only under a condition (for example `if (isServer) return;`), so a call may register nothing (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "why": "No authored contract covers the none or node host, and the certified summary these hosts once had stated owner requirements whose every count is `min: 0` (ADR 0161). Called at module scope, with no owner, that is a proof obligation, not a proven leak, and is reported uncertifiable.",
+      "misuse": "import { createTimer } from \"@solid-primitives/timer\";\n\ncreateTimer(() => console.log(\"tick\"), 1000, setInterval);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\ncreateRoot(dispose => {\n  createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  return dispose;\n});\n"
+    },
+    {
+      "id": "timer-createTimer-module-scope-browser",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "entrypoint": ".",
+      "export": "createTimer",
+      "class": "owner",
+      "rule": "missing-owner",
+      "hosts": [
+        "browser"
+      ],
+      "why": "In the browser build `isServer` is false, so createTimer always registers its interval cleanup on the ambient owner; the authored contract states that cleanup with `min: 1` and a required owner, and Chrome on rc.13 raises the missing-owner warning for this call. Called at module scope there is no owner, so the timer is never disposed.",
       "misuse": "import { createTimer } from \"@solid-primitives/timer\";\n\ncreateTimer(() => console.log(\"tick\"), 1000, setInterval);\n",
       "correct": "import { createRoot } from \"solid-js\";\nimport { createTimer } from \"@solid-primitives/timer\";\n\ncreateRoot(dispose => {\n  createTimer(() => console.log(\"tick\"), 1000, setInterval);\n  return dispose;\n});\n"
     },
