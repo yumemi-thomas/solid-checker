@@ -28732,3 +28732,11 @@ row. Outer destructuring of a resolved createRoot passthrough is the inner
 factory call's destructuring. Open: `createPolled` callbacks (async-iterable
 poll results need result-of-result vocabulary) and its `Date.now()` initializer
 obligation; createIntervalCounter's twin.
+
+## createIntervalCounter row (2026-10-09, ADR 0261)
+
+Closes reads, creates and returns by delegation to the package's numeric
+internal poll. Open: callbacks (nested option getters, comparators and
+subscriber-loss hooks), writes, invalidates, throws, cleanups, disposals; no
+host-free row. The constructor read is citation-backed only (its Chrome warning
+is package-attributed).

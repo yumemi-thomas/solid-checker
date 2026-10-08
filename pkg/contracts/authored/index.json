@@ -2683,8 +2683,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/b58e271bf1b8763701ed1917509d39cf32906efcac5c035b941d5a255484224d.json",
-      "documentDigest": "sha256:b58e271bf1b8763701ed1917509d39cf32906efcac5c035b941d5a255484224d"
+      "document": "objects/b6368784b227b87a8c2d97f23b7451ccadb40e77974b8312ebe0b63f2e124e6d.json",
+      "documentDigest": "sha256:b6368784b227b87a8c2d97f23b7451ccadb40e77974b8312ebe0b63f2e124e6d"
     },
     {
       "packageName": "@solid-primitives/timer",
