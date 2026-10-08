@@ -19,6 +19,7 @@
     }
   ],
   "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
   "exports": {
     "createDerivedStaticStore": {
       "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/static-store/dist/index.js:97-108 — Tracked derive callback and reactive string-key getter result; no complete domain closure.",
@@ -149,7 +150,13 @@
           "rule": "leaf-owner-forbidden-call",
           "why": "The initial optional-owner fnMemo rejects a present leaf."
         }
-      ]
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solid-primitives/static-store/dist/index.js:97-108; No host branch. Both create the fn memo and one memo per key, execute derive tracked under the fn memo owner, and return an object whose getters read the key memos. Server untrack differs internally but no untracked-read operation is asserted here; reads, callbacks, creates, and returns were all open and remain open. The store's memo-backed getters remain the claimed returned store.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [],
+        "closures": {}
+      }
     }
   }
 }

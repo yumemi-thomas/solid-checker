@@ -19,6 +19,7 @@
     }
   ],
   "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
   "exports": {
     "createEventStack": {
       "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-toEffect-module-scope/node_modules/@solid-primitives/event-bus/dist/eventStack.js:6-33 — Partial reactive value member; bus cleanup is optional-owner; all domains remain open.",
@@ -166,7 +167,13 @@
           "rule": "leaf-owner-forbidden-call",
           "why": "createEffect always runs at construction and rejects a present leaf."
         }
-      ]
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/event-bus/dist/utils.js:62-71; Both register one compute under an ambient parent and return the same payload => setStack(...) wrapper. Server runs compute under its created owner/observer but omits user apply, so the emit forwarding may be absent. No emit invocation or stack read operation is asserted, and every domain is already open; no new closure is proposed. Immutable push/copy: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/utils/dist/immutable/array.js:10, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/utils/dist/immutable/copy.js:15-19. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [],
+        "closures": {}
+      }
     }
   }
 }

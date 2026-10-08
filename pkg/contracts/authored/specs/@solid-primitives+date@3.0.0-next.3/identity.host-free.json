@@ -1,0 +1,106 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/date",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-00FN65UXXbG4w+xtH74zZvtuIJ957/IuEUX2V3KSjdp24kYNuqdLwfcall/v/I2xKHlN3Dz368e7+5NftnbldA==",
+      "snapshotRoot": "sha256:a37bf4d2b5ce47627dbcd0c3f5696f1655dab54adf13471421389bb3b56e7094",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "831a025d3e1038fa0f8c7eb9d66335b30dab23fef1511ff1fbfa1940bdb7544a",
+                  "path": "./dist/index.js",
+                  "sha256": "de97c69c80b5c27d2e13e378ab65462b0a6c7b482d0d9ad3ea8afd8811caea35"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "b9655c1fb96710e65ffd1cd5f14df964183a13c56a184fe1d570d5cb673a2cdf"
+                },
+                "exports": {
+                  "DAY": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "DEFAULT_MESSAGES": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "HOUR": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "MINUTE": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "MONTH": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "SECOND": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "UNITS": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "WEEK": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "YEAR": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "createCountdown": "summary-e911dd72c770e840f2cb889ee155df19fc674a476d5ba56a3dfe143dcf220509",
+                  "createCountdownFromNow": "summary-9e536763ea7256bad7d6bf5647ce3bbc888d1fba9091b9f5567f4187cb56668a",
+                  "createDate": "summary-733345fca3eac5e3790bdfa73831a12c199b5c43f4a0373a0eb53b0ba56f30fc",
+                  "createDateNow": "summary-733345fca3eac5e3790bdfa73831a12c199b5c43f4a0373a0eb53b0ba56f30fc",
+                  "createTimeAgo": "summary-733345fca3eac5e3790bdfa73831a12c199b5c43f4a0373a0eb53b0ba56f30fc",
+                  "createTimeDifference": "summary-733345fca3eac5e3790bdfa73831a12c199b5c43f4a0373a0eb53b0ba56f30fc",
+                  "createTimeDifferenceFromNow": "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8",
+                  "formatDate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "formatDateRelative": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getCountdown": "summary-6624d971caf10b922f1f43e6303eaee354a5d93c073a90c910887b712a9be284",
+                  "getDate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getDateDifference": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getTime": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-00FN65UXXbG4w+xtH74zZvtuIJ957/IuEUX2V3KSjdp24kYNuqdLwfcall/v/I2xKHlN3Dz368e7+5NftnbldA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "f5d846e7b1bd18ebfde7135b84192dd9fdae217ead00720a020c35a40f31c287"
+          },
+          "name": "@solid-primitives/date",
+          "version": "3.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-e911dd72c770e840f2cb889ee155df19fc674a476d5ba56a3dfe143dcf220509": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9e536763ea7256bad7d6bf5647ce3bbc888d1fba9091b9f5567f4187cb56668a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-733345fca3eac5e3790bdfa73831a12c199b5c43f4a0373a0eb53b0ba56f30fc": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-6624d971caf10b922f1f43e6303eaee354a5d93c073a90c910887b712a9be284": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

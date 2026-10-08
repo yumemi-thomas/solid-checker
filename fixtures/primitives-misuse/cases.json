@@ -791,21 +791,21 @@
       "correct": "import { createRoot } from \"solid-js\";\nimport { createElementCursor } from \"@solid-primitives/cursor\";\n\ncreateRoot(dispose => {\n  createElementCursor(document.body, \"pointer\");\n  return dispose;\n});\n"
     },
     {
-      "id": "keyboard-createShortcut-module-scope",
+      "id": "keyboard-createShortcut-leaf-owner",
       "package": "@solid-primitives/keyboard",
       "version": "2.0.0-next.5",
       "entrypoint": ".",
       "export": "createShortcut",
       "class": "owner",
-      "rule": "missing-owner",
+      "rule": "leaf-owner-forbidden-call",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "createShortcut registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
-      "misuse": "import { createShortcut } from \"@solid-primitives/keyboard\";\n\ncreateShortcut([\"Control\", \"K\"], () => console.log(\"open\"));\n",
-      "correct": "import { createRoot } from \"solid-js\";\nimport { createShortcut } from \"@solid-primitives/keyboard\";\n\ncreateRoot(dispose => {\n  createShortcut([\"Control\", \"K\"], () => console.log(\"open\"));\n  return dispose;\n});\n"
+      "why": "createShortcut registers its key listeners through tryOnCleanup, which calls onCleanup whenever an owner exists. Inside createTrackedEffect, a children-forbidden scope, Chrome on rc.13 raises CLEANUP_IN_FORBIDDEN_SCOPE and halts reactivity. (Replaces a module-scope case: with no owner tryOnCleanup registers nothing, by the package's design, and rc.13 reports nothing.)",
+      "misuse": "import { createTrackedEffect } from \"solid-js\";\nimport { createShortcut } from \"@solid-primitives/keyboard\";\n\nexport default function App() {\n  createTrackedEffect(() => {\n    createShortcut([\"Control\", \"K\"], () => console.log(\"open\"));\n  });\n  return <p>leaf</p>;\n}\n",
+      "correct": "import { createShortcut } from \"@solid-primitives/keyboard\";\n\nexport default function App() {\n  createShortcut([\"Control\", \"K\"], () => console.log(\"open\"));\n  return <p>leaf</p>;\n}\n"
     },
     {
       "id": "keyboard-createKeyHold-top-level-read",

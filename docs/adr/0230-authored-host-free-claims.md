@@ -49,6 +49,18 @@ be either, so a claim for it must hold on both.
   reports `reactive-dispatch-unresolved` (uncertifiable) rather than a
   violation, which is right: on the server build the call does nothing.
   Browser results are unchanged.
+- **Rollout (same day):** a source review of every other primitive export
+  found 31 safe and 23 unsafe. Unsafe means the server build returns a
+  different value (`makeTimer`, `makeResizeObserver`, `targetFPS`), turns a
+  claimed reactive accessor into a constant (`createDateNow`, `createKeyHold`,
+  `createMediaQuery`, `createPointerPosition`, `createRAF`, `createLazyMemo`,
+  `createIsMounted`, `createEventStack`), makes a returned setter inert
+  (`createDate`), or tracks where the browser does not (`defer`).
+  event-listener next.3 has no local install and gets nothing. All 31 ship.
+- Primitives ledger, none host: 4 cases report correctly (was 0). In 10, the
+  misuse is reported uncertifiable where the case expects a violation. That
+  is the intended weakening: on the server build the operation may not run.
+  Browser stays at 16. No correct twin on any host has a violation.
 - The node host is not covered: a declared node host receives only cases
   certified for it (ADR 0140), and its correct answer is often "nothing
   happens", which the ledger cannot express yet.

@@ -1,0 +1,68 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/refs",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-lrDQ6cR/FY2cV4OfoyAcrc1TnmcHrQkaWvF1lxcI1S/BkLKTcnOfZG0KAQJ138eo/N4Bq9Eqx9yva/W5Rih9/A==",
+      "snapshotRoot": "sha256:f1bb0747a59988901af32bb5e6d202aa0da74f7d7ff2e1c2b01b85f52ce4f436",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "5964863856f967b59110e27815ef74098688f6b9831378cb691f5ea97a469cd6",
+                  "path": "./dist/index.js",
+                  "sha256": "16918859df0fb6867d867f43a2ac2fd3eb9f1a5ab37d6fb124347fea746b079f"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "196afe9bf9437adaae20d0c614d446666886f4c82ea1fc5894c9a1bcb6466f3c"
+                },
+                "exports": {
+                  "Ref": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Refs": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defaultElementPredicate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getFirstChild": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getResolvedElements": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "mergeRefs": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "resolveElements": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "resolveFirst": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-lrDQ6cR/FY2cV4OfoyAcrc1TnmcHrQkaWvF1lxcI1S/BkLKTcnOfZG0KAQJ138eo/N4Bq9Eqx9yva/W5Rih9/A==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "1e68008c54a811427fc65fe866cd52805b696bbe9978128ca798a10f79224d41"
+          },
+          "name": "@solid-primitives/refs",
+          "version": "3.0.0-next.2"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

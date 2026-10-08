@@ -10,7 +10,22 @@ skip to `min: 0`; domains close only with server-path citations.
 - **Gained (pilot, `createTimer`):** none host, `timer-createTimer-module-scope`
   and `timer-createTimer-effect-apply` report `missing-owner` uncertifiable
   with clean correct twins. Browser results unchanged.
-- **Open:** every other primitive export; the node host.
+- **Rollout:** 31 more exports across 14 specs (58 authored entries).
+  Primitives ledger, none host: 4 report correctly (was 0), and 10 report the
+  misuse uncertifiable instead of `package-contract-incomplete`. Browser
+  unchanged at 16; no correct-twin violation on any host.
+- **Open:** 23 exports whose server build differs (ADR 0230 lists them); the
+  node host.
+- **Ledger corrected from Chrome:** `createShortcut` at module scope raises
+  nothing on rc.13 (`tryOnCleanup` registers nothing without an owner, by the
+  package's design), so that case is replaced by a leaf-owner one, which
+  Chrome flags (CLEANUP_IN_FORBIDDEN_SCOPE).
+- **Open, checker recall:** for that leaf-owner misuse the checker reports
+  `reactive-dispatch-unresolved` (uncertifiable) on every host, not the
+  violation Chrome shows. The claim states the cleanups with `min: 0` (an
+  empty key list registers none), an `unconstrained` owner and
+  `requiresCleanup: required`. `createTimer`'s leaf-owner case, whose cleanup
+  has `min: 1`, is proven on the browser host. Not yet investigated.
 
 ## Solid Primitives batch 2 (2026-10-08)
 
