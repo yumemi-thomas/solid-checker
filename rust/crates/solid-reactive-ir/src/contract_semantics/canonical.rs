@@ -97,6 +97,14 @@ pub(super) fn semantic_digest(
             .any(|export| has_callback_results(&export.call))
     });
     let mut writer = CanonicalWriter::new();
+    writer.captures = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| has_captures(&export.call))
+    });
+    if writer.captures {
+        writer.text("solid-checker:semantic-captures:v1");
+    }
     if callback_results {
         writer.text("solid-checker:semantic-callback-results:v1");
     }
@@ -291,9 +299,13 @@ pub(super) fn recipe_address(
         writer.text("solid-checker:semantic-callback-results:v1");
         writer.callback_results = true;
     }
+    if has_captures(&export.call) {
+        writer.text("solid-checker:semantic-captures:v1");
+        writer.captures = true;
+    }
     writer.local_ids = true;
     writer.address_case = Some(artifact_case.id.clone());
-    if writer.callback_results {
+    if writer.callback_results || writer.captures {
         // A producer recipe must also bind its consumers' timing, context,
         // paths and data edges. Bind the complete new graph conservatively;
         // pre-extension recipes keep their exact historical stream.
@@ -375,6 +387,7 @@ struct CanonicalWriter {
     /// assertion retain their previous byte stream, including absent fields.
     strict_reads: bool,
     callback_results: bool,
+    captures: bool,
     /// Whether operation and resource ids are written with their artifact-case
     /// prefix removed. Set only by [`recipe_address`]; false everywhere else,
     /// so every other digest writes every id verbatim, byte for byte.
@@ -420,6 +433,7 @@ impl CanonicalWriter {
             hash: Sha256::new(),
             strict_reads: false,
             callback_results: false,
+            captures: false,
             local_ids: false,
             address_case: None,
             composed_provenance: false,
@@ -710,6 +724,12 @@ impl CanonicalWriter {
     }
 
     fn call(&mut self, call: &CallSemantics) {
+        if self.captures {
+            self.sequence(call.captures(), |writer, capture| {
+                writer.text(&capture.id);
+                writer.value_source(&capture.from);
+            });
+        }
         if self.callback_results {
             self.sequence(call.callback_results(), Self::callback_result);
         }
@@ -784,6 +804,11 @@ impl CanonicalWriter {
 
     fn value_source(&mut self, source: &ValueSource) {
         match source {
+            ValueSource::Capture { capture, path } => {
+                self.u8(4);
+                self.text(capture);
+                self.sequence(path, |writer, value| writer.text(value));
+            }
             ValueSource::Parameter { index, path } => {
                 self.u8(0);
                 self.u16(*index);
@@ -1413,6 +1438,31 @@ impl CanonicalWriter {
             writer.option(claim.resource.as_ref(), Self::resource_id);
         });
     }
+}
+
+fn has_captures(call: &CallSemantics) -> bool {
+    fn value_has_captures(value: &ValueShape) -> bool {
+        match value {
+            ValueShape::ReturnedCallable { call, members } => {
+                call.as_deref().is_some_and(has_captures)
+                    || members
+                        .iter()
+                        .any(|member| value_has_captures(&member.value))
+            }
+            ValueShape::EffectfulCallable(call) => has_captures(call),
+            ValueShape::Tuple(items) => items.items().iter().any(value_has_captures),
+            ValueShape::Object(properties) => properties
+                .items()
+                .iter()
+                .any(|property| value_has_captures(&property.value)),
+            _ => false,
+        }
+    }
+    !call.captures().is_empty()
+        || call
+            .operations
+            .iter()
+            .any(|operation| operation.output.as_ref().is_some_and(value_has_captures))
 }
 
 fn has_callback_results(call: &CallSemantics) -> bool {

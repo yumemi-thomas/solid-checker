@@ -1469,6 +1469,9 @@ pub struct CallSemantics {
     /// Authored result-use censuses, local to this call graph. Omission is
     /// historical behavior, never a negative claim about callback results.
     callback_results: Vec<CallbackResult>,
+    /// Values retained at the enclosing factory call, not invocation arguments.
+    /// Valid only on a whole returned callable's graph. Authored only.
+    captures: Vec<CapturedValue>,
     pub operations: Vec<Operation>,
     pub edges: Vec<OperationEdge>,
     pub resources: Vec<Resource>,
@@ -1490,6 +1493,7 @@ impl CallSemantics {
             context_premises: BTreeSet::new(),
             accessor_bounds: BTreeSet::new(),
             callback_results: Vec::new(),
+            captures: Vec::new(),
             operations,
             edges,
             resources,
@@ -1508,6 +1512,17 @@ impl CallSemantics {
     #[must_use]
     pub fn callback_results(&self) -> &[CallbackResult] {
         &self.callback_results
+    }
+
+    #[must_use]
+    pub fn with_captures(mut self, captures: Vec<CapturedValue>) -> Self {
+        self.captures = captures;
+        self
+    }
+
+    #[must_use]
+    pub fn captures(&self) -> &[CapturedValue] {
+        &self.captures
     }
 
     /// The same call semantics, additionally proposing the named domains for
@@ -1687,6 +1702,12 @@ pub struct CallbackInvocation {
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ValueSource {
+    /// A value from this returned graph's capture catalogue. `path` is
+    /// relative to the retained value, never to an invocation argument.
+    Capture {
+        capture: String,
+        path: Vec<String>,
+    },
     Parameter {
         index: u16,
         path: Vec<String>,
@@ -1707,6 +1728,13 @@ pub enum ValueSource {
         resource: ResourceId,
         path: Vec<String>,
     },
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CapturedValue {
+    pub id: String,
+    /// Exact source in the enclosing factory's graph.
+    pub from: ValueSource,
 }
 
 /// ADR 0207: a class of an object's own properties a callback item names.
@@ -2417,7 +2445,9 @@ pub enum ValueShape {
     /// output, never nested.
     EffectfulCallable(Box<CallSemantics>),
     /// A whole function returned by a factory. The graph's parameters are
-    /// invocation arguments, never retained factory arguments. Named function
+    /// invocation arguments, never retained factory arguments. Its explicit
+    /// capture catalogue supplies those retained values in a separate scope.
+    /// Named function
     /// object members use the existing returned-member vocabulary. Missing
     /// graphs or members assert nothing about later dispatch. Authored only;
     /// valid only as the whole output of a factory return, never nested.

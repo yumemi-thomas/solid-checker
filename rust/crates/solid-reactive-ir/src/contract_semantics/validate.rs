@@ -167,7 +167,66 @@ fn validate_artifact_guard(
 }
 
 fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError> {
-    normalize_call_in(call, path, None)
+    normalize_call_in(call, path, None, false)
+}
+
+/// Validate retained identities in the factory namespace before normalizing
+/// the returned graph in its own invocation namespace. Never resolve by name.
+fn normalize_captures(
+    call: &mut CallSemantics,
+    resources: &BTreeMap<ResourceId, ResourceInfo>,
+    operations: &BTreeSet<OperationId>,
+    path: &str,
+) -> Result<(), ModelError> {
+    let mut ids = BTreeSet::new();
+    for capture in &call.captures {
+        require_text(&capture.id, "capture id")?;
+        if !ids.insert(capture.id.clone()) {
+            return Err(ModelError::DuplicateIdentity {
+                kind: "capture",
+                id: capture.id.clone(),
+            });
+        }
+        let source_path = match &capture.from {
+            ValueSource::Parameter { path, .. } => path,
+            ValueSource::OperationOutput {
+                operation,
+                path: source_path,
+            } => {
+                require_operation(operation, operations, path)?;
+                source_path
+            }
+            ValueSource::Resource {
+                resource,
+                path: source_path,
+            } => {
+                require_resource(resource, resources, path)?;
+                source_path
+            }
+            ValueSource::Capture { .. } | ValueSource::ParameterMembers { .. } => {
+                return contradiction(path.to_owned(), "a capture needs one exact factory source");
+            }
+        };
+        if source_path.iter().any(|key| key.is_empty() || key == "*") {
+            return contradiction(path.to_owned(), "capture paths must be exact");
+        }
+    }
+    for callback in call.claims.callbacks.items() {
+        if let ValueSource::Capture {
+            capture,
+            path: source_path,
+        } = &callback.from
+        {
+            if !ids.contains(capture) {
+                return contradiction(path.to_owned(), format!("unknown capture {capture}"));
+            }
+            if source_path.iter().any(|key| key.is_empty() || key == "*") {
+                return contradiction(path.to_owned(), "capture paths must be exact");
+            }
+        }
+    }
+    call.captures.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(())
 }
 
 /// The resources and operation ids of the export a nested call belongs to
@@ -181,7 +240,27 @@ fn normalize_call_in(
     call: &mut CallSemantics,
     path: &str,
     outer: Option<OuterScope<'_>>,
+    returned_graph: bool,
 ) -> Result<(), ModelError> {
+    if !returned_graph && !call.captures.is_empty() {
+        return contradiction(
+            path.to_owned(),
+            "captures belong only to a whole returned graph",
+        );
+    }
+    if !returned_graph
+        && call
+            .claims
+            .callbacks
+            .items()
+            .iter()
+            .any(|row| matches!(row.from, ValueSource::Capture { .. }))
+    {
+        return contradiction(
+            path.to_owned(),
+            "a capture source belongs only to a returned graph",
+        );
+    }
     normalize_knowledge(&mut call.claims.callbacks, &format!("{path}.callbacks"))?;
     normalize_knowledge(&mut call.claims.reads, &format!("{path}.reads"))?;
     normalize_knowledge(&mut call.claims.writes, &format!("{path}.writes"))?;
@@ -553,7 +632,17 @@ fn normalize_operation(
                 });
             }
             if let Some(call) = call {
-                normalize_call_in(call, &out_path, Some((resources, operations)))?;
+                if call.captures().iter().any(|capture| {
+                    matches!(&capture.from, ValueSource::OperationOutput { operation: source, .. }
+                        if source == &operation.id)
+                }) {
+                    return contradiction(
+                        out_path,
+                        "a returned graph cannot capture its own factory return",
+                    );
+                }
+                normalize_captures(call, resources, operations, &out_path)?;
+                normalize_call_in(call, &out_path, Some((resources, operations)), true)?;
             }
             // Reuse ADR 0235's lift/normalize/restore machinery verbatim.
             let mut container = ValueShape::Object(KnowledgeSet::Complete(std::mem::take(members)));
@@ -564,6 +653,7 @@ fn normalize_operation(
                     &mut call,
                     &format!("{out_path}.member.{member}"),
                     Some((resources, operations)),
+                    false,
                 )?;
                 restore_effectful_member(&mut container, &member, call);
             }
@@ -593,7 +683,12 @@ fn normalize_operation(
                         "an effectful callable cannot return another effectful callable",
                     );
                 }
-                normalize_call_in(&mut call, &member_path, Some((resources, operations)))?;
+                normalize_call_in(
+                    &mut call,
+                    &member_path,
+                    Some((resources, operations)),
+                    false,
+                )?;
                 restore_effectful_member(output, &member, call);
             }
         } else {
@@ -1702,7 +1797,7 @@ fn validate_call_claims(
             &format!("{path}.callbacks"),
         )?;
         match &callback.from {
-            ValueSource::Parameter { .. } => {}
+            ValueSource::Parameter { .. } | ValueSource::Capture { .. } => {}
             // ADR 0207: a member class is invoked as a call; any other protocol
             // of an unbounded set of members has no meaning here.
             ValueSource::ParameterMembers { .. } => {

@@ -2691,6 +2691,57 @@ mod tests {
     }
 
     #[test]
+    fn argumentless_factory_result_calls_demand_validity_by_exact_binding() {
+        let file = test_file_facts(
+            "src/captured.tsx",
+            r#"declare function factory(): () => void;
+declare function ordinary(): void;
+function Card(parameter: () => void) {
+  const returned = factory();
+  const alias = returned;
+  returned(); alias(); parameter(); ordinary();
+  { const returned = parameter; returned(); }
+  return <p />;
+}"#,
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let returned_declaration = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.call_initializer.is_some())
+            .unwrap()
+            .names[0]
+            .span;
+        let mut checked = 0;
+        for call in file.ast.calls.iter().filter(|call| {
+            matches!(
+                file.source_text(call.callee),
+                Some("returned" | "alias" | "parameter" | "ordinary")
+            )
+        }) {
+            let expected =
+                file.ast.reference_declaration(call.callee) == Some(returned_declaration);
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            assert_eq!(
+                demands
+                    .iter()
+                    .any(|demand| { demand.location == location && demand.resolved_call }),
+                expected,
+                "{}",
+                file.source_text(call.callee).unwrap()
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 5);
+    }
+
+    #[test]
     fn argumentless_nested_function_calls_demand_validity_by_exact_binding() {
         let file = test_file_facts(
             "src/captured.tsx",

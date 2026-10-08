@@ -259,15 +259,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/7a3a6abca1b927f0d5da7d90a811898a3412c869a0a006f743392fef1f6d07df.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/authored/objects/7a3a6abca1b927f0d5da7d90a811898a3412c869a0a006f743392fef1f6d07df.json"
-        ),
-    ),
-    (
         "objects/7b32bb86ec8eee209b05b7350b55c2eea6fa6e19c68575361a53958be53254a7.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/7b32bb86ec8eee209b05b7350b55c2eea6fa6e19c68575361a53958be53254a7.json"
+        ),
+    ),
+    (
+        "objects/7bf83b738944534d14a0d8eae7ad5a9594a9e5aa005de8442b7a6ba4f58c3078.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/7bf83b738944534d14a0d8eae7ad5a9594a9e5aa005de8442b7a6ba4f58c3078.json"
         ),
     ),
     (

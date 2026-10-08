@@ -13101,7 +13101,9 @@ fn described_callbacks(
             // Item B of ways-to-improve § 3.3: a call of the member of the
             // caller's value at this path, confirmed site for site below.
             ValueSource::Parameter { index, path } => (usize::from(*index), Some(path.clone())),
-            ValueSource::OperationOutput { .. } | ValueSource::Resource { .. } => {
+            ValueSource::OperationOutput { .. }
+            | ValueSource::Resource { .. }
+            | ValueSource::Capture { .. } => {
                 return Err(format!(
                     "describes `{operation_id}` as invoking a callable that did not arrive as a \
                      parameter"

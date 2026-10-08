@@ -9807,7 +9807,8 @@
       "package": "@solid-primitives/scheduled",
       "version": "2.0.0-next.2",
       "export": "debounce",
-      "returnedCallableProbeDigest": "c3872a141129d7f90decda619d23e85607474643bf6b39da2e7454ffd93b21aa",
+      "returnedCallableProbeDigest": "2d5cbe172ed8464c762fd769b2d87ef2dcda791f9c7472aee351102fb7fbff04",
+      "captureProbeDigest": "d7216476b34c208052d4ac593fdfa358b8fbfcc445e7a6a4b0b47c0a4f832223",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -9852,8 +9853,48 @@
       "package": "@solid-primitives/scheduled",
       "version": "2.0.0-next.2",
       "export": "debounce",
+      "label": "captured-dispatch",
+      "returnedCallableProbeDigest": "a5dd85cb5b5a359831aa447b53b388a0b38169711119f9e9977d8b8749aaf142",
+      "captureProbeDigest": "02127073884a1c3c2328d842c19341f47576282a3242204e344e8f0cc64afbe8",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 8,
+            "column": 28
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+scheduled@2.0.0-next.2",
+      "package": "@solid-primitives/scheduled",
+      "version": "2.0.0-next.2",
+      "export": "debounce",
       "label": "dispatch",
-      "returnedCallableProbeDigest": "c6f9cb71ab1992124951e3f8a9cec1f7f7c0930261e45fd3a490466a6baec5a0",
+      "returnedCallableProbeDigest": "b31ac4007973c453b98fbfe7aa938b88cf6d13f3658ab37d5e42655a89bc5e6d",
+      "captureProbeDigest": "2bcbb6b19a493bcbc691e361515f27dc92c089c717dc3e4cf783d1211d1b652f",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -9891,7 +9932,8 @@
       "version": "2.0.0-next.2",
       "export": "debounce",
       "label": "returned-clear",
-      "returnedCallableProbeDigest": "1445b49784f7f2dca4b1945e34dc75e08ae7df7fe1d411213bf7f3758bbf3f2a",
+      "returnedCallableProbeDigest": "b2ab1a1eade60d668647a0d4353eb16c4562d4193d0cc1ba14e6e2302643a24d",
+      "captureProbeDigest": "c249b751602aa6f377d8e67ae0c6e3a7e646715cbec7677a24c979e59dcc3a4f",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -10009,7 +10051,8 @@
       "package": "@solid-primitives/scheduled",
       "version": "2.0.0-next.2",
       "export": "throttle",
-      "returnedCallableProbeDigest": "a6aaa31f86dbd7cafca8f1063254a91b8a6593b633c5e47d65071f78c11bccd8",
+      "returnedCallableProbeDigest": "19e5494071fe2c88fdb3902c24f5c713624c032b9e2bbbb19e8b5f4844d5660c",
+      "captureProbeDigest": "f79418ff7bfe331fc85e009ba700400db91959a2add5ac52f639cf9d6b11538a",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -10054,8 +10097,48 @@
       "package": "@solid-primitives/scheduled",
       "version": "2.0.0-next.2",
       "export": "throttle",
+      "label": "captured-dispatch",
+      "returnedCallableProbeDigest": "3245681e630401d6ae9ac782e621606560cf31a7b6d230e2cf5ad05ff6b31ed2",
+      "captureProbeDigest": "315fcf3f3fca4b36afb8652ebcaaf1fc5c9d2acf5a290fbaa9641b9b778cdece",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 8,
+            "column": 28
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+scheduled@2.0.0-next.2",
+      "package": "@solid-primitives/scheduled",
+      "version": "2.0.0-next.2",
+      "export": "throttle",
       "label": "dispatch",
-      "returnedCallableProbeDigest": "1e36e9514e948e70bf4a38d60ea7cb5394342edd4877748cf12a48e1421cf8c8",
+      "returnedCallableProbeDigest": "068b70d0c1aef595e4b84db888fbb871bdeec2fc708d999bd2f9711fca80e1f5",
+      "captureProbeDigest": "ddd7e1127e9dae647255bc7672f7bce7d54c07c958063112d20de337e9c65ea7",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -10093,7 +10176,8 @@
       "version": "2.0.0-next.2",
       "export": "throttle",
       "label": "returned-clear",
-      "returnedCallableProbeDigest": "ec62d1ef8e74e2b3a6749ea7f475d6f7373ffd5b84c3ae556237a6c57dfa9390",
+      "returnedCallableProbeDigest": "085f700073508bcc62ab42ab9d841dada2aa2932664b2951b9e49b5b91e745df",
+      "captureProbeDigest": "4b036694726e60bb912e99d3c5997a0043fd7f5639b0dbb12c3bc1ee71051e5f",
       "solidRuntime": [
         {
           "name": "solid-js",

@@ -1269,6 +1269,15 @@ pub struct ContractExport {
     /// Exact result producers and contextual uses, never ordinary argument
     /// invocation rows. Local summaries do not infer this authored vocabulary.
     pub callback_results: Vec<ContractCallbackResult>,
+    /// Projection only. Virtual callback slots name explicit captures, never
+    /// invocation arguments. No producer may re-emit these as parameter rows.
+    pub capture_sources: BTreeMap<usize, crate::contract_semantics::ValueSource>,
+    /// Captures read through an explicit, exactly linked factory resource.
+    pub captured_resource_slots: BTreeSet<usize>,
+    /// Exact factory-site values, bound separately for each returned instance.
+    pub captured_arguments: BTreeMap<usize, solid_facts::ast::ArgumentFact>,
+    /// Whether this consumer can preserve all capture execution axes.
+    pub capture_context_supported: bool,
     /// Exact argument slots an accepted ambient invocation may call inline
     /// during the export call. The value is true only for an unguarded,
     /// call-scoped lower bound of at least one. Internal projection only;
@@ -1597,7 +1606,9 @@ impl ContractExport {
             }
             ClaimDomain::Reads => closed(!self.reactive_reads.is_open(), domain),
             ClaimDomain::Callbacks => {
-                self.callback_results.is_empty() && closed(!self.callbacks.is_open(), domain)
+                self.callback_results.is_empty()
+                    && self.capture_sources.is_empty()
+                    && closed(!self.callbacks.is_open(), domain)
             }
             _ => false,
         }

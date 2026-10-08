@@ -2258,8 +2258,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/7a3a6abca1b927f0d5da7d90a811898a3412c869a0a006f743392fef1f6d07df.json",
-      "documentDigest": "sha256:7a3a6abca1b927f0d5da7d90a811898a3412c869a0a006f743392fef1f6d07df"
+      "document": "objects/7bf83b738944534d14a0d8eae7ad5a9594a9e5aa005de8442b7a6ba4f58c3078.json",
+      "documentDigest": "sha256:7bf83b738944534d14a0d8eae7ad5a9594a9e5aa005de8442b7a6ba4f58c3078"
     },
     {
       "packageName": "@solid-primitives/script-loader",

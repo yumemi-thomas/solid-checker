@@ -2212,7 +2212,12 @@ pub(crate) fn discover_sources(
                     // literal names -- never the argument when it is only the
                     // container of the invoked member.
                     let Some((_, Some(invoked))) =
-                        crate::interproc::contract_callback_invoked_value(call, callback)
+                        crate::interproc::contract_callback_invoked_value(
+                            file,
+                            semantic_lookup,
+                            call,
+                            callback,
+                        )
                     else {
                         continue;
                     };

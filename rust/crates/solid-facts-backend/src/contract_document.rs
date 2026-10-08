@@ -418,6 +418,11 @@ fn compact_call(
 ) -> Result<JsonValue, ContractFailure> {
     let claims = call.claims();
     let mut object = JsonMap::new();
+    if !call.captures().is_empty() {
+        object.insert("captures".into(), JsonValue::Array(call.captures().iter().map(|capture| {
+            Ok(json!({ "id": capture.id, "from": compact_value_source(&capture.from, ids)? }))
+        }).collect::<Result<Vec<_>, ContractFailure>>()?));
+    }
     if !call.callback_results().is_empty() {
         let results = call
             .callback_results()
@@ -642,6 +647,7 @@ fn compact_value_source(
     ids: &CompactIds,
 ) -> Result<JsonValue, ContractFailure> {
     Ok(match source {
+        ValueSource::Capture { capture, path } => json!({"capture": capture, "path": path}),
         ValueSource::Parameter { index, path } => json!({"arg": index, "path": path}),
         ValueSource::ParameterMembers { index, path, class } => {
             json!({"arg": index, "path": path, "members": class.wire()})
@@ -1624,6 +1630,8 @@ struct WireSummary {
 #[serde(deny_unknown_fields)]
 struct WireCall {
     #[serde(default)]
+    captures: Vec<WireCapturedValue>,
+    #[serde(default)]
     closed: Vec<WireCallDomain>,
     /// The domains this document proposes closed without claiming closure.
     /// Additive to `schemaVersion: 1`: a document that omits it proposes
@@ -1701,6 +1709,13 @@ struct WireCallbackResult {
 
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct WireCapturedValue {
+    id: String,
+    from: WireValueSource,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct WireCallback {
     from: WireValueSource,
     operation: String,
@@ -1737,6 +1752,8 @@ struct WireDescribedInvocation {
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WireValueSource {
+    #[serde(default)]
+    capture: Option<String>,
     #[serde(default)]
     arg: Option<u16>,
     #[serde(default)]
@@ -2972,6 +2989,7 @@ fn expand_call(
 ) -> Result<solid_reactive_ir::contract_semantics::CallSemantics, ContractFailure> {
     let call = call.cloned().unwrap_or_default();
     validate_count("operations", call.operations.len(), MAX_OPERATIONS)?;
+    validate_count("captures", call.captures.len(), MAX_OPERATIONS)?;
     validate_count(
         "callback result censuses",
         call.callback_results.len(),
@@ -3076,6 +3094,17 @@ fn expand_call(
     // Whether a bound is admissible -- `reads` closed -- is a normalization
     // invariant, refused by name in `validate_accessor_bounds`.
     .with_accessor_bounds(bounds)
+    .with_captures(
+        call.captures
+            .into_iter()
+            .map(|capture| {
+                Ok(solid_reactive_ir::contract_semantics::CapturedValue {
+                    id: capture.id,
+                    from: expand_value_source(capture.from, ids)?,
+                })
+            })
+            .collect::<Result<Vec<_>, ContractFailure>>()?,
+    )
     .with_callback_results(
         call.callback_results
             .into_iter()
@@ -3207,6 +3236,20 @@ fn expand_value_source(
     source: WireValueSource,
     ids: &IdScope,
 ) -> Result<ValueSource, ContractFailure> {
+    if let Some(capture) = source.capture {
+        if source.arg.is_some()
+            || source.operation.is_some()
+            || source.resource.is_some()
+            || source.members.is_some()
+        {
+            return invalid_document("a capture source cannot name another source");
+        }
+        validate_nonempty(&capture, "capture id")?;
+        return Ok(ValueSource::Capture {
+            capture,
+            path: source.path,
+        });
+    }
     if let Some(class) = source.members {
         let (Some(index), None, None) = (source.arg, &source.operation, &source.resource) else {
             return invalid_document("a callback source's members class requires arg");
@@ -4869,6 +4912,70 @@ mod tests {
                 .and_then(|decoded| decoded.normalize())
                 .is_err()
         );
+    }
+
+    #[test]
+    fn returned_captures_round_trip_and_refuse_ambiguous_or_dangling_identity() {
+        let original = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/reactive-ir/package-returned-callable-consumer/node_modules/reactive-package/solid-reactivity.json"
+        ));
+        let mut document: JsonValue = serde_json::from_slice(original).unwrap();
+        let summaries = document["summaries"].as_object_mut().unwrap();
+        let summary = summaries
+            .values_mut()
+            .find(|summary| {
+                summary["call"]["operations"]
+                    .as_array()
+                    .is_some_and(|operations| {
+                        operations.iter().any(|operation| {
+                            operation["output"]["kind"] == "returned-callable"
+                                && operation["output"]["call"].is_object()
+                        })
+                    })
+            })
+            .unwrap();
+        let graph = summary["call"]["operations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|operation| operation["output"]["call"].is_object())
+            .unwrap();
+        graph["output"]["call"]["captures"] = json!([{ "id": "callback", "from": { "arg": 0 } }]);
+        graph["output"]["call"]["callbacks"] =
+            json!([{ "from": { "capture": "callback" }, "operation": "invoke-capture" }]);
+        graph["output"]["call"]["operations"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({
+                "id": "invoke-capture", "kind": "invoke", "trigger": { "event": "call" },
+                "at": { "event": "call", "schedule": "same-stack" },
+                "tracking": "ambient-at-execution", "owner": { "source": "ambient-at-execution" },
+                "count": { "min": 1, "max": 1, "scope": "call" }
+            }));
+        let kept = normalized(&serde_json::to_vec(&document).unwrap());
+        assert_eq!(
+            normalized(&encode(&kept, &SidecarDigests::default(), true).unwrap()),
+            kept
+        );
+        let text = serde_json::to_string(&document).unwrap();
+        for bad in [
+            text.replace("\"capture\":\"callback\"", "\"capture\":\"missing\""),
+            text.replace(
+                "\"capture\":\"callback\"",
+                "\"arg\":0,\"capture\":\"callback\"",
+            ),
+            text.replace(
+                "\"from\":{\"arg\":0}",
+                "\"from\":{\"resource\":\"missing\"}",
+            ),
+        ] {
+            assert!(
+                decode(bad.as_bytes())
+                    .and_then(|proposal| proposal.normalize())
+                    .is_err()
+            );
+        }
     }
 
     /// ADR 0153 part 3: `contextPremises` survives the round trip, puts the

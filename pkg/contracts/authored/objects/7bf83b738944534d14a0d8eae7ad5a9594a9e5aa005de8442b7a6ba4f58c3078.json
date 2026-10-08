@@ -225,7 +225,8 @@
                 "closed": [
                   "reads",
                   "creates",
-                  "returns"
+                  "returns",
+                  "callbacks"
                 ],
                 "reads": [],
                 "creates": [],
@@ -233,6 +234,26 @@
                   "debounce-returned-return"
                 ],
                 "operations": [
+                  {
+                    "id": "debounce-captured-dispatch",
+                    "kind": "invoke",
+                    "trigger": {
+                      "event": "external-event"
+                    },
+                    "at": {
+                      "event": "external-event",
+                      "schedule": "external"
+                    },
+                    "tracking": "untracked",
+                    "owner": {
+                      "source": "none"
+                    },
+                    "count": {
+                      "min": 0,
+                      "max": 1,
+                      "scope": "call"
+                    }
+                  },
                   {
                     "id": "debounce-returned-return",
                     "kind": "return",
@@ -250,6 +271,24 @@
                       "scope": "call"
                     },
                     "output": "undefined"
+                  }
+                ],
+                "captures": [
+                  {
+                    "id": "callback",
+                    "from": {
+                      "arg": 0,
+                      "path": []
+                    }
+                  }
+                ],
+                "callbacks": [
+                  {
+                    "from": {
+                      "capture": "callback",
+                      "path": []
+                    },
+                    "operation": "debounce-captured-dispatch"
                   }
                 ]
               },
@@ -486,7 +525,8 @@
                 "closed": [
                   "reads",
                   "creates",
-                  "returns"
+                  "returns",
+                  "callbacks"
                 ],
                 "reads": [],
                 "creates": [],
@@ -494,6 +534,26 @@
                   "throttle-returned-return"
                 ],
                 "operations": [
+                  {
+                    "id": "throttle-captured-dispatch",
+                    "kind": "invoke",
+                    "trigger": {
+                      "event": "external-event"
+                    },
+                    "at": {
+                      "event": "external-event",
+                      "schedule": "external"
+                    },
+                    "tracking": "untracked",
+                    "owner": {
+                      "source": "none"
+                    },
+                    "count": {
+                      "min": 0,
+                      "max": 1,
+                      "scope": "call"
+                    }
+                  },
                   {
                     "id": "throttle-returned-return",
                     "kind": "return",
@@ -511,6 +571,24 @@
                       "scope": "call"
                     },
                     "output": "undefined"
+                  }
+                ],
+                "captures": [
+                  {
+                    "id": "callback",
+                    "from": {
+                      "arg": 0,
+                      "path": []
+                    }
+                  }
+                ],
+                "callbacks": [
+                  {
+                    "from": {
+                      "capture": "callback",
+                      "path": []
+                    },
+                    "operation": "throttle-captured-dispatch"
                   }
                 ]
               },

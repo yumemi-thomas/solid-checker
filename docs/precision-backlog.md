@@ -1,5 +1,13 @@
 # Precision backlog
 
+## Returned-graph captures (2026-10-08)
+
+ADR 0256: a returned graph may invoke or read a captured factory argument,
+resource or result, bound per instance. Still open: captured arrows with
+parameters stay obligations (so real `debounce((q) => ...)` calls are
+uncertifiable); returned state (`createScheduled`'s first-call guard) and
+dictionary dispatch (`translator`) are not modelled.
+
 ## Lazy per-key getters (2026-10-08)
 
 ADR 0255: a lazy getter Get in tracked code is clean; any other Get is an

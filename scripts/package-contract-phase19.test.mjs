@@ -359,7 +359,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 194 adds package-lazy-getter-consumer's hand-stated document,
       // ADR 0255's pin of lazy per-key getters.
-      stableMainDocuments: 194,
+      //
+      // 195 adds package-captured-callable-consumer's hand-stated document,
+      // ADR 0256's pin of returned-graph captures.
+      stableMainDocuments: 195,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

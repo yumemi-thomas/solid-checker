@@ -869,11 +869,16 @@ fn contract_callback_arguments_unbound(
 /// value) had its `callbacks` open until item B, and a consumer read no row of
 /// it at all; and it never folds the *whole* argument, which would claim the
 /// caller's array or props object is itself called.
-pub(crate) fn contract_callback_invoked_value<'c>(
-    call: &'c solid_facts::ast::CallFact,
+pub(crate) fn contract_callback_invoked_value(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    call: &solid_facts::ast::CallFact,
     callback: &ContractCallback,
-) -> Option<(&'c solid_facts::ast::ArgumentFact, Option<Span>)> {
-    let argument = call.arguments.get(callback.parameter)?;
+) -> Option<(solid_facts::ast::ArgumentFact, Option<Span>)> {
+    let argument = lookup
+        .callee_symbol(file, call.callee)
+        .and_then(|symbol| lookup.captured_argument(symbol, callback.parameter))
+        .or_else(|| call.arguments.get(callback.parameter))?;
     let invoked = match callback.path.as_slice() {
         // The historical answer for the argument itself, spread or not.
         [] => Some(argument.span),
@@ -886,7 +891,7 @@ pub(crate) fn contract_callback_invoked_value<'c>(
             .map(|member| member.value),
         _ => None,
     };
-    Some((argument, invoked))
+    Some((argument.clone(), invoked))
 }
 
 /// The symbol a value written at `span` names: the compiler entity at the span
@@ -2057,7 +2062,8 @@ fn discover_interprocedural_graph(
             // The map also keeps value enumerations for the result consumer.
             // They are no callable edge, invoked parameter or re-pushed row.
             for callback in callbacks.iter().filter(|callback| callback.is_invocation()) {
-                let Some((argument, invoked)) = contract_callback_invoked_value(call, callback)
+                let Some((argument, invoked)) =
+                    contract_callback_invoked_value(file, lookup, call, callback)
                 else {
                     continue;
                 };
@@ -2161,13 +2167,17 @@ fn discover_interprocedural_graph(
                         && let Some(target) =
                             functions_for_path(nodes, nodes_by_path, file.path.as_str())
                                 .filter(|(_, node)| {
-                                    if lookup.contract_callback_results(symbol).is_some_and(
-                                        |results| {
-                                            results.iter().any(|result| {
-                                                result.parameter == callback.parameter
-                                            })
-                                        },
-                                    ) {
+                                    if lookup
+                                        .captured_argument(symbol, callback.parameter)
+                                        .is_some()
+                                        || lookup.contract_callback_results(symbol).is_some_and(
+                                            |results| {
+                                                results.iter().any(|result| {
+                                                    result.parameter == callback.parameter
+                                                })
+                                            },
+                                        )
+                                    {
                                         node.span == file.ast.peel_ts_sugar_span(invoked)
                                     } else {
                                         invoked.contains(node.span)
@@ -2243,12 +2253,15 @@ fn discover_interprocedural_graph(
                         functions_for_path(nodes, nodes_by_path, file.path.as_str())
                             .filter(|(_, node)| {
                                 if lookup
-                                    .contract_callback_results(symbol)
-                                    .is_some_and(|results| {
-                                        results
-                                            .iter()
-                                            .any(|result| result.parameter == callback.parameter)
-                                    })
+                                    .captured_argument(symbol, callback.parameter)
+                                    .is_some()
+                                    || lookup.contract_callback_results(symbol).is_some_and(
+                                        |results| {
+                                            results.iter().any(|result| {
+                                                result.parameter == callback.parameter
+                                            })
+                                        },
+                                    )
                                 {
                                     node.span == file.ast.peel_ts_sugar_span(argument.span)
                                 } else {
@@ -6091,11 +6104,59 @@ fn interprocedural_result_reads_for_file(
                 // member-path row (item B), and nothing folded otherwise --
                 // never the whole argument for a member row.
                 let Some((argument, Some(invoked))) =
-                    contract_callback_invoked_value(call, callback)
+                    contract_callback_invoked_value(file, lookup, call, callback)
                 else {
                     continue;
                 };
-                let argument_symbol = value_symbol(file, invoked, entities);
+                let captured = lookup
+                    .captured_argument(symbol, callback.parameter)
+                    .is_some();
+                if captured {
+                    match lookup
+                        .resolved_callee_call(file, call.callee)
+                        .map(|resolved| resolved.validity)
+                    {
+                        // TypeScript owns an erroneous/recovery call. Do not
+                        // recast its type diagnostic as a dispatch finding.
+                        Some(ResolvedCallValidity::Recovery) => continue,
+                        Some(ResolvedCallValidity::Valid) if ambiguous_candidates.is_none() => {}
+                        Some(ResolvedCallValidity::Valid | ResolvedCallValidity::Unresolved)
+                        | None => {
+                            dispatch_obligations.push(StaticDefect {
+                                kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                                    callee: label.clone(),
+                                    member: None,
+                                },
+                                location: location(file.path.shared(), call.span),
+                                analysis_context:
+                                    "the captured invocation has no exact valid call fact".into(),
+                                fixes: vec![],
+                                uncertain: true,
+                            });
+                            continue;
+                        }
+                    }
+                }
+                let literal_function = file
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|function| function.span == invoked);
+                let argument_symbol = if captured && literal_function.is_some() {
+                    None
+                } else {
+                    value_symbol(file, invoked, entities)
+                };
+                let argument_function =
+                    literal_function
+                        .map(|function| (file, function))
+                        .or_else(|| {
+                            argument_symbol
+                                .and_then(|symbol| lookup.function_for_symbol(symbol.as_str()))
+                                .filter(|(source, function)| {
+                                    lookup.function_value_is_current(source, function)
+                                })
+                        });
                 let argument_summary = argument_symbol
                     .and_then(|argument_symbol| {
                         dependencies.insert(InterproceduralResultDependency::Symbol(
@@ -6112,13 +6173,16 @@ fn interprocedural_result_reads_for_file(
                             .enumerate()
                             .filter(|(_, node)| {
                                 node.path == file.path.as_str()
-                                    && (if lookup.contract_callback_results(symbol).is_some_and(
-                                        |results| {
-                                            results.iter().any(|result| {
-                                                result.parameter == callback.parameter
-                                            })
-                                        },
-                                    ) {
+                                    && (if lookup
+                                        .captured_argument(symbol, callback.parameter)
+                                        .is_some()
+                                        || lookup.contract_callback_results(symbol).is_some_and(
+                                            |results| {
+                                                results.iter().any(|result| {
+                                                    result.parameter == callback.parameter
+                                                })
+                                            },
+                                        ) {
                                         node.span == file.ast.peel_ts_sugar_span(invoked)
                                     } else {
                                         invoked.contains(node.span)
@@ -6174,6 +6238,26 @@ fn interprocedural_result_reads_for_file(
                 let Some(argument_summary) =
                     argument_summary.or_else(|| accessor_read.as_ref().map(std::slice::from_ref))
                 else {
+                    if captured
+                        && !(callback.execution == "deferred"
+                            && argument_symbol.is_some_and(|symbol| {
+                                source_kinds.get(symbol.as_str())
+                                    == Some(&ReactiveSourceKind::Accessor)
+                                    && accessors.contains_key(symbol.as_str())
+                            }))
+                    {
+                        dispatch_obligations.push(StaticDefect {
+                            kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: label.clone(),
+                                member: None,
+                            },
+                            location: location(file.path.shared(), call.span),
+                            analysis_context: "the captured callable has no exact read census"
+                                .into(),
+                            fixes: vec![],
+                            uncertain: true,
+                        });
+                    }
                     continue;
                 };
                 let callback_execution = match callback.execution.as_str() {
@@ -6182,6 +6266,21 @@ fn interprocedural_result_reads_for_file(
                     _ => execution,
                 };
                 for read in argument_summary {
+                    // A mandatory inline capture invokes this exact caller
+                    // value on this call's stack. An accessor is the read;
+                    // a function summary still needs the origin in its own
+                    // synchronous body. Nested/deferred summary reads keep
+                    // their obligations instead of inheriting this proof.
+                    let capture_read_proven = captured
+                        && callback.invokes_argument()
+                        && callback.execution == "inline"
+                        && !callback.clears_tracking
+                        && lookup.contract_inline_accessor_invocation(symbol, callback.parameter)
+                            == Some(true)
+                        && (accessor_read.is_some()
+                            || argument_function.is_some_and(|(source, function)| {
+                                captured_body_read_runs_during_call(source, function, read)
+                            }));
                     let (callback_execution, read_unproven) = read
                         .contract_read_context
                         .as_ref()
@@ -6198,7 +6297,7 @@ fn interprocedural_result_reads_for_file(
                     )) {
                         result.push(ReactiveRead {
                             package_internal: false,
-                            summary_attributed: true,
+                            summary_attributed: !capture_read_proven,
                             kind: "accessor".into(),
                             accessor: read.display.to_string().into(),
                             location: location(file.path.shared(), call.span),
@@ -6527,6 +6626,23 @@ fn interprocedural_result_reads_for_file(
         }
     }
     (result, dispatch_obligations, dependencies)
+}
+
+fn captured_body_read_runs_during_call(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    read: &SummaryRead,
+) -> bool {
+    if read.origin.path.as_ref() != file.path.as_str() {
+        return false;
+    }
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(read.origin.start_byte),
+        u32::try_from(read.origin.end_byte),
+    ) else {
+        return false;
+    };
+    body_site_runs_during_call(file, function, Span::new(start, end))
 }
 
 /// Narrow source premise for newly promoted defaults/async origins.
@@ -8272,6 +8388,58 @@ mod tests {
             summary.push(entry.clone());
         }
         summary
+    }
+
+    #[test]
+    fn captured_body_read_proof_requires_the_exact_synchronous_body() {
+        use solid_facts::{
+            FileFacts, ast,
+            compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
+            core::Generation,
+        };
+        let source = "const callback = () => { read(); const nested = () => later(); return <div data-value={jsx()} />; };";
+        let ast = ast::extract("app.tsx", source).unwrap();
+        let compiler = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: ast.source.hash.clone(),
+            semantic_model: Default::default(),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            discarded_regions: vec![],
+            ownership_regions: vec![],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        };
+        let file = FileFacts::new(Generation::new(1).unwrap(), source, ast, compiler).unwrap();
+        let function = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.body.contains(file.ast.calls[0].span))
+            .unwrap();
+        for (callee, expected) in [("read", true), ("later", false), ("jsx", false)] {
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some(callee))
+                .unwrap();
+            let mut row = read("accessor", callee, u64::from(call.span.start));
+            row.origin.end_byte = u64::from(call.span.end);
+            assert_eq!(
+                super::captured_body_read_runs_during_call(&file, function, &row),
+                expected
+            );
+            row.origin.path = "other.tsx".into();
+            assert!(!super::captured_body_read_runs_during_call(
+                &file, function, &row
+            ));
+            row.origin.path = file.path.shared();
+            row.origin.start_byte = u64::MAX;
+            assert!(!super::captured_body_read_runs_during_call(
+                &file, function, &row
+            ));
+        }
     }
 
     /// The dispatch gate unions every candidate's reads once it returns true,

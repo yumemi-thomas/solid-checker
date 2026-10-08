@@ -791,13 +791,31 @@ fn plan_file(
         let argumentless_local_helper = call.arguments.is_empty()
             && call.direct_callee
             && local_nested_function_callee(file, call.callee);
+        // A returned graph's capture replay needs call validity even when
+        // its invocation supplies no arguments. This only requests a fact:
+        // a call initializer is no proof of a returned callable or a contract.
+        let argumentless_factory_result = call.arguments.is_empty()
+            && call.direct_callee
+            && file
+                .ast
+                .reference_declaration(call.callee)
+                .is_some_and(|declaration| {
+                    file.ast.bindings.iter().any(|binding| {
+                        binding.immutable
+                            && binding.shape == solid_facts::ast::BindingShape::Identifier
+                            && binding.names.len() == 1
+                            && binding.names[0].span == declaration
+                            && binding.call_initializer.is_some()
+                    })
+                });
         planned.resolved_call = !call.arguments.is_empty()
             || returned_callees.contains(&call.callee)
             || computed_dispatch
             || argumentless_primitive
             || argumentless_method
             || argumentless_construction
-            || argumentless_local_helper;
+            || argumentless_local_helper
+            || argumentless_factory_result;
         planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
         // Typed source discovery must distinguish the exact callable value

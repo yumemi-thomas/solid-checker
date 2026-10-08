@@ -1328,6 +1328,41 @@ impl LocalAccessContext<'_, '_> {
             .map(|span| file.ast.peel_ts_sugar_span(span))
             .collect::<HashSet<_>>();
         for factory in &file.ast.calls {
+            let has_captures = self
+                .lookup
+                .callee_symbol(file, factory.callee)
+                .and_then(|symbol| self.lookup.returned_capture_sources(symbol))
+                .is_some_and(|sources| !sources.is_empty());
+            if let Some(sources) = self
+                .lookup
+                .callee_symbol(file, factory.callee)
+                .and_then(|symbol| self.lookup.returned_capture_sources(symbol))
+            {
+                for source in sources.values() {
+                    let crate::contract_semantics::ValueSource::Parameter { index, path } = source
+                    else {
+                        continue;
+                    };
+                    if !path.is_empty() {
+                        continue;
+                    }
+                    let Some(argument) = factory.arguments.get(usize::from(*index)) else {
+                        continue;
+                    };
+                    for escape in crate::contracts::capture_argument_escapes(
+                        file,
+                        self.entities,
+                        factory,
+                        argument,
+                    ) {
+                        result.dispatch_obligations.push(obligation(
+                            escape,
+                            file.source_text(factory.callee).unwrap_or_default(),
+                            "a captured caller value escapes or has no exact immutable identity",
+                        ));
+                    }
+                }
+            }
             let Some((returned, _)) = self
                 .lookup
                 .callee_symbol(file, factory.callee)
@@ -1356,6 +1391,13 @@ impl LocalAccessContext<'_, '_> {
                 ));
                 continue;
             };
+            if has_captures && binding.initializer != Some(factory.span) {
+                result.dispatch_obligations.push(obligation(
+                    factory.span,
+                    export,
+                    "a wrapped returned function has no exact capture instance binding",
+                ));
+            }
             if !binding.immutable
                 || crate::value_identity::binding_has_write(file, self.entities, root)
             {
@@ -1467,7 +1509,8 @@ impl LocalAccessContext<'_, '_> {
                     // Reactive accessor calls also require a successful
                     // instance-local binding. Unbound uses keep ADR 0234's
                     // nested-function and event-handler exemptions.
-                    if selected.is_some()
+                    if !has_captures
+                        && selected.is_some()
                         && ((called
                             && inside_non_component_function(file, member.span, self.lookup))
                             || (!called && handlers.contains(&member.span)))
@@ -1482,7 +1525,7 @@ impl LocalAccessContext<'_, '_> {
                     continue;
                 }
                 // Match ADR 0234 for passing the function as an on* value.
-                if !handlers.contains(&id.span) {
+                if has_captures || !handlers.contains(&id.span) {
                     result.dispatch_obligations.push(obligation(
                         id.span,
                         export,
@@ -1552,7 +1595,47 @@ impl LocalAccessContext<'_, '_> {
         self.callback_result_obligations(file, &mut result);
         let mut seen = HashSet::new();
         let allowed = allowed_callback_spans(file, self.lookup);
+        let capture_bodies = self.lookup.bound_capture_literal_bodies(file);
         for call in &file.ast.calls {
+            if let Some(captures) = self
+                .lookup
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| self.lookup.captured_arguments(symbol))
+            {
+                for argument in captures.values() {
+                    let literal = file
+                        .ast
+                        .functions
+                        .iter()
+                        .any(|function| function.span == argument.span);
+                    let symbol = self.entities.at(file.path.as_str(), argument.span);
+                    let known = literal
+                        || symbol.is_some_and(|symbol| {
+                            self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Accessor)
+                                || self.lookup.function_for_symbol(symbol).is_some_and(
+                                    |(source, function)| {
+                                        self.lookup.function_value_is_current(source, function)
+                                    },
+                                )
+                        });
+                    if !known {
+                        result.dispatch_obligations.push(crate::StaticDefect {
+                            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: file
+                                    .source_text(call.callee)
+                                    .unwrap_or_default()
+                                    .to_owned(),
+                                member: None,
+                            },
+                            location: crate::location(file.path.shared(), call.span),
+                            analysis_context:
+                                "the captured callable's implementation is not established".into(),
+                            fixes: vec![],
+                            uncertain: true,
+                        });
+                    }
+                }
+            }
             let callee = location(file.path.shared(), call.callee);
             // A returned accessor can be invoked immediately without ever
             // acquiring a binding symbol: `mapArray(list, map)()`. Preserve
@@ -1629,7 +1712,10 @@ impl LocalAccessContext<'_, '_> {
             let Some(symbol) = self.lookup.callee_symbol(file, call.callee) else {
                 continue;
             };
-            if inside_known_value_function_argument(file, call.callee, self.lookup) {
+            if (self.accessors.contains_key(symbol)
+                && capture_bodies.iter().any(|body| body.contains(call.span)))
+                || inside_known_value_function_argument(file, call.callee, self.lookup)
+            {
                 continue;
             }
             let inside_function = file.ast.any_function_body_containing(call.span);

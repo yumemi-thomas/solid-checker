@@ -3202,6 +3202,185 @@ fn returned_callable_keeps_the_old_digest_and_hashes_its_graph_axes() {
     );
 }
 
+fn captured_graph(from: ValueSource) -> CallSemantics {
+    let mut graph = call(
+        vec![operation("captured-invoke", OperationKind::Invoke)],
+        vec![],
+    );
+    graph.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+        from: ValueSource::Capture {
+            capture: "callback".into(),
+            path: vec![],
+        },
+        operation: OperationId("captured-invoke".into()),
+    }]);
+    graph.with_captures(vec![CapturedValue {
+        id: "callback".into(),
+        from,
+    }])
+}
+
+fn capture_proposal(graph: CallSemantics) -> ContractProposal {
+    let mut returned = operation("factory-return", OperationKind::Return);
+    returned.output = Some(ValueShape::ReturnedCallable {
+        call: Some(Box::new(graph)),
+        members: vec![],
+    });
+    proposal_with(ValueShape::Callable, call(vec![returned], vec![]))
+}
+
+#[test]
+fn captures_hash_factory_identity_and_refuse_certification() {
+    let graph = captured_graph(ValueSource::Parameter {
+        index: 0,
+        path: vec![],
+    });
+    let normalized = capture_proposal(graph.clone()).normalize().unwrap();
+    let changed = capture_proposal(captured_graph(ValueSource::Parameter {
+        index: 1,
+        path: vec![],
+    }))
+    .normalize()
+    .unwrap();
+    assert_ne!(normalized.semantic_digest(), changed.semantic_digest());
+    let returns = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Returns));
+    assert_ne!(
+        address_of(&normalized, "server-import", returns.clone(), "closure"),
+        address_of(&changed, "server-import", returns, "closure"),
+        "an unchanged return id cannot reuse a probe for another factory capture"
+    );
+    let mut queued = graph.clone();
+    queued.operations[0].schedule = Some(Schedule::Queued);
+    assert_ne!(
+        normalized.semantic_digest(),
+        capture_proposal(queued)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+    );
+    let mut tracked = graph;
+    tracked.operations[0].tracking = Tracking::AmbientAtExecution;
+    assert_ne!(
+        normalized.semantic_digest(),
+        capture_proposal(tracked)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+    );
+    let Err(refused) = certification::proof_policy_2().inspect_candidates(&normalized) else {
+        panic!("captures are authored-only");
+    };
+    assert!(refused.to_string().contains("captures are authored-only"));
+    let plain = call(vec![], vec![]);
+    assert_eq!(
+        capture_proposal(plain.clone())
+            .normalize()
+            .unwrap()
+            .semantic_digest(),
+        capture_proposal(plain.with_captures(vec![]))
+            .normalize()
+            .unwrap()
+            .semantic_digest(),
+        "an empty capture catalogue retains the absent-field digest family"
+    );
+    // The existing returned-callable golden test still pins the exact stream
+    // of a pre-extension document, including an absent capture catalogue.
+}
+
+#[test]
+fn captures_refuse_dangling_recursive_wildcard_and_wrong_scope_sources() {
+    let graph = captured_graph(ValueSource::Parameter {
+        index: 0,
+        path: vec![],
+    });
+    let mut duplicate = graph.clone();
+    duplicate.captures.push(duplicate.captures[0].clone());
+    assert!(capture_proposal(duplicate).normalize().is_err());
+    let mut dangling = graph.clone();
+    dangling.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+        from: ValueSource::Capture {
+            capture: "missing".into(),
+            path: vec![],
+        },
+        operation: OperationId("captured-invoke".into()),
+    }]);
+    assert!(capture_proposal(dangling).normalize().is_err());
+    for from in [
+        ValueSource::Resource {
+            resource: ResourceId("missing".into()),
+            path: vec![],
+        },
+        ValueSource::OperationOutput {
+            operation: OperationId("captured-invoke".into()),
+            path: vec![],
+        },
+        ValueSource::Parameter {
+            index: 0,
+            path: vec!["*".into()],
+        },
+        ValueSource::Capture {
+            capture: "callback".into(),
+            path: vec![],
+        },
+    ] {
+        assert!(capture_proposal(captured_graph(from)).normalize().is_err());
+    }
+    assert!(
+        proposal_with(ValueShape::Callable, graph)
+            .normalize()
+            .is_err()
+    );
+    let mut member = operation("return-member", OperationKind::Return);
+    member.output = Some(ValueShape::Tuple(KnowledgeSet::Complete(vec![
+        ValueShape::EffectfulCallable(Box::new(captured_graph(ValueSource::Parameter {
+            index: 0,
+            path: vec![],
+        }))),
+    ])));
+    assert!(
+        proposal_with(ValueShape::Callable, call(vec![member], vec![]))
+            .normalize()
+            .is_err()
+    );
+}
+
+#[test]
+fn factory_resource_and_result_captures_keep_exact_outer_identities() {
+    let mut graph = captured_graph(ValueSource::Resource {
+        resource: ResourceId("resource".into()),
+        path: vec![],
+    });
+    let mut proposal = capture_proposal(graph.clone());
+    proposal.artifact_cases[0]
+        .exports
+        .get_mut("createResource")
+        .unwrap()
+        .call
+        .resources
+        .push(resource("resource", ResourceKind::ReactiveSource));
+    assert!(proposal.normalize().is_ok());
+    graph.captures[0].from = ValueSource::OperationOutput {
+        operation: OperationId("factory-invoke".into()),
+        path: vec![],
+    };
+    let mut proposal = capture_proposal(graph);
+    let factory = &mut proposal.artifact_cases[0]
+        .exports
+        .get_mut("createResource")
+        .unwrap()
+        .call;
+    let producer = operation("factory-invoke", OperationKind::Invoke);
+    factory.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+        from: ValueSource::Parameter {
+            index: 0,
+            path: vec![],
+        },
+        operation: producer.id.clone(),
+    }]);
+    factory.operations.push(producer);
+    assert!(proposal.normalize().is_ok());
+}
+
 fn callback_result_graph(protocol: InvokeProtocol, complete: bool) -> CallSemantics {
     let producer = operation("produce", OperationKind::Invoke);
     let mut use_ = operation("use-result", OperationKind::Invoke);

@@ -701,6 +701,106 @@ impl<'a> SemanticLookup<'a> {
             .map(|binding| binding.summary.callback_results.as_slice())
     }
 
+    pub(super) fn captured_argument(
+        &self,
+        symbol: &str,
+        slot: usize,
+    ) -> Option<&solid_facts::ast::ArgumentFact> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)?
+            .summary
+            .captured_arguments
+            .get(&slot)
+    }
+
+    pub(super) fn captured_arguments(
+        &self,
+        symbol: &str,
+    ) -> Option<&std::collections::BTreeMap<usize, solid_facts::ast::ArgumentFact>> {
+        Some(
+            &self
+                .resolved_contracts
+                .by_symbol
+                .get(symbol)?
+                .summary
+                .captured_arguments,
+        )
+    }
+
+    pub(super) fn returned_capture_sources(
+        &self,
+        symbol: &str,
+    ) -> Option<&std::collections::BTreeMap<usize, crate::contract_semantics::ValueSource>> {
+        Some(
+            &self
+                .resolved_contracts
+                .by_symbol
+                .get(symbol)?
+                .summary
+                .returned_callable_effects
+                .as_ref()?
+                .capture_sources,
+        )
+    }
+
+    /// Exact literals retained by a successfully bound returned instance,
+    /// with no factory-time callback invocation of that argument. Their reads
+    /// belong to invocation replay, not to the factory argument's lexical site.
+    pub(super) fn bound_capture_literal_bodies(&self, file: &FileFacts) -> Vec<Span> {
+        let mut bodies = Vec::new();
+        for binding in &file.ast.bindings {
+            let Some(root) = binding
+                .names
+                .first()
+                .and_then(|name| self.entities.at(file.path.as_str(), name.span))
+            else {
+                continue;
+            };
+            if !self.returned_callable_is_bound(root.as_str()) {
+                continue;
+            }
+            let Some(captures) = self.captured_arguments(root.as_str()) else {
+                continue;
+            };
+            if captures.is_empty() {
+                continue;
+            }
+            let Some(factory) = binding.initializer.and_then(|initializer| {
+                file.ast.calls.iter().find(|call| call.span == initializer)
+            }) else {
+                continue;
+            };
+            let Some(callbacks) = self
+                .callee_symbol(file, factory.callee)
+                .and_then(|symbol| self.contract_callbacks(symbol))
+            else {
+                continue;
+            };
+            for argument in captures.values() {
+                let Some(index) = factory
+                    .arguments
+                    .iter()
+                    .position(|input| input.span == argument.span)
+                else {
+                    continue;
+                };
+                if callbacks.iter().any(|callback| callback.parameter == index) {
+                    continue;
+                }
+                if let Some(function) = file
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|function| function.span == argument.span)
+                {
+                    bodies.push(function.body);
+                }
+            }
+        }
+        bodies
+    }
+
     pub(super) fn contract_result_census_is_closed(&self, symbol: &str) -> bool {
         self.resolved_contracts
             .by_symbol
@@ -4096,6 +4196,104 @@ mod tests {
             false,
         );
         body(&lookup)
+    }
+
+    #[test]
+    fn capture_literal_bodies_require_bound_instances_and_no_factory_invocation() {
+        let source = "const captured = make(() => read()); const other = make(() => 0);";
+        let facts = project(source);
+        let file = &facts.files[0];
+        let captured_name = span_of(source, "captured", 0);
+        let entities = entity_symbols(&[
+            (captured_name, "captured-instance"),
+            (span_of(source, "other", 0), "other-instance"),
+            (span_of(source, "make", 0), "factory"),
+            (span_of(source, "make", 1), "factory"),
+        ]);
+        let factory = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| call.callee == span_of(source, "make", 0))
+            .unwrap();
+        let argument = factory.arguments[0].clone();
+        let body = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == argument.span)
+            .unwrap()
+            .body;
+        let binding = |symbol: &str, summary| crate::contracts::ResolvedContractBinding {
+            local_name: symbol.into(),
+            imported_name: symbol.into(),
+            package_name: "fixture-package".into(),
+            symbol: SymbolId::from(symbol),
+            runtime_identity: String::new(),
+            contract_location: crate::location(file.path.shared(), factory.callee),
+            summary,
+        };
+        let ast_indexes = HashMap::new();
+        let symbol_names = HashMap::new();
+        let dialect = solid_dialect::Solid2;
+        for (bound, callbacks, expected) in [
+            (true, crate::ContractClaim::Known(vec![]), vec![body]),
+            (false, crate::ContractClaim::Known(vec![]), vec![]),
+            (true, crate::ContractClaim::Open, vec![]),
+            (
+                true,
+                crate::ContractClaim::Known(vec![crate::ContractCallback {
+                    parameter: 0,
+                    execution: "inline".into(),
+                    schedule: None,
+                    arguments: vec![],
+                    owner: None,
+                    clears_tracking: false,
+                    protocol: crate::contract_semantics::InvokeProtocol::Call,
+                    path: vec![],
+                }]),
+                vec![],
+            ),
+        ] {
+            let factory_summary = crate::ContractExport {
+                callbacks,
+                ..crate::ContractExport::default()
+            };
+            let returned_summary = crate::ContractExport {
+                captured_arguments: std::collections::BTreeMap::from([(
+                    usize::MAX,
+                    argument.clone(),
+                )]),
+                ..crate::ContractExport::default()
+            };
+            let factory_binding = binding("factory", factory_summary);
+            let returned_binding = binding("captured-instance", returned_summary);
+            let contracts = crate::contracts::ResolvedContracts {
+                bindings: vec![],
+                by_symbol: HashMap::from([
+                    (factory_binding.symbol.clone(), factory_binding),
+                    (returned_binding.symbol.clone(), returned_binding),
+                ]),
+                callee_bindings: HashMap::new(),
+                returned_callable_bindings: if bound {
+                    HashSet::from([SymbolId::from("captured-instance")])
+                } else {
+                    HashSet::new()
+                },
+                missing_exports: vec![],
+                counts: crate::ContractBindingCounts::default(),
+            };
+            let lookup = SemanticLookup::new(
+                &facts,
+                &ast_indexes,
+                &entities,
+                &symbol_names,
+                &dialect,
+                &contracts,
+                false,
+            );
+            assert_eq!(lookup.bound_capture_literal_bodies(file), expected);
+        }
     }
 
     #[test]

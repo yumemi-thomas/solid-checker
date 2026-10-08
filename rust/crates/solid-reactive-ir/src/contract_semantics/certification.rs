@@ -327,6 +327,16 @@ impl ProofPolicy2 {
                             .into(),
                     });
                 }
+                if export.call.operations.iter().any(|operation| {
+                    matches!(&operation.output, Some(ValueShape::ReturnedCallable {
+                        call: Some(call), ..
+                    }) if !call.captures().is_empty())
+                }) {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "returned captures are authored-only and not certifiable".into(),
+                    });
+                }
                 // No implementation census establishes result-use closure.
                 if !export.call.callback_results().is_empty() {
                     return Err(ModelError::Contradiction {

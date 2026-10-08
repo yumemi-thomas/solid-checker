@@ -85,6 +85,10 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
         "version".into(),
         ContractExport {
             callback_results: Vec::new(),
+            capture_sources: Default::default(),
+            captured_arguments: Default::default(),
+            captured_resource_slots: Default::default(),
+            capture_context_supported: false,
             kind: "value".into(),
             reactive_reads: ContractClaim::Known(Vec::new()),
             returns: ContractClaim::Known(None),
@@ -158,6 +162,10 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
         "version".into(),
         ContractExport {
             callback_results: Vec::new(),
+            capture_sources: Default::default(),
+            captured_arguments: Default::default(),
+            captured_resource_slots: Default::default(),
+            capture_context_supported: false,
             kind: "function".into(),
             reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
                 execution: None,

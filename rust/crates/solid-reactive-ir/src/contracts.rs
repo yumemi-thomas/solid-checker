@@ -198,6 +198,16 @@ pub fn project_export_semantics(
         returns,
         callbacks,
         callback_results,
+        capture_sources: export
+            .call
+            .captures()
+            .iter()
+            .enumerate()
+            .map(|(slot, capture)| (usize::MAX - slot, capture.from.clone()))
+            .collect(),
+        captured_arguments: BTreeMap::new(),
+        captured_resource_slots: BTreeSet::new(),
+        capture_context_supported: capture_context_supported(export),
         inline_accessor_invocations: export
             .callbacks()
             .items()
@@ -410,11 +420,25 @@ fn project_callbacks(
         {
             continue;
         }
-        let ValueSource::Parameter { index, path } = &callback.from else {
-            open.insert(ClaimDomain::Callbacks);
-            continue;
+        let (index, path) = match &callback.from {
+            ValueSource::Parameter { index, path } => (usize::from(*index), path),
+            ValueSource::Capture { capture, path } => {
+                let Some(slot) = export
+                    .call
+                    .captures()
+                    .iter()
+                    .position(|entry| &entry.id == capture)
+                else {
+                    open.insert(ClaimDomain::Callbacks);
+                    continue;
+                };
+                (usize::MAX - slot, path)
+            }
+            _ => {
+                open.insert(ClaimDomain::Callbacks);
+                continue;
+            }
         };
-        let index = *index;
         let Some(operation) = export.operation(&callback.operation.0) else {
             open.insert(ClaimDomain::Callbacks);
             continue;
@@ -434,7 +458,7 @@ fn project_callbacks(
             continue;
         };
         callbacks.push(ContractCallback {
-            parameter: usize::from(index),
+            parameter: index,
             execution: execution.into(),
             // `projected_execution` collapses a tracked operation onto one
             // attribution word, which has no schedule column. Carry the
@@ -950,14 +974,196 @@ fn project_returned_callable_effects(
     };
     let mut call = (**call).clone();
     call.resources.extend(export.call.resources.iter().cloned());
-    Some(Box::new(project_export_semantics(
-        &crate::contract_semantics::ExportSemantics {
-            identity: export.identity.clone(),
-            shape: ValueShape::Callable,
-            stability: export.stability,
-            call,
-        },
-    )))
+    let mut projected = project_export_semantics(&crate::contract_semantics::ExportSemantics {
+        identity: export.identity.clone(),
+        shape: ValueShape::Callable,
+        stability: export.stability,
+        call,
+    });
+    projected.captured_resource_slots = project_capture_resource_slots(export);
+    for callback in projected.callbacks.known().into_iter().flatten() {
+        if projected.capture_sources.contains_key(&callback.parameter)
+            && callback.execution == "inline"
+            && callback.invokes_argument()
+        {
+            let guaranteed = call_capture_is_guaranteed(export, callback.parameter);
+            projected
+                .inline_accessor_invocations
+                .insert(callback.parameter, guaranteed);
+        }
+    }
+    Some(Box::new(projected))
+}
+
+fn call_capture_is_guaranteed(
+    export: &crate::contract_semantics::ExportSemantics,
+    slot: usize,
+) -> bool {
+    let Some(ValueShape::ReturnedCallable {
+        call: Some(call), ..
+    }) = agreed_returned_callable(export)
+    else {
+        return false;
+    };
+    let Some(capture) = call.captures().get(usize::MAX - slot) else {
+        return false;
+    };
+    call.claims().callbacks.items().iter().filter(|row| {
+        matches!(&row.from, ValueSource::Capture { capture: id, path } if id == &capture.id && path.is_empty())
+    }).any(|row| {
+        call.operations.iter().find(|operation| operation.id == row.operation).is_some_and(|operation| {
+            operation.guard.is_none()
+                && operation.schedule == Some(Schedule::SameStack)
+                && operation.at == Some(crate::contract_semantics::Event::Call)
+                && operation.cardinality.scope == Some(crate::contract_semantics::CardinalityScope::Call)
+                && operation.cardinality.min.is_some_and(|min| min >= 1)
+        })
+    })
+}
+
+/// Existing explicit reactive inputs already name factory resources. Retain
+/// that identity for a catalogue entry, including an exactly stated accessor
+/// operation result. No resource kind alone proves a callable or a read.
+fn project_capture_resource_slots(
+    factory: &crate::contract_semantics::ExportSemantics,
+) -> BTreeSet<usize> {
+    let Some(ValueShape::ReturnedCallable {
+        call: Some(graph), ..
+    }) = agreed_returned_callable(factory)
+    else {
+        return BTreeSet::new();
+    };
+    graph
+        .captures()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, capture)| {
+            let resource = match &capture.from {
+                ValueSource::Resource { resource, path } if path.is_empty() => resource,
+                ValueSource::OperationOutput { operation, path } if path.is_empty() => {
+                    let producer = factory.operation(&operation.0)?;
+                    if producer.guard.is_some()
+                        || producer.trigger
+                            != Some(crate::contract_semantics::Trigger::Event(
+                                crate::contract_semantics::Event::Call,
+                            ))
+                        || producer.at != Some(crate::contract_semantics::Event::Call)
+                        || producer.schedule != Some(Schedule::SameStack)
+                        || producer.cardinality.scope
+                            != Some(crate::contract_semantics::CardinalityScope::Call)
+                        || !producer.cardinality.min.is_some_and(|min| min >= 1)
+                    {
+                        return None;
+                    }
+                    let Some(ValueShape::Reactive {
+                        role: crate::contract_semantics::ReactiveRole::Accessor,
+                        resource: Some(resource),
+                        ..
+                    }) = &producer.output
+                    else {
+                        return None;
+                    };
+                    resource
+                }
+                _ => return None,
+            };
+            if graph.claims().callbacks.items().iter().any(|row| {
+            matches!(&row.from, ValueSource::Capture { capture: id, .. } if id == &capture.id)
+        }) { return None }
+            let reads = graph
+                .operations
+                .iter()
+                .filter(|operation| {
+                    graph.claims().reads.items().contains(&operation.id)
+                        && operation.inputs.iter().any(|input| {
+                            matches!(input,
+                    ValueShape::Reactive {
+                        role: crate::contract_semantics::ReactiveRole::Accessor,
+                        resource: Some(input), ..
+                    } if input == resource)
+                        })
+                })
+                .collect::<Vec<_>>();
+            (!reads.is_empty()
+                && reads.iter().all(|operation| {
+                    operation.guard.is_none()
+                        && operation.trigger
+                            == Some(crate::contract_semantics::Trigger::Event(
+                                crate::contract_semantics::Event::Call,
+                            ))
+                        && operation.at == Some(crate::contract_semantics::Event::Call)
+                        && operation.schedule == Some(Schedule::SameStack)
+                        && operation.tracking == Tracking::AmbientAtExecution
+                        && operation.owner.source == OwnerSource::AmbientAtExecution
+                        && operation.cardinality.scope
+                            == Some(crate::contract_semantics::CardinalityScope::Call)
+                        && operation.cardinality.min.is_some_and(|min| min >= 1)
+                }))
+            .then_some(usize::MAX - index)
+        })
+        .collect()
+}
+
+fn capture_context_supported(export: &crate::contract_semantics::ExportSemantics) -> bool {
+    let reads_supported = export
+        .operation_claim(ClaimDomain::Reads)
+        .is_some_and(|reads| {
+            reads.is_closed()
+                && reads.items().iter().all(|id| {
+                    export.operation(&id.0).is_some_and(|operation| {
+                        operation_runs_after_the_call(operation)
+                            || operation_reads_under_its_own_computation(operation)
+                            || operation.strict_read
+                                == Some(crate::contract_semantics::StrictRead::Cleared)
+                            || (operation.guard.is_none()
+                                && operation.trigger
+                                    == Some(crate::contract_semantics::Trigger::Event(
+                                        crate::contract_semantics::Event::Call,
+                                    ))
+                                && operation.at == Some(crate::contract_semantics::Event::Call)
+                                && operation.schedule == Some(Schedule::SameStack)
+                                && operation.tracking == Tracking::AmbientAtExecution
+                                && operation.owner.source == OwnerSource::AmbientAtExecution
+                                && operation.cardinality.scope
+                                    == Some(crate::contract_semantics::CardinalityScope::Call)
+                                && operation.cardinality.min.is_some_and(|min| min >= 1))
+                    })
+                })
+        });
+    reads_supported
+        && export
+            .callbacks()
+            .items()
+            .iter()
+            .filter(|row| matches!(row.from, ValueSource::Capture { .. }))
+            .all(|row| {
+                export.operation(&row.operation.0).is_some_and(|operation| {
+                    operation.guard.is_none()
+                        && operation.invoke_protocol()
+                            == crate::contract_semantics::InvokeProtocol::Call
+                        && match operation.schedule {
+                            Some(Schedule::SameStack) => {
+                                operation.at == Some(crate::contract_semantics::Event::Call)
+                                    && operation.trigger
+                                        == Some(crate::contract_semantics::Trigger::Event(
+                                            crate::contract_semantics::Event::Call,
+                                        ))
+                                    && operation.tracking == Tracking::AmbientAtExecution
+                                    && operation.owner.source == OwnerSource::AmbientAtExecution
+                            }
+                            Some(Schedule::Queued | Schedule::External) => {
+                                matches!(
+                                    operation.tracking,
+                                    Tracking::AmbientAtExecution | Tracking::Untracked
+                                ) && matches!(
+                                    operation.owner.source,
+                                    OwnerSource::None | OwnerSource::AmbientAtExecution
+                                )
+                            }
+                            None => false,
+                        }
+                })
+            })
 }
 
 /// The [`ContractReturn::kind`] of an opaque returned member (ADR 0234).
@@ -1316,6 +1522,203 @@ fn project_leaf_forbidden_operations(
     operations
 }
 
+fn bind_capture_arguments(
+    file: &solid_facts::FileFacts,
+    entities: &EntitySymbols,
+    factory: &solid_facts::ast::CallFact,
+    summary: &ContractExport,
+) -> Option<ContractExport> {
+    let mut bound = summary.clone();
+    if !summary.capture_sources.is_empty() && !summary.capture_context_supported {
+        return None;
+    }
+    if !summary.capture_sources.is_empty()
+        && (summary.callbacks.is_open() || summary.open_claims.contains(&ClaimDomain::Callbacks))
+    {
+        return None;
+    }
+    for (slot, source) in &summary.capture_sources {
+        if summary.captured_resource_slots.contains(slot) {
+            continue;
+        }
+        // Resource/output captures have identities in the normalized graph,
+        // but no caller value is established by this consumer slice.
+        let ValueSource::Parameter { index, path } = source else {
+            return None;
+        };
+        if !path.is_empty() {
+            return None;
+        }
+        let argument = factory.arguments.get(usize::from(*index))?;
+        if argument.spread
+            || !capture_argument_escapes(file, entities, factory, argument).is_empty()
+        {
+            return None;
+        }
+        for callback in summary
+            .callbacks
+            .known()?
+            .iter()
+            .filter(|row| row.parameter == *slot)
+        {
+            if !callback.invokes_argument()
+                || (callback.execution == "inline"
+                    && summary.inline_accessor_invocations.get(slot) != Some(&true))
+            {
+                return None;
+            }
+        }
+        bound.captured_arguments.insert(*slot, argument.clone());
+    }
+    Some(bound)
+}
+
+/// All non-call uses of a captured identifier remain obligations. A spelling
+/// fallback can only add an obligation when Type Facts did not bind a use.
+pub(crate) fn capture_argument_escapes(
+    file: &solid_facts::FileFacts,
+    entities: &EntitySymbols,
+    factory: &solid_facts::ast::CallFact,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> Vec<solid_facts::core::Span> {
+    let span = argument.span;
+    if argument.spread || file.ast.peel_ts_sugar_span(span) != span {
+        return vec![span];
+    }
+    let input_free = |function: &solid_facts::ast::FunctionFact| {
+        function.kind == solid_facts::ast::FunctionKind::Arrow
+            && function.parameters.is_empty()
+            && !function.rest_parameter
+            && !function.r#async
+            && !function.generator
+    };
+    if let Some(function) = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == span)
+    {
+        return if input_free(function) {
+            vec![]
+        } else {
+            vec![span]
+        };
+    }
+    if !file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == span)
+    {
+        return vec![span];
+    }
+    let Some(root) = entities.get(&crate::location(file.path.shared(), span)) else {
+        return vec![span];
+    };
+    let Some(binding) = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.names.iter().any(|name| {
+                entities.get(&crate::location(file.path.shared(), name.span)) == Some(root)
+            })
+    }) else {
+        return vec![span];
+    };
+    if crate::value_identity::binding_has_write(file, entities, root) {
+        return vec![span];
+    }
+    if binding.shape == solid_facts::ast::BindingShape::Identifier {
+        let Some(initializer) = binding.initializer else {
+            return vec![span];
+        };
+        if file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == initializer)
+            .is_some_and(|function| !input_free(function))
+        {
+            return vec![span];
+        }
+        if file.ast.peel_ts_sugar_span(initializer) != initializer
+            || (!file
+                .ast
+                .functions
+                .iter()
+                .any(|function| function.span == initializer)
+                && !file.ast.calls.iter().any(|call| call.span == initializer))
+        {
+            return vec![span];
+        }
+    }
+    let declaration = binding
+        .names
+        .iter()
+        .find(|name| entities.get(&crate::location(file.path.shared(), name.span)) == Some(root))
+        .expect("the exact binding was found")
+        .span;
+    let scope = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| function.body.contains(declaration))
+        .min_by_key(|function| function.body.end - function.body.start)
+        .map(|function| function.body);
+    let name = file.source_text(span).unwrap_or_default();
+    let mut escapes = Vec::new();
+    for identifier in file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == solid_facts::ast::IdentifierRole::Reference && id.span != span)
+    {
+        let exact = entities.get(&crate::location(file.path.shared(), identifier.span));
+        let possible = exact == Some(root)
+            || (exact.is_none()
+                && !name.is_empty()
+                && file.source_text(identifier.span) == Some(name)
+                && scope.is_none_or(|scope| scope.contains(identifier.span)));
+        if possible
+            && !(exact == Some(root)
+                && file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| call.callee == identifier.span && !call.construct))
+        {
+            escapes.push(identifier.span);
+        }
+    }
+    for property in &file.ast.object_properties {
+        if property.shorthand_binding == Some(declaration) {
+            escapes.push(property.span);
+        }
+    }
+    for exported in file
+        .ast
+        .exports
+        .iter()
+        .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+    {
+        if !exported.type_only
+            && entities.get(&crate::location(file.path.shared(), exported.local.span)) == Some(root)
+        {
+            escapes.push(exported.local.span);
+        }
+    }
+    // Other arguments of this very call are escapes too, even if their spans
+    // were not emitted as identifier references.
+    for other in &factory.arguments {
+        if other.span != span
+            && entities.get(&crate::location(file.path.shared(), other.span)) == Some(root)
+        {
+            escapes.push(other.span);
+        }
+    }
+    escapes.sort();
+    escapes.dedup();
+    escapes
+}
+
 /// Which published operation imposes an owner obligation on the *caller*.
 ///
 /// The four shapes here are the ones a consumer can actually meet today: the
@@ -1573,6 +1976,145 @@ mod owner_requirement_projection_tests {
         assert!(partial.returned_callable_effects.is_none());
         assert!(partial.returned_member_effects.is_empty());
         assert!(partial.open_claims.contains(&ClaimDomain::Returns));
+    }
+
+    #[test]
+    fn captures_project_separately_from_returned_invocation_arguments() {
+        use crate::contract_semantics::{CallbackInvocation, CapturedValue, ValueSource};
+        let mut invocation = operation("invoke-captured", OperationKind::Invoke, &[]);
+        invocation.tracking = Tracking::AmbientAtExecution;
+        invocation.owner.source = OwnerSource::AmbientAtExecution;
+        let mut graph_claims = claims();
+        graph_claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+            from: ValueSource::Capture {
+                capture: "callback".into(),
+                path: vec![],
+            },
+            operation: invocation.id.clone(),
+        }]);
+        let graph = CallSemantics::new(
+            graph_claims,
+            vec![invocation],
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        )
+        .with_captures(vec![CapturedValue {
+            id: "callback".into(),
+            from: ValueSource::Parameter {
+                index: 1,
+                path: vec![],
+            },
+        }]);
+        let mut returned = operation("return", OperationKind::Return, &[]);
+        returned.output = Some(ValueShape::ReturnedCallable {
+            call: Some(Box::new(graph)),
+            members: vec![],
+        });
+        let mut factory_claims = claims();
+        factory_claims.returns = KnowledgeSet::Complete(vec![returned.id.clone()]);
+        let projected = project_export_semantics(&export(factory_claims, vec![returned], vec![]));
+        let graph = projected.returned_callable_effects.unwrap();
+        assert!(
+            graph.captured_arguments.is_empty(),
+            "projection alone binds no caller value"
+        );
+        assert_eq!(
+            graph.capture_sources[&usize::MAX],
+            ValueSource::Parameter {
+                index: 1,
+                path: vec![]
+            }
+        );
+        assert_eq!(graph.callbacks.known().unwrap()[0].parameter, usize::MAX);
+        assert!(
+            !graph
+                .callbacks
+                .known()
+                .unwrap()
+                .iter()
+                .any(|row| row.parameter == 0 || row.parameter == 1)
+        );
+    }
+
+    #[test]
+    fn captures_link_explicit_resource_reads_and_exact_accessor_results_only() {
+        use crate::contract_semantics::{CapturedValue, ReactiveRole, ValueSource};
+        let mut read = operation("read-capture", OperationKind::Read, &[]);
+        read.tracking = Tracking::AmbientAtExecution;
+        read.owner.source = OwnerSource::AmbientAtExecution;
+        read.cardinality.min = Some(1);
+        read.inputs = vec![ValueShape::Reactive {
+            role: ReactiveRole::Accessor,
+            resource: Some(ResourceId("source".into())),
+            capabilities: KnowledgeSet::Unknown,
+        }];
+        let mut graph_claims = claims();
+        graph_claims.reads = KnowledgeSet::Complete(vec![read.id.clone()]);
+        let mut producer = operation("create-source", OperationKind::Create, &["source"]);
+        producer.cardinality.min = Some(1);
+        producer.output = Some(read.inputs[0].clone());
+        let project = |source: ValueSource, read: Operation, producer: Operation| {
+            let graph = CallSemantics::new(
+                graph_claims.clone(),
+                vec![read],
+                vec![],
+                vec![],
+                GuardPartition::default(),
+            )
+            .with_captures(vec![CapturedValue {
+                id: "source".into(),
+                from: source,
+            }]);
+            let mut returned = operation("return", OperationKind::Return, &[]);
+            returned.output = Some(ValueShape::ReturnedCallable {
+                call: Some(Box::new(graph)),
+                members: vec![],
+            });
+            let mut factory_claims = claims();
+            factory_claims.returns = KnowledgeSet::Complete(vec![returned.id.clone()]);
+            factory_claims.creates = KnowledgeSet::Complete(vec![producer.id.clone()]);
+            project_export_semantics(&export(
+                factory_claims,
+                vec![producer, returned],
+                vec![Resource {
+                    id: ResourceId("source".into()),
+                    kind: ResourceKind::ReactiveSource,
+                    states: KnowledgeSet::Unknown,
+                    capabilities: KnowledgeSet::Unknown,
+                    lifetime: None,
+                }],
+            ))
+            .returned_callable_effects
+            .unwrap()
+        };
+        let resource = ValueSource::Resource {
+            resource: ResourceId("source".into()),
+            path: vec![],
+        };
+        let result = ValueSource::OperationOutput {
+            operation: OperationId("create-source".into()),
+            path: vec![],
+        };
+        for source in [resource, result.clone()] {
+            let projected = project(source, read.clone(), producer.clone());
+            assert!(projected.captured_resource_slots.contains(&usize::MAX));
+            assert_eq!(projected.reactive_reads.known().unwrap().len(), 1);
+        }
+        let mut unknown = producer.clone();
+        unknown.output = Some(ValueShape::Unknown);
+        assert!(
+            project(result.clone(), read.clone(), unknown)
+                .captured_resource_slots
+                .is_empty()
+        );
+        let mut optional = read;
+        optional.cardinality.min = Some(0);
+        assert!(
+            project(result, optional, producer)
+                .captured_resource_slots
+                .is_empty()
+        );
     }
 
     #[test]
@@ -4234,6 +4776,10 @@ fn contract_export_function(
     };
     ContractExport {
         callback_results: Vec::new(),
+        capture_sources: BTreeMap::new(),
+        captured_arguments: BTreeMap::new(),
+        captured_resource_slots: BTreeSet::new(),
+        capture_context_supported: false,
         kind: "function".into(),
         // ADR 0013: an access path alone does not establish the execution of
         // a nested callable. The compact model cannot express this uncertainty
@@ -6026,6 +6572,17 @@ fn bind_returned_callable_effects(
             if returned.kind != RETURNED_CALLABLE {
                 continue;
             }
+            if binding.initializer != Some(initializer)
+                && contracted
+                    .summary
+                    .returned_callable_effects
+                    .as_ref()
+                    .is_some_and(|graph| !graph.capture_sources.is_empty())
+            {
+                // A wrapped factory result is a retained function value use,
+                // not the exact instance binding required by captures.
+                continue;
+            }
             let Some(root) = entities.get(&location(file.path.shared(), binding.names[0].span))
             else {
                 continue;
@@ -6055,9 +6612,10 @@ fn bind_returned_callable_effects(
                 };
             if let Some(summary) = &contracted.summary.returned_callable_effects
                 && !by_symbol.contains_key(root)
+                && let Some(summary) = bind_capture_arguments(file, entities, factory, summary)
             {
                 whole_bindings.insert(root.clone());
-                additions.push(resolved(root.clone(), (**summary).clone(), "returned"));
+                additions.push(resolved(root.clone(), summary, "returned"));
             }
             // Members can be overwritten even when the function binding is
             // const. Withhold all member graphs after mutation or an escape.
