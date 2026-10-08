@@ -253,6 +253,8 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/package-effectful-member-consumer/node_modules/**
 !fixtures/reactive-ir/package-open-callbacks-eager-argument/node_modules/
 !fixtures/reactive-ir/package-open-callbacks-eager-argument/node_modules/**
+!fixtures/reactive-ir/package-own-tracked-read-consumer/node_modules/
+!fixtures/reactive-ir/package-own-tracked-read-consumer/node_modules/**
 !fixtures/reactive-ir/forwarded-event-prop/node_modules/
 !fixtures/reactive-ir/forwarded-event-prop/node_modules/**
 !fixtures/reactive-ir/forwarded-tracked-compute/node_modules/

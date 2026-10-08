@@ -1,5 +1,11 @@
 # Precision backlog
 
+## Tracked reads under a created owner (2026-10-08)
+
+ADR 0239: a contract read stated `tracked` under an owner the export creates
+is no longer reported at the call as the package's own untracked read.
+Fixture: `fixtures/reactive-ir/package-own-tracked-read-consumer`.
+
 ## Solid Primitives batch 4 (2026-10-08)
 
 ADR 0238: thirteen more primitive packages enter the authored tier, and all

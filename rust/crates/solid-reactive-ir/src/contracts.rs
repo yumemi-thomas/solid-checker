@@ -519,6 +519,16 @@ fn operation_runs_after_the_call(operation: &crate::contract_semantics::Operatio
         || matches!(operation.trigger, Some(Trigger::Resource { .. }))
 }
 
+/// ADR 0239: whether `operation` is stated to run tracked, under an owner
+/// the export itself creates.
+fn operation_reads_under_its_own_computation(
+    operation: &crate::contract_semantics::Operation,
+) -> bool {
+    use crate::contract_semantics::{OwnerSource, Tracking};
+    operation.tracking == Tracking::Tracked
+        && matches!(operation.owner.source, OwnerSource::Created(_))
+}
+
 fn project_reactive_reads(
     export: &crate::contract_semantics::ExportSemantics,
     open: &mut BTreeSet<ClaimDomain>,
@@ -541,6 +551,13 @@ fn project_reactive_reads(
         // closed `reads` still means nothing else is read, but it is not
         // attributed to the call. A read with unstated timing still is.
         if operation_runs_after_the_call(operation) {
+            continue;
+        }
+        // ADR 0239: a read stated `tracked` under an owner the export creates
+        // runs inside the export's own computation, which observes it. It is
+        // not a read in the caller's tracking context, so it is not
+        // attributed to the call either; it stays a known item of `reads`.
+        if operation_reads_under_its_own_computation(operation) {
             continue;
         }
         match operation.inputs.first() {

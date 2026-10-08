@@ -334,7 +334,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       //
       // 185 adds package-open-callbacks-eager-argument's hand-stated document,
       // ADR 0237's pin of an eager argument to an open callback slot.
-      stableMainDocuments: 185,
+      //
+      // 186 adds package-own-tracked-read-consumer's hand-stated document,
+      // ADR 0239's pin of a tracked read under a created owner.
+      stableMainDocuments: 186,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
