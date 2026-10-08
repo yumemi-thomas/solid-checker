@@ -15,10 +15,16 @@ on rc.13.
   the correct twin keeps a `package-contract-incomplete` notice for a domain
   left open.
 - **Corpus:** 555 violations and 3,424 uncertifiable, both unchanged.
-- **Open:** three ledger expectations look wrong from the source
-  (`ReactiveSet.has`, `createStaticStore`, `createIsMounted` at module
-  scope); they wait for runtime evidence. The none and node hosts have no
-  primitive contract.
+- **Ledger corrected from Chrome (same day):** three misuse twins raised no
+  diagnostic on rc.13. Trigger and static-store signals are `ownedWrite`, an
+  unobserved read creates no signal, and an ownerless `onSettled` that returns
+  nothing needs no owner. `ReactiveSet` now has a leaf-owner case (a tracked
+  `has` registers `onCleanup`; Chrome raises CLEANUP_IN_FORBIDDEN_SCOPE).
+  `createStaticStore` now has a primed top-level read (STRICT_READ_UNTRACKED).
+  `createIsMounted` at module scope has no misuse at all, so it is removed;
+  its top-level read keeps a case. Both new cases pass tsc and are detected in
+  Chrome. Neither export has a contract yet.
+- **Open:** the none and node hosts have no primitive contract.
 
 ## The certified contract tier is retired (2026-10-08)
 

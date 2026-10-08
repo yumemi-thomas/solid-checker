@@ -592,20 +592,20 @@
       "correct": "import { createRoot } from \"solid-js\";\nimport { createEventBus, toEffect } from \"@solid-primitives/event-bus\";\n\ncreateRoot(dispose => {\n  toEffect(createEventBus<string>().emit)(\"hello\");\n  return dispose;\n});\n"
     },
     {
-      "id": "set-ReactiveSet-top-level-read",
+      "id": "set-ReactiveSet-leaf-owner",
       "package": "@solid-primitives/set",
       "version": "1.0.0-next.2",
       "entrypoint": ".",
       "export": "ReactiveSet",
-      "class": "returnedAccessor",
-      "rule": "strict-read-untracked",
+      "class": "owner",
+      "rule": "leaf-owner-forbidden-call",
       "hosts": [
         "none",
         "browser",
         "node"
       ],
-      "why": "A ReactiveSet's `has` is a tracked read. Called at the component's top level it is read once, untracked.",
-      "misuse": "import { ReactiveSet } from \"@solid-primitives/set\";\n\nexport default function App() {\n  const selected = new ReactiveSet<number>([1]);\n  const current = selected.has(1);\n  return <p>{String(current)}</p>;\n}\n",
+      "why": "A tracked `has` registers an `onCleanup` on its observer (trigger's TriggerCache.track). Inside `createTrackedEffect`, a children-forbidden scope, Chrome on rc.13 raises CLEANUP_IN_FORBIDDEN_SCOPE and halts reactivity. Reading the set in JSX is the supported form. (Replaces a top-level `has` case: an unobserved read creates no signal, so rc.13 reports nothing there.)",
+      "misuse": "import { createTrackedEffect } from \"solid-js\";\nimport { ReactiveSet } from \"@solid-primitives/set\";\n\nexport default function App() {\n  const selected = new ReactiveSet<number>([1]);\n  createTrackedEffect(() => {\n    console.log(selected.has(1));\n  });\n  return <p>leaf</p>;\n}\n",
       "correct": "import { ReactiveSet } from \"@solid-primitives/set\";\n\nexport default function App() {\n  const selected = new ReactiveSet<number>([1]);\n  return <p>{String(selected.has(1))}</p>;\n}\n"
     },
     {
@@ -1298,7 +1298,7 @@
       "correct": "import { createRoot } from \"solid-js\";\nimport { createActiveElement } from \"@solid-primitives/active-element\";\n\ncreateRoot(dispose => {\n  createActiveElement();\n  return dispose;\n});\n"
     },
     {
-      "id": "static-store-createStaticStore-top-level-read",
+      "id": "static-store-createStaticStore-primed-top-level-read",
       "package": "@solid-primitives/static-store",
       "version": "1.0.0-next.2",
       "entrypoint": ".",
@@ -1310,9 +1310,9 @@
         "browser",
         "node"
       ],
-      "why": "createStaticStore returns a reactive object. Reading `state.count` at the component's top level reads it once, untracked.",
-      "misuse": "import { createStaticStore } from \"@solid-primitives/static-store\";\n\nexport default function App() {\n  const [state] = createStaticStore({ count: 0 });\n  const current = state.count;\n  return <p>{String(current)}</p>;\n}\n",
-      "correct": "import { createStaticStore } from \"@solid-primitives/static-store\";\n\nexport default function App() {\n  const [state] = createStaticStore({ count: 0 });\n  return <p>{String(state.count)}</p>;\n}\n"
+      "why": "Once a tracked read (here the memo) has created a property's signal, a later read in the component body reads that signal untracked; Chrome on rc.13 raises STRICT_READ_UNTRACKED. (Replaces an unprimed top-level read, which returns the plain copy and creates no signal.)",
+      "misuse": "import { createMemo } from \"solid-js\";\nimport { createStaticStore } from \"@solid-primitives/static-store\";\n\nexport default function App() {\n  const [state] = createStaticStore({ count: 0 });\n  const doubled = createMemo(() => state.count * 2);\n  const current = state.count;\n  return <p>{String(current)} {doubled()}</p>;\n}\n",
+      "correct": "import { createMemo } from \"solid-js\";\nimport { createStaticStore } from \"@solid-primitives/static-store\";\n\nexport default function App() {\n  const [state] = createStaticStore({ count: 0 });\n  const doubled = createMemo(() => state.count * 2);\n  return <p>{String(state.count)} {doubled()}</p>;\n}\n"
     },
     {
       "id": "static-store-createDerivedStaticStore-write-in-tracked-callback",
@@ -1597,23 +1597,6 @@
       "why": "createIsMounted returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
       "misuse": "import { createIsMounted } from \"@solid-primitives/lifecycle\";\n\nexport default function App() {\n  const mounted = createIsMounted();\n  const current = mounted();\n  return <p>{String(current)}</p>;\n}\n",
       "correct": "import { createIsMounted } from \"@solid-primitives/lifecycle\";\n\nexport default function App() {\n  const mounted = createIsMounted();\n  return <p>{String(mounted())}</p>;\n}\n"
-    },
-    {
-      "id": "lifecycle-createIsMounted-module-scope",
-      "package": "@solid-primitives/lifecycle",
-      "version": "1.0.0-next.2",
-      "entrypoint": ".",
-      "export": "createIsMounted",
-      "class": "owner",
-      "rule": "missing-owner",
-      "hosts": [
-        "none",
-        "browser",
-        "node"
-      ],
-      "why": "createIsMounted registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
-      "misuse": "import { createIsMounted } from \"@solid-primitives/lifecycle\";\n\ncreateIsMounted();\n",
-      "correct": "import { createRoot } from \"solid-js\";\nimport { createIsMounted } from \"@solid-primitives/lifecycle\";\n\ncreateRoot(dispose => {\n  createIsMounted();\n  return dispose;\n});\n"
     },
     {
       "id": "notification-createNotification-module-scope",
