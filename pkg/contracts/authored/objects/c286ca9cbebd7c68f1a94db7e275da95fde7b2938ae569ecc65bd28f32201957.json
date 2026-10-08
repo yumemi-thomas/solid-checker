@@ -1,28 +1,53 @@
 {
-  "package": "@solid-primitives/pointer",
-  "version": "1.0.0-next.2",
-  "solidRuntime": [
-    {
-      "name": "solid-js",
-      "version": "2.0.0-rc.13",
-      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
-    },
-    {
-      "name": "@solidjs/signals",
-      "version": "2.0.0-rc.13",
-      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
-    },
-    {
-      "name": "@solidjs/web",
-      "version": "2.0.0-rc.13",
-      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "92dcbf6d760a10412fe781f129c31b2f6da6e4632e634cb84a2776106e3f98a4",
+            "path": "./dist/index.js",
+            "sha256": "7a33b0c6244a55c8adcc89d0cbfd13fba8de5c00a283bea2485458814bb7191f"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "751a2078c356692c58f898ed918416ebf62c333915976828769f6ad77d1100ce"
+          },
+          "exports": {
+            "createPerPointerListeners": "open-callable",
+            "createPointerList": "open-callable",
+            "createPointerListeners": "open-callable",
+            "createPointerPosition": "authored-createPointerPosition",
+            "getPositionToElement": "open-callable",
+            "pointerHover": "open-callable",
+            "pointerPosition": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
     }
-  ],
-  "identity": "identity.json",
-  "exports": {
-    "createPointerPosition": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/index.js:130-154 — Return accessor only; transitive listener/callback/owner behavior stays open.",
-      "rule": "strict-read-untracked",
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-BaNEkQW8hmrAslMZD6Z41jlza2XxW85TTevAa9W6kpwNkNbRFbAUAFX+jVMq4mdEtVdYM4On7b25nE8tAB+zIQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "93bad5a1fd9fdd9b72212820b4f5f8a26709f2fe0a886d30afe42b358c54e41d"
+    },
+    "name": "@solid-primitives/pointer",
+    "version": "1.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createPointerPosition": {
       "call": {
         "operations": [
           {
@@ -270,60 +295,7 @@
           }
         ]
       },
-      "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/index.js:130-154 — In the browser the function returns exactly createSignal's state accessor; no alternate browser return.",
-        "reads": "P1/P2: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/index.js:30-39,130-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/helpers.js:20-24,38-55 — No package-owned reactive accessor is read in construction or the pointer handlers; state is only written. Config/property traversal is P2 data, host event fields are P1. A callable config.target runs in the separately stated tracked listener compute; a callable object-shaped config.value runs in the separately stated tracked state compute. Both bodies are caller code.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/index.js:130-154,30-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1723-1758,2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 — Browser creates one reactive state node and the listener computations. config.value can legally be a function decorated with all PointerStateWithActive fields (structural published type); rc.13 createSignal then creates the guarded optional-parent pointer-state-compute and invokes that callable under its tracked owner. The state production denotes the reactive source in either branch, not a promise of a non-computed signal. pointer-initial-value records the caller invocation. Injected enter/move/leave handlers guarantee at least three listener effects; structurally supplied extra config keys can add more (including a truthy value key). Each is one render effect for a plain target or one user effect for a callable target, with the same ambient required-owner / child capability. Effect apply returns host removals; no extra onCleanup on the constructor owner. Do not change 3..many into exactly 3."
-      },
-      "probes": [
-        {
-          "label": "state-read",
-          "rule": "strict-read-untracked",
-          "why": "Read the produced state untracked in the component for misuse; only JSX reads it in correct. Existing return behavior is retained."
-        },
-        {
-          "label": "listener-owner",
-          "rule": "missing-owner",
-          "why": "Construct with runWithOwner(null) for misuse and component owner for correct. Browser listener effect construction must emit NO_OWNER_EFFECT only in misuse."
-        },
-        {
-          "label": "target-tracking",
-          "rule": "reactive-write-in-owned-scope",
-          "why": "Both target accessors read source; only misuse writes a separate ordinary signal from tracked listener compute.",
-          "scenario": [
-            {
-              "action": "click",
-              "selector": "#target"
-            },
-            {
-              "action": "wait-for-text",
-              "selector": "#done",
-              "text": "done"
-            }
-          ]
-        },
-        {
-          "label": "initial-value-owner",
-          "rule": "leaf-owner-forbidden-call",
-          "why": "A published-type-compatible callable decorated with state fields selects function-form createSignal. In a leaf it throws PRIMITIVE_IN_FORBIDDEN_SCOPE before any listener constructor; normal component creation is clean."
-        },
-        {
-          "label": "initial-value-tracking",
-          "rule": "reactive-write-in-owned-scope",
-          "why": "Decorated callable initial state reads source under derived signal tracking. Only misuse writes sink there; correct writes in the button handler.",
-          "scenario": [
-            {
-              "action": "click",
-              "selector": "#target"
-            },
-            {
-              "action": "wait-for-text",
-              "selector": "#done",
-              "text": "done"
-            }
-          ]
-        }
-      ]
+      "shape": "callable"
     }
   }
 }

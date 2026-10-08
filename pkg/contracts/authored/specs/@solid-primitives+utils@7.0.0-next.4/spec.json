@@ -122,7 +122,8 @@
         "closed": [
           "reads",
           "creates",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": []
@@ -130,7 +131,8 @@
       "closures": {
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 The only own property Get is built-in function length, excluded by the premise. Conditional v() is enumerated in callbacks, not claimed inert.",
         "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 The complete caller-code use is v() under the callable and length=0 guard; length is a plain property under the premise. Unknown guard truth remains unknown, not a guaranteed invocation.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 No package-defined owner/source/cleanup/computation is created; any v() body is caller code governed by access-argument."
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 No package-defined owner/source/cleanup/computation is created; any v() body is caller code governed by access-argument.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-access-argument-read/node_modules/@solid-primitives/utils/dist/index.js:88 \u2014 COMPLETE return alternatives: v itself unless v is a zero-arity function, otherwise exactly v()'s result. Existing return (parameter 0) and return-invocation (invocation-result parameter 0), alongside the existing access-argument guarded invoke, cover all normal completions. Closing this alternative set does not assert either alternative is a non-reactive value or that the caller callback is inert."
       },
       "probes": [
         {

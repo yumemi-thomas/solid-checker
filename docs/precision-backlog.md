@@ -1,5 +1,18 @@
 # Precision backlog
 
+## Closing the open domains the primitives ledger needs (2026-10-08)
+
+ADR 0232: an absent argument no longer yields a parameter-member dispatch
+obligation; `access` closes `returns`; `createPointerPosition` closes `reads`
+and `creates` with five new Chrome-probed operations.
+
+- **Gained:** primitives ledger, browser host, 18 report correctly (was 16).
+  No correct-twin violation on any host. Coverage unchanged.
+- **Not closable under the current format:** 14 of the 17 "correct use not
+  clean" cases (lazy getters, mutable returned APIs, hidden singleton
+  cleanups, recursive returned callbacks). `createLazyMemo` keeps a
+  strict-read obligation from its resource-triggered calc.
+
 ## A possible package registration in a leaf owner is a proof obligation (2026-10-08)
 
 ADR 0231: a contract registration stated with `min: 0`, or behind a guard the

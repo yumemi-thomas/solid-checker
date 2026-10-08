@@ -139,15 +139,15 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/6f0eec55e46f7c46ef034b8af64792a1fe855bf44fd471c5e630917f2686998b.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/authored/objects/6f0eec55e46f7c46ef034b8af64792a1fe855bf44fd471c5e630917f2686998b.json"
-        ),
-    ),
-    (
         "objects/73734cfb2917693f89b737da2dc7c2fd4aa9ed5da1e65da0db04c024028dfe7a.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/73734cfb2917693f89b737da2dc7c2fd4aa9ed5da1e65da0db04c024028dfe7a.json"
+        ),
+    ),
+    (
+        "objects/77dc0f751bfe869e7238d140708d99009cb2f5ea865b1507e3be2f1d83ed2226.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/77dc0f751bfe869e7238d140708d99009cb2f5ea865b1507e3be2f1d83ed2226.json"
         ),
     ),
     (
@@ -259,12 +259,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/b68584f5542b69502bc4a4e79699b45a3079585648aa0f31003b0f3a85cbdde3.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/authored/objects/b68584f5542b69502bc4a4e79699b45a3079585648aa0f31003b0f3a85cbdde3.json"
-        ),
-    ),
-    (
         "objects/bd3daa5aaeb15ebae83915bd8c586ebbb41bd51aa7bd67efea32694285ca749e.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/bd3daa5aaeb15ebae83915bd8c586ebbb41bd51aa7bd67efea32694285ca749e.json"
@@ -274,6 +268,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/c1294573b49998d8875792565545db32325d84aadf441db9aa6e0d6815ca1637.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/c1294573b49998d8875792565545db32325d84aadf441db9aa6e0d6815ca1637.json"
+        ),
+    ),
+    (
+        "objects/c286ca9cbebd7c68f1a94db7e275da95fde7b2938ae569ecc65bd28f32201957.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/c286ca9cbebd7c68f1a94db7e275da95fde7b2938ae569ecc65bd28f32201957.json"
         ),
     ),
     (

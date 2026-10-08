@@ -1150,6 +1150,12 @@ impl LocalAccessContext<'_, '_> {
             {
                 for (parameter, name, via, declaration) in contracted {
                     let Some(argument) = call.arguments.get(*parameter) else {
+                        // ADR 0232: with no argument at that position and no
+                        // spread that could supply one, the caller passed no
+                        // value whose member the package could read.
+                        if !call.arguments.iter().any(|argument| argument.spread) {
+                            continue;
+                        }
                         result.dispatch_obligations.push(crate::StaticDefect {
                             kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
                                 callee: name.clone(),
