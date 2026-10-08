@@ -801,8 +801,234 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    /// ADR 0234: a member of a package's returned tuple or object whose
+    /// invocation the contract does not describe (`callable`, `unknown`).
+    /// Each call of it in a component body, module scope or compiler callback,
+    /// and each use that lets it escape (anything but a call or a JSX `on*`
+    /// handler value), is a proof obligation. So is a contracted call whose
+    /// result holding such a member is not destructured: the member may then
+    /// be reached through the value, wherever it goes.
+    fn opaque_member_obligations(
+        &self,
+        file: &solid_facts::FileFacts,
+        result: &mut LocalAccessResult,
+    ) {
+        let opaque = |returned: &ContractReturn| returned.kind == crate::contracts::OPAQUE_MEMBER;
+        let holds_opaque = |returned: &ContractReturn| {
+            returned.elements.iter().flatten().any(opaque)
+                || returned.properties.values().any(opaque)
+        };
+        let obligation =
+            |span: solid_facts::core::Span, callee: &str, context: &str| crate::StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: callee.to_owned(),
+                    member: None,
+                },
+                location: location(file.path.shared(), span),
+                analysis_context: context.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            };
+        // Declarations of destructured opaque members, with the export.
+        let mut members = HashMap::<solid_facts::core::Span, String>::new();
+        let mut destructured = HashSet::<solid_facts::core::Span>::new();
+        for binding in &file.ast.bindings {
+            let Some(initializer) = binding.initializer else {
+                continue;
+            };
+            let initializer = file.ast.peel_ts_sugar_span(initializer);
+            let Some(call) = file.ast.calls.iter().find(|call| call.span == initializer) else {
+                continue;
+            };
+            let Some((returned, _)) = self
+                .lookup
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| self.contract_returns.get(symbol))
+            else {
+                continue;
+            };
+            if !holds_opaque(returned) {
+                continue;
+            }
+            let export = file.source_text(call.callee).unwrap_or_default().to_owned();
+            match binding.shape {
+                solid_facts::ast::BindingShape::Array if returned.kind == "tuple" => {
+                    destructured.insert(call.span);
+                    for (slot, member) in binding.array_slots.iter().zip(&returned.elements) {
+                        if let (Some(slot), Some(member)) = (slot, member)
+                            && opaque(member)
+                        {
+                            members.insert(slot.span, export.clone());
+                        }
+                    }
+                }
+                solid_facts::ast::BindingShape::Object if returned.kind == "object" => {
+                    destructured.insert(call.span);
+                    for slot in &binding.object_slots {
+                        if returned
+                            .properties
+                            .get(slot.property.as_str())
+                            .is_some_and(opaque)
+                        {
+                            members.insert(slot.local.span, export.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        // A result holding an opaque member that is neither destructured nor
+        // discarded: the member travels with the value. Bound to one name
+        // that never escapes and has no alias, only the member accesses
+        // through that name can reach it, and each one selecting an opaque
+        // member is the obligation instead.
+        for call in &file.ast.calls {
+            if call.result_discarded || destructured.contains(&call.span) {
+                continue;
+            }
+            let Some((returned, _)) = self
+                .lookup
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| self.contract_returns.get(symbol))
+            else {
+                continue;
+            };
+            if !holds_opaque(returned) {
+                continue;
+            }
+            let export = file.source_text(call.callee).unwrap_or_default();
+            let root = file
+                .ast
+                .bindings
+                .iter()
+                .filter(|binding| {
+                    binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.names.len() == 1
+                        && binding
+                            .initializer
+                            .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == call.span)
+                })
+                .find_map(|binding| self.entities.at(file.path.as_str(), binding.names[0].span));
+            let aliased = |root: &SymbolId| {
+                file.ast.bindings.iter().any(|binding| {
+                    binding
+                        .initializer_identifier
+                        .as_ref()
+                        .is_some_and(|initializer| {
+                            self.entities.at(file.path.as_str(), initializer.span) == Some(root)
+                        })
+                })
+            };
+            // Every reference to the name is a direct member receiver: the
+            // value itself goes nowhere, so a member is reached only through
+            // the accesses enumerated below.
+            let only_members = |root: &SymbolId| {
+                file.ast
+                    .identifiers
+                    .iter()
+                    .filter(|id| id.role == solid_facts::ast::IdentifierRole::Reference)
+                    .filter(|id| self.entities.at(file.path.as_str(), id.span) == Some(root))
+                    .all(|id| {
+                        file.ast
+                            .members
+                            .iter()
+                            .any(|member| member.object == id.span)
+                    })
+            };
+            let tracked_root = root.filter(|root| !aliased(root) && only_members(root));
+            let Some(root) = tracked_root else {
+                result.dispatch_obligations.push(obligation(
+                    call.span,
+                    export,
+                    "the returned value holds a function its package contract does not describe, and it is not destructured here",
+                ));
+                continue;
+            };
+            for member in &file.ast.members {
+                if self.entities.at(file.path.as_str(), member.object) != Some(root) {
+                    continue;
+                }
+                let computed = file.ast.computed_members.contains(&member.span);
+                let key = file.source_text(member.property).unwrap_or_default();
+                let selected = match returned.kind.as_str() {
+                    "tuple" if computed => key
+                        .parse::<usize>()
+                        .ok()
+                        .and_then(|index| returned.elements.get(index))
+                        .and_then(Option::as_ref),
+                    "object" if !computed => returned.properties.get(key),
+                    _ => None,
+                };
+                if !selected.is_some_and(opaque) {
+                    continue;
+                }
+                let called = file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span);
+                if !called || !inside_non_component_function(file, member.span, self.lookup) {
+                    result.dispatch_obligations.push(obligation(
+                        member.span,
+                        export,
+                        "reaches a returned function whose behavior its package contract does not describe",
+                    ));
+                }
+            }
+        }
+        if members.is_empty() {
+            return;
+        }
+        let callees = file
+            .ast
+            .calls
+            .iter()
+            .map(|call| (file.ast.peel_ts_sugar_span(call.callee), call.span))
+            .collect::<HashMap<_, _>>();
+        let handlers = file
+            .ast
+            .jsx_elements
+            .iter()
+            .flat_map(|element| &element.attributes)
+            .filter(|attribute| {
+                file.source_text(attribute.local_name)
+                    .is_some_and(|name| name.starts_with("on"))
+            })
+            .filter_map(|attribute| attribute.expression)
+            .map(|expression| file.ast.peel_ts_sugar_span(expression))
+            .collect::<HashSet<_>>();
+        for identifier in &file.ast.identifiers {
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference {
+                continue;
+            }
+            let Some(export) = file
+                .ast
+                .reference_declaration(identifier.span)
+                .and_then(|declaration| members.get(&declaration))
+            else {
+                continue;
+            };
+            if let Some(call) = callees.get(&identifier.span) {
+                if !inside_non_component_function(file, identifier.span, self.lookup) {
+                    result.dispatch_obligations.push(obligation(
+                        *call,
+                        export,
+                        "calls a returned function whose behavior its package contract does not describe",
+                    ));
+                }
+            } else if !handlers.contains(&identifier.span) {
+                result.dispatch_obligations.push(obligation(
+                    identifier.span,
+                    export,
+                    "passes on a returned function whose behavior its package contract does not describe",
+                ));
+            }
+        }
+    }
+
     pub(crate) fn discover(&self, file: &solid_facts::FileFacts) -> LocalAccessResult {
         let mut result = LocalAccessResult::default();
+        self.opaque_member_obligations(file, &mut result);
         let mut seen = HashSet::new();
         let allowed = allowed_callback_spans(file, self.lookup);
         for call in &file.ast.calls {

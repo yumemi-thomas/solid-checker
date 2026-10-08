@@ -167,6 +167,7 @@
           "create-running"
         ],
         "closed": [
+          "returns",
           "reads",
           "creates",
           "callbacks"
@@ -176,6 +177,7 @@
         ]
       },
       "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/raf/dist/index.js:20-47 \u2014 Exact running/start/stop tuple on normal browser completion; construction itself is synchronous.",
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/raf/dist/index.js:20-47 \u2014 Only own read is running() in returned start; delayed-start-running-read executes after construction. No call-time reactive read.",
         "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/raf/dist/index.js:20-47 \u2014 Exactly one running signal and one direct onCleanup(stop) registration in the browser branch. requestAnimationFrame occurs only later. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
         "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/raf/dist/index.js:20-47 \u2014 P1: index.js:28-31 invokes only the captured frame callback after requestAnimationFrame dispatch: external-event/external, ambient tracking/owner, 0..many. No constructor invocation or tracker/owner reset is claimed."
@@ -350,6 +352,7 @@
           "create-running"
         ],
         "closed": [
+          "returns",
           "reads",
           "creates",
           "callbacks"
@@ -359,6 +362,7 @@
         ]
       },
       "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/raf/dist/index.js:20-47 \u2014 Exact running/start/stop tuple on normal browser completion; construction itself is synchronous.",
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/raf/dist/index.js:20-47 \u2014 Only own read is running() in returned start; delayed-start-running-read executes after construction. No call-time reactive read.",
         "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/raf/dist/index.js:20-47 \u2014 Exactly one running signal and one direct onCleanup(stop) registration in the browser branch. requestAnimationFrame occurs only later. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
         "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/raf/dist/index.js:20-47 \u2014 P1: index.js:28-31 invokes only the captured frame callback after requestAnimationFrame dispatch: external-event/external, ambient tracking/owner, 0..many. No constructor invocation or tracker/owner reset is claimed."

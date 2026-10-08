@@ -193,7 +193,8 @@
         ],
         "closed": [
           "reads",
-          "creates"
+          "creates",
+          "returns"
         ],
         "reads": [],
         "creates": []
@@ -328,7 +329,8 @@
         "closed": [
           "reads",
           "creates",
-          "callbacks"
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": []

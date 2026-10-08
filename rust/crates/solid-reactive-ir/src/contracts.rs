@@ -726,6 +726,23 @@ fn project_returned_output(shape: &ValueShape) -> Option<ContractReturn> {
     }
 }
 
+/// ADR 0234: one member of a returned tuple or object. An opaque member --
+/// `callable`, whose invocation the contract does not describe, or `unknown`
+/// -- is kept as an `opaque-callable` leaf, so the consumer can hold every
+/// call or escape of it as a proof obligation. It names no reactive source.
+fn project_member_shape(shape: &ValueShape) -> Option<ContractReturn> {
+    match shape {
+        ValueShape::Callable | ValueShape::Unknown => Some(ContractReturn {
+            kind: OPAQUE_MEMBER.into(),
+            ..ContractReturn::default()
+        }),
+        _ => project_return_shape(shape),
+    }
+}
+
+/// The [`ContractReturn::kind`] of an opaque returned member (ADR 0234).
+pub(crate) const OPAQUE_MEMBER: &str = "opaque-callable";
+
 fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
     match shape {
         ValueShape::Reactive { .. } => Some(ContractReturn {
@@ -775,7 +792,7 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         ValueShape::Tuple(KnowledgeSet::Complete(items) | KnowledgeSet::Partial(items)) => {
             Some(ContractReturn {
                 kind: "tuple".into(),
-                elements: items.iter().map(project_return_shape).collect(),
+                elements: items.iter().map(project_member_shape).collect(),
                 ..ContractReturn::default()
             })
         }
@@ -785,7 +802,7 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
             let properties = properties
                 .iter()
                 .filter_map(|property| {
-                    project_return_shape(&property.value)
+                    project_member_shape(&property.value)
                         .map(|value| (property.name.clone(), value))
                 })
                 .collect::<BTreeMap<_, _>>();

@@ -1065,6 +1065,16 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 return Err("a relational return requires a parameter only");
             }
         }
+        // ADR 0234: an opaque member of a returned tuple or object.
+        crate::contracts::OPAQUE_MEMBER => {
+            if !returned.label.is_empty()
+                || returned.parameter.is_some()
+                || !returned.elements.is_empty()
+                || !returned.properties.is_empty()
+            {
+                return Err("an opaque member carries nothing");
+            }
+        }
         _ => return Err("the return kind is unsupported"),
     }
     Ok(())

@@ -1,5 +1,22 @@
 # Precision backlog
 
+## Calling an opaque returned member is a proof obligation (2026-10-08)
+
+ADR 0234: a `callable` or `unknown` member of a returned tuple or object is now
+tracked. Calling it in a component body, module scope or compiler callback,
+or letting it escape, is `reactive-dispatch-unresolved` uncertifiable. Closing
+`returns` over such a member is allowed again.
+
+- **Gained:** primitives ledger, browser host, 20 report correctly (was 16):
+  `createRAF` and `default` top-level reads, `createDate` and `createDateNow`
+  top-level reads. No correct-twin violation on any host.
+- **Coverage:** only `partial-structural-return-consumer` moves (two member
+  calls become obligations; two new cases pin the handler and escape
+  branches).
+- **Open:** what calling such a member does (`effectful-callable`); until
+  then `createRAF`'s `start()` in a component body is an obligation, not the
+  violation Chrome shows.
+
 ## A closed return may not hide an opaque member (2026-10-08)
 
 ADR 0233: closing `returns` over a tuple or object with an opaque `callable`
