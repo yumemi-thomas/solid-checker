@@ -817,38 +817,6 @@
       "correct": "import { combineProps } from \"@solid-primitives/props\";\n\nexport default function Button(props: { class?: string }) {\n  const merged = combineProps(props, { class: \"button\" });\n  return <button class={merged.class}>go</button>;\n}\n"
     },
     {
-      "id": "upload-createDropzone-module-scope",
-      "package": "@solid-primitives/upload",
-      "version": "1.0.0-next.4",
-      "entrypoint": ".",
-      "export": "createDropzone",
-      "class": "owner",
-      "rule": "missing-owner",
-      "hosts": [
-        "none",
-        "browser"
-      ],
-      "why": "createDropzone registers work on the ambient owner (a listener, observer or timer disposed with it). Called at module scope there is no owner, so it is never disposed.",
-      "misuse": "import { createDropzone } from \"@solid-primitives/upload\";\n\ncreateDropzone();\n",
-      "correct": "import { createRoot } from \"solid-js\";\nimport { createDropzone } from \"@solid-primitives/upload\";\n\ncreateRoot(dispose => {\n  createDropzone();\n  return dispose;\n});\n"
-    },
-    {
-      "id": "upload-createDropzone-top-level-read",
-      "package": "@solid-primitives/upload",
-      "version": "1.0.0-next.4",
-      "entrypoint": ".",
-      "export": "createDropzone",
-      "class": "returnedAccessor",
-      "rule": "strict-read-untracked",
-      "hosts": [
-        "none",
-        "browser"
-      ],
-      "why": "createDropzone returns a reactive value. Read at the component's top level it is read once, untracked, and the view never updates.",
-      "misuse": "import { createDropzone } from \"@solid-primitives/upload\";\n\nexport default function App() {\n  const zone = createDropzone();\n  const current = zone.files().length;\n  return <p>{String(current)}</p>;\n}\n",
-      "correct": "import { createDropzone } from \"@solid-primitives/upload\";\n\nexport default function App() {\n  const zone = createDropzone();\n  return <p>{String(zone.files().length)}</p>;\n}\n"
-    },
-    {
       "id": "history-createUndoHistory-top-level-read",
       "package": "@solid-primitives/history",
       "version": "1.0.0-next.3",

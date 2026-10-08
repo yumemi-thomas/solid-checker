@@ -296,7 +296,7 @@
       }
     },
     "createReducer": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 — Complete constructor census including generic function-valued initialValue and options comparator/getters. Returned dispatch remains an opaque member; its invocation is an obligation unless separately described (ADR 0234). Browser probes pending.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 Complete constructor census including generic function-valued initialValue and options comparator/getters. Returned dispatch remains an opaque member; its invocation is an obligation unless separately described (ADR 0234). Browser probes pending.",
       "rule": "strict-read-untracked",
       "probes": [
         {
@@ -625,12 +625,123 @@
         ]
       },
       "closures": {
-        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 — The constructor never calls state(). It spreads P2 options and passes initialValue to createSignal. A function-valued initialValue, getters and equals/reducer callbacks are caller invocations, not unstated package accessor reads; later setter uses the node's stored current value.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 — Exactly one reactive source; a callable initialValue uses createSignal's tracked computed node with optional parent, requiring children when present. Noncallable initialValue creates only a signal. Core reactive API semantics at cited rc.13 entrypoint, no other package constructor.",
-        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 — Constructor may invoke callable initialValue in tracked computation and options getters through spread. Later dispatch invokes dispatcher; signal updates may invoke supplied equals on their execution stack. Each callback family is explicitly listed. Minimum zero avoids assuming dispatch/recompute/comparison occurs.",
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 — Every normal completion returns exactly [stateAccessor, dispatchWrapper]. Tuple enumeration is closed; dispatch is an opaque callable member, whose uses retain ADR 0234 obligations.",
-        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 — The primitive constructor performs no onCleanup or onSettled registration. Cleanup that caller callbacks may install belongs to their separately stated invocation, not the package census."
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 The constructor never calls state(). It spreads P2 options and passes initialValue to createSignal. A function-valued initialValue, getters and equals/reducer callbacks are caller invocations, not unstated package accessor reads; later setter uses the node's stored current value.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 Exactly one reactive source; a callable initialValue uses createSignal's tracked computed node with optional parent, requiring children when present. Noncallable initialValue creates only a signal. Core reactive API semantics at cited rc.13 entrypoint, no other package constructor.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 Constructor may invoke callable initialValue in tracked computation and options getters through spread. Later dispatch invokes dispatcher; signal updates may invoke supplied equals on their execution stack. Each callback family is explicitly listed. Minimum zero avoids assuming dispatch/recompute/comparison occurs.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 Every normal completion returns exactly [stateAccessor, dispatchWrapper]. Tuple enumeration is closed; dispatch is an opaque callable member, whose uses retain ADR 0234 obligations.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 The primitive constructor performs no onCleanup or onSettled registration. Cleanup that caller callbacks may install belongs to their separately stated invocation, not the package census."
       }
+    },
+    "createPureReaction": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - A-discarded browser constructor creates no reaction yet, invokes no onInvalidate, performs no reactive reads and registers exactly one required cleanup. Retained owner and onInvalidate are not modeled captures; returned tracking graph is omitted.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "pure-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "pure-return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "returned-callable"
+            }
+          }
+        ],
+        "callbacks": [],
+        "reads": [],
+        "creates": [],
+        "cleanups": [
+          "pure-cleanup"
+        ],
+        "returns": [
+          "pure-return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - getOwner is owner metadata, not a reactive read. No signal/memo read before returning the tracker. All tracking/untrack/reaction behavior is confined to the omitted returned graph.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser returns one tracker arrow; server returns one no-op arrow. Both are returned-callable with graph omitted; no invocation or capture proof.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser constructor creates no reactive source, owner or computation. createReaction occurs only within the omitted tracker graph.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - onInvalidate is retained, never called during construction. tracking is a later invocation argument; neither is a factory callback invocation.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser onCleanup at 31 registers exactly one required disposed-flag cleanup. No other factory cleanup."
+      },
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Sound host-free weakening: server returns a no-op callable at 27 before getOwner/cleanup. The same opaque return shape covers both; only pure-cleanup needs minZero. Reads/creates/callbacks stay empty on both factory paths.",
+        "minZero": [
+          "pure-cleanup"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - getOwner is owner metadata, not a reactive read. No signal/memo read before returning the tracker. All tracking/untrack/reaction behavior is confined to the omitted returned graph.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser returns one tracker arrow; server returns one no-op arrow. Both are returned-callable with graph omitted; no invocation or capture proof.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser constructor creates no reactive source, owner or computation. createReaction occurs only within the omitted tracker graph.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - onInvalidate is retained, never called during construction. tracking is a later invocation argument; neither is a factory callback invocation.",
+          "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser onCleanup at 31 registers exactly one required disposed-flag cleanup. No other factory cleanup."
+        }
+      },
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Required factory cleanup rejects a leaf; component owner accepts it. No later returned-callable use."
+        }
+      ]
     }
   }
 }

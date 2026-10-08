@@ -23,7 +23,7 @@
   "hostFreeIdentity": "identity.host-free.json",
   "exports": {
     "createPreventScroll": {
-      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-189; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88,323-350 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-25 \u2014 getRegistry creates at most one shared ownedWrite stack signal; identity across instances is not asserted. isActive reads that signal. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:98-189 \u2014 Browser makes exactly three required-owner split effects. isActive runs tracked under the third effect's compute; all option accessor calls are the existing enumerated tracked callbacks. Apply writes use the ownedWrite registry signal; three possible returned apply cleanups belong to their created effects, not the caller. Native wheel/touch handlers and geometry/style operations are host behavior (P1); no reactive package read in them. Draft only.",
       "rule": "leaf-owner-forbidden-call",
       "call": {
         "operations": [
@@ -343,6 +343,190 @@
             "output": {
               "kind": "undefined"
             }
+          },
+          {
+            "id": "registry-stack-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "registry-stack"
+            ]
+          },
+          {
+            "id": "registry-stack-first-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "prevent-scroll-events-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "prevent-scroll-events-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "registry-stack"
+              }
+            ]
+          },
+          {
+            "id": "registry-stack-flush-read",
+            "kind": "read",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "prevent-scroll-events-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "prevent-scroll-events-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "registry-stack"
+              }
+            ]
+          },
+          {
+            "id": "stack-apply-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "prevent-scroll-stack-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "prevent-scroll-stack-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "style-apply-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "prevent-scroll-style-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "prevent-scroll-style-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "events-apply-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "prevent-scroll-events-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "prevent-scroll-events-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
           }
         ],
         "callbacks": [
@@ -427,6 +611,10 @@
           {
             "id": "prevent-scroll-events-owner",
             "kind": "owner"
+          },
+          {
+            "id": "registry-stack",
+            "kind": "reactive-source"
           }
         ],
         "returns": [
@@ -434,12 +622,28 @@
         ],
         "closed": [
           "returns",
+          "reads",
+          "creates",
           "callbacks"
+        ],
+        "creates": [
+          "registry-stack-production"
+        ],
+        "reads": [
+          "registry-stack-first-read",
+          "registry-stack-flush-read"
+        ],
+        "cleanups": [
+          "stack-apply-cleanup",
+          "style-apply-cleanup",
+          "events-apply-cleanup"
         ]
       },
       "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-189; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88,323-350 \u2014 Every normal browser completion is undefined.",
-        "callbacks": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-189; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:88,323-350 \u2014 P1: DOM geometry/style/contains/listener methods are host behavior. P2: option-map/property traversal is data. The seven option accessors are exactly enumerated under their three effect computes; package event handlers use no additional caller callable. Registry reads/creates stay open."
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-25 \u2014 getRegistry creates at most one shared ownedWrite stack signal; identity across instances is not asserted. isActive reads that signal. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:98-189 \u2014 Browser makes exactly three required-owner split effects. isActive runs tracked under the third effect's compute; all option accessor calls are the existing enumerated tracked callbacks. Apply writes use the ownedWrite registry signal; three possible returned apply cleanups belong to their created effects, not the caller. Native wheel/touch handlers and geometry/style operations are host behavior (P1); no reactive package read in them.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-25 \u2014 getRegistry creates at most one shared ownedWrite stack signal; identity across instances is not asserted. isActive reads that signal. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:98-189 \u2014 Browser makes exactly three required-owner split effects. isActive runs tracked under the third effect's compute; all option accessor calls are the existing enumerated tracked callbacks. Apply writes use the ownedWrite registry signal; three possible returned apply cleanups belong to their created effects, not the caller. Native wheel/touch handlers and geometry/style operations are host behavior (P1); no reactive package read in them.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-25 \u2014 getRegistry creates at most one shared ownedWrite stack signal; identity across instances is not asserted. isActive reads that signal. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:98-189 \u2014 Browser makes exactly three required-owner split effects. isActive runs tracked under the third effect's compute; all option accessor calls are the existing enumerated tracked callbacks. Apply writes use the ownedWrite registry signal; three possible returned apply cleanups belong to their created effects, not the caller. Native wheel/touch handlers and geometry/style operations are host behavior (P1); no reactive package read in them. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/utils/dist/index.js:347-350 \u2014 globalRegistry initializes only when the Symbol.for slot is absent.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-25 \u2014 getRegistry creates at most one shared ownedWrite stack signal; identity across instances is not asserted. isActive reads that signal. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:98-189 \u2014 Browser makes exactly three required-owner split effects. isActive runs tracked under the third effect's compute; all option accessor calls are the existing enumerated tracked callbacks. Apply writes use the ownedWrite registry signal; three possible returned apply cleanups belong to their created effects, not the caller. Native wheel/touch handlers and geometry/style operations are host behavior (P1); no reactive package read in them. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 \u2014 access invokes only a zero-arity accessor; all seven option properties are already enumerated. P2: traversal of the props map is data."
       },
       "probes": [
         {
@@ -457,14 +661,20 @@
               "text": "done"
             }
           ]
+        },
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "All three effects require an ambient owner in the browser. Module misuse; correct creates a live root."
         }
       ],
       "hostFree": {
-        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:98-189; Server returns undefined at line 99 before registry initialization, all three effects, and all props access. Optional property callbacks already permit zero; reads, creates, and cleanups were already open and remain open. prevent-scroll-stack may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:99. prevent-scroll-style may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:99. prevent-scroll-events may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:99. Registry and property access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-25; utils access/globalRegistry: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/utils/dist/index.js:347-350. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:98-189; Server returns undefined at line 99 before registry initialization, all three effects, and all props access. Optional property callbacks already permit zero; reads, creates, and cleanups were already open and remain open. prevent-scroll-stack may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:99. prevent-scroll-style may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:99. prevent-scroll-events may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:99. Registry and property access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/scroll/dist/preventScroll.js:17-25; utils access/globalRegistry: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solid-primitives/utils/dist/index.js:347-350. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Batch 7a server-path re-check: the added registry source already has min 0; registry first-read is now also weakened to min 0. flush reads/apply cleanup operations already have min 0. Early return at preventScroll.js:99 skips all of them. Existing hostFree.closed and citations are retained; reads/creates remain open there.",
         "minZero": [
           "prevent-scroll-stack",
           "prevent-scroll-style",
-          "prevent-scroll-events"
+          "prevent-scroll-events",
+          "registry-stack-first-read"
         ],
         "closed": [
           "returns",

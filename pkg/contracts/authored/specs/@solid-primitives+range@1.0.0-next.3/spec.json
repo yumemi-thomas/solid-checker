@@ -23,18 +23,26 @@
   "exports": {
     "repeat": {
       "hostFree": {
-        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53. Same constructor and same mapLength function on both builds: one ordinary memo invokes times under its observer, and the returned mapper creates roots only when called. No host branch or untrack. Only cleanup is closed; reads/creates/callbacks/returns remain open. Server direct cleanup can skip an unowned call. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation.",
         "minZero": [
           "cleanup"
         ],
         "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
           "cleanups"
         ],
         "closures": {
-          "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53. Same constructor and same mapLength function on both builds: one ordinary memo invokes times under its observer, and the returned mapper creates roots only when called. No host branch or untrack. Only cleanup is closed; reads/creates/callbacks/returns remain open. Server direct cleanup can skip an unowned call. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain cleanups: The server path has only the listed direct cleanup registration; server onCleanup may skip an absent owner. The lowered lower bound permits that branch without claiming a guaranteed registration."
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - No package-owned reactive read at construction. times reads belong to the tracked memo callback; memoLen() is inside the omitted returned mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - One returned-callable, graph omitted. Mapping, fallback and per-item owner behavior are not certified. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - No factory signal. Exactly one child-requiring optional-parent memo, enumerated in computations; item/fallback roots occur only in omitted returned mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - times runs once eagerly and on later tracked memo reruns under length-memo-owner. mapFn/fallback are only inside the omitted mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+          "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - Exactly one direct onCleanup at 18; registered disposer traversal runs at cleanup, and invokes package-created root disposers only. No additional factory cleanup. P1/P2: typed numeric callback results and package-owned arrays are plain."
         }
       },
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - A-discarded full factory census; whole returned graph omitted. Existing positive pairs retained; new discarded-owner pair binds fresh returned-callable observations.",
       "call": {
         "operations": [
           {
@@ -100,8 +108,8 @@
             },
             "tracking": "tracked",
             "count": {
-              "min": 0,
-              "max": "many",
+              "min": 1,
+              "max": 1,
               "scope": "call"
             },
             "owner": {
@@ -130,12 +138,42 @@
             },
             "tracking": "untracked",
             "count": {
-              "min": 0,
-              "max": "many",
+              "min": 1,
+              "max": 1,
               "scope": "call"
             },
             "output": {
-              "kind": "callable"
+              "kind": "returned-callable"
+            }
+          },
+          {
+            "id": "times-recompute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "length-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "length-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
             }
           }
         ],
@@ -155,6 +193,13 @@
               "path": []
             },
             "operation": "times-compute"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "times-recompute"
           }
         ],
         "resources": [
@@ -164,11 +209,21 @@
           }
         ],
         "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
           "cleanups"
-        ]
+        ],
+        "reads": [],
+        "creates": []
       },
       "closures": {
-        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 \u2014 Exactly one direct onCleanup at construction. Later returned mapper creates roots and invokes caller code, so other domains are not closed."
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - No package-owned reactive read at construction. times reads belong to the tracked memo callback; memoLen() is inside the omitted returned mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - One returned-callable, graph omitted. Mapping, fallback and per-item owner behavior are not certified. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - No factory signal. Exactly one child-requiring optional-parent memo, enumerated in computations; item/fallback roots occur only in omitted returned mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - times runs once eagerly and on later tracked memo reruns under length-memo-owner. mapFn/fallback are only inside the omitted mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - Exactly one direct onCleanup at 18; registered disposer traversal runs at cleanup, and invokes package-created root disposers only. No additional factory cleanup. P1/P2: typed numeric callback results and package-owned arrays are plain."
       },
       "rule": "missing-owner",
       "scenario": [
@@ -192,11 +247,27 @@
           "label": "times-tracking",
           "rule": "reactive-write-in-owned-scope",
           "why": "times runs in the created memo at construction; ordinary signal writes throw there."
+        },
+        {
+          "label": "discarded-owner",
+          "rule": "missing-owner",
+          "why": "Fresh discarded-result pair: unowned asynchronous setup versus live root; no returned function/object is called, read or escaped.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
         }
       ]
     },
     "mapRange": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - A-discarded full factory census; whole returned graph omitted. Existing positive pairs retained; new discarded-owner pair binds fresh returned-callable observations.",
       "call": {
         "operations": [
           {
@@ -253,12 +324,12 @@
             },
             "tracking": "untracked",
             "count": {
-              "min": 0,
-              "max": "many",
+              "min": 1,
+              "max": 1,
               "scope": "call"
             },
             "output": {
-              "kind": "callable"
+              "kind": "returned-callable"
             }
           }
         ],
@@ -278,11 +349,21 @@
           }
         ],
         "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
           "cleanups"
-        ]
+        ],
+        "reads": [],
+        "creates": []
       },
       "closures": {
-        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 \u2014 Exactly one direct onCleanup at construction. Later returned mapper creates roots and invokes caller code, so other domains are not closed."
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - No package-owned reactive read at construction. Initial getStep() is explicitly an ambient caller callback; getStart/getTo and later step reads occur only inside the omitted returned mapper. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - One returned-callable, graph omitted. Mapping, fallback and per-item owner behavior are not certified. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - No factory signal. No factory reactive owner or computation; mapper/fallback roots occur only when the omitted returned function runs. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - Only getStep runs once during construction on the caller stack. getStart/getTo/mapFn/fallback and subsequent step invocations belong only to the omitted returned graph. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - Exactly one direct onCleanup at 29; registered disposer traversal runs at cleanup, and invokes package-created root disposers only. No additional factory cleanup. P1/P2: typed numeric callback results and package-owned arrays are plain."
       },
       "rule": "missing-owner",
       "scenario": [
@@ -306,6 +387,22 @@
           "label": "initial-step",
           "rule": "strict-read-untracked",
           "why": "getStep is invoked before onCleanup (dist/mapRange.js:28-29) in the ambient component body. A case-file callback invokes step() so the diagnosed operation is application code, rather than a bare accessor invoked directly by the package; the constant callback twin remains clean."
+        },
+        {
+          "label": "discarded-owner",
+          "rule": "missing-owner",
+          "why": "Fresh discarded-result pair: unowned asynchronous setup versus live root; no returned function/object is called, read or escaped.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
         }
       ]
     }

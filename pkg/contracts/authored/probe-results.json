@@ -1108,6 +1108,80 @@
       "package": "@solid-primitives/clipboard",
       "version": "2.0.0-next.17",
       "export": "createClipboard",
+      "label": "data-first",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 23
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+clipboard@2.0.0-next.17",
+      "package": "@solid-primitives/clipboard",
+      "version": "2.0.0-next.17",
+      "export": "createClipboard",
+      "label": "data-flush",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 28
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+clipboard@2.0.0-next.17",
+      "package": "@solid-primitives/clipboard",
+      "version": "2.0.0-next.17",
+      "export": "createClipboard",
       "label": "leaf",
       "solidRuntime": [
         {
@@ -2302,6 +2376,51 @@
             "file": "case",
             "line": 5,
             "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+event-bus@3.0.0-next.3",
+      "package": "@solid-primitives/event-bus",
+      "version": "3.0.0-next.3",
+      "export": "createEventStack",
+      "label": "mapper-context",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 3
+          }
+        },
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 25
           }
         }
       ],
@@ -4481,6 +4600,7 @@
       "package": "@solid-primitives/keyboard",
       "version": "2.0.0-next.5",
       "export": "createKeyHold",
+      "strictReadProbeDigest": "4afd4e80eca07a15f7653c1ad46ddb9fb3807d82b830824fcb71185496b76c17",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -4517,7 +4637,46 @@
       "package": "@solid-primitives/keyboard",
       "version": "2.0.0-next.5",
       "export": "createKeyHold",
+      "label": "cleared-initial",
+      "strictReadProbeDigest": "bb9e6eca7ed3258f95df64605b2b9f752d2f5323a6ddcb493c38c8693928e494",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 19
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+keyboard@2.0.0-next.5",
+      "package": "@solid-primitives/keyboard",
+      "version": "2.0.0-next.5",
+      "export": "createKeyHold",
       "label": "subscription-owner",
+      "strictReadProbeDigest": "224c713935f7265840bd7fdefda737f5fd18e42fec231ecd1ce6c45da42e2425",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -4549,7 +4708,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_keyboard_2.0.0-next.5_createKeyHold_subscription-owner/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read-browser/.solid-checker-authored-probes/_solid-primitives_keyboard_2.0.0-next.5_createKeyHold_subscription-owner/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -4593,7 +4752,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_keyboard_2.0.0-next.5_createShortcut/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read-browser/.solid-checker-authored-probes/_solid-primitives_keyboard_2.0.0-next.5_createShortcut/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -4679,6 +4838,43 @@
       "package": "@solid-primitives/keyboard",
       "version": "2.0.0-next.5",
       "export": "useKeyDownList",
+      "label": "reuse-cleanup",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+keyboard@2.0.0-next.5",
+      "package": "@solid-primitives/keyboard",
+      "version": "2.0.0-next.5",
+      "export": "useKeyDownList",
       "label": "subscription-owner",
       "solidRuntime": [
         {
@@ -4711,7 +4907,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/.solid-checker-authored-probes/_solid-primitives_keyboard_2.0.0-next.5_useKeyDownList_subscription-owner/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read-browser/.solid-checker-authored-probes/_solid-primitives_keyboard_2.0.0-next.5_useKeyDownList_subscription-owner/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -4724,6 +4920,45 @@
       "package": "@solid-primitives/keyed",
       "version": "3.0.0-next.2",
       "export": "keyArray",
+      "returnedCallableProbeDigest": "2a6b83c248721fb99f49d313be6c1b7dbdf71e478860fea344af168b66523169",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 5
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+keyed@3.0.0-next.2",
+      "package": "@solid-primitives/keyed",
+      "version": "3.0.0-next.2",
+      "export": "keyArray",
+      "label": "discarded-owner",
+      "returnedCallableProbeDigest": "aab255ccbb09bed0ecf8436fceebff4388c768351d06314b4de00d6f3de71c4c",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -4761,6 +4996,7 @@
       "version": "3.0.0-next.2",
       "export": "keyArray",
       "label": "leaf",
+      "returnedCallableProbeDigest": "8db4e69389e210bc719f8bfb00a0a54aaefa39e95fecc2cb6b265a422e2de7fe",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -5469,6 +5705,89 @@
       "spec": "@solid-primitives+memo@2.0.0-next.2",
       "package": "@solid-primitives/memo",
       "version": "2.0.0-next.2",
+      "export": "createPureReaction",
+      "returnedCallableProbeDigest": "b43175e8d4f9385637d250d2bcdf812b650e0964acc2980bc5a8531597d5d5a9",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 5
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+memo@2.0.0-next.2",
+      "package": "@solid-primitives/memo",
+      "version": "2.0.0-next.2",
+      "export": "createPureReaction",
+      "label": "leaf",
+      "returnedCallableProbeDigest": "f0b55c5edf76d8d559d491efd90ca12d8cf9e29526a6561af42e841e5a3a7005",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 21
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read-browser/.solid-checker-authored-probes/_solid-primitives_memo_2.0.0-next.2_createPureReaction_leaf/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+memo@2.0.0-next.2",
+      "package": "@solid-primitives/memo",
+      "version": "2.0.0-next.2",
       "export": "createReducer",
       "solidRuntime": [
         {
@@ -5727,6 +6046,43 @@
       "package": "@solid-primitives/mutation-observer",
       "version": "3.0.0-next.2",
       "export": "createMutationObserver",
+      "label": "initial-start",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+mutation-observer@3.0.0-next.2",
+      "package": "@solid-primitives/mutation-observer",
+      "version": "3.0.0-next.2",
+      "export": "createMutationObserver",
       "label": "leaf",
       "solidRuntime": [
         {
@@ -5759,9 +6115,83 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope/.solid-checker-authored-probes/_solid-primitives_mutation-observer_3.0.0-next.2_createMutationObserver_leaf/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_mutation-observer_3.0.0-next.2_createMutationObserver_leaf/main.tsx",
             "line": 8,
             "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+mutation-observer@3.0.0-next.2",
+      "package": "@solid-primitives/mutation-observer",
+      "version": "3.0.0-next.2",
+      "export": "createMutationObserver",
+      "label": "native-three",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 8,
+            "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+mutation-observer@3.0.0-next.2",
+      "package": "@solid-primitives/mutation-observer",
+      "version": "3.0.0-next.2",
+      "export": "createMutationObserver",
+      "label": "native-two",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 8,
+            "column": 11
           }
         }
       ],
@@ -7256,6 +7686,43 @@
       "correct": []
     },
     {
+      "spec": "@solid-primitives+promise@2.0.0-next.2",
+      "package": "@solid-primitives/promise",
+      "version": "2.0.0-next.2",
+      "export": "until",
+      "label": "leaf-constructor",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
       "spec": "@solid-primitives+props@4.0.0-next.3",
       "package": "@solid-primitives/props",
       "version": "4.0.0-next.3",
@@ -7290,6 +7757,416 @@
         }
       ],
       "correct": []
+    },
+    {
+      "spec": "@solid-primitives+raf@4.0.0-next.2",
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "export": "createMs",
+      "returnedCallableProbeDigest": "a3c9343a346aff17066fce5541cecb5bbd86c73df28e9438890e158f48b42f18",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 5
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 5
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+raf@4.0.0-next.2",
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "export": "createMs",
+      "label": "fps-tracking",
+      "returnedCallableProbeDigest": "034d08b12ed3ce9077e9bb4d06792bf1f524d90d921d8c2776feefdf5d977c73",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 47
+          }
+        },
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 3
+          }
+        }
+      ],
+      "correct": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "spec": "@solid-primitives+raf@4.0.0-next.2",
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "export": "createMs",
+      "label": "leaf",
+      "returnedCallableProbeDigest": "3dcab7f4f9aafe5f303bf901d553d96b918da3572679bb098444443331c4fa0c",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 21
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/raf-createMs-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_raf_4.0.0-next.2_createMs_leaf/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 4,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "spec": "@solid-primitives+raf@4.0.0-next.2",
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "export": "createMs",
+      "label": "limit-dispatch",
+      "returnedCallableProbeDigest": "752ad52a8f2054427cb1fcd2a68e00c87121534ca19e4a331709f19692872046",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 3
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 24
+          }
+        }
+      ],
+      "correct": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 3
+          }
+        }
+      ]
     },
     {
       "spec": "@solid-primitives+raf@4.0.0-next.2",
@@ -7401,7 +8278,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/raf-createRAF-top-level-read/.solid-checker-authored-probes/_solid-primitives_raf_4.0.0-next.2_createRAF_owner/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/raf-createMs-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_raf_4.0.0-next.2_createRAF_owner/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -7556,7 +8433,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/raf-createRAF-top-level-read/.solid-checker-authored-probes/_solid-primitives_raf_4.0.0-next.2_default_owner/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/raf-createMs-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_raf_4.0.0-next.2_default_owner/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -7637,7 +8514,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/raf-createRAF-top-level-read/.solid-checker-authored-probes/_solid-primitives_raf_4.0.0-next.2_targetFPS/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/raf-createMs-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_raf_4.0.0-next.2_targetFPS/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -7687,6 +8564,45 @@
       "package": "@solid-primitives/range",
       "version": "1.0.0-next.3",
       "export": "mapRange",
+      "returnedCallableProbeDigest": "7df56091dbb39861113e0511802883d28d1234a09a9c46205d054db72c86e92f",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 5
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+range@1.0.0-next.3",
+      "package": "@solid-primitives/range",
+      "version": "1.0.0-next.3",
+      "export": "mapRange",
+      "label": "discarded-owner",
+      "returnedCallableProbeDigest": "6917385f801b977e4429b69a6d529023350d0cb94ccbc195d1c8db2f44a82b77",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -7724,6 +8640,7 @@
       "version": "1.0.0-next.3",
       "export": "mapRange",
       "label": "initial-step",
+      "returnedCallableProbeDigest": "80bd7139f88dbcac380cb2086c1389c5a262038b0703b2dd25264d287a9f9e4c",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -7761,6 +8678,7 @@
       "version": "1.0.0-next.3",
       "export": "mapRange",
       "label": "leaf",
+      "returnedCallableProbeDigest": "8fcf4d18368418b60df753caff51333d289325a5e7275e8533c9a599d5afff7b",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -7797,6 +8715,45 @@
       "package": "@solid-primitives/range",
       "version": "1.0.0-next.3",
       "export": "repeat",
+      "returnedCallableProbeDigest": "9b9850fc9e2c85f474dd30a3e447cb220f3472e2c4daa759ae0215ce4a17db81",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 5
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+range@1.0.0-next.3",
+      "package": "@solid-primitives/range",
+      "version": "1.0.0-next.3",
+      "export": "repeat",
+      "label": "discarded-owner",
+      "returnedCallableProbeDigest": "fae482dc2652c70d790f07d6a28426b389d85741794e1755d1cb09372ee94b08",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -7834,6 +8791,7 @@
       "version": "1.0.0-next.3",
       "export": "repeat",
       "label": "leaf",
+      "returnedCallableProbeDigest": "6f19e23b36e0fb20e251c66374145d35a4ab594356e367c6847389e57a50aefd",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -7871,6 +8829,7 @@
       "version": "1.0.0-next.3",
       "export": "repeat",
       "label": "times-tracking",
+      "returnedCallableProbeDigest": "2612f139998220b6e39c5cc65f62b36de6074f62c2339a0188d562dc59b93d6f",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -8051,6 +9010,51 @@
             "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/resize-observer-createElementSize-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_resize-observer_4.0.0-next.3_createElementSize/main.tsx",
             "line": 8,
             "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+resize-observer@4.0.0-next.3",
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "export": "createElementSize",
+      "label": "discarded-owner",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 5
+          }
+        },
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 5
           }
         }
       ],
@@ -9065,7 +10069,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createScrollPosition-module-scope/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createPreventScroll/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createPreventScroll/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -9121,6 +10125,59 @@
             "file": "case",
             "line": 9,
             "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+scroll@3.0.0-next.4",
+      "package": "@solid-primitives/scroll",
+      "version": "3.0.0-next.4",
+      "export": "createPreventScroll",
+      "label": "owner",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_EFFECT",
+          "site": {
+            "file": "case",
+            "line": 3,
+            "column": 1
+          }
+        },
+        {
+          "code": "NO_OWNER_EFFECT",
+          "site": {
+            "file": "case",
+            "line": 3,
+            "column": 1
+          }
+        },
+        {
+          "code": "NO_OWNER_EFFECT",
+          "site": {
+            "file": "case",
+            "line": 3,
+            "column": 1
           }
         }
       ],
@@ -9201,7 +10258,7 @@
         {
           "code": "REACTIVITY_HALTED",
           "site": {
-            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createScrollPosition-module-scope/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createScrollPosition_owner/main.tsx",
+            "file": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scroll-createPreventScroll-module-scope-browser/.solid-checker-authored-probes/_solid-primitives_scroll_3.0.0-next.4_createScrollPosition_owner/main.tsx",
             "line": 8,
             "column": 32
           }
@@ -10678,6 +11735,347 @@
             "file": "case",
             "line": 5,
             "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "createTimeoutLoop",
+      "strictReadProbeDigest": "e57c10b6aa4489c14557a5e0571144df437ae069b53da9b9f8cbe542ae1ad7a8",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 3,
+            "column": 1
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "createTimeoutLoop",
+      "label": "compute-first",
+      "strictReadProbeDigest": "3a462e232e845b42d5ec8a3c97b75e3e845081d79b48c8557292f8585099ccb8",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 40
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "createTimeoutLoop",
+      "label": "compute-flush",
+      "strictReadProbeDigest": "f254f4dc8b5a35c3e5cacbcf04eea80710451c8a26e895779754187b2104600c",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 45
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "createTimeoutLoop",
+      "label": "function-host",
+      "strictReadProbeDigest": "8de182080c0cff26b3605389e4ded91924212b8533c4244dca8725cdabbf35b5",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 10,
+            "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "createTimeoutLoop",
+      "label": "function-owner",
+      "strictReadProbeDigest": "cf2227dcccbbe1739345e842ba9af0f78d58dc262eda8deb23f2608321286dc4",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_EFFECT",
+          "site": {
+            "file": "case",
+            "line": 3,
+            "column": 1
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "createTimeoutLoop",
+      "label": "initial-clearing",
+      "strictReadProbeDigest": "26b9b9612003efe7b534c434d19a30d11a380f1bd32e35a2bb13fbeaf7965eed",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 19
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "createTimeoutLoop",
+      "label": "leaf",
+      "strictReadProbeDigest": "590f2bd60664b1930b5eac935f749255f9d15e6aad86991e6ce31f39df592e87",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "CLEANUP_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "createTimeoutLoop",
+      "label": "numeric-host",
+      "strictReadProbeDigest": "5db912ab63f3c121f3af999513ac8b4560e6ab87ee3cbdebf4a4ec3ce8102659",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 10,
+            "column": 11
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+timer@1.4.5-next.1",
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "export": "createTimeoutLoop",
+      "label": "timeout-host",
+      "strictReadProbeDigest": "664844e18e9a651688406c62994a8e752bb33614864e8d57c35fab738ae6a9b7",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_CLEANUP",
+          "site": {
+            "file": "case",
+            "line": 11,
+            "column": 13
           }
         }
       ],

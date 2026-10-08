@@ -21,11 +21,14 @@
   ],
   "exports": {
     "createMutationObserver": {
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope/node_modules/@solid-primitives/mutation-observer/dist/index.js:6-38 \u2014 Browser isSupported=!isServer is true, so onCleanup(stop) is unconditional (30-33). onSettled(start) executes later and creates an owner-dependent leaf; creates and callbacks stay OPEN. Return has exactly add and controls.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solid-primitives/mutation-observer/dist/index.js:6-34 \u2014 Browser constructs one native MutationObserver; onSettled(start) is registered before mandatory onCleanup(stop). Exact two/three-argument overload selection uses typeof b. initial accessor runs later during start, untracked inside onSettled; callback b/c is native externally scheduled. P1 native observer methods/read-only fields and P2 Node/options/tuple data are not reactive sources. No package-defined source read. Returned add/start/stop stay opaque; their manual future invocation remains uncertifiable. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/solid-js/dist/solid.dev.js:1-2 \u2014 Reexports signals/web browser runtime. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solidjs/signals/dist/dev.js:3031-3059 \u2014 onSettled creates a lazy tracked-effect leaf only under a children-capable owner, else global queued callback with no new owner; created-leaf registration min 0, never an unconditional owner requirement. Draft browser authority only.",
       "rule": "missing-owner",
       "call": {
         "closed": [
-          "returns"
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
         ],
         "returns": [
           "return"
@@ -115,17 +118,207 @@
                 }
               ]
             }
+          },
+          {
+            "id": "settled-registration",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "settled-leaf",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
+          },
+          {
+          "id": "initial-start",
+          "kind": "invoke",
+          "guard": {
+            "all": [
+              {
+                "arg": 0,
+                "path": [],
+                "kind": "callable"
+              }
+            ]
+          },
+            "trigger": {
+              "event": "settle"
+            },
+            "at": {
+              "event": "settle",
+              "schedule": "queued"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "native-handler-two",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "native-handler-three",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
           }
-        ]
+        ],
+        "resources": [
+          {
+            "id": "settled-leaf",
+            "kind": "owner"
+          }
+        ],
+        "computations": [
+          "settled-registration"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "initial-start"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "native-handler-two"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "native-handler-three"
+          }
+        ],
+        "reads": [],
+        "creates": []
       },
       "closures": {
-        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope/node_modules/@solid-primitives/mutation-observer/dist/index.js:6-38 \u2014 Browser isSupported=!isServer is true, so onCleanup(stop) is unconditional (30-33). onSettled(start) executes later and creates an owner-dependent leaf; creates and callbacks stay OPEN. Return has exactly add and controls."
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solid-primitives/mutation-observer/dist/index.js:6-34 \u2014 Browser constructs one native MutationObserver; onSettled(start) is registered before mandatory onCleanup(stop). Exact two/three-argument overload selection uses typeof b. initial accessor runs later during start, untracked inside onSettled; callback b/c is native externally scheduled. P1 native observer methods/read-only fields and P2 Node/options/tuple data are not reactive sources. No package-defined source read. Returned add/start/stop stay opaque; their manual future invocation remains uncertifiable. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/solid-js/dist/solid.dev.js:1-2 \u2014 Reexports signals/web browser runtime. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solidjs/signals/dist/dev.js:3031-3059 \u2014 onSettled creates a lazy tracked-effect leaf only under a children-capable owner, else global queued callback with no new owner; created-leaf registration min 0, never an unconditional owner requirement.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solid-primitives/mutation-observer/dist/index.js:6-34 \u2014 Browser constructs one native MutationObserver; onSettled(start) is registered before mandatory onCleanup(stop). Exact two/three-argument overload selection uses typeof b. initial accessor runs later during start, untracked inside onSettled; callback b/c is native externally scheduled. P1 native observer methods/read-only fields and P2 Node/options/tuple data are not reactive sources. No package-defined source read. Returned add/start/stop stay opaque; their manual future invocation remains uncertifiable. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/solid-js/dist/solid.dev.js:1-2 \u2014 Reexports signals/web browser runtime. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solidjs/signals/dist/dev.js:3031-3059 \u2014 onSettled creates a lazy tracked-effect leaf only under a children-capable owner, else global queued callback with no new owner; created-leaf registration min 0, never an unconditional owner requirement.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solid-primitives/mutation-observer/dist/index.js:6-34 \u2014 Browser constructs one native MutationObserver; onSettled(start) is registered before mandatory onCleanup(stop). Exact two/three-argument overload selection uses typeof b. initial accessor runs later during start, untracked inside onSettled; callback b/c is native externally scheduled. P1 native observer methods/read-only fields and P2 Node/options/tuple data are not reactive sources. No package-defined source read. Returned add/start/stop stay opaque; their manual future invocation remains uncertifiable. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/solid-js/dist/solid.dev.js:1-2 \u2014 Reexports signals/web browser runtime. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solidjs/signals/dist/dev.js:3031-3059 \u2014 onSettled creates a lazy tracked-effect leaf only under a children-capable owner, else global queued callback with no new owner; created-leaf registration min 0, never an unconditional owner requirement.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solid-primitives/mutation-observer/dist/index.js:6-34 \u2014 Browser constructs one native MutationObserver; onSettled(start) is registered before mandatory onCleanup(stop). Exact two/three-argument overload selection uses typeof b. initial accessor runs later during start, untracked inside onSettled; callback b/c is native externally scheduled. P1 native observer methods/read-only fields and P2 Node/options/tuple data are not reactive sources. No package-defined source read. Returned add/start/stop stay opaque; their manual future invocation remains uncertifiable. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/solid-js/dist/solid.dev.js:1-2 \u2014 Reexports signals/web browser runtime. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solidjs/signals/dist/dev.js:3031-3059 \u2014 onSettled creates a lazy tracked-effect leaf only under a children-capable owner, else global queued callback with no new owner; created-leaf registration min 0, never an unconditional owner requirement. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/mutation-observer-createMutationObserver-module-scope-browser/node_modules/@solid-primitives/utils/dist/index.js:88 \u2014 access(initial) calls only zero-arity accessor. Constructor default options are data by the published overload, not an additional accessor. Future returned add with options accessor is opaque and needs captures."
       },
       "probes": [
         {
           "label": "leaf",
           "rule": "leaf-owner-forbidden-call",
           "why": "An owner-backed onSettled is a leaf; construct in the component owner in the correct twin."
+        },
+        {
+          "label": "initial-start",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Initial accessor runs in the owner-backed onSettled leaf. Only misuse calls onCleanup there; correct returns the element directly."
+        },
+        {
+          "label": "native-two",
+          "rule": "missing-owner",
+          "why": "After exact overload selection, native MutationObserver dispatch has no ambient owner. Correct restores the captured component owner before onCleanup.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "native-three",
+          "rule": "missing-owner",
+          "why": "After exact overload selection, native MutationObserver dispatch has no ambient owner. Correct restores the captured component owner before onCleanup.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
         }
       ]
     }

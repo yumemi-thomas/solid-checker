@@ -694,6 +694,684 @@
           "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:22 \u2014 Returned arrow calls native clearInterval with its retained timer handle, without dereferencing or calling the handle. Under P1 there is no caller invocation, reactive read or reactive allocation and normal completion returns undefined. No captured factory argument is required; callbacks/reads/creates/returns are independently enumerated. Writes and cancellation protocols remain open."
         }
       }
+    },
+    "createTimeoutLoop": {
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "numeric-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-source-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "resources": [
+              "current-timeout"
+            ]
+          },
+          {
+            "id": "timeout-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-initial",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-compute-first",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-compute-flush",
+            "kind": "invoke",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-host",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "initial-timeout-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "strictRead": "cleared",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:99 \u2014 Actual unlabelled untrack(timeout). /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solidjs/signals/dist/dev-shared.js:5863-5887 \u2014 untrack sets strictRead false without discarding ambient owner."
+          },
+          {
+            "id": "current-timeout-first",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "current-timeout"
+              }
+            ],
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "current-timeout-flush",
+            "kind": "read",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "current-timeout"
+              }
+            ],
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "numeric-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "function-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "function-apply-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "timeout-initial"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "timeout-compute-first"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "timeout-compute-flush"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "timeout-host"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "numeric-handler"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "function-handler"
+          }
+        ],
+        "reads": [
+          "initial-timeout-read",
+          "current-timeout-first",
+          "current-timeout-flush"
+        ],
+        "creates": [
+          "timeout-source-production"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "resources": [
+          {
+            "id": "current-timeout",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "timeout-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "cleanups": [
+          "numeric-cleanup",
+          "function-apply-cleanup"
+        ],
+        "computations": [
+          "timeout-effect"
+        ]
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Numeric mandatory cleanup inside onSettled leaf."
+        },
+        {
+          "label": "function-owner",
+          "rule": "missing-owner",
+          "why": "Function branch always creates an owner-requiring effect."
+        },
+        {
+          "label": "initial-clearing",
+          "rule": "strict-read-untracked",
+          "why": "Initial timeout accessor runs under untrack; compare explicit bad component read with tracked JSX. Neither constructor should warn."
+        },
+        {
+          "label": "compute-first",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The mandatory first tracked timeout compute invokes accessor under the created effect. Initial untrack call must remain clean.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "compute-flush",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Drive source change; only a later tracked compute writes.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "numeric-host",
+          "rule": "missing-owner",
+          "why": "Native numeric interval dispatch invokes handler ownerless; correct restores captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "function-host",
+          "rule": "missing-owner",
+          "why": "Function interval dispatch invokes handler ownerless; correct restores captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "timeout-host",
+          "rule": "missing-owner",
+          "why": "After handler, function branch invokes timeout on native interval stack, outside the tracked effect; correct restores captured owner for that later call.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1)."
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1). Draft only. Numeric plain guard is justified by published TimeoutSource = number | Accessor<number | false>, not by arbitrary plain values.",
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none.",
+        "minZero": [
+          "numeric-cleanup",
+          "timeout-source-production",
+          "timeout-effect",
+          "timeout-initial",
+          "timeout-compute-first",
+          "initial-timeout-read",
+          "current-timeout-first"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1)."
+        }
+      }
     }
   }
 }
