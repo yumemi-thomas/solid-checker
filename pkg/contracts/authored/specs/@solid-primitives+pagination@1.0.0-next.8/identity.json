@@ -1,0 +1,77 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/pagination",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-b8XsohMgzCVgEI12YXIGikxMmiWIGd5zf88KYHIus/SzoY1vAf2MhWTVMgPE3fM5Bv5d/esos1YZHEjGvEJzdA==",
+      "snapshotRoot": "sha256:918b21207d4d727e2f68892297ca44e7867e47bdad7ef31686ace6d29a9c70c4",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "5e1cffb358b3097ab772270f7b0adb0969d85e94cba94ef2f307cbada84263e3",
+                  "path": "./dist/index.js",
+                  "sha256": "8fa6b89b23d3c3afe7ada97647aa9c994587e64c56dfd38d405dfff810e2608d"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "518d8cb47bc3e149396e6c6d896f9d162de039bfe84428dac5d7da452407cb23"
+                },
+                "exports": {
+                  "PAGINATION_DEFAULTS": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "createInfiniteScroll": "summary-5999162d78bdf1a6eea20c9b1db5e85e94caaebe26ffaed2697b5bae34cd9108",
+                  "createPagination": "summary-9621ecec724233f085c792126c0697fde43ec02962ec0e264ceebbe74b04537f",
+                  "createSegment": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-b8XsohMgzCVgEI12YXIGikxMmiWIGd5zf88KYHIus/SzoY1vAf2MhWTVMgPE3fM5Bv5d/esos1YZHEjGvEJzdA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "9918b877fc3bdf680e106f00fd4d1443143f05894149f1635b32f66c19856b75"
+          },
+          "name": "@solid-primitives/pagination",
+          "version": "1.0.0-next.8"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-5999162d78bdf1a6eea20c9b1db5e85e94caaebe26ffaed2697b5bae34cd9108": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9621ecec724233f085c792126c0697fde43ec02962ec0e264ceebbe74b04537f": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,12 @@
 # Precision backlog
 
+## Solid Primitives batch 3 (2026-10-08)
+
+ADR 0236, slice 3a: nine more primitive packages enter the authored tier.
+Browser ledger: 26 report correctly (was 21); seven more prove the misuse
+with an open domain on the correct twin; no correct-twin violation on any
+host. `createPagination` and `createDropzone` do not ship (pairs failed).
+
 ## A returned member may state what calling it does (2026-10-08)
 
 ADR 0235: a new contract value, `effectful-callable`, gives a member of a

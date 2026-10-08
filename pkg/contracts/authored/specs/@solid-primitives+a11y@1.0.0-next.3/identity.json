@@ -1,0 +1,88 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/a11y",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-ohvuHYkxTNJtOPlhSHHCiLILE7KOQ3K6hcDrq4Fr69euk1Fnpct3d9VxFbgMPxBG31RJtJoD6Yh5BJNwFz84kw==",
+      "snapshotRoot": "sha256:6d9ff028d549badb959af560873ef1de46bdc0750b4cfea060d1042d270083fc",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "85295d5999d5f6198b094f69186e974abbcebed62bb7089a9f69eb8abcd22086",
+                  "path": "./dist/index.js",
+                  "sha256": "feb10791ee234e0065f173287db5d02192538099ebe1fcf740f61cfa75e62742"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "7908695440392570d866cf5c841780cd9556491a831c3bf5d9b29536641eaac2"
+                },
+                "exports": {
+                  "FormControlContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createAnnounce": "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a",
+                  "createFormControl": "summary-87de0df21071089df42e4792793743573a02b0ca55cf4390ef3da9289cdf28d2",
+                  "createFormControlInput": "summary-224bee96798aabc13c112ff27c4e7143bdcd01495d5fd021975877fa43fffba9",
+                  "createReducedMotion": "summary-16accc46ed55d9d3bd3b061159e4d06e6c1d94ca28f7ab410c7fd96c2d05ed73",
+                  "makeAnnounce": "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8",
+                  "useFormControl": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-ohvuHYkxTNJtOPlhSHHCiLILE7KOQ3K6hcDrq4Fr69euk1Fnpct3d9VxFbgMPxBG31RJtJoD6Yh5BJNwFz84kw==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "48f8d8a6471041c33217fcff8126534ab8ef29304baeddd98e665b6d5414f44c"
+          },
+          "name": "@solid-primitives/a11y",
+          "version": "1.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-87de0df21071089df42e4792793743573a02b0ca55cf4390ef3da9289cdf28d2": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-224bee96798aabc13c112ff27c4e7143bdcd01495d5fd021975877fa43fffba9": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-16accc46ed55d9d3bd3b061159e4d06e6c1d94ca28f7ab410c7fd96c2d05ed73": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

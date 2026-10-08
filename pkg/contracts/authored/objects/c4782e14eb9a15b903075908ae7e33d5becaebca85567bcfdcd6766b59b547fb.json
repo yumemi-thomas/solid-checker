@@ -1,0 +1,143 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "f9df00052e2b687caa1f1348ac5a44d32dcb8c2df93bcb4ff34c2861408dfe60",
+            "path": "./dist/index.js",
+            "sha256": "a6847b7c1e372679805ae2e04cc0c538b16e9827c9d954fcad3a506a120973f9"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "8ea1c2f11fb0b5f86ca8c1107bf390a0dad3bb1d35b863741abcfd96b190f15f"
+          },
+          "exports": {
+            "createConnectivitySignal": "authored-createConnectivitySignal",
+            "createNetworkInformation": "open-callable",
+            "makeConnectivityListener": "open-callable",
+            "makeNetworkInformation": "open-callable",
+            "useConnectivitySignal": "open-callable",
+            "useNetworkInformation": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-Sovi/qB+DReZ66kJZIQq5bifsQMkoDjIccAW9XdGKdsp6j26hqL2QkPoJH9NW6lxeyydaXVxaH4nj706ASQg2Q==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "993c636ef2bceeb31681b53421fc75d8d0b990de80d6393811439de9532c5fd7"
+    },
+    "name": "@solid-primitives/connectivity",
+    "version": "1.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createConnectivitySignal": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "online"
+            }
+          },
+          {
+            "id": "create-online",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "online"
+            ]
+          },
+          {
+            "id": "listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 2,
+              "max": 2,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "online",
+            "kind": "reactive-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-online"
+        ],
+        "cleanups": [
+          "listener-cleanups"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

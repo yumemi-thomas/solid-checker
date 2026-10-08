@@ -1,0 +1,107 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/websocket",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-x5wKmCnZeKrUQmy0au5MlFjDcXnQqcAYmMctPXxceTvtY7YJXlAykaf7Sx+XknNvzlbl+UrOZ2zGNRD8BNeOxw==",
+      "snapshotRoot": "sha256:e631e51cfab44a5d03c8e1fdec6cccb4b87abaa3ede49b5df092360b83583cc7",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "78592d1cc393e2bfdf214d9c14deedbde5465ff00ac70396591de0d023cdcf6b",
+                  "path": "./dist/index.js",
+                  "sha256": "aaf7ecce59ae4f5d0d7f0230700aa69918120876999698ffbce82d58cadcd12c"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "a0a3fbb77087db9634b2d063c74d0844b1141bc4b3adb4d923db64a8967d8bcf"
+                },
+                "exports": {
+                  "createReconnectingWS": "summary-a3829eb415414f22df8e18460705f0bd58e407c76b71ab55d6dda204b2258962",
+                  "createWS": "summary-d8717f116ddabdcf09067c58a3facbd390e65261dd5276d86eb917934cbdf550",
+                  "createWSData": "summary-0227e5b9c1d91360f091f029aa3e50d1a2964d7cb19e07e0d5d79cb6034d7b2d",
+                  "createWSMessage": "summary-56cff516fafe2603b7c378f505b3b85cf266e4252800612b4f6164cdebc42527",
+                  "createWSState": "summary-c2428419a55144f785ba487265440aaa1914fae403d0c8676f76f9006e4b1349",
+                  "createWSStore": "summary-c4ba899e2c5f3396f4ef48a945cbd533253490b90f96a532adc3c966be8c7118",
+                  "makeHeartbeatWS": "summary-05fa6b7bd072d674b7d88a4857cfe8b57d8b1c5b2001a93a61727f7ef723d33a",
+                  "makeReconnectingWS": "summary-a1b4576f1266691e38824ef83274ae6b2dc6e69f57d13f24e075b610e7e586a2",
+                  "makeWS": "summary-81fca57ee0fc87bdadbccc413b6ffc5059ad4026573bc23f6efcf00db40d245e",
+                  "wsMessageIterable": "summary-2ad8fe4cf115c61f21b9dceaaf058455d16f96ac0f36ec8a3219506030aecf81"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-x5wKmCnZeKrUQmy0au5MlFjDcXnQqcAYmMctPXxceTvtY7YJXlAykaf7Sx+XknNvzlbl+UrOZ2zGNRD8BNeOxw==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "3ff72fed65b50f6c12a96edee656718b193045c78e5bd23089278f372f6e8674"
+          },
+          "name": "@solid-primitives/websocket",
+          "version": "2.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-a3829eb415414f22df8e18460705f0bd58e407c76b71ab55d6dda204b2258962": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-d8717f116ddabdcf09067c58a3facbd390e65261dd5276d86eb917934cbdf550": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-0227e5b9c1d91360f091f029aa3e50d1a2964d7cb19e07e0d5d79cb6034d7b2d": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-56cff516fafe2603b7c378f505b3b85cf266e4252800612b4f6164cdebc42527": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c2428419a55144f785ba487265440aaa1914fae403d0c8676f76f9006e4b1349": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c4ba899e2c5f3396f4ef48a945cbd533253490b90f96a532adc3c966be8c7118": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-05fa6b7bd072d674b7d88a4857cfe8b57d8b1c5b2001a93a61727f7ef723d33a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-a1b4576f1266691e38824ef83274ae6b2dc6e69f57d13f24e075b610e7e586a2": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-81fca57ee0fc87bdadbccc413b6ffc5059ad4026573bc23f6efcf00db40d245e": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2ad8fe4cf115c61f21b9dceaaf058455d16f96ac0f36ec8a3219506030aecf81": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

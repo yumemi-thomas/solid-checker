@@ -1,0 +1,153 @@
+{
+  "package": "@solid-primitives/websocket",
+  "version": "2.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createWSState": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 OwnedWrite permits internal updates but does not bypass strict reads. Browser draft; Chrome probes pending, not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "socket-state"
+            }
+          },
+          {
+            "id": "create-state",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "socket-state"
+            ]
+          }
+        ],
+        "resources": [
+          {
+            "id": "socket-state",
+            "kind": "reactive-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-state"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 One eager ownedWrite signal, returned accessor, native open/close handlers and a close wrapper. No cleanup, computation, caller callback or private reactive read. P1 applies to native WebSocket platform fields/methods; P2 to protocol data. Returned setter policy is not claimed.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 One eager ownedWrite signal, returned accessor, native open/close handlers and a close wrapper. No cleanup, computation, caller callback or private reactive read. P1 applies to native WebSocket platform fields/methods; P2 to protocol data. Returned setter policy is not claimed.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 One eager ownedWrite signal, returned accessor, native open/close handlers and a close wrapper. No cleanup, computation, caller callback or private reactive read. P1 applies to native WebSocket platform fields/methods; P2 to protocol data. Returned setter policy is not claimed.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 One eager ownedWrite signal, returned accessor, native open/close handlers and a close wrapper. No cleanup, computation, caller callback or private reactive read. P1 applies to native WebSocket platform fields/methods; P2 to protocol data. Returned setter policy is not claimed."
+      },
+      "rule": "strict-read-untracked"
+    },
+    "createReconnectingWS": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:97-148 \u2014 Returned dynamic WebSocket facade cannot have its complete shape closed here. Browser draft; Chrome probes pending, not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:97-148; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23 \u2014 Native socket construction and retry/send bookkeeping contain no own reactive read, reactive construction or direct caller callable invocation. One direct onCleanup registers wrapper.close. P1 native WebSocket; P2 options/protocol/queue data.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:97-148; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23 \u2014 Native socket construction and retry/send bookkeeping contain no own reactive read, reactive construction or direct caller callable invocation. One direct onCleanup registers wrapper.close. P1 native WebSocket; P2 options/protocol/queue data.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:97-148; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23 \u2014 Native socket construction and retry/send bookkeeping contain no own reactive read, reactive construction or direct caller callable invocation. One direct onCleanup registers wrapper.close. P1 native WebSocket; P2 options/protocol/queue data."
+      },
+      "rule": "missing-owner",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        }
+      ]
+    }
+  }
+}

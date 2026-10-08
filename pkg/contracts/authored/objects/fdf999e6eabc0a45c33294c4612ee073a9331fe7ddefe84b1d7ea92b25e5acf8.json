@@ -1,0 +1,126 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "ee5578ae27521823a6914f512497ee56d87158420dabad8cf0d61d7c8d8042ff",
+            "path": "./dist/index.js",
+            "sha256": "2d2c295bf7b2e705c2de4ded7aa87758206e093adb2c547a2854fc319e1cb051"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "4cf4d08cd9e4bf4130e651eae5bb8d772d7865fc80614fc6f0aea3ad3c0e63de"
+          },
+          "exports": {
+            "copyToClipboard": "open-callable",
+            "createClipboard": "authored-createClipboard",
+            "element": "open-callable",
+            "input": "open-callable",
+            "makeClipboard": "open-callable",
+            "newClipboardItem": "open-callable",
+            "newItem": "open-callable",
+            "readClipboard": "open-callable",
+            "writeClipboard": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-Zvm2yeGR16OsX3Bzk/gyywdXxXiVq3kUhbukPkogEKgA2bNKwGlKDuRC48C26aPKBJmYxbRRbg2p0KKG5kvqlg==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "d2eb596dc924ea8129ac6787626a36efe49fc9da5f8e38daea69b739580d41b8"
+    },
+    "name": "@solid-primitives/clipboard",
+    "version": "2.0.0-next.17"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createClipboard": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor"
+                },
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "closed": [
+          "returns"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

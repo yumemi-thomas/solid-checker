@@ -1,0 +1,122 @@
+{
+  "package": "@solid-primitives/fullscreen",
+  "version": "2.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createFullscreen": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-module-scope/node_modules/@solid-primitives/fullscreen/dist/index.js:47-70 \u2014 Direct onCleanup at line 62 is unconditional for every browser ref form. Browser draft; Chrome probes pending, not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "isActive",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "enter",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "exit",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "closed": [
+          "returns"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/fullscreen-createFullscreen-module-scope/node_modules/@solid-primitives/fullscreen/dist/index.js:47-70 \u2014 Exactly { enter, exit, isActive }; isActive is the unconditional browser signal, and enter/exit remain opaque callables."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "The direct cleanup or effect runs ownerless versus inside a live root; dispose is queued outside render."
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        }
+      ]
+    }
+  }
+}

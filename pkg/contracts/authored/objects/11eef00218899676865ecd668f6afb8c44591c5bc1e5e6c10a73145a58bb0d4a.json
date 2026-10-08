@@ -1,0 +1,140 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "4b791ceb28ddede6f306baf7629c4a4c3499079bb73f2282c64cd5604e8aff7e",
+            "path": "./dist/index.js",
+            "sha256": "59b5782bcd29e4b63c4c6c18beecb6f7c4ee500498bc7f32a1240afde05a432e"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "17e3ac5968d95844fae770394e404e9892c0684192e7727438d14c1f07bba60f"
+          },
+          "exports": {
+            "createActiveElement": "authored-createActiveElement",
+            "focus": "open-callable",
+            "makeActiveElementListener": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-/75EE30E9S/szk2SQ5b6FcH7ZiYYBb71by22+bbULqaUnnIiFOaVoXjSDkj/WZB2Fsf2LlaTjWk1JehZPeYtrQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "46dc20683b6ed774b6e7a1f2132cc7009d9134b22dc8005cbe392f9d2548127f"
+    },
+    "name": "@solid-primitives/active-element",
+    "version": "3.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createActiveElement": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "active"
+            }
+          },
+          {
+            "id": "create-active",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "active"
+            ]
+          },
+          {
+            "id": "listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 2,
+              "max": 2,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "active",
+            "kind": "reactive-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-active"
+        ],
+        "cleanups": [
+          "listener-cleanups"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

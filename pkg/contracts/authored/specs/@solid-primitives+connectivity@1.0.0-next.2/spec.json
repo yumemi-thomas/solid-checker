@@ -1,0 +1,130 @@
+{
+  "package": "@solid-primitives/connectivity",
+  "version": "1.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createConnectivitySignal": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/connectivity/dist/index.js:73-78 \u2014 Creates stays open because createHydratableSignal has a hydration-only onSettled registration, not covered by these browser-render pairs. Browser draft; Chrome probes pending, not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "online"
+            }
+          },
+          {
+            "id": "create-online",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "online"
+            ]
+          },
+          {
+            "id": "listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 2,
+              "max": 2,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "online",
+            "kind": "reactive-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-online"
+        ],
+        "cleanups": [
+          "listener-cleanups"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/connectivity/dist/index.js:73-78; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 \u2014 Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/connectivity/dist/index.js:73-78; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 \u2014 Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/connectivity/dist/index.js:73-78; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/connectivity-createConnectivitySignal-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 \u2014 Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        }
+      ]
+    }
+  }
+}
