@@ -198,6 +198,7 @@ pub fn project_export_semantics(
         returns,
         callbacks,
         callback_results,
+        captured_lookup: export.call.captured_lookup().cloned(),
         capture_sources: export
             .call
             .captures()
@@ -4201,6 +4202,7 @@ pub(super) fn resolve_accepted_contract_imports(
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
+    runtime_configuration: &crate::RuntimeConfigurationPremise,
 ) -> ResolvedContracts {
     let projected = project_accepted_contracts(facts, contracts);
     resolve_contract_imports_inner(
@@ -4210,6 +4212,7 @@ pub(super) fn resolve_accepted_contract_imports(
         entities,
         symbol_names,
         dialect,
+        runtime_configuration,
     )
 }
 
@@ -4278,6 +4281,7 @@ fn resolve_contract_imports_inner(
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
+    runtime_configuration: &crate::RuntimeConfigurationPremise,
 ) -> ResolvedContracts {
     let mut bindings = Vec::new();
     let mut by_symbol = HashMap::new();
@@ -4628,6 +4632,14 @@ fn resolve_contract_imports_inner(
         &mut by_symbol,
         &mut callee_bindings,
     );
+    let visible_lookup_hazard = by_symbol.values().any(|binding| {
+        binding
+            .summary
+            .returned_callable_effects
+            .as_ref()
+            .is_some_and(|summary| summary.captured_lookup.is_some())
+    })
+        && crate::runtime_configuration::captured_lookup_has_visible_runtime_hazard(facts, dialect);
     let mut returned_callable_bindings = HashSet::new();
     bind_returned_callable_effects(
         facts,
@@ -4636,6 +4648,12 @@ fn resolve_contract_imports_inner(
         &mut by_symbol,
         &mut callee_bindings,
         &mut returned_callable_bindings,
+        (
+            symbol_names,
+            dialect,
+            runtime_configuration,
+            visible_lookup_hazard,
+        ),
     );
     ResolvedContracts {
         bindings,
@@ -4947,6 +4965,7 @@ fn contract_export_function(
     };
     ContractExport {
         callback_results: Vec::new(),
+        captured_lookup: None,
         capture_sources: BTreeMap::new(),
         captured_arguments: BTreeMap::new(),
         captured_resource_slots: BTreeSet::new(),
@@ -6713,6 +6732,12 @@ fn bind_returned_callable_effects(
     by_symbol: &mut HashMap<SymbolId, ResolvedContractBinding>,
     callees: &mut HashMap<Location, SymbolId>,
     whole_bindings: &mut HashSet<SymbolId>,
+    core: (
+        &HashMap<SymbolId, SymbolId>,
+        &dyn Dialect,
+        &crate::RuntimeConfigurationPremise,
+        bool,
+    ),
 ) {
     let mut additions = Vec::new();
     for file in &facts.files {
@@ -6783,7 +6808,11 @@ fn bind_returned_callable_effects(
                 };
             if let Some(summary) = &contracted.summary.returned_callable_effects
                 && !by_symbol.contains_key(root)
-                && let Some(summary) = bind_capture_arguments(file, entities, factory, summary)
+                && let Some(summary) = if summary.captured_lookup.is_some() {
+                    bind_captured_lookup(file, entities, core, factory, root, summary)
+                } else {
+                    bind_capture_arguments(file, entities, factory, summary)
+                }
             {
                 whole_bindings.insert(root.clone());
                 additions.push(resolved(root.clone(), summary, "returned"));
@@ -7180,4 +7209,484 @@ fn project_callback_results(
             })
         })
         .collect()
+}
+
+/// Admit a conditional slice, never strengthen the generic graph's minimum.
+/// Entire-file identity checks deliberately refuse every alias and escape.
+fn bind_captured_lookup(
+    file: &solid_facts::FileFacts,
+    entities: &EntitySymbols,
+    core: (
+        &HashMap<SymbolId, SymbolId>,
+        &dyn Dialect,
+        &crate::RuntimeConfigurationPremise,
+        bool,
+    ),
+    factory: &solid_facts::ast::CallFact,
+    result_root: &SymbolId,
+    summary: &ContractExport,
+) -> Option<ContractExport> {
+    use solid_facts::ast::{ArgumentLiteralFact, BindingShape, IdentifierRole};
+    let (symbol_names, dialect, runtime_configuration, visible_runtime_hazard) = core;
+    // ADR 0266 is an explicit conditional premise, not a complete census.
+    // Projection also demotes violations on a veto; do not close this instance's
+    // open domains under a veto, or after a positively identified mode/exposure
+    // API outside that premise. No normal-completion/no-throw fact is inferred.
+    if !runtime_configuration.permits_proof() || visible_runtime_hazard {
+        return None;
+    }
+    let recipe = summary.captured_lookup.as_ref()?;
+    if recipe.key != 0
+        || factory.construct
+        || factory.arguments.iter().any(|argument| argument.spread)
+        || recipe
+            .default_arguments
+            .iter()
+            .any(|index| factory.arguments.get(usize::from(*index)).is_some())
+    {
+        return None;
+    }
+    if summary.capture_sources.len() != 1 {
+        return None;
+    }
+    let (slot, source) = summary.capture_sources.iter().next()?;
+    let slot = *slot;
+    let ValueSource::Parameter { index, path } = source else {
+        return None;
+    };
+    if !path.is_empty() {
+        return None;
+    }
+    let argument = factory.arguments.get(usize::from(*index))?;
+    let root = entities.get(&location(file.path.shared(), argument.span))?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == BindingShape::Array
+            && binding.names.len() == 1
+            && binding.array_slots.len() == 1
+            && binding
+                .array_slots
+                .first()
+                .and_then(Option::as_ref)
+                .is_some_and(|name| {
+                    entities.get(&location(file.path.shared(), name.span)) == Some(root)
+                })
+            && binding.array_slots.iter().skip(1).all(Option::is_none)
+    })?;
+    if crate::value_identity::binding_has_write(file, entities, root) {
+        return None;
+    }
+    let creation = file
+        .ast
+        .calls
+        .iter()
+        .find(|call| Some(call.span) == binding.initializer)?;
+    if creation.construct || creation.arguments.len() != 1 || creation.arguments[0].spread {
+        return None;
+    }
+    let primitive = crate::known_primitive(&crate::call_primitive_name(
+        file,
+        creation,
+        entities,
+        symbol_names,
+        dialect,
+    ))?;
+    if !dialect
+        .tuple_accessor_preserves_initial_value(primitive, solid_dialect::ResultSlot::TupleItem(0))
+        || !dialect.inert_accessor_read(primitive, solid_dialect::ResultSlot::TupleItem(0))
+    {
+        return None;
+    }
+    let ArgumentLiteralFact::Object(properties) = &creation.arguments[0].literal_value else {
+        return None;
+    };
+    let scope = captured_lookup_scope(file, creation.span);
+    if captured_lookup_scope(file, factory.span) != scope
+        || scope.is_some_and(|scope| {
+            file.ast
+                .functions
+                .iter()
+                .any(|function| function.span == scope && (function.r#async || function.generator))
+                || file.ast.calls.iter().any(|call| {
+                    call.arguments
+                        .iter()
+                        .any(|argument| argument.span.contains(scope))
+                })
+        })
+    {
+        // A callback supplied to a mode/opaque helper may enter under a probe,
+        // latest companion, hydration wrapper or changed execution context.
+        return None;
+    }
+    // No dictionary read can escape through another use, including shorthand
+    // or exports (declaration-selected, independent of Type Facts demand).
+    let declaration = binding.names[0].span;
+    if file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == IdentifierRole::Reference)
+        .any(|id| {
+            (file.ast.reference_declaration(id.span) == Some(declaration)
+                || entities.get(&location(file.path.shared(), id.span)) == Some(root))
+                && id.span != argument.span
+        })
+        || file
+            .ast
+            .object_properties
+            .iter()
+            .any(|property| property.shorthand_binding == Some(declaration))
+        || file
+            .ast
+            .exports
+            .iter()
+            .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+            .any(|export| {
+                !export.type_only
+                    && entities.get(&location(file.path.shared(), export.local.span)) == Some(root)
+            })
+    {
+        return None;
+    }
+    let result_declaration = file
+        .ast
+        .bindings
+        .iter()
+        .flat_map(|binding| &binding.names)
+        .find(|name| entities.get(&location(file.path.shared(), name.span)) == Some(result_root))?
+        .span;
+    if file
+        .ast
+        .object_properties
+        .iter()
+        .any(|property| property.shorthand_binding == Some(result_declaration))
+        || file
+            .ast
+            .exports
+            .iter()
+            .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+            .any(|export| {
+                !export.type_only
+                    && entities.get(&location(file.path.shared(), export.local.span))
+                        == Some(result_root)
+            })
+    {
+        return None;
+    }
+    for id in file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == IdentifierRole::Reference)
+        .filter(|id| {
+            file.ast.reference_declaration(id.span) == Some(result_declaration)
+                || entities.get(&location(file.path.shared(), id.span)) == Some(result_root)
+        })
+    {
+        let call = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| call.callee == id.span && !call.construct)?;
+        if captured_lookup_scope(file, call.span) != scope
+            || call.arguments.len() != 1
+            || call.arguments.iter().any(|argument| argument.spread)
+        {
+            // No later closure lifetime or caller-controlled argument evaluation.
+            return None;
+        }
+        let key = &call.arguments.get(usize::from(recipe.key))?.literal_value;
+        if !captured_lookup_key_is_own_string(properties, key, recipe.strip_leading_dot) {
+            return None;
+        }
+    }
+    let callbacks = summary.callbacks.known()?;
+    let [callback] = callbacks.as_slice() else {
+        return None;
+    };
+    if callback.parameter != slot || !callback.invokes_argument() || callback.execution != "inline"
+    {
+        return None;
+    }
+    let mut bound = summary.clone();
+    bound.captured_arguments.insert(slot, argument.clone());
+    bound.inline_accessor_invocations.insert(slot, true);
+    bound.open_claims.remove(&ClaimDomain::Callbacks);
+    bound.open_claims.remove(&ClaimDomain::Returns);
+    bound.returns = ContractClaim::Known(None); // The proved own property is a string.
+    bound.captured_lookup = None; // Conditional metadata never becomes a local inference claim.
+    Some(bound)
+}
+
+fn captured_lookup_scope(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> Option<solid_facts::core::Span> {
+    file.ast
+        .functions
+        .iter()
+        .filter(|function| function.body.contains(span))
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map(|function| function.span)
+}
+
+fn captured_lookup_key_is_own_string(
+    properties: &[solid_facts::ast::ArgumentLiteralPropertyFact],
+    key: &solid_facts::ast::ArgumentLiteralFact,
+    strip_leading_dot: bool,
+) -> bool {
+    use solid_facts::ast::ArgumentLiteralFact;
+    let ArgumentLiteralFact::String(key) = key else {
+        return false;
+    };
+    let key: &str = key.as_str();
+    let key = if strip_leading_dot {
+        key.strip_prefix('.').unwrap_or(key)
+    } else {
+        key
+    };
+    properties
+        .iter()
+        .find(|property| property.name == key)
+        .is_some_and(|property| matches!(property.value, ArgumentLiteralFact::String(_)))
+}
+
+#[cfg(test)]
+mod captured_lookup_tests {
+    use super::captured_lookup_key_is_own_string;
+    use solid_facts::ast::{ArgumentLiteralFact as V, ArgumentLiteralPropertyFact as P};
+    fn bind(source: &str, with_import_identity: bool) -> Option<crate::ContractExport> {
+        bind_under(
+            source,
+            with_import_identity,
+            &crate::RuntimeConfigurationPremise::Assumed,
+            false,
+        )
+    }
+
+    fn bind_under(
+        source: &str,
+        with_import_identity: bool,
+        premise: &crate::RuntimeConfigurationPremise,
+        hazard: bool,
+    ) -> Option<crate::ContractExport> {
+        use crate::contract_semantics::{CapturedLookup, ClaimDomain, InvokeProtocol, ValueSource};
+        use crate::{ContractCallback, ContractClaim, ContractExport, EntitySymbols, SymbolId};
+        use solid_facts::{
+            FileFacts, ast,
+            compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
+            core::Generation,
+        };
+        use std::collections::{BTreeMap, BTreeSet, HashMap};
+        let ast = ast::extract("case.tsx", source).unwrap();
+        let compiler = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: ast.source.hash.clone(),
+            semantic_model: Default::default(),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            discarded_regions: vec![],
+            ownership_regions: vec![],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        };
+        let file = FileFacts::new(Generation::new(1).unwrap(), source, ast, compiler).unwrap();
+        let symbol =
+            |span: solid_facts::core::Span| SymbolId::from(format!("declaration:{}", span.start));
+        let mut by_span = HashMap::new();
+        for name in file
+            .ast
+            .bindings
+            .iter()
+            .flat_map(|binding| &binding.names)
+            .chain(
+                file.ast
+                    .imports
+                    .iter()
+                    .flat_map(|import| &import.bindings)
+                    .map(|binding| &binding.local),
+            )
+        {
+            by_span.insert(
+                (u64::from(name.span.start), u64::from(name.span.end)),
+                symbol(name.span),
+            );
+        }
+        for (reference, declaration) in &file.ast.reference_declarations {
+            by_span.insert(
+                (u64::from(reference.start), u64::from(reference.end)),
+                symbol(*declaration),
+            );
+        }
+        let entities = EntitySymbols {
+            by_path: HashMap::from([(file.path.to_string(), by_span)]),
+        };
+        let mut names = HashMap::new();
+        if with_import_identity {
+            let imported = &file.ast.imports[0].bindings[0];
+            names.insert(symbol(imported.local.span), SymbolId::from("createSignal"));
+        }
+        let factory = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| file.source_text(call.callee) == Some("lookup"))?;
+        let returned = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.initializer == Some(factory.span))?;
+        let root = symbol(returned.names[0].span);
+        let summary = ContractExport {
+            captured_lookup: Some(CapturedLookup {
+                dictionary: "dict".into(),
+                key: 0,
+                default_arguments: vec![1, 2],
+                strip_leading_dot: true,
+            }),
+            capture_sources: BTreeMap::from([(
+                usize::MAX,
+                ValueSource::Parameter {
+                    index: 0,
+                    path: vec![],
+                },
+            )]),
+            callbacks: ContractClaim::Known(vec![ContractCallback {
+                parameter: usize::MAX,
+                execution: "inline".into(),
+                schedule: None,
+                arguments: vec![],
+                owner: Some("inherited".into()),
+                clears_tracking: false,
+                protocol: InvokeProtocol::Call,
+                path: vec![],
+            }]),
+            open_claims: BTreeSet::from([ClaimDomain::Callbacks, ClaimDomain::Returns]),
+            ..ContractExport::default()
+        };
+        super::bind_captured_lookup(
+            &file,
+            &entities,
+            (&names, &solid_dialect::Solid2, premise, hazard),
+            factory,
+            &root,
+            &summary,
+        )
+    }
+
+    #[test]
+    fn instance_proof_requires_exact_signal_discarded_setter_and_every_use() {
+        let initial = "import { createSignal } from 'solid-js'; const [dict] = createSignal({ hello:'hello' }); const t = lookup(dict); t('hello');";
+        let bound = bind(initial, true).expect("exact immutable instance");
+        assert!(bound.inline_accessor_invocations[&usize::MAX]);
+        assert!(bound.captured_arguments.contains_key(&usize::MAX));
+        assert!(
+            !bound
+                .open_claims
+                .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
+        );
+        assert!(bound.captured_lookup.is_none());
+        let component = initial.replace("const [dict]", "function App() { const [dict]") + " }";
+        assert!(
+            bind(&component, true).is_some(),
+            "ordinary synchronous component scope"
+        );
+        let veto = crate::RuntimeConfigurationPremise::Vetoed {
+            location: typefacts::Location {
+                path: "setup.ts".into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        };
+        assert!(bind_under(initial, true, &veto, false).is_none());
+        assert!(
+            bind_under(
+                initial,
+                true,
+                &crate::RuntimeConfigurationPremise::Assumed,
+                true
+            )
+            .is_none()
+        );
+        assert!(
+            bind(initial, false).is_none(),
+            "unresolved import is never a native source"
+        );
+        for source in [
+            initial.replace("[dict]", "[dict, setDict]"),
+            initial.replace("t('hello')", "t('hello', mutate())"),
+            initial.replace("t('hello')", "const read = () => t('hello'); read()"),
+            initial.replace("const [dict]", "isPending(() => { const [dict]") + " });",
+            initial.replace("const [dict]", "latest(() => { const [dict]") + " });",
+            initial.replace("const [dict]", "async function App() { const [dict]") + " }",
+            initial.replace(
+                "createSignal({ hello:'hello' })",
+                "createSignal({ hello:'hello' }, {})",
+            ),
+            initial.replace("lookup(dict)", "lookup(dict, value => value)"),
+            initial.replace("t('hello')", "t('toString')"),
+            initial.replace("t('hello')", "t(key)"),
+            initial.replace("t('hello')", "t(...keys)"),
+            initial.replace("t('hello')", "const alias = t; alias('hello')"),
+            initial.replace("t('hello')", "const result = dict(); t('hello')"),
+            initial.replace("{ hello:'hello' }", "{ get hello() { return 'hello'; } }"),
+            initial.replace("{ hello:'hello' }", "{ ...other, hello:'hello' }"),
+            initial.replace("t('hello')", "t('hello'); export { t }"),
+            initial.replace("t('hello')", "const keep = { t }; t('hello')"),
+        ] {
+            assert!(bind(&source, true).is_none(), "{source}");
+        }
+        let paired = format!("{initial} const other = lookup(dict); other('hello');");
+        assert!(
+            bind(&paired, true).is_none(),
+            "a second factory is an unproved dictionary exposure"
+        );
+    }
+
+    #[test]
+    fn own_string_lookup_strips_one_dot_and_never_guesses_inherited_keys() {
+        let properties = vec![
+            P {
+                name: "hello".into(),
+                value: V::String("hello".into()),
+            },
+            P {
+                name: ".hello".into(),
+                value: V::String("dot".into()),
+            },
+        ];
+        for key in ["hello", ".hello", "..hello"] {
+            assert!(captured_lookup_key_is_own_string(
+                &properties,
+                &V::String(key.into()),
+                true
+            ));
+        }
+        for key in ["missing", "toString", "constructor", "...hello"] {
+            assert!(!captured_lookup_key_is_own_string(
+                &properties,
+                &V::String(key.into()),
+                true
+            ));
+        }
+        assert!(!captured_lookup_key_is_own_string(
+            &properties,
+            &V::Unknown,
+            true
+        ));
+        assert!(!captured_lookup_key_is_own_string(
+            &properties,
+            &V::Integer(0),
+            true
+        ));
+        let function = vec![P {
+            name: "hello".into(),
+            value: V::Function,
+        }];
+        assert!(!captured_lookup_key_is_own_string(
+            &function,
+            &V::String("hello".into()),
+            true
+        ));
+    }
 }

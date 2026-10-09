@@ -7683,6 +7683,24 @@ impl Dialect for Solid2 {
         (primitive == Primitive::CreateRoot).then_some(0)
     }
 
+    fn captured_lookup_runtime_hazard(&self, path: &str, start: u64, end: u64) -> bool {
+        runtime_configuration::lookup_hazard(path, start, end)
+    }
+
+    // Conditional on ADR 0266; no NoThrow, history or listener authority.
+    // rc.13 dev.js:2346-2354; dev-shared.js:5660-5696,6333-6638:
+    // a nonfunction initializer builds a plain signal holding that exact value.
+    fn tuple_accessor_preserves_initial_value(
+        &self,
+        primitive: Primitive,
+        slot: ResultSlot,
+    ) -> bool {
+        matches!(
+            (primitive, slot),
+            (Primitive::CreateSignal, ResultSlot::TupleItem(0))
+        )
+    }
+
     /// Source: the published declarations, read from the exact package
     /// artifacts of the audited prerelease. In
     /// `solid-js@2.0.0-rc.3/types/server/signals.d.ts`:

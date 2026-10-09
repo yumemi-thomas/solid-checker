@@ -2750,6 +2750,28 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// Exact declaration identities whose runtime use withholds the bounded
+    /// captured-lookup proof (mode switches, node exposure, diagnostic footer).
+    /// This is a recipe refusal, not another runtime-configuration premise.
+    fn captured_lookup_runtime_hazard(&self, declaration_path: &str, start: u64, end: u64) -> bool {
+        let _ = (declaration_path, start, end);
+        false
+    }
+
+    /// Under the explicit standard runtime configuration and intact runtime
+    /// model, a noncallable initial value, no options and a discarded setter leave
+    /// this tuple accessor observing precisely the initial value. The consumer
+    /// must also prove no accessor/result escape can expose the source or value.
+    /// Silence is not preservation. This does not generalize to derived sources.
+    fn tuple_accessor_preserves_initial_value(
+        &self,
+        primitive: Primitive,
+        slot: ResultSlot,
+    ) -> bool {
+        let _ = (primitive, slot);
+        false
+    }
+
     /// Whether invoking the accessor at `slot` of what `primitive` returns runs
     /// no code at all -- not the caller's, not the package's, not a callback's
     /// -- when **the creating call's first argument cannot be a function and
@@ -4040,6 +4062,40 @@ mod tests {
         // Not a version at all: the caller falls back, as it always has.
         assert_eq!(Version::for_solid_js("workspace:*"), None);
         assert_eq!(Version::for_solid_js(""), None);
+    }
+
+    #[test]
+    fn tuple_initial_value_preservation_requires_a_dialect_row() {
+        let silent = &Silent as &dyn Dialect;
+        assert!(!silent.tuple_accessor_preserves_initial_value(
+            Primitive::CreateSignal,
+            ResultSlot::TupleItem(0)
+        ));
+        let solid = &Solid2 as &dyn Dialect;
+        let path = "/p/node_modules/@solidjs/signals/dist/types/core/verdict.d.ts";
+        assert!(solid.captured_lookup_runtime_hazard(path, 75, 84));
+        assert!(!silent.captured_lookup_runtime_hazard(path, 75, 84));
+        assert!(!solid.captured_lookup_runtime_hazard(path, 74, 84));
+        assert!(!solid.captured_lookup_runtime_hazard(
+            "/p/node_modules/other/verdict.d.ts",
+            75,
+            84
+        ));
+        assert!(solid.tuple_accessor_preserves_initial_value(
+            Primitive::CreateSignal,
+            ResultSlot::TupleItem(0)
+        ));
+        assert!(!solid.tuple_accessor_preserves_initial_value(
+            Primitive::CreateSignal,
+            ResultSlot::TupleItem(1)
+        ));
+        assert!(
+            !solid.tuple_accessor_preserves_initial_value(Primitive::CreateMemo, ResultSlot::Whole)
+        );
+        assert!(!solid.tuple_accessor_preserves_initial_value(
+            Primitive::CreateOptimistic,
+            ResultSlot::TupleItem(0)
+        ));
     }
 
     #[test]

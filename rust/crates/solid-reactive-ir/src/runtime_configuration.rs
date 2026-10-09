@@ -53,6 +53,15 @@ fn configuration_api(
     dialect: &dyn Dialect,
     package_roots: &[(String, String)],
 ) -> Option<RuntimeConfigurationApi> {
+    let (path, start, end) = canonical_symbol_declaration(table, symbol, package_roots)?;
+    dialect.runtime_configuration_api(&path, start, end)
+}
+
+fn canonical_symbol_declaration(
+    table: &TypeScriptTable,
+    symbol: &str,
+    package_roots: &[(String, String)],
+) -> Option<(String, u64, u64)> {
     let mut current = symbol;
     let mut seen = HashSet::new();
     loop {
@@ -68,11 +77,11 @@ fn configuration_api(
             return None;
         };
         let path = canonical_declaration_path(declaration.location.path.as_ref(), package_roots)?;
-        return dialect.runtime_configuration_api(
-            &path,
+        return Some((
+            path,
             declaration.location.start_byte,
             declaration.location.end_byte,
-        );
+        ));
     }
 }
 
@@ -136,7 +145,7 @@ fn only_truthiness_tests(ast: &solid_facts::ast::AstFacts, declaration: Span) ->
         })
 }
 
-pub(crate) fn scan(facts: &ProjectFacts, dialect: &dyn Dialect) -> RuntimeConfigurationPremise {
+fn package_roots(facts: &ProjectFacts) -> Vec<(String, String)> {
     let mut roots = facts
         .resolved_imports
         .iter()
@@ -149,6 +158,63 @@ pub(crate) fn scan(facts: &ProjectFacts, dialect: &dyn Dialect) -> RuntimeConfig
         .collect::<Vec<_>>();
     roots.sort();
     roots.dedup();
+    roots
+}
+
+/// Positive visible refusals for the lookup recipe. No additional assumption,
+/// Unknown state or Type Facts reference demand is added to ADR 0266.
+pub(crate) fn captured_lookup_has_visible_runtime_hazard(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+) -> bool {
+    let roots = package_roots(facts);
+    for file in &facts.files {
+        let mut symbols = HashMap::new();
+        for entity in facts.typescript.entities_for_path(file.path.as_str()) {
+            let key = (entity.location.start_byte, entity.location.end_byte);
+            let symbol = (!entity.symbol_unresolved && !entity.symbol.is_empty())
+                .then_some(entity.symbol.as_ref());
+            symbols
+                .entry(key)
+                .and_modify(|value| *value = None)
+                .or_insert(symbol);
+        }
+        let hazard_at = |span: Span| {
+            symbols
+                .get(&(u64::from(span.start), u64::from(span.end)))
+                .copied()
+                .flatten()
+                .and_then(|symbol| canonical_symbol_declaration(&facts.typescript, symbol, &roots))
+                .is_some_and(|(path, start, end)| {
+                    dialect.captured_lookup_runtime_hazard(&path, start, end)
+                })
+        };
+        if file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .flat_map(|import| &import.bindings)
+            .any(|binding| {
+                !binding.type_only
+                    && binding.runtime_referenced
+                    && !matches!(binding.kind, ImportKind::Namespace | ImportKind::SideEffect)
+                    && hazard_at(binding.local.span)
+            })
+            || file
+                .ast
+                .members
+                .iter()
+                .any(|member| runtime_span(&file.ast, member.span) && hazard_at(member.property))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+pub(crate) fn scan(facts: &ProjectFacts, dialect: &dyn Dialect) -> RuntimeConfigurationPremise {
+    let roots = package_roots(facts);
     let mut identities = HashMap::new();
     for file in &facts.files {
         // Index only entities already supplied by the analysis. A duplicate
@@ -362,6 +428,83 @@ mod tests {
         assert_eq!(finding.evidence[0].location.as_ref(), Some(&site));
         assert!(finding.fixes.is_empty());
         assert!(RuntimeConfigurationPremise::default().permits_proof());
+    }
+
+    fn lookup_project(source: &str, declaration_path: &str, start: u64, end: u64) -> ProjectFacts {
+        let ast = solid_facts::ast::extract("setup.tsx", source).unwrap();
+        let span = if let Some(member) = ast.members.first() {
+            member.property
+        } else {
+            ast.imports[0].bindings[0].local.span
+        };
+        let mut encoded = serde_json::to_value(table(declaration_path, start, end)).unwrap();
+        encoded["entities"] = serde_json::json!([{
+            "location": { "path": "setup.tsx", "startByte": span.start, "endByte": span.end },
+            "symbol": "alias"
+        }]);
+        let compiler = solid_facts::compiler::ExecutionMap {
+            compiler_facts_protocol: solid_facts::compiler::COMPILER_FACTS_PROTOCOL,
+            source_hash: ast.source.hash.clone(),
+            semantic_model: Default::default(),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            discarded_regions: vec![],
+            ownership_regions: vec![],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        };
+        let generation = solid_facts::core::Generation::new(1).unwrap();
+        ProjectFacts {
+            generation,
+            project_id: "lookup".into(),
+            files: vec![solid_facts::FileFacts::new(generation, source, ast, compiler).unwrap()],
+            typescript: serde_json::from_value(encoded).unwrap(),
+            typescript_changes: None,
+            resolved_imports: None,
+            runtime_resolutions: None,
+            runtime_symbol_redirects: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn lookup_refusals_are_exact_runtime_uses_separate_from_the_premise() {
+        let path = "/p/node_modules/@solidjs/signals/dist/types/core/dev.d.ts";
+        for source in [
+            "import { anything as renamed } from 'arbitrary'; renamed(() => undefined);",
+            "import * as S from 'arbitrary'; S.renamed(() => undefined);",
+        ] {
+            let facts = lookup_project(source, path, 22414, 22430);
+            assert!(captured_lookup_has_visible_runtime_hazard(
+                &facts,
+                &solid_dialect::Solid2
+            ));
+            assert!(
+                scan(&facts, &solid_dialect::Solid2).permits_proof(),
+                "not an ADR 0266 veto"
+            );
+            let wrong = lookup_project(source, path, 22415, 22430);
+            assert!(!captured_lookup_has_visible_runtime_hazard(
+                &wrong,
+                &solid_dialect::Solid2
+            ));
+            let unrelated =
+                lookup_project(source, "/p/node_modules/other/core/dev.d.ts", 22414, 22430);
+            assert!(!captured_lookup_has_visible_runtime_hazard(
+                &unrelated,
+                &solid_dialect::Solid2
+            ));
+        }
+        for source in [
+            "import type { anything } from 'arbitrary'; type T = typeof anything;",
+            "import { anything } from 'arbitrary'; type T = typeof anything;",
+            "import * as S from 'arbitrary'; type T = typeof S.renamed;",
+        ] {
+            let facts = lookup_project(source, path, 22414, 22430);
+            assert!(!captured_lookup_has_visible_runtime_hazard(
+                &facts,
+                &solid_dialect::Solid2
+            ));
+        }
     }
 
     #[test]

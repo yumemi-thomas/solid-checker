@@ -724,6 +724,17 @@ impl CanonicalWriter {
     }
 
     fn call(&mut self, call: &CallSemantics) {
+        // Required captures already bind the entire returned graph in recipe
+        // addresses. Omission emits no byte: pre-extension digests stay exact.
+        if let Some(lookup) = call.captured_lookup() {
+            self.text("solid-checker:semantic-captured-own-string-lookup:v1");
+            self.text(&lookup.dictionary);
+            self.u16(lookup.key);
+            self.sequence(&lookup.default_arguments, |writer, index| {
+                writer.u16(*index)
+            });
+            self.bool(lookup.strip_leading_dot);
+        }
         if self.captures {
             self.sequence(call.captures(), |writer, capture| {
                 writer.text(&capture.id);

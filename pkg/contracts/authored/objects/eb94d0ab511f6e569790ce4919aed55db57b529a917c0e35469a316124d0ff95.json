@@ -173,43 +173,17 @@
       "call": {
         "closed": [
           "reads",
-          "creates"
+          "creates",
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": [],
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "dictionary-at-result"
-          }
-        ],
+        "callbacks": [],
         "returns": [
           "return"
         ],
         "operations": [
-          {
-            "id": "dictionary-at-result",
-            "kind": "invoke",
-            "trigger": {
-              "event": "result-access"
-            },
-            "at": {
-              "event": "result-access",
-              "schedule": "external"
-            },
-            "tracking": "ambient-at-execution",
-            "count": {
-              "min": 0,
-              "max": "many",
-              "scope": "trigger"
-            },
-            "owner": {
-              "source": "ambient-at-execution"
-            }
-          },
           {
             "id": "return",
             "kind": "return",
@@ -220,14 +194,69 @@
               "event": "call",
               "schedule": "same-stack"
             },
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "count": {
-              "min": 0,
-              "max": "many",
+              "min": 1,
+              "max": 1,
               "scope": "call"
             },
             "output": {
-              "kind": "callable"
+              "kind": "returned-callable",
+              "call": {
+                "capturedLookup": {
+                  "dictionary": "dict",
+                  "key": 0,
+                  "defaultArguments": [
+                    1,
+                    2
+                  ],
+                  "stripLeadingDot": true
+                },
+                "captures": [
+                  {
+                    "id": "dict",
+                    "from": {
+                      "arg": 0
+                    }
+                  }
+                ],
+                "closed": [
+                  "reads",
+                  "creates"
+                ],
+                "reads": [],
+                "creates": [],
+                "callbacks": [
+                  {
+                    "from": {
+                      "capture": "dict"
+                    },
+                    "operation": "dict-read"
+                  }
+                ],
+                "operations": [
+                  {
+                    "id": "dict-read",
+                    "kind": "invoke",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "ambient-at-execution",
+                    "count": {
+                      "min": 0,
+                      "max": 1,
+                      "scope": "call"
+                    },
+                    "owner": {
+                      "source": "ambient-at-execution"
+                    }
+                  }
+                ]
+              }
             }
           }
         ]

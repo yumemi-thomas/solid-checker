@@ -3270,7 +3270,11 @@ fn captures_hash_factory_identity_and_refuse_certification() {
     let Err(refused) = certification::proof_policy_2().inspect_candidates(&normalized) else {
         panic!("captures are authored-only");
     };
-    assert!(refused.to_string().contains("captures are authored-only"));
+    assert!(
+        refused
+            .to_string()
+            .contains("captures and captured lookups are authored-only")
+    );
     let plain = call(vec![], vec![]);
     assert_eq!(
         capture_proposal(plain.clone())

@@ -357,6 +357,7 @@ fn normalize_call_in(
         )?;
     }
     normalize_callback_results(call, &resources, path)?;
+    normalize_captured_lookup(call, returned_graph, path)?;
     call.operations
         .sort_by(|left, right| left.id.cmp(&right.id));
 
@@ -3305,6 +3306,90 @@ fn normalize_callback_results(
     }
     call.callback_results
         .sort_by(|a, b| a.producer.cmp(&b.producer));
+    Ok(())
+}
+
+fn normalize_captured_lookup(
+    call: &mut CallSemantics,
+    returned_graph: bool,
+    path: &str,
+) -> Result<(), ModelError> {
+    let Some(lookup) = call.captured_lookup.as_mut() else {
+        return Ok(());
+    };
+    lookup.default_arguments.sort_unstable();
+    let [capture] = call.captures.as_slice() else {
+        return contradiction(path.to_owned(), "captured lookup needs exactly one capture");
+    };
+    let ValueSource::Parameter {
+        index,
+        path: member_path,
+    } = &capture.from
+    else {
+        return contradiction(
+            path.to_owned(),
+            "captured lookup needs a bare parameter capture",
+        );
+    };
+    let [row] = call.claims.callbacks.items() else {
+        return contradiction(
+            path.to_owned(),
+            "captured lookup needs one possible dictionary call",
+        );
+    };
+    let [operation] = call.operations.as_slice() else {
+        return contradiction(
+            path.to_owned(),
+            "captured lookup's conditional slice owns its dispatch",
+        );
+    };
+    if !returned_graph
+        || capture.id != lookup.dictionary
+        || !member_path.is_empty()
+        || lookup.default_arguments.len() > 16
+        || lookup
+            .default_arguments
+            .windows(2)
+            .any(|pair| pair[0] == pair[1])
+        || lookup.default_arguments.contains(index)
+        || call.claims.callbacks.is_closed()
+        || !matches!(call.claims.returns, KnowledgeSet::Unknown)
+        || !call.claims.reads.is_closed()
+        || !call.claims.reads.items().is_empty()
+        || !call.claims.creates.is_closed()
+        || !call.claims.creates.items().is_empty()
+        || !call.callback_results.is_empty()
+        || !call.edges.is_empty()
+        || !call.resources.is_empty()
+        || !matches!(&row.from, ValueSource::Capture { capture, path }
+            if capture == &lookup.dictionary && path.is_empty())
+        || row.operation != operation.id
+        || operation.kind != OperationKind::Invoke
+        || operation.invoke_protocol() != InvokeProtocol::Call
+        || !operation.inputs.is_empty()
+        || operation.guard.is_some()
+        || operation.strict_read.is_some()
+        || operation.trigger != Some(Trigger::Event(Event::Call))
+        || operation.at != Some(Event::Call)
+        || operation.schedule != Some(Schedule::SameStack)
+        || operation.tracking != Tracking::AmbientAtExecution
+        || operation.owner
+            != (OwnerRelation {
+                source: OwnerSource::AmbientAtExecution,
+                ..OwnerRelation::default()
+            })
+        || operation.output.is_some()
+        || !operation.resources.is_empty()
+        || operation.composed_from.is_some()
+        || operation.cardinality.scope != Some(CardinalityScope::Call)
+        || operation.cardinality.min != Some(0)
+        || operation.cardinality.max != Some(UpperBound::Finite(1))
+    {
+        return contradiction(
+            path.to_owned(),
+            "unsupported or unconditional captured lookup claim",
+        );
+    }
     Ok(())
 }
 

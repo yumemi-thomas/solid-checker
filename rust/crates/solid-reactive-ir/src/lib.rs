@@ -1292,6 +1292,7 @@ pub struct ContractExport {
     /// Exact result producers and contextual uses, never ordinary argument
     /// invocation rows. Local summaries do not infer this authored vocabulary.
     pub callback_results: Vec<ContractCallbackResult>,
+    pub captured_lookup: Option<contract_semantics::CapturedLookup>,
     /// Projection only. Virtual callback slots name explicit captures, never
     /// invocation arguments. No producer may re-emit these as parameter rows.
     pub capture_sources: BTreeMap<usize, crate::contract_semantics::ValueSource>,

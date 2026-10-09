@@ -33,6 +33,40 @@
     "sidecars": { "$ref": "#/$defs/sidecars" }
   },
   "$defs": {
+    "capturedLookup": {
+      "description": "Authored conditional own-string lookup slice on a whole returned graph. Requires one bare dictionary capture. Open callbacks/returns are discharged only by an exact immutable dictionary, omitted defaults and own literal key proof; no claim outside that premise.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dictionary",
+        "key",
+        "defaultArguments",
+        "stripLeadingDot"
+      ],
+      "properties": {
+        "dictionary": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "key": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "defaultArguments": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          }
+        },
+        "stripLeadingDot": {
+          "type": "boolean"
+        }
+      }
+    },
     "string": { "type": "string", "maxLength": 16384 },
     "nonemptyString": {
       "type": "string",
@@ -210,6 +244,7 @@
           "type": "array", "maxItems": 4096,
           "items": { "$ref": "#/$defs/callbackResult" }
         },
+        "capturedLookup": { "$ref": "#/$defs/capturedLookup" },
         "captures": {
           "type": "array",
           "maxItems": 4096,

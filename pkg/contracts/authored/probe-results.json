@@ -4308,6 +4308,8 @@
       "package": "@solid-primitives/i18n",
       "version": "3.0.0-next.4",
       "export": "translator",
+      "returnedCallableProbeDigest": "d25454e87d3984c71cc4ac4474d69e81da102c6168459b9699cb9ae4e448206e",
+      "captureProbeDigest": "7e6e8bfdecec66b1a02945b8b1e31151c5861adef44e6ca900d2db59c02a4778",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -4332,8 +4334,86 @@
           "code": "STRICT_READ_UNTRACKED",
           "site": {
             "file": "case",
-            "line": 6,
-            "column": 19
+            "line": 5,
+            "column": 38
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+i18n@3.0.0-next.4",
+      "package": "@solid-primitives/i18n",
+      "version": "3.0.0-next.4",
+      "export": "translator",
+      "label": "own-string",
+      "returnedCallableProbeDigest": "6b82e73fe51d9ef21d03da84ae726ddd9563e8595c78f08b73abcc386288d13a",
+      "captureProbeDigest": "217c95c9845b70d2a50eced6d32a62517503135f062f9bcc8866048e44e41c7f",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 79
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+i18n@3.0.0-next.4",
+      "package": "@solid-primitives/i18n",
+      "version": "3.0.0-next.4",
+      "export": "translator",
+      "label": "prefix-own-string",
+      "returnedCallableProbeDigest": "d303bbf705a796c8776499b078340f7a45883bf89fbcc36cec142370ff817950",
+      "captureProbeDigest": "702ac1ffdda63a19b04ffea1b9a778b853874f5398aef66e162301df752c458e",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 103
           }
         }
       ],

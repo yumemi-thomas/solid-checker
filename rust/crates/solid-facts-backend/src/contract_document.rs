@@ -418,6 +418,12 @@ fn compact_call(
 ) -> Result<JsonValue, ContractFailure> {
     let claims = call.claims();
     let mut object = JsonMap::new();
+    if let Some(lookup) = call.captured_lookup() {
+        object.insert("capturedLookup".into(), json!({
+            "dictionary": lookup.dictionary, "key": lookup.key,
+            "defaultArguments": lookup.default_arguments, "stripLeadingDot": lookup.strip_leading_dot
+        }));
+    }
     if !call.captures().is_empty() {
         object.insert("captures".into(), JsonValue::Array(call.captures().iter().map(|capture| {
             Ok(json!({ "id": capture.id, "from": compact_value_source(&capture.from, ids)? }))
@@ -1660,7 +1666,20 @@ struct WireSummary {
 
 #[derive(Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct WireCapturedLookup {
+    dictionary: String,
+    key: u16,
+    #[serde(rename = "defaultArguments")]
+    default_arguments: Vec<u16>,
+    #[serde(rename = "stripLeadingDot")]
+    strip_leading_dot: bool,
+}
+
+#[derive(Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct WireCall {
+    #[serde(default, rename = "capturedLookup")]
+    captured_lookup: Option<WireCapturedLookup>,
     #[serde(default)]
     captures: Vec<WireCapturedValue>,
     #[serde(default)]
@@ -3174,6 +3193,14 @@ fn expand_call(
     // Whether a bound is admissible -- `reads` closed -- is a normalization
     // invariant, refused by name in `validate_accessor_bounds`.
     .with_accessor_bounds(bounds)
+    .with_captured_lookup(call.captured_lookup.map(|lookup| {
+        solid_reactive_ir::contract_semantics::CapturedLookup {
+            dictionary: lookup.dictionary,
+            key: lookup.key,
+            default_arguments: lookup.default_arguments,
+            strip_leading_dot: lookup.strip_leading_dot,
+        }
+    }))
     .with_captures(
         call.captures
             .into_iter()
@@ -5292,6 +5319,57 @@ mod tests {
                 "a {why} computations domain must be refused: {call}"
             );
         }
+    }
+
+    #[test]
+    fn captured_lookup_round_trips_binds_digest_and_refuses_unconditional_claims() {
+        let bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/reactive-ir/package-captured-lookup-consumer/node_modules/reactive-package/solid-reactivity.json"
+        ));
+        let kept = decode(bytes).unwrap().normalize().unwrap();
+        let emitted = encode(
+            &kept,
+            &SidecarDigests {
+                proof: None,
+                probes: None,
+            },
+            false,
+        )
+        .unwrap();
+        let again = decode(&emitted).unwrap().normalize().unwrap();
+        assert_eq!(kept.semantic_digest(), again.semantic_digest());
+        let mut document: JsonValue = serde_json::from_slice(bytes).unwrap();
+        let graph =
+            &mut document["summaries"]["summary-lookup"]["call"]["operations"][0]["output"]["call"];
+        graph["capturedLookup"]["stripLeadingDot"] = json!(false);
+        let changed = decode(&serde_json::to_vec(&document).unwrap())
+            .unwrap()
+            .normalize()
+            .unwrap();
+        assert_ne!(kept.semantic_digest(), changed.semantic_digest());
+        for (field, value) in [
+            ("dictionary", json!("dangling")),
+            ("defaultArguments", json!([1, 1])),
+            ("key", json!(-1)),
+        ] {
+            let mut invalid: JsonValue = serde_json::from_slice(bytes).unwrap();
+            invalid["summaries"]["summary-lookup"]["call"]["operations"][0]["output"]["call"]["capturedLookup"]
+                [field] = value;
+            assert!(
+                decode(&serde_json::to_vec(&invalid).unwrap())
+                    .and_then(|decoded| decoded.normalize())
+                    .is_err()
+            );
+        }
+        let mut invalid: JsonValue = serde_json::from_slice(bytes).unwrap();
+        invalid["summaries"]["summary-lookup"]["call"]["operations"][0]["output"]["call"]["closed"] =
+            json!(["reads", "creates", "callbacks"]);
+        assert!(
+            decode(&serde_json::to_vec(&invalid).unwrap())
+                .and_then(|decoded| decoded.normalize())
+                .is_err()
+        );
     }
 
     #[test]

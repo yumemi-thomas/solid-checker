@@ -341,3 +341,5 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/package-derived-get-consumer/node_modules/**
 !fixtures/reactive-ir/package-closed-map-owner-consumer/node_modules/
 !fixtures/reactive-ir/package-closed-map-owner-consumer/node_modules/**
+!fixtures/reactive-ir/package-captured-lookup-consumer/node_modules/
+!fixtures/reactive-ir/package-captured-lookup-consumer/node_modules/**

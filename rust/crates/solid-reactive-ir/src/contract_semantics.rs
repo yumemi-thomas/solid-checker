@@ -1472,6 +1472,10 @@ pub struct CallSemantics {
     /// Values retained at the enclosing factory call, not invocation arguments.
     /// Valid only on a whole returned callable's graph. Authored only.
     captures: Vec<CapturedValue>,
+    /// Authored conditional slice: an own string key of a captured dictionary,
+    /// with the listed factory defaults, returns that string after one ambient
+    /// dictionary call. Outside the premise, callbacks/returns stay unknown.
+    captured_lookup: Option<CapturedLookup>,
     pub operations: Vec<Operation>,
     pub edges: Vec<OperationEdge>,
     pub resources: Vec<Resource>,
@@ -1494,6 +1498,7 @@ impl CallSemantics {
             accessor_bounds: BTreeSet::new(),
             callback_results: Vec::new(),
             captures: Vec::new(),
+            captured_lookup: None,
             operations,
             edges,
             resources,
@@ -1518,6 +1523,17 @@ impl CallSemantics {
     pub fn with_captures(mut self, captures: Vec<CapturedValue>) -> Self {
         self.captures = captures;
         self
+    }
+
+    #[must_use]
+    pub fn with_captured_lookup(mut self, lookup: Option<CapturedLookup>) -> Self {
+        self.captured_lookup = lookup;
+        self
+    }
+
+    #[must_use]
+    pub fn captured_lookup(&self) -> Option<&CapturedLookup> {
+        self.captured_lookup.as_ref()
     }
 
     #[must_use]
@@ -1765,6 +1781,19 @@ impl MemberClass {
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct OperationId(pub String);
+
+/// Finite conditional lookup recipe, not an unconditional callback census.
+/// `dictionary` names one bare factory-parameter capture; `key` is an invocation
+/// argument. Only omitted `default_arguments` are initially admitted. A literal
+/// string key is optionally stripped of one leading dot, then an exact own data
+/// string property is selected. No dictionary/result identity escapes this slice.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CapturedLookup {
+    pub dictionary: String,
+    pub key: u16,
+    pub default_arguments: Vec<u16>,
+    pub strip_leading_dot: bool,
+}
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ResourceId(pub String);

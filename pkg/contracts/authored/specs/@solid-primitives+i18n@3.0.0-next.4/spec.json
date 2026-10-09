@@ -205,60 +205,22 @@
       }
     },
     "translator": {
-      "hostFree": {
-        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207. Both constructors return the same translation callable without invoking dict at construction. Later dict invocation is ambient-at-execution on the same stack; no untrack or dependency branch exists. reads/creates close only package-owned call behavior; callbacks and returns stay open for dictionary functions, resolvers and missing-key callbacks. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
-        "minZero": [],
-        "closed": [
-          "reads",
-          "creates"
-        ],
-        "closures": {
-          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207. Both constructors return the same translation callable without invoking dict at construction. Later dict invocation is ambient-at-execution on the same stack; no untrack or dependency branch exists. reads/creates close only package-owned call behavior; callbacks and returns stay open for dictionary functions, resolvers and missing-key callbacks. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
-          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207. Both constructors return the same translation callable without invoking dict at construction. Later dict invocation is ambient-at-execution on the same stack; no untrack or dependency branch exists. reads/creates close only package-owned call behavior; callbacks and returns stay open for dictionary functions, resolvers and missing-key callbacks. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain."
-        }
-      },
-      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207 \u2014 dict is captured only in the result and invoked later, in that result caller's context (result-access). No own reactive source/owner is created. Dictionary-value functions, the resolver, missing-key callbacks and arbitrary result alternatives keep callbacks and returns OPEN; this is not an inert described-callable.",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
       "rule": "strict-read-untracked",
       "call": {
         "closed": [
           "reads",
-          "creates"
+          "creates",
+          "callbacks",
+          "returns"
         ],
         "reads": [],
         "creates": [],
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "dictionary-at-result"
-          }
-        ],
+        "callbacks": [],
         "returns": [
           "return"
         ],
         "operations": [
-          {
-            "id": "dictionary-at-result",
-            "kind": "invoke",
-            "trigger": {
-              "event": "result-access"
-            },
-            "at": {
-              "event": "result-access",
-              "schedule": "external"
-            },
-            "tracking": "ambient-at-execution",
-            "count": {
-              "min": 0,
-              "max": "many",
-              "scope": "trigger"
-            },
-            "owner": {
-              "source": "ambient-at-execution"
-            }
-          },
           {
             "id": "return",
             "kind": "return",
@@ -269,22 +231,103 @@
               "event": "call",
               "schedule": "same-stack"
             },
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "count": {
-              "min": 0,
-              "max": "many",
+              "min": 1,
+              "max": 1,
               "scope": "call"
             },
             "output": {
-              "kind": "callable"
+              "kind": "returned-callable",
+              "call": {
+                "capturedLookup": {
+                  "dictionary": "dict",
+                  "key": 0,
+                  "defaultArguments": [
+                    1,
+                    2
+                  ],
+                  "stripLeadingDot": true
+                },
+                "captures": [
+                  {
+                    "id": "dict",
+                    "from": {
+                      "arg": 0
+                    }
+                  }
+                ],
+                "closed": [
+                  "reads",
+                  "creates"
+                ],
+                "reads": [],
+                "creates": [],
+                "callbacks": [
+                  {
+                    "from": {
+                      "capture": "dict"
+                    },
+                    "operation": "dict-read"
+                  }
+                ],
+                "operations": [
+                  {
+                    "id": "dict-read",
+                    "kind": "invoke",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "ambient-at-execution",
+                    "count": {
+                      "min": 0,
+                      "max": 1,
+                      "scope": "call"
+                    },
+                    "owner": {
+                      "source": "ambient-at-execution"
+                    }
+                  }
+                ]
+              }
             }
           }
         ]
       },
       "closures": {
-        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207 \u2014 dict is captured only in the result and invoked later, in that result caller's context (result-access). No own reactive source/owner is created. Dictionary-value functions, the resolver, missing-key callbacks and arbitrary result alternatives keep callbacks and returns OPEN; this is not an inert described-callable.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207 \u2014 dict is captured only in the result and invoked later, in that result caller's context (result-access). No own reactive source/owner is created. Dictionary-value functions, the resolver, missing-key callbacks and arbitrary result alternatives keep callbacks and returns OPEN; this is not an inert described-callable."
-      }
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+      },
+      "captureClosures": {
+        "return.dict": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+      },
+      "returnedClosures": {
+        "return": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+        }
+      },
+      "lookupClosures": {
+        "return": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+      },
+      "probes": [
+        {
+          "label": "own-string",
+          "rule": "strict-read-untracked",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+        },
+        {
+          "label": "prefix-own-string",
+          "rule": "strict-read-untracked",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+        }
+      ]
     }
   }
 }

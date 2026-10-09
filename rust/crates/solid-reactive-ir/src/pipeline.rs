@@ -378,8 +378,14 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     add_solid_import_names(facts, entities, dialect, &mut symbol_names);
     build_timings.symbol_name_indexes = substage_started.elapsed();
     let substage_started = Instant::now();
-    let mut resolved_contracts =
-        resolve_accepted_contract_imports(facts, contracts, entities, &symbol_names, dialect);
+    let mut resolved_contracts = resolve_accepted_contract_imports(
+        facts,
+        contracts,
+        entities,
+        &symbol_names,
+        dialect,
+        &runtime_configuration,
+    );
     build_timings.contract_resolution = substage_started.elapsed();
     let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
     let semantic_lookup = SemanticLookup::new(

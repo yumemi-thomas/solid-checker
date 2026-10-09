@@ -28816,3 +28816,20 @@ coerces it with `String(original)`, invoking a caller `Symbol.toPrimitive`
 hook outside every stated row. ADR 0262's normal-result proof is not a
 no-throw proof. Closing it needs an exception-use census or a premise that
 excludes object-bearing abrupt completions.
+
+
+## Conditional captured dictionary lookup (2026-10-09, ADR 0267)
+
+The authored `capturedLookup` slice preserves a dictionary call's ambient execution
+context and proves only exact own string keys with omitted defaults. The consumer
+requires a fresh native signal initializer, no options, discarded setter, exact
+binder references and no captured dictionary/returned callable escape. This closes
+only translator's original immutable literal twins after admission, conditional on
+ADR 0266's standard runtime configuration. The instance consumes permits_proof();
+projection retains its project-wide veto. Same synchronous scope/no supplied callback
+entry and exact runtime mode/node-exposure/footer refusals exclude unsupported entry
+and reporting channels. This is not a NoThrow claim. Mutable sources,
+missing/inherited/dynamic keys, custom resolvers/handlers, wrappers and opaque
+producers remain uncertifiable. No general dictionary dispatch or state model is
+claimed. Measured: ledger browser 98 -> 99; the namespace-created dictionary
+case stays uncertifiable (more conservative than predicted).

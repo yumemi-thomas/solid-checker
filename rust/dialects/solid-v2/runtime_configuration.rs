@@ -52,3 +52,54 @@ mod tests {
         );
     }
 }
+
+/// Positive recipe refusals; these do not change the ADR 0266 premise.
+pub(super) fn lookup_hazard(path: &str, start: u64, end: u64) -> bool {
+    let normalized = path.replace('\\', "/");
+    let Some((_, declaration)) = normalized.rsplit_once("/node_modules/") else {
+        return false;
+    };
+    matches!(
+        (declaration, start, end),
+        ("@solidjs/signals/dist/types/core/dev.d.ts", 22414, 22430) // setConsoleFooter
+        | ("@solidjs/signals/dist/types/core/owner.d.ts", 2463, 2471) // getOwner
+        | ("@solidjs/signals/dist/types/core/owner.d.ts", 1825, 1836) // getObserver
+        | ("@solidjs/signals/dist/types/core/verdict.d.ts", 24, 30) // latest
+        | ("@solidjs/signals/dist/types/core/verdict.d.ts", 75, 84) // isPending
+        | ("@solidjs/signals/dist/types/core/core.d.ts", 1834, 1852) // setSnapshotCapture
+        | ("@solidjs/signals/dist/types/core/core.d.ts", 1901, 1918) // markSnapshotScope
+        | ("@solidjs/signals/dist/types/core/core.d.ts", 1964, 1984) // releaseSnapshotScope
+        | ("@solidjs/signals/dist/types/core/core.d.ts", 2030, 2044) // clearSnapshots
+        | ("@solidjs/signals/dist/types/core/scheduler.d.ts", 7781, 7796) // ROOT_ERROR_HOOK
+    )
+}
+
+#[cfg(test)]
+mod lookup_tests {
+    use super::lookup_hazard;
+    #[test]
+    fn refusal_catalog_is_exact_and_normalizes_windows_paths() {
+        for (file, start, end) in [
+            ("dev", 22414, 22430),
+            ("owner", 2463, 2471),
+            ("owner", 1825, 1836),
+            ("verdict", 24, 30),
+            ("verdict", 75, 84),
+            ("core", 1834, 1852),
+            ("core", 1901, 1918),
+            ("core", 1964, 1984),
+            ("core", 2030, 2044),
+            ("scheduler", 7781, 7796),
+        ] {
+            let path = format!("/p/node_modules/@solidjs/signals/dist/types/core/{file}.d.ts");
+            assert!(lookup_hazard(&path, start, end));
+            assert!(!lookup_hazard(&path, start + 1, end));
+            assert!(!lookup_hazard(
+                &path.replace("@solidjs/signals", "unrelated"),
+                start,
+                end
+            ));
+            assert!(lookup_hazard(&path.replace('/', "\\"), start, end));
+        }
+    }
+}

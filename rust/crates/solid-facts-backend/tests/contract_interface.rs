@@ -85,6 +85,7 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
         "version".into(),
         ContractExport {
             callback_results: Vec::new(),
+            captured_lookup: None,
             capture_sources: Default::default(),
             captured_arguments: Default::default(),
             captured_resource_slots: Default::default(),
@@ -162,6 +163,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
         "version".into(),
         ContractExport {
             callback_results: Vec::new(),
+            captured_lookup: None,
             capture_sources: Default::default(),
             captured_arguments: Default::default(),
             captured_resource_slots: Default::default(),

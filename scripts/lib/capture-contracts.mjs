@@ -12,6 +12,18 @@ export function validateCaptures(where, claim) {
   const cited = claim.captureClosures ?? {};
   const keys = new Set();
   for (const [returned, graph] of graphs(claim)) {
+    const lookup = graph.capturedLookup;
+    if (lookup) {
+      assert(typeof cited[`${returned}.${lookup.dictionary}`] === "string", `${where}: lookup needs capture citation`);
+      assert(typeof claim.lookupClosures?.[returned] === "string" && /\S+:\d+/.test(claim.lookupClosures[returned]), `${where}: lookup slice needs installed dispatch citation`);
+      assert(Number.isInteger(lookup.key) && lookup.key >= 0 && lookup.key <= 65535);
+      assert(typeof lookup.stripLeadingDot === "boolean");
+      assert(Array.isArray(lookup.defaultArguments) && lookup.defaultArguments.length <= 16);
+      assert(lookup.defaultArguments.every(index => Number.isInteger(index) && index >= 0 && index <= 65535));
+      assert.equal(new Set(lookup.defaultArguments).size, lookup.defaultArguments.length);
+      assert((graph.captures ?? []).length === 1 && graph.captures[0].id === lookup.dictionary);
+      assert(!(graph.closed ?? []).includes("callbacks") && !(graph.closed ?? []).includes("returns"), `${where}: lookup is conditional`);
+    }
     const ids = new Set();
     for (const capture of graph.captures ?? []) {
       assert(typeof capture.id === "string" && capture.id.length && !ids.has(capture.id), `${where}: distinct capture id required`);
@@ -43,7 +55,9 @@ export function captureProbeDigest(spec, name, pair, misuse, correct, cases) {
   if (!graphs(claim).some(([, graph]) => (graph.captures ?? []).length)) return undefined;
   validateCaptures(`${spec.package}#${name}`, claim);
   return createHash("sha256").update(JSON.stringify({
-    format: "solid-checker:authored-captures-probe:v1",
+    format: graphs(claim).some(([, graph]) => graph.capturedLookup)
+      ? "solid-checker:authored-captured-lookup-probe:v1"
+      : "solid-checker:authored-captures-probe:v1",
     package: spec.package, version: spec.version, runtime: spec.solidRuntime,
     cases, claim, pair, misuse, correct
   })).digest("hex");

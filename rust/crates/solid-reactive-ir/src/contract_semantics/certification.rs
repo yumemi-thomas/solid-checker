@@ -345,11 +345,11 @@ impl ProofPolicy2 {
                 if export.call.operations.iter().any(|operation| {
                     matches!(&operation.output, Some(ValueShape::ReturnedCallable {
                         call: Some(call), ..
-                    }) if !call.captures().is_empty())
+                    }) if !call.captures().is_empty() || call.captured_lookup().is_some())
                 }) {
                     return Err(ModelError::Contradiction {
                         path: format!("{}.{export_name}", artifact.id),
-                        reason: "returned captures are authored-only and not certifiable".into(),
+                        reason: "returned captures and captured lookups are authored-only and not certifiable".into(),
                     });
                 }
                 // No implementation census establishes result-use closure.

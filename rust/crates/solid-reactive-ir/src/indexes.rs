@@ -1263,6 +1263,34 @@ impl<'a> SemanticLookup<'a> {
                     hasher.update(file.source_hash.as_str().as_bytes());
                 }
             }
+            // Captured lookup admission reads a project-wide runtime-hazard
+            // census. Bind its resolved instances: an import-only setup edit
+            // can withdraw a graph without changing the using file's sources,
+            // compiler facts or TypeScript source-discovery dependencies.
+            if self.resolved_contracts.by_symbol.values().any(|binding| {
+                binding
+                    .summary
+                    .returned_callable_effects
+                    .as_ref()
+                    .is_some_and(|summary| summary.captured_lookup.is_some())
+            }) {
+                hasher.update(b"captured-lookup-instances\0");
+                let mut instances = self
+                    .resolved_contracts
+                    .returned_callable_bindings
+                    .iter()
+                    .collect::<Vec<_>>();
+                instances.sort_unstable();
+                for instance in instances {
+                    let symbol = instance.as_str();
+                    hasher.update(
+                        u64::try_from(symbol.len())
+                            .unwrap_or(u64::MAX)
+                            .to_le_bytes(),
+                    );
+                    hasher.update(symbol.as_bytes());
+                }
+            }
             // Returned-source proofs inspect callee syntax and binding facts,
             // even when its public type and read summary do not change. Bind
             // the byte identity of every file that can hold such a proof (a
