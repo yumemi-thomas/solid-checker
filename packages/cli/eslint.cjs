@@ -693,6 +693,13 @@ for (const catalog of Object.values(manifests)) {
       )
     }
   };
+  // ADR 0269: the dialect config with the browser runtime target. For client
+  // applications, where analyzed code runs in the browser; a later config
+  // that sets `settings.solidChecker.runtime` overrides it.
+  plugin.configs[`browser-${catalog.config}`] = {
+    ...plugin.configs[catalog.config],
+    settings: { solidChecker: { runtime: { target: "browser" } } }
+  };
   const preferenceRules = catalog.rules.filter(entry =>
     entry.presets.includes("preferences")
   );

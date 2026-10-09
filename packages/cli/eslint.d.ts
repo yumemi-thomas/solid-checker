@@ -71,6 +71,11 @@ export interface SolidCheckerPlugin extends ESLint.Plugin {
     recommended: Linter.Config;
     v1: Linter.Config;
     v2: Linter.Config;
+    /**
+     * `v2` with `settings.solidChecker.runtime.target` set to `"browser"`
+     * (ADR 0269), for client applications.
+     */
+    "browser-v2": Linter.Config;
   };
 }
 

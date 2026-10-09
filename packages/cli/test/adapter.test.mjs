@@ -276,6 +276,15 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
   assert.equal(plugin.configs.v2.rules["solid-checker/contract-note"], "warn");
 });
 
+test("browser configs are the dialect config with the browser runtime target", () => {
+  for (const catalog of Object.values(plugin._testing.manifests)) {
+    const config = plugin.configs[`browser-${catalog.config}`];
+    assert.deepEqual(config.rules, plugin.configs[catalog.config].rules);
+    assert.deepEqual(config.settings, { solidChecker: { runtime: { target: "browser" } } });
+    assert.equal(plugin.configs[catalog.config].settings, undefined);
+  }
+});
+
 test("preference configs and recommendation metadata follow generated catalogs", () => {
   for (const catalog of Object.values(plugin._testing.manifests)) {
     const preferences = catalog.rules.filter(entry => entry.presets.includes("preferences"));

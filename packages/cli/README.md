@@ -206,6 +206,31 @@ To report project findings through Oxlint, load the bundled JavaScript adapter:
 }
 ```
 
+For a client application, whose analyzed code runs in the browser, also set
+the browser runtime target. Package contracts are then read with their browser
+claims, which find far more real misuse than the claims that must hold on every
+host (ADR 0269):
+
+```json
+{
+  "jsPlugins": ["solid-checker/eslint"],
+  "settings": { "solidChecker": { "runtime": { "target": "browser" } } },
+  "rules": {
+    "solid-checker/certification": "error",
+    "solid-checker/contract-note": "warn"
+  }
+}
+```
+
+In ESLint, the `browser-v2` config is `v2` with the same setting. This covers
+Solid 2 client start mode (`solid({ start: true })` in `@solidjs/vite-plugin`)
+and plain Vite SPAs. The target applies to the whole analyzed project: leave it
+unset for a project whose files include server-only code (`"use server"`
+modules, an authored server entry or middleware, HTTP route handlers, a
+client-mode custom `Document`), and for libraries. With SSR (`ssr: true`) the
+App also runs in the browser, so browser findings there are real, but the
+project's server-only files would be analyzed as browser code too.
+
 The adapter discovers the nearest `tsconfig.json`, runs native project analysis
 once, caches its snapshot, and projects matching findings into Oxlint. Set
 `settings.solidChecker.project` when the project uses a nonstandard config name
