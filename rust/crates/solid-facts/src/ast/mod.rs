@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 52;
+pub const AST_FACTS_SCHEMA: u32 = 53;
 
 mod binding_references;
 mod class_obligation;
@@ -293,6 +293,11 @@ pub struct AstFacts {
     pub iterated_operands: Vec<Span>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
+    /// Exact simple assignment targets, including destructuring leaves,
+    /// update operands and iteration targets. Keys and defaults are reads.
+    /// Transparent TypeScript wrappers are peeled (facts schema 53).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub write_targets: Vec<Span>,
     /// Exact operands of delete expressions, independently of assignments.
     #[serde(default)]
     pub deleted_targets: Vec<Span>,
@@ -1531,6 +1536,7 @@ impl AstFacts {
             coercing_operands: Vec::new(),
             iterated_operands: Vec::new(),
             assignments: Vec::new(),
+            write_targets: Vec::new(),
             deleted_targets: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
@@ -1679,6 +1685,7 @@ struct Collector<'s, 'semantic> {
     coercing_operands: Vec<Span>,
     iterated_operands: Vec<Span>,
     assignments: Vec<AssignmentFact>,
+    write_targets: Vec<Span>,
     deleted_targets: Vec<Span>,
     if_regions: Vec<IfRegionFact>,
     jump_statements: Vec<Span>,
@@ -1832,6 +1839,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercing_operands: Vec::new(),
             iterated_operands: Vec::new(),
             assignments: Vec::new(),
+            write_targets: Vec::new(),
             deleted_targets: Vec::new(),
             if_regions: Vec::new(),
             jump_statements: Vec::new(),
@@ -1894,6 +1902,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.iterated_operands.sort_unstable();
         self.iterated_operands.dedup();
         self.assignments.sort_by_key(|fact| fact.target);
+        self.write_targets.sort_unstable();
+        self.write_targets.dedup();
         self.if_regions.sort_by_key(|fact| fact.consequent);
         self.jump_statements.sort_unstable();
         self.iteration_targets.sort_unstable();
@@ -1945,6 +1955,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercing_operands: self.coercing_operands,
             iterated_operands: self.iterated_operands,
             assignments: self.assignments,
+            write_targets: self.write_targets,
             deleted_targets: self.deleted_targets,
             if_regions: self.if_regions,
             jump_statements: self.jump_statements,
@@ -3355,6 +3366,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             },
         });
         walk::walk_assignment_expression(self, expression);
+    }
+
+    fn visit_simple_assignment_target(
+        &mut self,
+        target: &oxc_ast::ast::SimpleAssignmentTarget<'a>,
+    ) {
+        let written = target.get_expression().map_or_else(
+            || span(target.span()),
+            |expression| span(peel_ts_sugar(expression).span()),
+        );
+        self.write_targets.push(written);
+        walk::walk_simple_assignment_target(self, target);
     }
 
     fn visit_update_expression(&mut self, expression: &UpdateExpression<'a>) {
@@ -5730,6 +5753,28 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
         assert_eq!(
             reads,
             vec![("value", false), ("value", true), ("value", true)]
+        );
+    }
+
+    #[test]
+    fn exact_write_targets_separate_destructuring_leaves_from_reads() {
+        let source = "out[host.hydrating ? 1 : 0] = 1; ({ a: host.done, b: local = host.hydrating } = input); host.done ||= true; for (host.hydrating of flags) {} (host.done as boolean) = false;";
+        let facts = extract("targets.ts", source).unwrap();
+        let written = facts
+            .write_targets
+            .iter()
+            .map(|target| &source[target.start as usize..target.end as usize])
+            .collect::<Vec<_>>();
+        assert_eq!(
+            written,
+            vec![
+                "out[host.hydrating ? 1 : 0]",
+                "host.done",
+                "local",
+                "host.done",
+                "host.hydrating",
+                "host.done",
+            ]
         );
     }
 

@@ -1834,12 +1834,13 @@ pub struct ReturnedCallbackSemantics {
     pub owner: Option<CallbackOwner>,
 }
 
-/// A positively identified runtime-configuration export (ADR 0266).
+/// A positively identified runtime-configuration export (ADRs 0266/0268).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuntimeConfigurationApi {
     ExternalSource,
     DevelopmentHooks,
     Observation,
+    HydrationHost,
 }
 
 /// One Solid language version's vocabulary.
@@ -1857,6 +1858,13 @@ pub trait Dialect: Sync {
     ) -> Option<RuntimeConfigurationApi> {
         let _ = (declaration_path, start, end);
         None
+    }
+
+    /// Harmless member reads after exact identification of the hydration host.
+    /// The caller excludes writes and supplies only a static member name.
+    fn hydration_host_member_read_is_harmless(&self, member: &str, truthiness_only: bool) -> bool {
+        let _ = (member, truthiness_only);
+        false
     }
 
     /// Which version this adapter speaks.

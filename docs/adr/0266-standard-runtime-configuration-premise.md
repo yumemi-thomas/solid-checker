@@ -8,6 +8,8 @@ The checker adopts the explicit conditional premise **standard runtime
 configuration**: the analyzed program runs with no `enableExternalSource`
 configuration, no installation of any `DEV.hooks` callback (`onOwner`,
 `onGraph`, `onUpdate`, `onStoreNodeUpdate`), and no `OBSERVE.exclude` marking.
+ADR 0268 amends this with a fourth clause: the hydration host is Solid's
+standard serializer runtime, with no custom hydration host callbacks.
 This is the same class of assumption as unpatched built-ins in ADRs 0167,
 0190, 0211 and 0262. Absence of a source veto is not a proof of absence.
 
@@ -111,6 +113,10 @@ no-throw guarantee, callback completeness, lifetime or lookup preservation.
 Diagnostics/attribution listeners, snapshots, error hooks, comparators and
 descriptor traps still need separate handling where a proof depends on them.
 No research promotion or package-contract claim lands here.
+
+The original hydration limitation remains: ADR 0268 rules out custom host
+configuration conditionally; it proves neither hydration absence nor success,
+serialized-value behavior, callback completion, or replay/lifetime preservation.
 
 ## Measured consequences
 

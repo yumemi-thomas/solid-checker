@@ -1,5 +1,22 @@
 # Precision backlog
 
+## Standard hydration host (2026-10-09, ADR 0268)
+
+The owner extends ADR 0266 with an assumed standard serializer/hydration host.
+Exact sharedConfig declarations supply positive project-wide vetoes for writes,
+aliases, escapes, re-exports and non-benign member uses. Direct hydrating/done
+reads and truthiness-only object/context tests keep the premise. Missing
+identity never vetoes. Review found that containing mutation spans incorrectly
+veto harmless key/default flag reads; exact simple write-target facts (schema 53)
+separate these reads from mutations without granting object escape authority.
+22 process scenarios cover it. Measured: no existing fixture finding and no
+rc.13 corpus site moved. Recall gap: `sharedConfig` imported from the main
+`solid-js` entry has no published declaration, so a write there is not vetoed.
+Custom dependency/SSR serializer/plugin/bootstrap
+configuration outside the exact host-object scan remains the project's premise
+obligation. Hydration entry, success, replay, lifetime, serialized values,
+transition/history and other callback channels remain unclosed.
+
 ## Standard runtime configuration (2026-10-09)
 
 ADR 0266 names the previously implicit runtime premise: no external-source

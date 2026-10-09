@@ -6998,6 +6998,10 @@ impl Dialect for Solid2 {
         runtime_configuration::api(path, start, end)
     }
 
+    fn hydration_host_member_read_is_harmless(&self, member: &str, truthiness_only: bool) -> bool {
+        runtime_configuration::harmless_host_read(member, truthiness_only)
+    }
+
     // rc.9 dev-shared.js core read() explicitly excludes pendingCheckActive
     // from the strict pending-read safeguard; verdict.isPending supplies it.
     // Store proxy traps have a different guard, so this is accessor-only.

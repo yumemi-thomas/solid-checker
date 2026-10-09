@@ -1,4 +1,4 @@
-//! ADR 0266: an assumed runtime condition, with positive visible vetoes only.
+//! ADRs 0266/0268: an assumed runtime condition, with positive visible vetoes only.
 
 use std::collections::{HashMap, HashSet};
 
@@ -34,7 +34,7 @@ impl RuntimeConfigurationPremise {
             "Cannot certify this finding under the standard runtime configuration premise: a configuration export is used at {}:{}-{}.",
             location.path, location.start_byte, location.end_byte
         );
-        finding.hint = "Review ADR 0266 and the configuration site; restoring the premise requires reanalysis of the configured project.".into();
+        finding.hint = "Review ADRs 0266/0268 and the configuration site; restoring the premise requires reanalysis of the configured project.".into();
         finding.fixes.clear();
         finding.evidence.clear();
         finding.evidence.push(crate::EvidenceStep {
@@ -143,6 +143,80 @@ fn only_truthiness_tests(ast: &solid_facts::ast::AstFacts, declaration: Span) ->
                     logical.operator == LogicalOperatorKind::And && logical.left == id.span
                 })
         })
+}
+
+fn truthiness_use(ast: &solid_facts::ast::AstFacts, expression: Span) -> bool {
+    use solid_facts::ast::{CoerciveOperandKind, LogicalOperatorKind};
+    let is_expression = |span| ast.peel_ts_sugar_span(span) == expression;
+    ast.if_regions
+        .iter()
+        .any(|region| is_expression(region.test))
+        || ast
+            .conditional_expressions
+            .iter()
+            .any(|conditional| is_expression(conditional.test))
+        || ast.logical_expressions.iter().any(|logical| {
+            logical.operator == LogicalOperatorKind::And && is_expression(logical.left)
+        })
+        || ast.coercive_operands.iter().any(|operand| {
+            operand.kind == CoerciveOperandKind::LogicalNot && is_expression(operand.span)
+        })
+}
+
+/// The host identity is already exact. Only its direct static data reads or
+/// truthiness can avoid a veto; callback reads and object transport cannot.
+fn harmless_hydration_host_use(
+    ast: &solid_facts::ast::AstFacts,
+    source: &str,
+    expression: Span,
+    dialect: &dyn Dialect,
+) -> bool {
+    if !runtime_span(ast, expression) {
+        return true;
+    }
+    if truthiness_use(ast, expression) {
+        return true;
+    }
+    let Some(member) = ast.members.iter().find(|member| {
+        ast.peel_ts_sugar_span(member.object) == expression
+            && !ast.computed_members.contains(&member.span)
+    }) else {
+        return false;
+    };
+    // Containment is not a write: computed keys and destructuring defaults
+    // can read a harmless flag while addressing a different target.
+    if ast.write_targets.contains(&member.span)
+        || ast
+            .deleted_targets
+            .iter()
+            .any(|target| ast.peel_ts_sugar_span(*target) == member.span)
+    {
+        return false;
+    }
+    let Some(name) = source.get(member.property.start as usize..member.property.end as usize)
+    else {
+        return false;
+    };
+    dialect.hydration_host_member_read_is_harmless(name, truthiness_use(ast, member.span))
+}
+
+fn only_harmless_hydration_host_uses(
+    ast: &solid_facts::ast::AstFacts,
+    source: &str,
+    declaration: Span,
+    dialect: &dyn Dialect,
+) -> bool {
+    use solid_facts::ast::IdentifierRole;
+    let mut references = ast
+        .identifiers
+        .iter()
+        .filter(|id| {
+            id.role == IdentifierRole::Reference
+                && ast.reference_declaration(id.span) == Some(declaration)
+        })
+        .peekable();
+    references.peek().is_some()
+        && references.all(|id| harmless_hydration_host_use(ast, source, id.span, dialect))
 }
 
 fn package_roots(facts: &ProjectFacts) -> Vec<(String, String)> {
@@ -258,14 +332,22 @@ pub(crate) fn scan(facts: &ProjectFacts, dialect: &dyn Dialect) -> RuntimeConfig
                 {
                     continue;
                 }
-                if matches!(
-                    api_at(binding.local.span),
+                let veto = match api_at(binding.local.span) {
                     Some(
                         RuntimeConfigurationApi::DevelopmentHooks
-                            | RuntimeConfigurationApi::Observation
-                    )
-                ) && !only_truthiness_tests(&file.ast, binding.local.span)
-                {
+                        | RuntimeConfigurationApi::Observation,
+                    ) => !only_truthiness_tests(&file.ast, binding.local.span),
+                    Some(RuntimeConfigurationApi::HydrationHost) => {
+                        !only_harmless_hydration_host_uses(
+                            &file.ast,
+                            &file.source,
+                            binding.local.span,
+                            dialect,
+                        )
+                    }
+                    _ => false,
+                };
+                if veto {
                     return RuntimeConfigurationPremise::Vetoed {
                         location: binding.local.span.location(file.path.shared()),
                     };
@@ -274,15 +356,32 @@ pub(crate) fn scan(facts: &ProjectFacts, dialect: &dyn Dialect) -> RuntimeConfig
         }
         // Includes exact namespace members, TS wrappers, and first references
         // before aliasing/destructuring/escape; unrelated members do not veto.
+        for export in &file.ast.exports {
+            if export.type_only {
+                continue;
+            }
+            for specifier in &export.specifiers {
+                if !specifier.type_only
+                    && api_at(specifier.local.span) == Some(RuntimeConfigurationApi::HydrationHost)
+                {
+                    return RuntimeConfigurationPremise::Vetoed {
+                        location: specifier.local.span.location(file.path.shared()),
+                    };
+                }
+            }
+        }
         for member in &file.ast.members {
             if runtime_span(&file.ast, member.span)
-                && matches!(
-                    api_at(member.property),
+                && match api_at(member.property) {
                     Some(
                         RuntimeConfigurationApi::DevelopmentHooks
-                            | RuntimeConfigurationApi::Observation
-                    )
-                )
+                        | RuntimeConfigurationApi::Observation,
+                    ) => true,
+                    Some(RuntimeConfigurationApi::HydrationHost) => {
+                        !harmless_hydration_host_use(&file.ast, &file.source, member.span, dialect)
+                    }
+                    _ => false,
+                }
             {
                 return RuntimeConfigurationPremise::Vetoed {
                     location: member.span.location(file.path.shared()),
@@ -464,6 +563,116 @@ mod tests {
             runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
         }
+    }
+
+    fn hydration_project(source: &str) -> ProjectFacts {
+        let mut facts = lookup_project(
+            source,
+            "/p/node_modules/solid-js/types/internal.d.ts",
+            7472,
+            7484,
+        );
+        let ast = &facts.files[0].ast;
+        let binding = &ast.imports[0].bindings[0];
+        let span = if binding.kind == ImportKind::Namespace {
+            ast.members
+                .iter()
+                .find(|member| {
+                    ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
+                        == Some(binding.local.span)
+                })
+                .map_or(binding.local.span, |member| member.property)
+        } else {
+            binding.local.span
+        };
+        let mut encoded = serde_json::to_value(&facts.typescript).unwrap();
+        encoded["entities"] = serde_json::json!([{
+            "location": { "path": "setup.tsx", "startByte": span.start, "endByte": span.end },
+            "symbol": "alias"
+        }]);
+        facts.typescript = serde_json::from_value(encoded).unwrap();
+        facts
+    }
+
+    #[test]
+    fn hydration_host_vetoes_transport_and_writes_but_keeps_data_reads() {
+        for (usage, permits) in [
+            ("host.load = id => id;", false),
+            ("host.has = () => true;", false),
+            ("host.gather = () => {};", false),
+            ("const alias = host;", false),
+            ("export { host };", false),
+            ("const { load } = host;", false),
+            ("Object.assign(host, {});", false),
+            ("Object.defineProperty(host, 'load', {});", false),
+            ("consume(host);", false),
+            ("consume(host.context);", false),
+            ("host.context.serialize('id', 1);", false),
+            ("host.hydrating = true;", false),
+            ("if (host.hydrating = true) consume(1);", false),
+            ("const { hydrating } = host;", false),
+            ("host.registry = new Map();", false),
+            ("host.context = undefined;", false),
+            ("out[host.hydrating ? 1 : 0] = 1;", true),
+            ("out[host.done ? 1 : 0]++;", true),
+            ("delete out[host.done ? 1 : 0];", true),
+            ("for (out[host.done ? 1 : 0] of values) {}", true),
+            ("({ a: local = host.hydrating } = value);", true),
+            ("({ [host.done ? 'a' : 'b']: local } = value);", true),
+            ("out[host.done = true] = 1;", false),
+            ("(host.hydrating as boolean) = true;", false),
+            ("host.done ||= true;", false),
+            ("delete host.done;", false),
+            ("({ x: host.done } = value);", false),
+            ("for (host.done of values) {}", false),
+            ("host['load'] = () => 1;", false),
+            ("host[key] = value;", false),
+            ("host.load?.('id');", false),
+            ("const value = host.hydrating;", true),
+            ("consume(!host.hydrating);", true),
+            ("const value = host.done;", true),
+            ("if (host.context) consume(1);", true),
+            ("const absent = !(host.context);", true),
+            ("host.context && consume(1);", true),
+            ("const flag = host.context ? 1 : 0;", true),
+            ("if (host) consume(1);", true),
+            ("if (host.context) host.load = () => 1;", false),
+            ("const value = (host as any).hydrating;", true),
+        ] {
+            let source =
+                format!("import {{ sharedConfig as host }} from 'solid-js/internal'; {usage}");
+            assert_eq!(
+                scan(&hydration_project(&source), &solid_dialect::Solid2).permits_proof(),
+                permits,
+                "{usage}"
+            );
+        }
+        for (usage, permits) in [
+            ("H.sharedConfig.load = () => 1;", false),
+            ("const alias = H.sharedConfig;", false),
+            ("const flag = H.sharedConfig.hydrating;", true),
+            ("if ((H.sharedConfig as any).context) consume(1);", true),
+            ("type Host = typeof H.sharedConfig;", true),
+        ] {
+            let source = format!("import * as H from 'solid-js/internal'; {usage}");
+            assert_eq!(
+                scan(&hydration_project(&source), &solid_dialect::Solid2).permits_proof(),
+                permits,
+                "{usage}"
+            );
+        }
+        for source in [
+            "import type { sharedConfig as host } from 'solid-js/internal'; type T = typeof host;",
+            "import { sharedConfig as host } from 'solid-js/internal'; type T = typeof host;",
+            "import { sharedConfig as host } from 'solid-js/internal'; function f(host: any) { host.load = () => 1; }",
+        ] {
+            assert!(scan(&hydration_project(source), &solid_dialect::Solid2).permits_proof());
+        }
+        let mut unresolved = hydration_project(
+            "import { sharedConfig as host } from 'solid-js/internal'; host.load = () => 1;",
+        );
+        unresolved.typescript = table("/p/src/local.d.ts", 7472, 7484);
+        assert!(scan(&unresolved, &solid_dialect::Solid2).permits_proof());
     }
 
     #[test]
