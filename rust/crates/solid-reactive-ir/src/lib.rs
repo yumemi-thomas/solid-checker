@@ -2327,6 +2327,13 @@ pub struct BuildTimings {
 pub struct IncrementalBuilder {
     retained: Option<RetainedBuild>,
     caches: IncrementalCacheState,
+    /// ADR 0266: one scan per Type Facts snapshot. The snapshot generation
+    /// fixes the entity set the scan reads, so a repeated request for the
+    /// same generation reuses it instead of rescanning every file.
+    runtime_configuration: Option<(
+        (solid_dialect::Version, String, u64),
+        RuntimeConfigurationPremise,
+    )>,
 }
 
 /// How much derived cross-generation state an idle retained session keeps.
@@ -2391,8 +2398,21 @@ impl IncrementalBuilder {
         let contracts = external_contracts.as_ref();
         let total_started = Instant::now();
         let lookup_started = Instant::now();
+        let premise_key = (
+            dialect.version(),
+            facts.project_id.clone(),
+            facts.generation.get(),
+        );
+        let premise = match &self.runtime_configuration {
+            Some((key, premise)) if *key == premise_key => premise.clone(),
+            _ => {
+                let premise = runtime_configuration::scan(facts, dialect);
+                self.runtime_configuration = Some((premise_key, premise.clone()));
+                premise
+            }
+        };
         let identity = BuildIdentity {
-            runtime_configuration: runtime_configuration::scan(facts, dialect),
+            runtime_configuration: premise,
             dialect: dialect.version(),
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
@@ -2439,6 +2459,7 @@ impl IncrementalBuilder {
 
     pub fn clear(&mut self) {
         self.retained = None;
+        self.runtime_configuration = None;
         self.caches.clear();
     }
 
