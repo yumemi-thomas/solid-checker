@@ -624,6 +624,21 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["arg", "ownDataKeys"],
+          "properties": {
+            "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "path": { "$ref": "#/$defs/stringPath" },
+            "ownDataKeys": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string" },
+              "description": "Exact unordered keys of a fresh own-data object. Types, accessors, spreads, computed keys, custom prototypes and proxies do not establish this premise."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["arg", "tupleAlternative"],
           "properties": {
             "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },

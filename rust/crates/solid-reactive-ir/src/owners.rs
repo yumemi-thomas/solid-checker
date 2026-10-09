@@ -3523,6 +3523,59 @@ mod tests {
     }
 
     #[test]
+    fn owner_closed_key_guard_refuses_aliases_and_open_runtime_maps() {
+        use crate::contract_semantics::GuardAtom;
+        let atoms = vec![
+            GuardAtom::OwnDataKeys {
+                argument: 0,
+                path: vec![],
+                names: vec!["onDown".into(), "target".into()],
+            },
+            GuardAtom::Property {
+                argument: 0,
+                path: vec![],
+                name: "onDown".into(),
+                callable: Some(true),
+            },
+        ];
+        for source in [
+            "register({ target: node, onDown: () => {} });",
+            "register(({ onDown() {}, target: node }) satisfies Config);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, atoms.clone(), true),
+                Some(true)
+            );
+            assert_eq!(
+                guarded_registration(source, atoms.clone(), false),
+                Some(false)
+            );
+        }
+        for source in [
+            "register({ target: node, onDown: () => {}, ondown: undefined });",
+            "register({ onDown: () => {} });",
+            "register({ target: node });",
+        ] {
+            assert_eq!(guarded_registration(source, atoms.clone(), true), None);
+        }
+        for source in [
+            "register({ target: node, onDown: fn });",
+            "register(config);",
+            "register({ target: node, onDown: () => {}, ...rest });",
+            "register({ target: node, get onDown() { return fn; } });",
+            "register({ target: node, [key]: () => {} });",
+            "register({ target: node, onDown: () => {}, __proto__: proto });",
+            "register(new Proxy({ target: node, onDown: () => {} }, traps));",
+            "register(...args);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, atoms.clone(), true),
+                Some(false)
+            );
+        }
+    }
+
+    #[test]
     fn owner_literal_guards_require_exact_runtime_arguments() {
         use crate::contract_semantics::{GuardAtom, Literal};
         let atom = GuardAtom::Literal {

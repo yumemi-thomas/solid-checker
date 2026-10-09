@@ -101,6 +101,53 @@
             }
           },
           {
+            "id": "closed-map-listener-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "pointer-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "ownDataKeys": [
+                    "onDown",
+                    "target"
+                  ]
+                },
+                {
+                  "arg": 0,
+                  "path": [],
+                  "property": "onDown",
+                  "callable": true
+                }
+              ]
+            }
+          },
+          {
             "id": "target",
             "kind": "invoke",
             "trigger": {
@@ -240,7 +287,8 @@
         ],
         "creates": [],
         "computations": [
-          "listener-effects"
+          "listener-effects",
+          "closed-map-listener-effect"
         ],
         "reads": [],
         "callbacks": [

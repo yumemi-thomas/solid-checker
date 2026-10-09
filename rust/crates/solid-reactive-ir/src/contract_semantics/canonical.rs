@@ -1199,6 +1199,17 @@ impl CanonicalWriter {
                 self.text(name);
                 self.option(callable.as_ref(), |writer, callable| writer.bool(*callable));
             }
+            GuardAtom::OwnDataKeys {
+                argument,
+                path,
+                names,
+            } => {
+                // Append a tag: every pre-existing guard retains its bytes.
+                self.u8(8);
+                self.u16(*argument);
+                self.sequence(path, |writer, value| writer.text(value));
+                self.sequence(names, |writer, value| writer.text(value));
+            }
             GuardAtom::TupleAlternative {
                 argument,
                 alternative,

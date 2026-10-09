@@ -2246,6 +2246,13 @@ pub enum GuardAtom {
         path: Vec<String>,
         kind: ValueKind,
     },
+    /// An exact, fresh own-data object with precisely this unordered key set.
+    /// Type declarations and partial property observations cannot prove it.
+    OwnDataKeys {
+        argument: u16,
+        path: Vec<String>,
+        names: Vec<String>,
+    },
     Property {
         argument: u16,
         path: Vec<String>,

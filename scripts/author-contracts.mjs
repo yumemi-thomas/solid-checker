@@ -50,6 +50,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { propertyGetProbeDigest, validatePropertyGets } from "./lib/property-get-contracts.mjs";
+import { ownDataKeysProbeDigest, validateOwnDataKeys } from "./lib/own-data-key-contracts.mjs";
 
 import { strictReadProbeDigest, strictReadWireCall, validateStrictReads } from "./lib/strict-read-contracts.mjs";
 
@@ -155,6 +156,7 @@ function validateClosures(where, claim, nested = false) {
   // Captures are checked once, from the factory claim, which walks every
   // returned graph's catalogue itself; a nested graph legitimately has one.
   if (!nested) validateCaptures(where, claim);
+  validateOwnDataKeys(where, claim);
   validateStrictReads(where, claim);
   validateCallbackResults(where, claim);
   validateLazyGetters(where, claim);
@@ -386,6 +388,11 @@ function probe(browser) {
       misuse: readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       correct: readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8")
     })));
+    const ownDataKeysDigests = new Map(cases.map(entry => {
+      const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
+      return [entry.id, ownDataKeysProbeDigest(spec, entry.export, pair,
+        entry.misuse, entry.correct, certifiedCases(spec))];
+    }));
     const strictReadDigests = new Map(cases.map(entry => {
       const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
       return [entry.id, strictReadProbeDigest(spec, entry.export, pair,
@@ -434,6 +441,7 @@ function probe(browser) {
     for (const row of read(join(scratch, "out.json")).results) {
       const label = labels.get(row.id);
       const probeDigest = probeDigests.get(row.id);
+      const ownDataKeysDigest = ownDataKeysDigests.get(row.id);
       const strictReadDigest = strictReadDigests.get(row.id);
       const returnedDigest = returnedDigests.get(row.id);
       const callbackResultDigest = callbackResultDigests.get(row.id);
@@ -443,6 +451,7 @@ function probe(browser) {
       results.push({ spec: spec.name, package: spec.package, version: spec.version, export: row.export,
         ...(label ? { label } : {}),
         ...(probeDigest ? { propertyGetProbeDigest: probeDigest } : {}),
+        ...(ownDataKeysDigest ? { ownDataKeysProbeDigest: ownDataKeysDigest } : {}),
         ...(strictReadDigest ? { strictReadProbeDigest: strictReadDigest } : {}),
         ...(returnedDigest ? { returnedCallableProbeDigest: returnedDigest } : {}),
         ...(callbackResultDigest ? { callbackResultProbeDigest: callbackResultDigest } : {}),
@@ -500,6 +509,9 @@ function passed(spec, name) {
   const results = existsSync(RESULTS) ? read(RESULTS).results : [];
   const runtime = JSON.stringify(spec.solidRuntime.map(({ name, version }) => ({ name, version })));
   return pairsOf(name, spec.exports[name]).every(pair => {
+    const ownDataKeysDigest = ownDataKeysProbeDigest(spec, name, pair,
+      readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
+      readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
     const probeDigest = propertyGetProbeDigest(spec, name, pair,
       readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
@@ -524,6 +536,7 @@ function passed(spec, name) {
     return results.some(row => row.spec === spec.name && row.export === name
       && (row.label ?? undefined) === pair.label && row.verdict === "passed"
       && JSON.stringify(row.solidRuntime) === runtime
+      && (!ownDataKeysDigest || row.ownDataKeysProbeDigest === ownDataKeysDigest)
       && (!probeDigest || row.propertyGetProbeDigest === probeDigest)
       && (!strictReadDigest || row.strictReadProbeDigest === strictReadDigest)
       && (!returnedDigest || row.returnedCallableProbeDigest === returnedDigest)

@@ -1035,6 +1035,7 @@ struct ArgumentFacts {
     literals: FiniteFact<Literal>,
     kinds: FiniteFact<ValueKind>,
     properties: BTreeMap<String, PropertyFact>,
+    own_data_keys: FiniteFact<Vec<String>>,
 }
 
 /// Exact, demand-shaped Type Facts for one call expression. Facts are local to
@@ -1121,6 +1122,15 @@ impl CallSiteFacts {
         fact: FiniteFact<ValueKind>,
     ) {
         self.arguments.entry((argument, path)).or_default().kinds = fact;
+    }
+
+    /// Only an exact runtime own-data map may supply this fact.
+    fn set_own_data_keys(&mut self, argument: u16, path: Vec<String>, mut names: Vec<String>) {
+        names.sort();
+        self.arguments
+            .entry((argument, path))
+            .or_default()
+            .own_data_keys = FiniteFact::exact(names);
     }
 
     pub fn set_property(
@@ -1225,6 +1235,16 @@ impl CallSiteFacts {
                 .arguments
                 .get(&(*argument, path.clone()))
                 .map_or(GuardTruth::Unknown, |facts| facts.kinds.evaluate(kind)),
+            GuardAtom::OwnDataKeys {
+                argument,
+                path,
+                names,
+            } => self
+                .arguments
+                .get(&(*argument, path.clone()))
+                .map_or(GuardTruth::Unknown, |facts| {
+                    facts.own_data_keys.evaluate(names)
+                }),
             GuardAtom::Property {
                 argument,
                 path,
@@ -1510,7 +1530,8 @@ pub(crate) fn owner_guard_at_call(guard: &Guard, call: &solid_facts::ast::CallFa
         let (argument, path) = match atom {
             GuardAtom::Literal { argument, path, .. }
             | GuardAtom::ValueKind { argument, path, .. }
-            | GuardAtom::Property { argument, path, .. } => (*argument, path),
+            | GuardAtom::Property { argument, path, .. }
+            | GuardAtom::OwnDataKeys { argument, path, .. } => (*argument, path),
             GuardAtom::Signature(_)
             | GuardAtom::ArgumentCount { .. }
             | GuardAtom::TupleAlternative { .. }
@@ -1569,6 +1590,18 @@ pub(crate) fn owner_guard_at_call(guard: &Guard, call: &solid_facts::ast::CallFa
             GuardAtom::ValueKind { .. } if !path.is_empty() => {
                 facts.set_value_kind(argument, path.clone(), literal_value_kinds(&literal));
             }
+            GuardAtom::OwnDataKeys { .. } => {
+                if let ArgumentLiteralFact::Object(properties) = literal {
+                    facts.set_own_data_keys(
+                        argument,
+                        path.clone(),
+                        properties
+                            .iter()
+                            .map(|property| property.name.to_string())
+                            .collect(),
+                    );
+                }
+            }
             GuardAtom::Property { name, .. } => {
                 if let ArgumentLiteralFact::Object(properties) = literal {
                     let property = properties
@@ -1606,9 +1639,10 @@ pub(crate) fn owner_guard_at_call(guard: &Guard, call: &solid_facts::ast::CallFa
         }
     }
     evaluate_guard_with(guard, |atom| match atom {
-        GuardAtom::Literal { .. } | GuardAtom::ValueKind { .. } | GuardAtom::Property { .. } => {
-            facts.evaluate(atom, "")
-        }
+        GuardAtom::Literal { .. }
+        | GuardAtom::ValueKind { .. }
+        | GuardAtom::Property { .. }
+        | GuardAtom::OwnDataKeys { .. } => facts.evaluate(atom, ""),
         GuardAtom::Signature(_)
         | GuardAtom::ArgumentCount { .. }
         | GuardAtom::TupleAlternative { .. }

@@ -28784,3 +28784,23 @@ Open: the primed untracked Get. Proving it needs an evaluation-order and
 successful-completion relation for property Gets (the priming tracked Get
 certainly ran first, same receiver and key, no intervening cache change),
 which the IR does not have. Until then the misuse stays a dispatch obligation.
+
+## Exact own-data key guards (2026-10-09, ADR 0265)
+
+`createPointerListeners` states `min: 1` only when its config is a complete
+literal with exactly `target` and a callable own `onDown`. Open: other key
+sets (e.g. `{ onDown }` without `target`, or several handlers) stay
+uncertifiable; normalization does not yet reject impossible guard
+conjunctions (key set excludes a demanded property). Neither can produce a
+false positive.
+
+## createPolled conditional callback completeness: withdrawn (2026-10-09)
+
+A drafted clause would have closed `createPolled`'s callbacks for exactly two
+arguments, literal delay and a primitive-returning poll callback. Withdrawn
+before landing: the poll may throw an object instead of returning, and
+`@solidjs/signals` (`dev-shared.js:4965-4994`, `:4481-4488`, `:35`) then
+coerces it with `String(original)`, invoking a caller `Symbol.toPrimitive`
+hook outside every stated row. ADR 0262's normal-result proof is not a
+no-throw proof. Closing it needs an exception-use census or a premise that
+excludes object-bearing abrupt completions.

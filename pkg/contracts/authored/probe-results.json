@@ -7641,6 +7641,83 @@
       "package": "@solid-primitives/pointer",
       "version": "1.0.0-next.2",
       "export": "createPointerListeners",
+      "ownDataKeysProbeDigest": "1c7d3334aaaa419f93ce6b5695211eded782f7944682a2efefb03484f00cd9cb",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "missing-owner",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "NO_OWNER_EFFECT",
+          "site": {
+            "file": "case",
+            "line": 3,
+            "column": 1
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+pointer@1.0.0-next.2",
+      "package": "@solid-primitives/pointer",
+      "version": "1.0.0-next.2",
+      "export": "createPointerListeners",
+      "label": "closed-map-leaf",
+      "ownDataKeysProbeDigest": "6588e01ce3111ad5f70f8d5ca46d37f47cdec3c7f790195d3be1b7cbda9b490e",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js"
+      ],
+      "rule": "leaf-owner-forbidden-call",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 4,
+            "column": 27
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solid-primitives+pointer@1.0.0-next.2",
+      "package": "@solid-primitives/pointer",
+      "version": "1.0.0-next.2",
+      "export": "createPointerListeners",
+      "label": "closed-map-owner",
+      "ownDataKeysProbeDigest": "5b2bb5d1946f36985576f2d45b27a3a32947bf1b4b5214beaf19c0411aebaca9",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -7678,6 +7755,7 @@
       "version": "1.0.0-next.2",
       "export": "createPointerListeners",
       "label": "host-dispatch",
+      "ownDataKeysProbeDigest": "61398a4c5f65065fc9ac1650becd8840692771c78b02b85f1dc4a10510b6a2e1",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -7723,6 +7801,7 @@
       "version": "1.0.0-next.2",
       "export": "createPointerListeners",
       "label": "leaf",
+      "ownDataKeysProbeDigest": "20ad17cb5544315d039cabfb65c3a9460ca5b2c0e689c7ae5bec8a84134021a0",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -7760,6 +7839,7 @@
       "version": "1.0.0-next.2",
       "export": "createPointerListeners",
       "label": "target-tracking",
+      "ownDataKeysProbeDigest": "2d638600e68c97c6706c92ce4d2f2fdaebde92b3f817e3414845c1fd8f667ccb",
       "solidRuntime": [
         {
           "name": "solid-js",

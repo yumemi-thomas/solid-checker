@@ -1064,6 +1064,13 @@ fn compact_guard_atom(atom: &GuardAtom, ids: &CompactIds) -> Result<JsonValue, C
             }
             value
         }
+        GuardAtom::OwnDataKeys {
+            argument,
+            path,
+            names,
+        } => {
+            json!({"arg": argument, "path": path, "ownDataKeys": names})
+        }
         GuardAtom::TupleAlternative {
             argument,
             alternative,
@@ -2272,6 +2279,7 @@ enum WireGuardAtom {
     Literal(WireLiteralAtom),
     ValueKind(WireValueKindAtom),
     Property(WirePropertyAtom),
+    OwnDataKeys(WireOwnDataKeysAtom),
     TupleAlternative(WireTupleAlternativeAtom),
     ResultProtocol(WireResultProtocolAtom),
     ArtifactCase(WireArtifactCaseAtom),
@@ -2324,6 +2332,15 @@ struct WirePropertyAtom {
     property: String,
     #[serde(default)]
     callable: Option<bool>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WireOwnDataKeysAtom {
+    arg: u16,
+    #[serde(default)]
+    path: Vec<String>,
+    own_data_keys: Vec<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -3760,6 +3777,11 @@ fn expand_guard_atom(atom: WireGuardAtom, _ids: &IdScope) -> Result<GuardAtom, C
             path: atom.path,
             name: atom.property,
             callable: atom.callable,
+        }),
+        WireGuardAtom::OwnDataKeys(atom) => Ok(GuardAtom::OwnDataKeys {
+            argument: atom.arg,
+            path: atom.path,
+            names: atom.own_data_keys,
         }),
         WireGuardAtom::TupleAlternative(atom) => Ok(GuardAtom::TupleAlternative {
             argument: atom.arg,
