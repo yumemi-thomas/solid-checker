@@ -19,6 +19,9 @@ use crate::{
 
 mod releases;
 
+#[path = "../../../dialects/solid-v2/runtime_configuration.rs"]
+mod runtime_configuration;
+
 /// Solid 2.0, answering for one installation of its three archives.
 ///
 /// Almost every answer is the same on every release this vocabulary was read
@@ -6986,6 +6989,15 @@ static NEGATIVE_AUTHORITY: DialectNegativeAuthority = DialectNegativeAuthority {
 };
 
 impl Dialect for Solid2 {
+    fn runtime_configuration_api(
+        &self,
+        path: &str,
+        start: u64,
+        end: u64,
+    ) -> Option<crate::RuntimeConfigurationApi> {
+        runtime_configuration::api(path, start, end)
+    }
+
     // rc.9 dev-shared.js core read() explicitly excludes pendingCheckActive
     // from the strict pending-read safeguard; verdict.isPending supplies it.
     // Store proxy traps have a different guard, so this is accessor-only.

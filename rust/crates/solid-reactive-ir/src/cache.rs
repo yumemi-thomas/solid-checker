@@ -34,6 +34,7 @@ use typefacts::{Declaration, Location};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct BuildIdentity {
+    pub(crate) runtime_configuration: crate::RuntimeConfigurationPremise,
     pub(crate) dialect: solid_dialect::Version,
     pub(crate) project_id: String,
     pub(crate) generation: u64,

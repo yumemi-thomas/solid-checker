@@ -140,6 +140,7 @@ pub struct RequestedRuleEnablement<'a> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct DiagnosticIdentity {
+    runtime_configuration: solid_reactive_ir::RuntimeConfigurationPremise,
     /// Which dialect's catalog and compiler produced the retained analysis;
     /// a retained result never answers for a different dialect.
     dialect: &'static str,
@@ -234,7 +235,16 @@ impl DiagnosticSession {
         // moves with the sources as well as the install.
         let release_notice = dialect::release_notice(self.dialect, project)
             .and_then(|notice| notice.scoped_to(facts));
+        // Consult the builder before a diagnostic hit: its identity includes
+        // ADR 0266's visible veto even when fact generation is unchanged.
+        let (program, _) = self.builder.build_with_accepted_contracts_shared(
+            facts,
+            self.dialect.vocabulary,
+            contracts,
+            &rule_options,
+        )?;
         let identity = DiagnosticIdentity {
+            runtime_configuration: program.runtime_configuration.clone(),
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
@@ -254,12 +264,6 @@ impl DiagnosticSession {
                 },
             ));
         }
-        let (program, _) = self.builder.build_with_accepted_contracts_shared(
-            facts,
-            self.dialect.vocabulary,
-            contracts,
-            &rule_options,
-        )?;
         let reactive_ir = ir_started.elapsed();
         let solve_started = Instant::now();
         let mut findings = self.dialect.solve(&program);

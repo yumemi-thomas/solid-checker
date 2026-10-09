@@ -1,5 +1,17 @@
 # Precision backlog
 
+## Standard runtime configuration (2026-10-09)
+
+ADR 0266 names the previously implicit runtime premise: no external-source
+configuration, DEV.hooks installation or OBSERVE exclusion. Positive exact
+export identification vetoes it project-wide; missing evidence does not.
+DEV/OBSERVE value references conservatively veto, except a named DEV import
+used only in truthiness tests (`if (DEV)`, ternary test, `DEV && ...`).
+Dependency/host configuration, reflective dispatch and unresolvable identities
+are documented outside the premise. Measured: no existing fixture finding and
+no rc.13 corpus site moved. This does not close
+transition/history, hydration, callback-completeness or lookup obligations.
+
 ## Values returned through createRoot (2026-10-09)
 
 ADR 0257: `createRoot(fn)` returns `fn`'s value, but the checker does not

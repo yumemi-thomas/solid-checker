@@ -23,7 +23,9 @@ mod projection;
 mod reachability;
 mod reactive_analysis;
 pub mod returns_walk;
+mod runtime_configuration;
 mod runtime_semantics;
+pub use runtime_configuration::RuntimeConfigurationPremise;
 mod server_rules;
 mod source_discovery;
 mod static_api;
@@ -2159,6 +2161,11 @@ fn empty_contract_exports() -> &'static BTreeMap<String, ContractExport> {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Program {
+    #[serde(
+        default,
+        skip_serializing_if = "RuntimeConfigurationPremise::permits_proof"
+    )]
+    pub runtime_configuration: RuntimeConfigurationPremise,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub development_feedback: Vec<development_feedback::DevelopmentFile>,
     pub reads: Vec<ReactiveRead>,
@@ -2385,6 +2392,7 @@ impl IncrementalBuilder {
         let total_started = Instant::now();
         let lookup_started = Instant::now();
         let identity = BuildIdentity {
+            runtime_configuration: runtime_configuration::scan(facts, dialect),
             dialect: dialect.version(),
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
@@ -2417,6 +2425,7 @@ impl IncrementalBuilder {
             contracts,
             rule_options,
             self.caches.for_build(),
+            identity.runtime_configuration.clone(),
         )?;
         let program = Arc::new(program);
         self.retained = Some(RetainedBuild {

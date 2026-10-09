@@ -1834,11 +1834,31 @@ pub struct ReturnedCallbackSemantics {
     pub owner: Option<CallbackOwner>,
 }
 
+/// A positively identified runtime-configuration export (ADR 0266).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuntimeConfigurationApi {
+    ExternalSource,
+    DevelopmentHooks,
+    Observation,
+}
+
 /// One Solid language version's vocabulary.
 ///
 /// Implementors are stateless; a dialect is a set of tables, and every method
 /// is a lookup.
 pub trait Dialect: Sync {
+    /// Classify an exact canonical declaration file and name-node byte span.
+    /// No answer is not a veto: this is a conditional premise, not a census.
+    fn runtime_configuration_api(
+        &self,
+        declaration_path: &str,
+        start: u64,
+        end: u64,
+    ) -> Option<RuntimeConfigurationApi> {
+        let _ = (declaration_path, start, end);
+        None
+    }
+
     /// Which version this adapter speaks.
     fn version(&self) -> Version;
 

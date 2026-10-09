@@ -142,6 +142,7 @@ impl ProgramDraft {
         self.contract_generation_obligations
             .sort_by(|left, right| location_order(&left.location, &right.location));
         Program {
+            runtime_configuration: crate::RuntimeConfigurationPremise::Assumed,
             development_feedback: self.development_feedback,
             reads: self.reads,
             writes: self.writes,
@@ -233,6 +234,7 @@ pub fn build_with_accepted_contracts_measured(
         contracts,
         rule_options,
         BuildCaches::default(),
+        crate::runtime_configuration::scan(facts, dialect),
     )
 }
 
@@ -242,6 +244,7 @@ pub(crate) fn build_with_accepted_contracts_measured_incremental(
     contracts: &AcceptedContractIndex,
     rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
+    runtime_configuration: crate::RuntimeConfigurationPremise,
 ) -> Result<(Program, BuildTimings), BuildError> {
     build_with_accepted_contract_inputs_measured_incremental(
         facts,
@@ -249,6 +252,7 @@ pub(crate) fn build_with_accepted_contracts_measured_incremental(
         contracts,
         rule_options,
         caches,
+        runtime_configuration,
     )
 }
 
@@ -258,6 +262,7 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     contracts: &AcceptedContractIndex,
     rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
+    runtime_configuration: crate::RuntimeConfigurationPremise,
 ) -> Result<(Program, BuildTimings), BuildError> {
     let external_contracts = contracts.external_packages();
     let contracts = external_contracts.as_ref();
@@ -583,7 +588,8 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         &typescript_indexes.symbols_by_root,
         &draft.static_defects,
     );
-    let program = draft.into_program(factory_instances, obligation_reach);
+    let mut program = draft.into_program(factory_instances, obligation_reach);
+    program.runtime_configuration = runtime_configuration;
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
     build_timings.total = total_started.elapsed();
     Ok((program, build_timings))

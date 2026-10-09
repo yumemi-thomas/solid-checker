@@ -732,6 +732,11 @@ pub fn project_findings(
         );
     }
 
+    for finding in &mut findings {
+        if finding.kind == "violation" {
+            program.runtime_configuration.apply(finding);
+        }
+    }
     finish_findings(findings, total_started, construction_started)
 }
 

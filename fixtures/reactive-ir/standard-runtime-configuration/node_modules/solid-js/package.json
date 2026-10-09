@@ -1,0 +1,135 @@
+{
+  "name": "solid-js",
+  "description": "Reactive JavaScript library for building user interfaces. Compiles JSX to real DOM with fine-grained signal-based updates — no virtual DOM.",
+  "version": "2.0.0-rc.13",
+  "author": "Ryan Carniato",
+  "license": "MIT",
+  "homepage": "https://solidjs.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/solidjs/solid.git",
+    "directory": "packages/solid"
+  },
+  "main": "./dist/server.js",
+  "module": "./dist/server.js",
+  "unpkg": "./dist/solid.js",
+  "jsdelivr": "./dist/solid.js",
+  "types": "types/index.d.ts",
+  "sideEffects": false,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "files": [
+    "dist",
+    "types",
+    "package.json",
+    "CHEATSHEET.md",
+    "skills"
+  ],
+  "exports": {
+    ".": {
+      "worker": {
+        "development": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.dev.js"
+        },
+        "observe": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.observe.js"
+        },
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.js"
+      },
+      "browser": {
+        "development": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/solid.dev.js"
+        },
+        "observe": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/solid.observe.js"
+        },
+        "types": "./types/index.d.ts",
+        "default": "./dist/solid.js"
+      },
+      "deno": {
+        "development": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.dev.js"
+        },
+        "observe": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.observe.js"
+        },
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.js"
+      },
+      "node": {
+        "development": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.dev.js"
+        },
+        "observe": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.observe.js"
+        },
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.js"
+      },
+      "development": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/solid.dev.js"
+      },
+      "observe": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/solid.observe.js"
+      },
+      "types": "./types/index.d.ts",
+      "default": "./dist/solid.js"
+    },
+    "./refresh": {
+      "development": {
+        "types": "./types/refresh/index.d.ts",
+        "default": "./dist/refresh.dev.js"
+      },
+      "types": "./types/refresh/index.d.ts",
+      "default": "./dist/refresh.js"
+    },
+    "./attribution": {
+      "types": "./types/attribution.d.ts",
+      "default": "./dist/attribution.js"
+    },
+    "./internal": {
+      "types": "./types/internal.d.ts",
+      "default": "./dist/internal.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "npm-run-all -nl build:*",
+    "build:clean": "rimraf dist/ coverage/",
+    "build:js": "rollup -c",
+    "types": "npm-run-all -nl types:clean types:src",
+    "types:clean": "rimraf types/",
+    "types:src": "tsc --project ./tsconfig.build.json",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "test-types": "tsc --project tsconfig.test.json && tsc --project tsconfig.no-dom.json"
+  },
+  "keywords": [
+    "solid",
+    "solidjs",
+    "ui",
+    "reactive",
+    "components",
+    "compiler",
+    "performance"
+  ],
+  "dependencies": {
+    "@solidjs/signals": "^2.0.0-rc.13",
+    "csstype": "^3.1.0",
+    "seroval": "~1.6.7",
+    "seroval-plugins": "~1.6.7"
+  }
+}

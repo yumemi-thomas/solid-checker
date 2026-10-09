@@ -35,6 +35,106 @@ use solid_facts_backend::fixture_authorization::{
     authorize_fixture_contract, read_fixture_contract_request,
 };
 
+#[test]
+fn standard_runtime_configuration_has_only_positive_project_wide_vetoes() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    for (case, kind) in [
+        ("baseline", "violation"),
+        ("shadow", "violation"),
+        ("namespace-clean", "violation"),
+        ("type-only", "violation"),
+        ("type-query", "violation"),
+        ("ordinary", "violation"),
+        ("intrinsics", "violation"),
+        ("external-read", "violation"),
+        ("external", "uncertifiable"),
+        ("external-alias", "uncertifiable"),
+        ("hook", "uncertifiable"),
+        ("alias", "uncertifiable"),
+        ("destructure", "uncertifiable"),
+        ("assign", "uncertifiable"),
+        ("descriptor", "uncertifiable"),
+        ("namespace", "uncertifiable"),
+        ("wrapper", "uncertifiable"),
+        ("observe", "uncertifiable"),
+        ("escape", "uncertifiable"),
+        ("benign", "violation"),
+    ] {
+        let scratch = temporary_directory(&format!("standard-runtime-{case}"));
+        copy_tree(
+            &repository_root().join("fixtures/reactive-ir/standard-runtime-configuration"),
+            &scratch,
+        );
+        let config_path = scratch.join("tsconfig.json");
+        let mut config: serde_json::Value =
+            serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+        config["include"] = if case == "baseline" {
+            serde_json::json!(["App.tsx", "jsx.d.ts"])
+        } else {
+            serde_json::json!(["App.tsx", "jsx.d.ts", format!("cases/{case}.ts")])
+        };
+        fs::write(&config_path, serde_json::to_vec(&config).unwrap()).unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .arg("--project")
+            .arg(&config_path)
+            .args(["--typefacts", &typefacts, "--format", "json"])
+            .output()
+            .unwrap();
+        assert!(
+            output
+                .status
+                .code()
+                .is_some_and(|code| code == 0 || code == 1),
+            "{case}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let findings = decode_findings(&output.stdout);
+        let reads = findings
+            .iter()
+            .filter(|finding| {
+                finding["rule"] == "strict-read-untracked"
+                    && finding["primaryLocation"]["path"]
+                        .as_str()
+                        .is_some_and(|path| path.ends_with("App.tsx"))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(reads.len(), 1, "{case}: {findings:#?}");
+        assert_eq!(reads[0]["kind"], kind, "{case}: {findings:#?}");
+        let start = fs::read_to_string(scratch.join("App.tsx"))
+            .unwrap()
+            .find("value();")
+            .unwrap() as u64;
+        assert_eq!(reads[0]["primaryLocation"]["startByte"], start, "{case}");
+        if kind == "uncertifiable" {
+            assert!(
+                reads[0]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("standard runtime configuration")
+            );
+            assert!(
+                reads[0]
+                    .get("fixes")
+                    .is_none_or(|fixes| fixes.as_array().is_some_and(Vec::is_empty))
+            );
+            assert!(
+                reads[0]["relatedLocations"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|site| {
+                        site["path"]
+                            .as_str()
+                            .is_some_and(|path| path.ends_with(&format!("cases/{case}.ts")))
+                    }),
+                "{case}: veto must name the other configured file: {findings:#?}"
+            );
+        }
+    }
+}
+
 /// The fixture is reused rather than duplicated: its `App.tsx` already pairs a
 /// tracked read with an untracked one over an accessor whose reactivity is
 /// established *only* by the package contract, and its document already closes

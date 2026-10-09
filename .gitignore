@@ -15,6 +15,8 @@ fixtures/upstream-parity/.staging/
 **/.DS_Store
 **/target/
 **/node_modules/
+!fixtures/reactive-ir/standard-runtime-configuration/node_modules/
+!fixtures/reactive-ir/standard-runtime-configuration/node_modules/**
 !rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/**
 !rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-v1/node_modules/

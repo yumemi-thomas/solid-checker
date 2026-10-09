@@ -1,0 +1,23 @@
+export { $REFRESH, ContextNotFoundError, NoOwnerError, NotReadyError, TimeoutError, action, createContext, createOwner, createRoot, runWithOwner, flush, getNextChildId, peekNextChildId, getContext, setContext, getOwner, isDisposed, getObserver, isEqual, untrack, isPending, latest, SUPPORTS_PROXY, setSnapshotCapture, markSnapshotScope, releaseSnapshotScope, clearSnapshots, enforceLoadingBoundary, enableExternalSource, resetErrorHalt, configureClientErrors, ROOT_ERROR_HOOK } from "./core/index.js";
+/**
+ * @internal The dev console footer seam — registered by `solid-js`, which
+ * owns the repair skill the footer points at. Not part of `DEV`; a no-op
+ * outside dev builds.
+ */
+export { setConsoleFooter } from "./core/index.js";
+import { type Dev, type Observe } from "./core/index.js";
+/**
+ * Observe tier (diagnostics channel, attribution hook slot + interaction
+ * frame): dev and observe builds. The attribution engine itself is the
+ * `@solidjs/signals/attribution` entry.
+ */
+export declare const OBSERVE: Observe | undefined;
+/** Dev tier (devtools hooks, graph traversal, console reporting): dev builds only. */
+export declare const DEV: Dev | undefined;
+export type { Owner, Context, ContextRecord, IQueue, ExternalSourceFactory, ExternalSource, ExternalSourceConfig, Refreshable, AttributionSlot, ClientErrorContext, ClientErrorHook, ClientErrorsConfig, InteractionRef, NavigationRef, Dev, Observe, ServerObserve, Records, RecordTypes, HostRecordTypes, RecordType, RecordEvent, RecordLive, RecordListener, RecordSubscribeOptions, DevHooks, DiagnosticCapture, DiagnosticCode, DiagnosticEvent, DiagnosticKind, DiagnosticListener, Diagnostics, DiagnosticSeverity, DiagnosticSubject } from "./core/index.js";
+export { createSignal, createMemo, createEffect, createRenderEffect, createTrackedEffect, createReaction, createOptimistic, refresh, resolve, until, onSettled, onCleanup } from "./signals.js";
+export type { Truthy, UntilOptions, Accessor, SourceAccessor, Setter, Signal, ComputeFunction, EffectFunction, EffectBundle, EffectOptions, SignalOptions, MemoOptions, NoInfer } from "./signals.js";
+export { affects } from "./affects.js";
+export { mapArray, repeat, type Maybe } from "./map.js";
+export * from "./store/index.js";
+export { createLoadingBoundary, createErrorBoundary, createRevealOrder, flatten, type RevealOrder } from "./boundaries.js";
