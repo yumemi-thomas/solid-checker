@@ -76,12 +76,25 @@ fn admitted(source: &str) -> bool {
     true
 }
 
-fn shell_syntax(source: &str) -> bool {
-    source.chars().any(|ch| {
-        matches!(
-            ch,
-            '<' | '>' | '$' | '\u{60}' | '\'' | '"' | '(' | ')' | '\\' | '\n' | '\r'
-        )
+/// A word that may change the shell's directory in sh, zsh or cmd
+/// (`cd`, `CD`, `cd..`, `cd/d`, `chdir`, `pushd`, `popd`) or which program
+/// `vite` names (a variable or alias assignment).
+fn shell_state_word(word: &str) -> bool {
+    // `PATH=./bin`, `export PATH=..` or `alias vite=...` can make the next
+    // `vite` another program; `--outDir=dist` starts with `-` and is a flag.
+    if word.split_once('=').is_some_and(|(name, _)| {
+        name.starts_with(|ch: char| ch.is_ascii_alphabetic() || ch == '_')
+            && name
+                .bytes()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
+    }) {
+        return true;
+    }
+    let lower = word.to_ascii_lowercase();
+    ["cd", "chdir", "pushd", "popd"].iter().any(|builtin| {
+        lower
+            .strip_prefix(builtin)
+            .is_some_and(|rest| !rest.starts_with(|ch: char| ch.is_ascii_alphanumeric()))
     })
 }
 
@@ -117,8 +130,8 @@ pub(super) enum ManifestRole {
 }
 
 /// ADR 0270 premises the conventional Vite config; this vetoes only where a
-/// script visibly selects another one. A script naming Vite must split on
-/// plain separators into commands, each either Vite-free or an exact
+/// script visibly selects another one. A script naming Vite must be plain
+/// words joined by `&&`, each command either Vite-free or an exact
 /// conventional `vite` command, with no directory change.
 pub(super) fn refusal(scripts: &serde_json::Value, role: ManifestRole) -> Option<String> {
     let Some(scripts) = scripts.as_object() else {
@@ -138,16 +151,17 @@ pub(super) fn refusal(scripts: &serde_json::Value, role: ManifestRole) -> Option
                 "scripts.{name}: enclosing manifest launches Vite from a different directory"
             ));
         }
-        let commands: Vec<_> = source.split(['&', '|', ';']).map(str::trim).collect();
-        // Any cd word, wherever it sits (`X=1 cd ..`, `command cd ..`),
-        // may move Vite to another root.
-        let conventional = !shell_syntax(source)
-            && !source
-                .split(|ch: char| ch.is_ascii_whitespace() || matches!(ch, '&' | '|' | ';'))
-                .any(|word| matches!(word, "cd" | "pushd" | "popd"))
-            && commands
-                .iter()
-                .all(|command| !names_vite(command) || admitted(command));
+        // Only plain words joined by `&&`: no other separator, newline,
+        // quoting, expansion, grouping or escape can reach the shell.
+        let conventional = source.split("&&").all(|command| {
+            let words: Vec<_> = command.split_ascii_whitespace().collect();
+            !command.contains(['\n', '\r'])
+                && !words.is_empty()
+                && words
+                    .iter()
+                    .all(|word| plain_word(word) && !shell_state_word(word))
+                && (!names_vite(command) || admitted(command))
+        });
         if !conventional {
             return Some(format!(
                 "scripts.{name}: script may select a non-conventional Vite config"
@@ -205,7 +219,8 @@ mod tests {
             "vite --host --minify",
             "tsc -b && vite build",
             "npm run i18n && tsr generate && tsc -b && vite build",
-            "vite build; tsc -p tsconfig.build.json",
+            "vite build&&tsc -p tsconfig.build.json",
+            "cdk synth && vite build",
         ] {
             assert!(app(source).is_none(), "{source}");
         }
@@ -235,6 +250,27 @@ mod tests {
             "builtin pushd ..; vite build",
             "true;cd ..;vite build",
             "cd;vite build",
+            "vite build; tsc -p tsconfig.build.json",
+            "tsc | vite build",
+            "{cd,..};vite build",
+            "{cd,..} && vite build",
+            "c[d] .. && vite build",
+            "c* .. && vite build",
+            "{cd ..;};vite build",
+            "chdir .. && vite build",
+            "builtin chdir .. && vite build",
+            "CD .. && vite build",
+            "cd.. && vite build",
+            "cd/d .. && vite build",
+            "PATH=./bin && vite build",
+            "export PATH=./bin && vite build",
+            "alias vite=other && vite build",
+            "c^d ..&vite build",
+            "! true && vite build",
+            "# x && vite build",
+            "true \u{b}cd .. && vite build",
+            "&& vite build",
+            "vite build &&",
             "true\nvite build --config ../other.ts",
             "v\\\nite build --config ../other.ts",
             "npx vite build",

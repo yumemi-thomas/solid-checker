@@ -109,5 +109,12 @@
   {"name":"enclosing-continued-vite","browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory","workspaceScripts":{"postbuild":"v\\\nite build --config ../other.ts"}},
   {"name":"separator-attached-cd","scripts":{"build":"true;cd ..;vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
   {"name":"newline-separated-vite","scripts":{"build":"true\nvite build --config ../other.ts"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
-  {"name":"enclosing-newline-separated-vite","browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory","workspaceScripts":{"postbuild":"true\nvite build --config ../other.ts"}}
+  {"name":"enclosing-newline-separated-vite","browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory","workspaceScripts":{"postbuild":"true\nvite build --config ../other.ts"}},
+  {"name":"brace-expanded-cd","scripts":{"build":"{cd,..};vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"glob-expanded-cd","scripts":{"build":"c[d] .. && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"chdir-builtin","scripts":{"build":"chdir .. && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"cmd-attached-cd","scripts":{"build":"cd.. && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"enclosing-brace-expanded-cd","workspaceScripts":{"postbuild":"{cd,..};vite build"},"browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory"},
+  {"name":"chained-conventional-vite","scripts":{"build":"tsc -b && vite build"},"browser":true},
+  {"name":"path-assignment","scripts":{"build":"PATH=./bin && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"}
 ]

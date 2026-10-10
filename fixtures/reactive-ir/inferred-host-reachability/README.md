@@ -37,7 +37,8 @@ admit in both roles, and the parent vp-build mutation twin was removed. App
 scripts naming Vite must split into exact conventional `vite` commands;
 enclosing scripts naming Vite refuse. Prefixed and separator-attached cd (`X=1 cd ..`, `command cd ..`,
 `true;cd ..`), escaped-newline and newline-separated Vite twins refuse.
-There are 111 conventional-selection and
+The app grammar is then plain words joined by `&&`, so brace/glob-expanded
+chdir/cmd-spelled cd and PATH-assignment twins refuse too. There are 118 conventional-selection and
 22 resolver controls.
 
 resolver-selection-cases.json supplies native host-proof twins in temporary
