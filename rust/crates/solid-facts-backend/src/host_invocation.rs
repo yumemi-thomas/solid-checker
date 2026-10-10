@@ -76,26 +76,25 @@ fn admitted(source: &str) -> bool {
     true
 }
 
-/// A word that may change the shell's directory in sh, zsh or cmd
-/// (`cd`, `CD`, `cd..`, `cd/d`, `chdir`, `pushd`, `popd`) or which program
-/// `vite` names (a variable or alias assignment).
+/// A word that may change the shell's directory or which program `vite`
+/// names, in sh, zsh or cmd: `cd`, `CD`, `cd..`, `cd/d`, `chdir`, `pushd`,
+/// `popd`, a drive selector (`D:`), cmd's `path`/`set`, and any assignment
+/// (`PATH=./bin`, `alias vite=...`, `set /a PATH-=1`). cmd's `@` echo prefix
+/// is ignored. `--outDir=dist` starts with `-` and is a flag value.
 fn shell_state_word(word: &str) -> bool {
-    // `PATH=./bin`, `export PATH=..` or `alias vite=...` can make the next
-    // `vite` another program; `--outDir=dist` starts with `-` and is a flag.
-    if word.split_once('=').is_some_and(|(name, _)| {
-        name.starts_with(|ch: char| ch.is_ascii_alphabetic() || ch == '_')
-            && name
-                .bytes()
-                .all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
-    }) {
+    if word.contains('=') && !word.starts_with('-') {
         return true;
     }
-    let lower = word.to_ascii_lowercase();
-    ["cd", "chdir", "pushd", "popd"].iter().any(|builtin| {
-        lower
-            .strip_prefix(builtin)
-            .is_some_and(|rest| !rest.starts_with(|ch: char| ch.is_ascii_alphanumeric()))
-    })
+    let lower = word.trim_start_matches('@').to_ascii_lowercase();
+    let drive =
+        lower.len() == 2 && lower.as_bytes()[0].is_ascii_alphabetic() && lower.ends_with(':');
+    drive
+        || matches!(lower.as_str(), "path" | "set")
+        || ["cd", "chdir", "pushd", "popd"].iter().any(|builtin| {
+            lower
+                .strip_prefix(builtin)
+                .is_some_and(|rest| !rest.starts_with(|ch: char| ch.is_ascii_alphanumeric()))
+        })
 }
 
 /// A case-insensitive `vite` word: `vite`, `vite.js`, `VITE_X`, but not
@@ -103,13 +102,13 @@ fn shell_state_word(word: &str) -> bool {
 /// premise, whatever tool they run.
 fn names_vite(source: &str) -> bool {
     // Quotes, escapes and line continuations vanish before execution:
-    // `vit"e"` and `v\<newline>ite` both run `vite`. A bare newline still
+    // `vit"e"`, cmd's `v^ite` and `v\<newline>ite` all run `vite`. A bare newline still
     // separates commands, so it becomes a space rather than vanishing.
     let lower: String = source
         .replace("\\\r\n", "")
         .replace("\\\n", "")
         .chars()
-        .filter(|ch| !matches!(ch, '\'' | '"' | '\\'))
+        .filter(|ch| !matches!(ch, '\'' | '"' | '\\' | '^'))
         .map(|ch| if matches!(ch, '\n' | '\r') { ' ' } else { ch })
         .collect::<String>()
         .to_ascii_lowercase();
@@ -265,6 +264,14 @@ mod tests {
             "PATH=./bin && vite build",
             "export PATH=./bin && vite build",
             "alias vite=other && vite build",
+            "@cd .. && vite build",
+            "@chdir .. && vite build",
+            "@pushd .. && vite build",
+            "D: && vite build",
+            "path C:/alternate/bin && vite build",
+            "set /a PATH-=1 && vite build",
+            "v^ite build --config ../other.ts",
+            "vi^te build --mode staging",
             "c^d ..&vite build",
             "! true && vite build",
             "# x && vite build",
@@ -303,6 +310,7 @@ mod tests {
             "pnpm --filter app exec vite",
             "v\\\nite build --config ../other.ts",
             "true\nvite build --config ../other.ts",
+            "v^ite build --config ../other.ts",
         ] {
             assert_eq!(
                 refusal(

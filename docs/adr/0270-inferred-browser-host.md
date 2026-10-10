@@ -147,7 +147,7 @@ local `.bin` wrappers are taken to build the app, if at all, with its
 conventional config, like the standard-runtime premise of ADR 0266.
 
 A script is inspected only when it names Vite: a case-insensitive `vite`
-word, after removing quotes, backslashes and line continuations and treating a
+word, after removing quotes, backslashes, cmd carets and line continuations and treating a
 bare newline as a command break (so `vite.js`, `vit"e"`, a
 `v\`-newline-`ite` continuation and `true`-newline-`vite` count,
 `vitest` and `@vitejs/...` do not). In the application manifest, including
@@ -155,8 +155,9 @@ lifecycle hooks, such a script must be plain words joined by `&&`: every word
 uses only ASCII letters, digits and `._:/=@-`, so no other separator, newline,
 quote, escape, expansion, glob, brace, group, comment or variable can reach the
 shell. No word may be a directory change in sh, zsh or cmd (`cd`, `CD`,
-`cd..`, `cd/d`, `chdir`, `pushd`, `popd`) or a variable/alias assignment
-(`PATH=./bin`, `alias vite=...`), wherever it sits. Every command
+`cd..`, `cd/d`, `chdir`, `pushd`, `popd`, also behind cmd's `@`), a drive
+selector (`D:`), cmd's `path` or `set`, or an assignment (`PATH=./bin`,
+`alias vite=...`, `set /a PATH-=1`), wherever it sits. Every command
 naming Vite must be exactly `vite`, `vite build`, `vite dev`, `vite serve` or
 `vite preview` with only these flags: `--port` (numeric), `--host` (optional
 literal), `--open`, `--strictPort`, `--base`/`--outDir` (literal),
@@ -186,7 +187,7 @@ candidates and directory membership (including alternate-file additions) are
 cache/proof inputs. Browser-map checks also enroll every importer/enclosing
 manifest and its absence.
 
-The implementation pins 118 invocation/config/browser-map controls plus 22
+The implementation pins 124 invocation/config/browser-map controls plus 22
 resolver controls, with exact main/helper process sites. Enclosing plain-Vite
 twins refuse with a parent tsconfigPaths config, with no parent config, and
 after parent config mutation with unchanged manifests; retained daemon and

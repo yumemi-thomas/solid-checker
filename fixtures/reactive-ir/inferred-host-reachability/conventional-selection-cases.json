@@ -116,5 +116,11 @@
   {"name":"cmd-attached-cd","scripts":{"build":"cd.. && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
   {"name":"enclosing-brace-expanded-cd","workspaceScripts":{"postbuild":"{cd,..};vite build"},"browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory"},
   {"name":"chained-conventional-vite","scripts":{"build":"tsc -b && vite build"},"browser":true},
-  {"name":"path-assignment","scripts":{"build":"PATH=./bin && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"}
+  {"name":"path-assignment","scripts":{"build":"PATH=./bin && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"cmd-echo-prefixed-cd","scripts":{"build":"@cd .. && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"cmd-drive-selector","scripts":{"build":"D: && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"cmd-path-builtin","scripts":{"build":"path C:/alternate/bin && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"cmd-arithmetic-assignment","scripts":{"build":"set /a PATH-=1 && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"cmd-caret-vite","scripts":{"build":"v^ite build --config ../other.ts"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"enclosing-cmd-caret-vite","workspaceScripts":{"postbuild":"v^ite build --config ../other.ts"},"browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory"}
 ]
