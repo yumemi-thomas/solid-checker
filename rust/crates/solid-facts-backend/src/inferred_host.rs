@@ -118,6 +118,16 @@ pub fn inferred_host_input_paths(directory: &Path) -> Vec<PathBuf> {
 /// configs may have names such as tsconfig.app.json.
 #[must_use]
 pub fn inferred_host_input_paths_for_project(directory: &Path, project: &Path) -> Vec<PathBuf> {
+    inferred_host_input_paths_for_sources(directory, project, &[])
+}
+
+/// Daemons also know explicit project sources omitted by the ordinary inventory.
+#[must_use]
+pub fn inferred_host_input_paths_for_sources(
+    directory: &Path,
+    project: &Path,
+    sources: &[PathBuf],
+) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if application_inputs(directory, project, &mut paths).is_err() {
         paths.sort();
@@ -141,7 +151,7 @@ pub fn inferred_host_input_paths_for_project(directory: &Path, project: &Path) -
             return paths;
         }
     };
-    inferred_host_graph_input_paths(directory, project, paths, &config, None, None)
+    inferred_host_graph_input_paths(directory, project, paths, &config, None, None, sources)
 }
 
 fn inferred_host_graph_input_paths(
@@ -151,6 +161,7 @@ fn inferred_host_graph_input_paths(
     resource_config: &Config,
     facts: Option<&ProjectFacts>,
     inventory: Option<Vec<PathBuf>>,
+    source_paths: &[PathBuf],
 ) -> Vec<PathBuf> {
     paths.extend([
         directory.join("package.json"),
@@ -165,6 +176,15 @@ fn inferred_host_graph_input_paths(
     );
     paths.extend(CONFIGS.iter().map(|name| directory.join(name)));
     let _ = tsconfig_inputs(project, &mut paths, &mut BTreeSet::new());
+    let resolver_sources = facts
+        .into_iter()
+        .flat_map(|facts| &facts.files)
+        .map(|file| PathBuf::from(file.path.as_str()))
+        .chain(source_paths.iter().cloned())
+        .collect::<Vec<_>>();
+    let resolver_paths =
+        crate::host_tsconfig::discover(directory, resource_config, &mut paths, &resolver_sources)
+            .unwrap_or_default();
     for stem in [
         "entry-client",
         "entry-server",
@@ -202,6 +222,7 @@ fn inferred_host_graph_input_paths(
         })
         .cloned()
         .chain(observed.keys().map(|path| PathBuf::from(*path)))
+        .chain(source_paths.iter().cloned())
         .collect::<BTreeSet<_>>();
     let host_constant_ancestors = sources
         .iter()
@@ -262,6 +283,7 @@ fn inferred_host_graph_input_paths(
             continue;
         };
         for text in requests.iter().map(String::as_str) {
+            let _ = resolver_paths.could_rewrite(text, &mut paths);
             // Resolution depends on the importer directory and request, not
             // the source filename. Resource reads keep their occurrence path.
             let _ = crate::host_loadable::resource(
@@ -491,6 +513,7 @@ fn input_manifest(
         config,
         Some(facts),
         Some(inventory),
+        &[],
     );
     // The graph-input pass inventories the application. Omitted
     // implementations remain inputs, never evidence against a positive edge.
@@ -1359,13 +1382,15 @@ fn jsx_body_ready(facts: &ProjectFacts, scopes: &BTreeMap<String, HostScope>, id
 /// missing attestations, another artifact, and absent runtime bytes leave it
 /// unknown. Record every byte/presence premise in the inference fingerprint.
 fn execution_constants(
-    directory: &Path,
+    prepared: &DiscoveryInputs,
     facts: &ProjectFacts,
     file: &FileFacts,
-    config: &Config,
     dialect: &dyn solid_dialect::Dialect,
     manifest: &mut BrowserRootManifest,
 ) -> BTreeMap<Span, (bool, bool)> {
+    let directory = &prepared.directory;
+    let config = &prepared.config;
+    let resolver_paths = &prepared.resolver_paths;
     let mut values = BTreeMap::new();
     let Some(resolutions) = &facts.resolved_imports else {
         return values;
@@ -1379,6 +1404,18 @@ fn execution_constants(
             .iter()
             .filter(|import| !import.type_only && import.module == candidate_export.module)
         {
+            let mut resolver_inputs = Vec::new();
+            let rewritable = resolver_paths.could_rewrite(&import.module, &mut resolver_inputs);
+            for input in resolver_inputs {
+                let observed =
+                    graph_identity(manifest, &input).unwrap_or_else(|| "unreadable".into());
+                manifest
+                    .inputs
+                    .insert(input.to_string_lossy().into_owned(), observed);
+            }
+            if rewritable && facts.runtime_resolutions.is_none() {
+                continue;
+            }
             if config.aliases.keys().any(|alias| {
                 import.module == alias.as_str()
                     || import
@@ -1496,6 +1533,19 @@ fn execution_constants(
             };
             if !proved(browser, candidate_export.client) || !proved(server, candidate_export.server)
             {
+                continue;
+            }
+            // The resolver must select one of the very browser files whose
+            // bytes proved this constant. Successful build/start is not a
+            // file-selection premise, nor is a declaration in this package.
+            if facts.runtime_resolutions.as_ref().is_some_and(|runtime| {
+                !matches!(runtime.outcome(file.path.as_str(), import.span, &import.module),
+                    solid_facts::runtime_resolution::RuntimeOutcome::File { path, physical_path }
+                    if path == physical_path && browser.iter().any(|constant|
+                        constant.fold.specifier == candidate_export.module
+                            && constant.fold.imported == candidate_export.export
+                            && constant.targets.iter().any(|(target, _)| package.join(target) == Path::new(path.as_ref()))))
+            }) {
                 continue;
             }
             for binding in import.bindings.iter().filter(|binding| {
@@ -2334,7 +2384,24 @@ struct DiscoveryInputs {
     directory: PathBuf,
     config: Config,
     paths: BTreeMap<String, Vec<String>>,
+    resolver_paths: crate::host_tsconfig::ResolverPaths,
     config_inputs: Vec<PathBuf>,
+}
+
+fn package_selection_agrees(
+    facts: &ProjectFacts,
+    importer: &str,
+    span: Span,
+    text: &str,
+    entries: &[PathBuf],
+    rewritable: bool,
+) -> bool {
+    facts.runtime_resolutions.as_ref().map_or(!rewritable, |runtime| {
+        matches!(runtime.outcome(importer, span, text),
+            solid_facts::runtime_resolution::RuntimeOutcome::File { path, physical_path }
+            if path == physical_path && entries.iter().any(|entry| Path::new(path.as_ref()) == entry.as_path()
+                && fs::canonicalize(entry).ok().as_deref() == Some(entry.as_path())))
+    })
 }
 
 fn discovery_inputs(
@@ -2369,11 +2436,23 @@ fn discovery_inputs(
     // Refusal consumes only its witness. No app inventory, request parsing,
     // or manifest hashing is needed before the configuration can be admitted.
     let config = configuration(&directory, &mut paths_observed, fixture_authority)?;
+    let resolver_sources = facts
+        .files
+        .iter()
+        .map(|file| PathBuf::from(file.path.as_str()))
+        .collect::<Vec<_>>();
+    let resolver_paths =
+        crate::host_tsconfig::discover(&directory, &config, &mut paths_observed, &resolver_sources)
+            .required(
+                &directory,
+                "cannot enumerate tsconfig resolver scope or inheritance",
+            )?;
     let paths = paths_targets(&directory, &project)?;
     Ok(DiscoveryInputs {
         directory,
         config,
         paths,
+        resolver_paths,
         config_inputs: paths_observed,
     })
 }
@@ -2446,12 +2525,27 @@ fn attach_discovery_inputs(
         Some(&index.manifest.inputs),
     )?;
     let paths = paths_targets(directory, project)?;
+    let resolver_sources = facts
+        .files
+        .iter()
+        .map(|file| PathBuf::from(file.path.as_str()))
+        .collect::<Vec<_>>();
+    let resolver_paths =
+        crate::host_tsconfig::discover(directory, &current, &mut current_inputs, &resolver_sources)
+            .required(
+                directory,
+                "cannot replay tsconfig resolver scope or inheritance",
+            )?;
     current_inputs.sort();
     current_inputs.dedup();
     let mut previous_inputs = prepared.config_inputs.clone();
     previous_inputs.sort();
     previous_inputs.dedup();
-    if current != prepared.config || paths != prepared.paths || current_inputs != previous_inputs {
+    if current != prepared.config
+        || paths != prepared.paths
+        || resolver_paths != prepared.resolver_paths
+        || current_inputs != previous_inputs
+    {
         return Err(DiscoveryRefusal::new(
             directory,
             "configuration inputs changed; retry analysis",
@@ -2623,8 +2717,7 @@ fn discovered_index_with_inputs(
                 "unsupported AST fact schema",
             ));
         }
-        let constants =
-            execution_constants(&directory, facts, file, &config, dialect, &mut manifest);
+        let constants = execution_constants(prepared, facts, file, dialect, &mut manifest);
         // Contents with separate execution models cannot inherit initialization.
         for region in file
             .ast
@@ -2818,6 +2911,24 @@ fn discovered_index_with_inputs(
             .map(|(symbol, _)| symbol.clone())
             .collect::<BTreeSet<_>>();
         for (span, text, runtime) in static_loads(facts, file) {
+            let mut resolver_inputs = Vec::new();
+            let rewritable = prepared
+                .resolver_paths
+                .could_rewrite(text, &mut resolver_inputs);
+            for input in resolver_inputs {
+                let observed = graph_identity(&mut manifest, &input)
+                    .required(&input, "cannot fingerprint tsconfig baseUrl candidate")?;
+                manifest
+                    .inputs
+                    .insert(input.to_string_lossy().into_owned(), observed);
+            }
+            if rewritable && facts.runtime_resolutions.is_none() {
+                module.refused = true;
+                blocked_imports.insert((path.into(), text.into()));
+                unproven_semantics.insert(path.into());
+                withheld_loads.insert((path.to_owned(), text.to_owned()), "tsconfig resolver can rewrite the request without authenticated file selection");
+                continue;
+            }
             // Even an unused value binding can survive client lowering.
             // Without exact erasure facts, every authored value import and
             // export-from must be loadable before this module can evaluate.
@@ -3022,6 +3133,9 @@ fn discovered_index_with_inputs(
                 );
             } else if row.resolution == ImportResolution::NodeModules {
                 let mut package_inputs = Vec::new();
+                let rewritable = prepared
+                    .resolver_paths
+                    .could_rewrite(text, &mut package_inputs);
                 if packages.is_none() {
                     // The provisional graph schedules package analysis; its
                     // optimistic edges are not final linking authority. Even
@@ -3029,9 +3143,13 @@ fn discovered_index_with_inputs(
                     let unsupported_loader = package_loads
                         .candidates(Path::new(path), text, &mut package_inputs)
                         .is_some_and(|(_, _, entries)| {
-                            !entries
-                                .iter()
-                                .all(|entry| crate::host_loadable::static_entry(entry))
+                            (rewritable
+                                && !package_selection_agrees(
+                                    facts, path, span, text, &entries, true,
+                                ))
+                                || !entries
+                                    .iter()
+                                    .all(|entry| crate::host_loadable::static_entry(entry))
                                 || !crate::host_loadable::stylesheet_closure(
                                     &entries,
                                     &config,
@@ -3047,12 +3165,12 @@ fn discovered_index_with_inputs(
                             .required(&input, "cannot fingerprint provisional package input")?;
                         manifest.inputs.insert(key, observed);
                     }
-                    if unsupported_loader {
+                    if unsupported_loader || (rewritable && facts.runtime_resolutions.is_none()) {
                         module.refused = true;
                         blocked_imports.insert((path.into(), text.into()));
                         withheld_loads.insert(
                             (path.to_owned(), text.to_owned()),
-                            "canonical installed package entry uses an unproved Vite loader",
+                            "canonical installed package entry uses an unproved Vite loader or tsconfig resolver selection",
                         );
                     }
                     continue;
@@ -3105,16 +3223,22 @@ fn discovered_index_with_inputs(
                         .required(&input, "cannot fingerprint static package input")?;
                     manifest.inputs.insert(key, observed);
                 }
-                let loadable = deduped && !config.package_dedupe && entries.is_some_and(|entries| {
-                    facts.runtime_resolutions.as_ref().is_none_or(|runtime| {
-                        matches!(runtime.outcome(path, span, text), solid_facts::runtime_resolution::RuntimeOutcome::File { path, physical_path }
-                            if path == physical_path && entries.entries().iter().any(|entry| Path::new(path.as_ref()) == entry.as_path()))
-                    })
-                });
+                let loadable = deduped
+                    && !config.package_dedupe
+                    && entries.is_some_and(|entries| {
+                        package_selection_agrees(
+                            facts,
+                            path,
+                            span,
+                            text,
+                            entries.entries(),
+                            rewritable,
+                        )
+                    });
                 if !loadable {
                     module.refused = true;
                     blocked_imports.insert((path.into(), text.into()));
-                    withheld_loads.insert((path.to_owned(), text.to_owned()), "missing exact installed client package entry or requested resolver disagreement");
+                    withheld_loads.insert((path.to_owned(), text.to_owned()), "missing exact installed client package entry, tsconfig rewrite, or requested resolver disagreement");
                 }
             }
         }
@@ -3688,6 +3812,7 @@ mod tests {
             };
             let parsed = host_config::parse(Path::new("vite.config.ts"), source).unwrap();
             assert!(!parsed.default_extensions);
+            assert!(parsed.tsconfig_paths);
         }
         assert!(
             host_config::parse(
@@ -3834,6 +3959,147 @@ mod tests {
                 .contains(&(main.clone(), "reactive-package".into()))
         );
         assert!(!refused.browser_proof_site(&main, 0, 1));
+    }
+
+    #[test]
+    fn tsconfig_resolver_selection_requires_exact_runtime_agreement() {
+        use solid_facts::runtime_resolution::{RuntimeOutcome, RuntimeResolutionIndex};
+        let Ok(producer) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+            return;
+        };
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let directory =
+            std::env::temp_dir().join(format!("host-tsconfig-selection-{}", std::process::id()));
+        fs::create_dir_all(directory.join("src")).unwrap();
+        let directory = fs::canonicalize(directory).unwrap();
+        fs::write(directory.join("package.json"), "{\"private\":true}").unwrap();
+        fs::write(
+            directory.join("index.html"),
+            "<script type='module' src='/src/main.ts'></script>",
+        )
+        .unwrap();
+        let source = "import {isServer} from '@solidjs/web'; new Date(); if (!isServer) selected(); function selected() {}";
+        let main = directory.join("src/main.ts");
+        fs::write(&main, source).unwrap();
+        fs::write(
+            directory.join("src/shadow.js"),
+            "export const isServer = true;",
+        )
+        .unwrap();
+        let project = directory.join("tsconfig.app.json");
+        fs::write(&project, r#"{"compilerOptions":{"strict":true,"module":"ESNext","moduleResolution":"Bundler","target":"ES2022"},"include":["src/*.ts"]}"#).unwrap();
+        let package = directory.join("node_modules/@solidjs/web");
+        fs::create_dir_all(package.join("dist")).unwrap();
+        fs::write(package.join("package.json"), r#"{"name":"@solidjs/web","version":"2.0.0-rc.13","type":"module","exports":{".":{"types":"./index.d.ts","browser":{"development":"./dist/web.dev.js","observe":"./dist/web.observe.js","default":"./dist/web.js"},"node":{"development":"./dist/server.dev.js","observe":"./dist/server.observe.js","default":"./dist/server.js"},"default":"./dist/web.js"}}}"#).unwrap();
+        // Exact published signature, not a relaxed callback or literal typing.
+        fs::write(
+            package.join("index.d.ts"),
+            "export declare const isServer: boolean;",
+        )
+        .unwrap();
+        let dialect = crate::dialect::default_dialect();
+        for target in dialect.vocabulary.host_boolean_exports()[0].runtime_targets {
+            fs::write(
+                package.join(target),
+                format!("export const isServer = {};", target.contains("server")),
+            )
+            .unwrap();
+        }
+        let typescript =
+            crate::TypeFactsSession::open(&producer, project.to_str().unwrap(), &[]).unwrap();
+        let (mut session, _) = crate::NativeIncrementalSession::open_pipelined(
+            dialect,
+            project.to_str().unwrap().into(),
+            typescript,
+        )
+        .unwrap();
+        let facts = session.analyze().unwrap();
+        let file = facts
+            .files
+            .iter()
+            .find(|file| file.path.as_str() == main.to_str().unwrap())
+            .unwrap();
+        let import = &file.ast.imports[0];
+        let cases: serde_json::Value = serde_json::from_slice(
+            &fs::read(repository.join(
+                "fixtures/reactive-ir/inferred-host-reachability/resolver-selection-cases.json",
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        for config_source in [
+            "export default {plugins:[],resolve:{tsconfigPaths:true}}",
+            "import paths from 'vite-tsconfig-paths'; export default {plugins:[paths()]}",
+        ] {
+            let config =
+                host_config::parse(&directory.join("vite.config.ts"), config_source).unwrap();
+            assert!(config.tsconfig_paths);
+            for case in cases.as_array().unwrap() {
+                fs::write(directory.join("tsconfig.json"), serde_json::to_vec(&serde_json::json!({"compilerOptions":{"baseUrl":".","paths":{case["pattern"].as_str().unwrap():["./src/shadow.js"]}},"include":["src"]})).unwrap()).unwrap();
+                let mut inputs = Vec::new();
+                let resolver_paths = crate::host_tsconfig::discover(
+                    &directory,
+                    &config,
+                    &mut inputs,
+                    std::slice::from_ref(&main),
+                )
+                .unwrap();
+                assert!(inputs.contains(&directory.join("tsconfig.json")));
+                let prepared = DiscoveryInputs {
+                    directory: directory.clone(),
+                    config: config.clone(),
+                    paths: BTreeMap::new(),
+                    resolver_paths,
+                    config_inputs: inputs,
+                };
+                let mut observed = facts.as_ref().clone();
+                if case["runtime"] != "absent" {
+                    let outcome = match case["runtime"].as_str().unwrap() {
+                        "client" => Some(package.join("dist/web.js")),
+                        "server" => Some(package.join("dist/server.js")),
+                        "shadow" => Some(directory.join("src/shadow.js")),
+                        _ => None,
+                    }
+                    .map_or(RuntimeOutcome::Unknown, |path| {
+                        RuntimeOutcome::File {
+                            path: path.to_str().unwrap().into(),
+                            physical_path: path.to_str().unwrap().into(),
+                        }
+                    });
+                    let mut runtime = RuntimeResolutionIndex::default();
+                    runtime.insert(
+                        main.to_str().unwrap(),
+                        import.span,
+                        import.module.as_str(),
+                        outcome,
+                    );
+                    observed.runtime_resolutions = Some(runtime);
+                }
+                let constants = execution_constants(
+                    &prepared,
+                    &observed,
+                    file,
+                    dialect.vocabulary,
+                    &mut BrowserRootManifest::default(),
+                );
+                let expected = case["browser"].as_bool().unwrap();
+                assert_eq!(!constants.is_empty(), expected, "{config_source}: {case}");
+                let index = discovered_index_with_inputs(
+                    &prepared,
+                    &observed,
+                    dialect.vocabulary,
+                    Some(&AcceptedContractIndex::default()),
+                )
+                .unwrap();
+                let start = u64::try_from(source.find("selected()").unwrap()).unwrap();
+                assert_eq!(
+                    index.browser_proof_site(main.to_str().unwrap(), start, start + 10),
+                    expected,
+                    "{config_source}: {case}"
+                );
+            }
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -4249,6 +4515,7 @@ mod tests {
             &config,
             None,
             Some(vec![scratch.clone()]),
+            &[],
         );
         assert!(inputs.contains(&implementation));
         assert!(!inputs.iter().any(|path| {

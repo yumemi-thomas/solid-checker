@@ -88,6 +88,23 @@ text; require its file path and realpath to equal the attested analyzed target.
 Missing, unknown, external, virtual, query-qualified or disagreeing answers
 retain baseline authority. Requested failures never fall back to the guess.
 Declaration/runtime package matching still belongs to artifact admission.
+
+Enabled native `resolve.tsconfigPaths` or admitted default `vite-tsconfig-paths`
+requires a separate resolver-config inventory. It is independent of `--project`:
+union ancestor and nested tsconfig.json/jsconfig.json discovery, the plugin's
+Vite workspace-root discovery, and all loaded relative JSON extends chains and
+references. Every config, workspace marker, absent candidate and traversed
+directory membership is an input, replayed before authority is projected.
+Any matching paths pattern withholds default package selection and host-constant
+folding, even when includes/excludes or derived overrides might narrow it.
+baseUrl candidate files/directories also withhold selection; absent candidates
+are fingerprinted. Nonmatching paths alone leave ordinary inference available.
+Only an opted-in exact runtime selection can recover the same canonical installed
+client file; a host constant additionally requires that file among the browser
+targets whose authenticated bytes prove the constant. Unknown, shadow, server or
+disagreeing selections cannot recover it. Successful build/start premises cannot
+discharge file selection. Unsupported package/nonliteral config inheritance,
+unreadable discovery and symlinked discovery scopes remain fail closed.
 Explicit aliases of package imports remain baseline until their exact runtime
 export surface is authenticated; local edge answers cannot replace that proof.
 Requested CSS resolution must also agree with its reviewed local input.

@@ -1,0 +1,9 @@
+[
+  {"name":"different-config-shadow", "pattern":"@solidjs/web", "runtime":"absent", "browser":false},
+  {"name":"different-config-unrelated", "pattern":"~/*", "runtime":"absent", "browser":true},
+  {"name":"wildcard-shadow", "pattern":"@solidjs/*", "runtime":"absent", "browser":false},
+  {"name":"runtime-agreement", "pattern":"@solidjs/web", "runtime":"client", "browser":true},
+  {"name":"runtime-disagreement", "pattern":"@solidjs/web", "runtime":"shadow", "browser":false},
+  {"name":"runtime-server-disagreement", "pattern":"~/*", "runtime":"server", "browser":false},
+  {"name":"runtime-unknown", "pattern":"@solidjs/web", "runtime":"unknown", "browser":false}
+]

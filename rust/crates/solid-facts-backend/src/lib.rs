@@ -105,6 +105,7 @@ pub mod host_constants;
 mod host_inline;
 mod host_loadable;
 mod host_plugins;
+mod host_tsconfig;
 mod inferred_contract;
 mod inferred_host;
 mod installed_patches;
@@ -199,8 +200,8 @@ pub use first_party_bundles::{
 };
 pub use inferred_host::{
     inferred_host_directory_digest, inferred_host_input_digest, inferred_host_input_paths,
-    inferred_host_input_paths_for_project, inferred_project_accepted_contracts,
-    inferred_project_accepted_contracts_with_note,
+    inferred_host_input_paths_for_project, inferred_host_input_paths_for_sources,
+    inferred_project_accepted_contracts, inferred_project_accepted_contracts_with_note,
 };
 pub use package_requirements::external_package_contract_requirements;
 pub use phase16_benchmark::phase16_benchmark_report;

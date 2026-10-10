@@ -971,8 +971,16 @@ fn inference_inputs_for_check(state: &State, check: &CheckRequest) -> Option<Vec
         return Some(Vec::new());
     }
     let directory = state.project.parent()?;
-    let mut paths =
-        solid_facts_backend::inferred_host_input_paths_for_project(directory, &state.project);
+    let sources = state
+        .sources
+        .iter()
+        .map(|source| PathBuf::from(&source.path))
+        .collect::<Vec<_>>();
+    let mut paths = solid_facts_backend::inferred_host_input_paths_for_sources(
+        directory,
+        &state.project,
+        &sources,
+    );
     // Nested execution boundaries are facts even without an accepted catalog.
     paths.extend(state.sources.iter().flat_map(|source| {
         Path::new(&source.path)

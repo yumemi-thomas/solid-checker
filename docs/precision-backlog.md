@@ -1,5 +1,24 @@
 # Precision backlog
 
+ADR 0270 tsconfig resolver file-selection boundary (2026-10-10): enabled native
+Vite and admitted default vite-tsconfig-paths now enroll their discoverable
+configs independently of the analyzed project, including extends, references,
+workspace markers and directory membership. Matching paths or existing baseUrl
+candidates withhold default package/host-constant strengthening. Exact runtime
+client-file agreement can recover it; shadow/server/unknown answers cannot.
+Build/start premises never discharge file identity. Different-project-config,
+wildcard, unrelated-path, runtime agreement/disagreement and input invalidation
+twins cover this boundary. Package/nonliteral config inheritance and symlinked
+or unreadable discovery scopes remain refused. No new diagnostic or published
+typing is introduced. Verification: 50 focused host tests, zero diagnostics
+against the real published @solidjs/web@2.0.0-rc.13 typings, unchanged coverage
+(239 projects / 1583 findings), and zero added or removed violations across the
+49-project no-target corpus. Complete findings match b69597043; the old Helge
+SC9005 span adjustment remains the only difference from rc13-head-notarget.
+Workspace Clippy preceded the green full make verify (225.71 seconds). Error
+Menu and Helge still infer; Error Menu's paired median remains +0.5525 seconds
+over 6009dceb9, so the earlier performance target is not fully achieved.
+
 ADR 0270 app-starts premise (schema 57, 2026-10-10): module-statement
 completion is explicitly marked in normalized facts. Inference consumes the
 premise only on an exact browser root static graph; unknown top-level

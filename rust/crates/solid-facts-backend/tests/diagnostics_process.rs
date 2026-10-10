@@ -4,6 +4,118 @@ mod support;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
+    use solid_facts_backend::fixture_authorization::{
+        authorize_fixture_contract, read_fixture_contract_request,
+    };
+    use std::{fs, path::Path, process::Command};
+    fn copy(from: &Path, to: &Path) {
+        fs::create_dir_all(to).unwrap();
+        for entry in fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                copy(&entry.path(), &to.join(entry.file_name()));
+            } else {
+                fs::copy(entry.path(), to.join(entry.file_name())).unwrap();
+            }
+        }
+    }
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let repository = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let scratch =
+        std::env::temp_dir().join(format!("tsconfig-shadow-process-{}", std::process::id()));
+    copy(
+        &repository.join("fixtures/reactive-ir/inferred-host-spa"),
+        &scratch,
+    );
+    let project = fs::canonicalize(scratch).unwrap();
+    fs::copy(
+        project.join("tsconfig.json"),
+        project.join("tsconfig.app.json"),
+    )
+    .unwrap();
+    let package = project.join("node_modules/@solidjs/web");
+    fs::create_dir_all(package.join("dist")).unwrap();
+    fs::write(package.join("package.json"), r#"{"name":"@solidjs/web","version":"2.0.0-rc.13","type":"module","exports":{".":{"types":"./index.d.ts","browser":{"development":"./dist/web.dev.js","observe":"./dist/web.observe.js","default":"./dist/web.js"},"node":{"development":"./dist/server.dev.js","observe":"./dist/server.observe.js","default":"./dist/server.js"},"default":"./dist/web.js"}}}"#).unwrap();
+    fs::write(
+        package.join("index.d.ts"),
+        "export declare const isServer: boolean;",
+    )
+    .unwrap();
+    for (prefix, value) in [("web", false), ("server", true)] {
+        for suffix in ["", ".dev", ".observe"] {
+            fs::write(
+                package.join(format!("dist/{prefix}{suffix}.js")),
+                format!("export const isServer = {value};"),
+            )
+            .unwrap();
+        }
+    }
+    let authorization =
+        authorize_fixture_contract(&project, &read_fixture_contract_request(&project).unwrap())
+            .unwrap();
+    let trust = project.join("trust.json");
+    fs::write(&trust, authorization.trust_configuration).unwrap();
+    let source = "import {isServer} from '@solidjs/web'; import {startClosed} from 'reactive-package'; new Date(); if (!isServer) startClosed();";
+    fs::write(project.join("src/main.ts"), source).unwrap();
+    fs::write(
+        project.join("src/shadow.js"),
+        "export const isServer = true;",
+    )
+    .unwrap();
+    fs::write(
+        project.join("vite.config.ts"),
+        "export default {plugins:[],resolve:{tsconfigPaths:true}};",
+    )
+    .unwrap();
+    let start = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
+    for (pattern, expected) in [
+        ("@solidjs/web", false),
+        ("@solidjs/*", false),
+        ("~/*", true),
+    ] {
+        fs::write(project.join("tsconfig.json"), serde_json::to_vec(&serde_json::json!({"compilerOptions":{"baseUrl":".","paths":{pattern:["./src/shadow.js"]}},"include":["src"]})).unwrap()).unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .env("SOLID_TYPEFACTS_BIN", &typefacts)
+            .env("SOLID_CHECKER_DAEMON", "0")
+            .args(["--format", "json", "--project"])
+            .arg(project.join("tsconfig.app.json"))
+            .arg("--receipt-trust-configuration")
+            .arg(&trust)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let at_site = |finding: &serde_json::Value| {
+            finding["id"] == "SC4001"
+                && finding["kind"] == "violation"
+                && finding["primaryLocation"]["startByte"].as_u64() == Some(start)
+                && finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("src/main.ts"))
+        };
+        assert_eq!(
+            result["findings"].as_array().unwrap().iter().any(at_site),
+            expected,
+            "{pattern}: {result:#?}"
+        );
+        if !expected {
+            assert_eq!(result["status"], "uncertifiable");
+            assert!(String::from_utf8_lossy(&output.stderr).contains(
+                "tsconfig resolver can rewrite the request without authenticated file selection"
+            ));
+        }
+    }
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
     use solid_facts_backend::fixture_authorization::{
         authorize_fixture_contract, read_fixture_contract_request,
