@@ -41,6 +41,11 @@ pub struct AcceptedContractInput {
     pub importer: String,
     pub specifier: String,
     pub contract: AcceptedContract,
+    /// The receipt's importer-free artifact identity, when the loader could
+    /// establish it. `None` keeps this acceptance importer-only: it is the
+    /// fail-closed direction, and the loader uses it for anything it cannot
+    /// state exactly — see `artifact_identity` below.
+    pub artifact_identity: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -87,22 +92,409 @@ impl AcceptedContractUse<'_> {
 /// before construction; consumers ask only for one exact import/export use.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AcceptedContractIndex {
+    /// A complete browser view, consulted only at positively proved execution
+    /// importers. The no-target view remains this index and receives no browser
+    /// fallback, even when the selected view has no acceptance for a package.
+    inferred_browser: Option<Box<InferredBrowserContracts>>,
     imports: BTreeMap<(String, String), Vec<AcceptedContract>>,
+    /// Acceptances reachable by the artifact they were proven about, rather
+    /// than by the file that imported it during certification. An entry here
+    /// is an addition to `imports`, never a replacement: a consumer that
+    /// matches by importer is answered exactly as before.
+    by_artifact: BTreeMap<String, Vec<AcceptedContract>>,
+    /// Specifiers whose installed artifact in *this* project is one an
+    /// acceptance was issued for, so any file may import them. Populated only
+    /// by `with_admitted_artifacts`; empty otherwise, which is every path that
+    /// does not derive identities.
+    admitted: BTreeMap<String, AcceptedContract>,
+    /// Imports admitted by artifact for one importing file only, keyed by
+    /// `(importer, specifier)`: a specifier whose importers reach more than
+    /// one installed artifact -- a monorepo root analysing sub-packages that
+    /// each install their own copy -- is admitted per install, for the files
+    /// whose resolution reaches it, and never project-wide. Populated only by
+    /// `with_admitted_artifacts_for`; empty for every project whose importers
+    /// all reach the project directory's own install.
+    admitted_at: BTreeMap<(String, String), AcceptedContract>,
     uncertifiable_imports: BTreeMap<(String, String), UncertifiableImportReason>,
+    /// Per imported specifier, why an acceptance that exists for its package
+    /// was not admitted -- one sentence the backend's admission rule wrote.
+    ///
+    /// Explanation only: it admits nothing, withholds nothing, and is read
+    /// solely to add a note to the acceptance gate at an import the index
+    /// already could not answer. It is part of the cache fingerprint because
+    /// that note is part of the findings.
+    admission_refusals: BTreeMap<String, String>,
+    /// [`Self::admission_refusals`] for one importing file, keyed by
+    /// `(importer, specifier)`: the explanation replayed from the install that
+    /// file's resolution reaches, where that is not the project directory's.
+    /// Consulted before the specifier-keyed one, and `None` is an answer too:
+    /// that importer's install refused nothing, so the specifier-keyed
+    /// sentence -- replayed from another copy -- is not its explanation.
+    /// Empty for every project whose importers all reach its own installs.
+    admission_refusals_at: BTreeMap<(String, String), Option<String>>,
+    /// ADR 0153 part 3: packages whose installed tree holds another package
+    /// that declares a dependency on them. That package's code may provide a
+    /// context the depended-on package exports, and the analysis does not see
+    /// it, so every context premise of such a package is unmet here. Filled by
+    /// the backend, which reads the installed manifests; empty otherwise. Part
+    /// of the cache fingerprint because it changes findings.
+    context_provided_packages: BTreeSet<String>,
     identity: Vec<AcceptedImportIdentity>,
+    /// Project catalogs that apply only to the files below one directory:
+    /// the `.solid-checker/` of a directory strictly inside the analysed
+    /// project, which the project's own catalog does not contain. Deepest
+    /// directory first, so the nearest catalog answers a file's import before
+    /// a farther one, and every scope answers before this index's own tiers,
+    /// which apply project-wide. Empty for every project with no nested
+    /// catalog, and then every query answers exactly as it did without it.
+    scopes: Vec<ScopedAcceptances>,
+}
+
+/// One nested directory's acceptances. `index` is a complete index of its own
+/// -- its catalogs' importer-keyed entries, what those catalogs admitted by
+/// artifact in the tree below `directory`, and why they refused -- consulted
+/// only for importers inside `directory`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct ScopedAcceptances {
+    directory: String,
+    index: AcceptedContractIndex,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct InferredBrowserContracts {
+    hosts: crate::hosts::ProjectHostIndex,
+    contracts: AcceptedContractIndex,
+    project_findings: bool,
+}
+
+impl ScopedAcceptances {
+    fn covers(&self, importer: &str) -> bool {
+        std::path::Path::new(importer).starts_with(&self.directory)
+    }
+
+    /// Deepest first, then by spelling so the order is a function of the set.
+    fn order(&self) -> (std::cmp::Reverse<usize>, &str) {
+        (
+            std::cmp::Reverse(std::path::Path::new(&self.directory).components().count()),
+            self.directory.as_str(),
+        )
+    }
 }
 
 impl AcceptedContractIndex {
+    #[must_use]
+    pub fn with_inferred_browser(
+        mut self,
+        hosts: crate::hosts::ProjectHostIndex,
+        contracts: Self,
+    ) -> Self {
+        self.inferred_browser = Some(Box::new(InferredBrowserContracts {
+            hosts,
+            contracts,
+            project_findings: true,
+        }));
+        self
+    }
+
+    #[must_use]
+    pub fn inferred_hosts(&self) -> Option<&crate::hosts::ProjectHostIndex> {
+        self.inferred_browser.as_ref().map(|view| &view.hosts)
+    }
+
+    /// Separate execution views keep uncalled bodies on today's no-target answer.
+    #[must_use]
+    pub fn execution_views(&self) -> Option<(Self, Self)> {
+        self.inferred_browser
+            .as_ref()
+            .filter(|view| view.project_findings)?;
+        let mut baseline = self.clone();
+        baseline.inferred_browser = None;
+        let mut browser = self.clone();
+        browser.inferred_browser.as_mut()?.project_findings = false;
+        Some((baseline, browser))
+    }
+
+    fn browser_view_at(&self, importer: &str, specifier: &str) -> Option<&Self> {
+        self.inferred_browser
+            .as_ref()
+            .filter(|view| {
+                view.hosts.browser_at(importer)
+                    && !view
+                        .hosts
+                        .blocked_imports
+                        .contains(&(importer.into(), specifier.into()))
+            })
+            .map(|view| &view.contracts)
+    }
+
+    /// Adds the acceptances of the project catalogs found in `directory`'s
+    /// `.solid-checker/`, applying to the files below `directory` only.
+    ///
+    /// For an importer inside several scoped directories, the deepest one
+    /// that answers wins, per specifier, and a farther one -- up to this
+    /// index's own, project-wide tiers -- answers only what the nearer ones
+    /// do not. An importer outside `directory` never sees `scoped`: a
+    /// catalog certified in one package of a monorepo says nothing about a
+    /// sibling package's files, whose own installed tree was not checked.
+    ///
+    /// `scoped` carries its own admissions; nothing here admits anything. A
+    /// second call for the same directory folds the new acceptances in below
+    /// the ones already held for it.
+    #[must_use]
+    pub fn with_scoped(mut self, directory: impl Into<String>, mut scoped: Self) -> Self {
+        let directory = directory.into();
+        // A scope's own scopes narrow it further; one outside it would widen
+        // it, and is not a scope of this one.
+        let nested = std::mem::take(&mut scoped.scopes)
+            .into_iter()
+            .filter(|scope| std::path::Path::new(&scope.directory).starts_with(&directory))
+            .collect::<Vec<_>>();
+        match self
+            .scopes
+            .iter_mut()
+            .find(|scope| scope.directory == directory)
+        {
+            Some(existing) => {
+                existing.index = std::mem::take(&mut existing.index).with_fallback(scoped);
+            }
+            None => self.scopes.push(ScopedAcceptances {
+                directory,
+                index: scoped,
+            }),
+        }
+        for scope in nested {
+            self = self.with_scoped(scope.directory, scope.index);
+        }
+        self.scopes
+            .sort_by(|left, right| left.order().cmp(&right.order()));
+        self
+    }
+
+    /// The scoped indexes that apply to `importer`, nearest first.
+    fn scopes_for<'a>(&'a self, importer: &str) -> impl Iterator<Item = &'a Self> {
+        self.scopes
+            .iter()
+            .filter(move |scope| scope.covers(importer))
+            .map(|scope| &scope.index)
+    }
+
+    /// This index's own answer for one import, ignoring scopes.
+    fn own_contract(&self, importer: &str, specifier: &str) -> Option<&AcceptedContract> {
+        self.imports
+            .get(&(importer.to_owned(), specifier.to_owned()))
+            .and_then(|contracts| contracts.first())
+            .or_else(|| {
+                self.admitted_at
+                    .get(&(importer.to_owned(), specifier.to_owned()))
+            })
+            .or_else(|| self.admitted.get(specifier))
+    }
+
+    /// This index's own explanation for one import, ignoring scopes: the one
+    /// replayed for this importer's own install first, then the
+    /// specifier-keyed one.
+    fn own_admission_refusal(&self, importer: &str, specifier: &str) -> Option<&str> {
+        match self
+            .admission_refusals_at
+            .get(&(importer.to_owned(), specifier.to_owned()))
+        {
+            Some(refusal) => refusal.as_deref(),
+            None => self.admission_refusal(specifier),
+        }
+    }
+
+    /// Every importer-keyed binding this index holds, its scopes' included,
+    /// deepest scope first and the project-wide tier last, each with the
+    /// refusal its own tier recorded for the binding's specifier. A report that
+    /// enumerates what acceptances a project holds has to see a nested
+    /// catalog's too; [`Self::semantic_identity`] is the project-wide tier's.
+    ///
+    /// The refusal is the binding's own tier's, not the one a lookup at the
+    /// binding's importer would find: a catalog entry's importer is the file
+    /// certification wrote beside the package, which need not lie inside the
+    /// directory whose catalog holds it.
+    pub fn all_semantic_identities(
+        &self,
+    ) -> impl Iterator<Item = (&AcceptedImportIdentity, Option<&str>)> {
+        self.scopes
+            .iter()
+            .map(|scope| &scope.index)
+            .chain(std::iter::once(self))
+            .flat_map(|index| {
+                index
+                    .identity
+                    .iter()
+                    .map(move |binding| (binding, index.admission_refusal(&binding.specifier)))
+            })
+    }
+
+    /// Why an acceptance for this specifier's package exists and was not
+    /// admitted, as the nearest catalog that applies to `importer` explains
+    /// it, and otherwise as the project-wide tier does.
+    #[must_use]
+    pub fn admission_refusal_at(&self, importer: &str, specifier: &str) -> Option<&str> {
+        if let Some(view) = self.browser_view_at(importer, specifier) {
+            return view.admission_refusal_at(importer, specifier);
+        }
+        self.scopes_for(importer)
+            .find_map(|scope| scope.own_admission_refusal(importer, specifier))
+            .or_else(|| self.own_admission_refusal(importer, specifier))
+    }
+
+    /// Ordinary analysis has one authority for Solid core: the built-in
+    /// dialect. Independent certification may still retain core contracts in
+    /// this general index, but they cannot supplement the runtime model.
+    /// Filter by authenticated package identity as well as written specifier,
+    /// so an alias cannot introduce a second authority. This is withholding,
+    /// never evidence that the specifier actually resolves to Solid.
+    #[must_use]
+    pub fn external_packages(&self) -> std::borrow::Cow<'_, Self> {
+        fn core_specifier(specifier: &str) -> bool {
+            solid_dialect::core_runtime_contract_reference("", specifier)
+        }
+
+        let retain = |key: &(String, String), contracts: &[AcceptedContract]| {
+            !core_specifier(&key.1)
+                && contracts.iter().all(|contract| {
+                    !solid_dialect::primitive_defining_package(&contract.package().name)
+                })
+        };
+        if self.imports.iter().all(|(key, values)| retain(key, values))
+            && self
+                .uncertifiable_imports
+                .keys()
+                .all(|(_, specifier)| !core_specifier(specifier))
+            && self
+                .admission_refusals
+                .keys()
+                .all(|specifier| !core_specifier(specifier))
+            && self.admitted_at.is_empty()
+            && self.admission_refusals_at.is_empty()
+            && self.scopes.is_empty()
+            && self.inferred_browser.is_none()
+        {
+            return std::borrow::Cow::Borrowed(self);
+        }
+        let mut external = self.clone();
+        external.retain_external();
+        std::borrow::Cow::Owned(external)
+    }
+
+    /// [`Self::external_packages`] in place, with no shortcut: every tier,
+    /// every scope.
+    fn retain_external(&mut self) {
+        fn core_specifier(specifier: &str) -> bool {
+            solid_dialect::core_runtime_contract_reference("", specifier)
+        }
+        let retain = |key: &(String, String), contracts: &[AcceptedContract]| {
+            !core_specifier(&key.1)
+                && contracts.iter().all(|contract| {
+                    !solid_dialect::primitive_defining_package(&contract.package().name)
+                })
+        };
+        let external = self;
+        external.imports.retain(|key, values| retain(key, values));
+        let external_package = |contract: &AcceptedContract| {
+            !solid_dialect::primitive_defining_package(&contract.package().name)
+        };
+        external
+            .by_artifact
+            .retain(|_, values| values.iter().all(external_package));
+        external
+            .admitted
+            .retain(|specifier, contract| !core_specifier(specifier) && external_package(contract));
+        external.admitted_at.retain(|(_, specifier), contract| {
+            !core_specifier(specifier) && external_package(contract)
+        });
+        external.identity.retain(|identity| {
+            external
+                .imports
+                .contains_key(&(identity.importer.clone(), identity.specifier.clone()))
+        });
+        external
+            .uncertifiable_imports
+            .retain(|(_, specifier), _| !core_specifier(specifier));
+        external
+            .admission_refusals
+            .retain(|specifier, _| !core_specifier(specifier));
+        external
+            .admission_refusals_at
+            .retain(|(_, specifier), _| !core_specifier(specifier));
+        for scope in &mut external.scopes {
+            scope.index.retain_external();
+        }
+        if let Some(view) = &mut external.inferred_browser {
+            view.contracts.retain_external();
+        }
+    }
+
+    /// Acceptances a project never imported by name: each one is reachable
+    /// only through the artifact it was proven about.
+    ///
+    /// This is the compiled-in tier's shape. A bundle has no importer in this
+    /// project — the file that imported it during certification is on another
+    /// machine — so putting it in `imports` would key it on a path that cannot
+    /// occur here, and would make every report that enumerates
+    /// `semantic_identity` claim the project accepted a contract it never
+    /// reached. Artifact admission is the whole match, exactly as it is for a
+    /// catalog entry whose importer does not match either.
+    #[must_use]
+    pub fn from_artifact_acceptances(
+        inputs: impl IntoIterator<Item = (String, AcceptedContract)>,
+    ) -> Self {
+        let mut by_artifact = BTreeMap::<String, Vec<AcceptedContract>>::new();
+        for (identity, contract) in inputs {
+            by_artifact.entry(identity).or_default().push(contract);
+        }
+        by_artifact.retain(|_, contracts| {
+            contracts.len() == 1
+                || contracts
+                    .windows(2)
+                    .all(|pair| pair[0].semantic_identity() == pair[1].semantic_identity())
+        });
+        Self {
+            imports: BTreeMap::new(),
+            inferred_browser: None,
+            by_artifact,
+            admitted: BTreeMap::new(),
+            admitted_at: BTreeMap::new(),
+            uncertifiable_imports: BTreeMap::new(),
+            admission_refusals: BTreeMap::new(),
+            admission_refusals_at: BTreeMap::new(),
+            context_provided_packages: BTreeSet::new(),
+            identity: Vec::new(),
+            scopes: Vec::new(),
+        }
+    }
+
     pub fn new(
         inputs: impl IntoIterator<Item = AcceptedContractInput>,
     ) -> Result<Self, SemanticQueryError> {
         let mut imports = BTreeMap::<_, Vec<_>>::new();
+        let mut by_artifact = BTreeMap::<String, Vec<AcceptedContract>>::new();
         for input in inputs {
+            if let Some(identity) = input.artifact_identity {
+                by_artifact
+                    .entry(identity)
+                    .or_default()
+                    .push(input.contract.clone());
+            }
             imports
                 .entry((input.importer, input.specifier))
                 .or_default()
                 .push(input.contract);
         }
+        // An artifact identity naming two different contracts is not a
+        // preference to resolve: it is two answers about the same bytes, and
+        // neither may be applied. Dropping the entry leaves those acceptances
+        // importer-only rather than failing the catalog, because the
+        // importer-keyed answers are still exactly as sound as they were.
+        by_artifact.retain(|_, contracts| {
+            contracts.len() == 1
+                || contracts
+                    .windows(2)
+                    .all(|pair| pair[0].semantic_identity() == pair[1].semantic_identity())
+        });
         let mut identity = Vec::new();
         for ((importer, specifier), contracts) in &imports {
             if contracts.len() != 1 {
@@ -120,8 +512,16 @@ impl AcceptedContractIndex {
         identity.sort();
         Ok(Self {
             imports,
+            inferred_browser: None,
+            by_artifact,
+            admitted: BTreeMap::new(),
+            admitted_at: BTreeMap::new(),
             uncertifiable_imports: BTreeMap::new(),
+            admission_refusals: BTreeMap::new(),
+            admission_refusals_at: BTreeMap::new(),
+            context_provided_packages: BTreeSet::new(),
             identity,
+            scopes: Vec::new(),
         })
     }
 
@@ -142,8 +542,7 @@ impl AcceptedContractIndex {
 
     #[must_use]
     pub fn is_uncertifiable(&self, importer: &str, specifier: &str) -> bool {
-        self.uncertifiable_imports
-            .contains_key(&(importer.to_owned(), specifier.to_owned()))
+        self.uncertifiable_reason(importer, specifier).is_some()
     }
 
     #[must_use]
@@ -152,9 +551,13 @@ impl AcceptedContractIndex {
         importer: &str,
         specifier: &str,
     ) -> Option<UncertifiableImportReason> {
-        self.uncertifiable_imports
-            .get(&(importer.to_owned(), specifier.to_owned()))
-            .copied()
+        if let Some(view) = self.browser_view_at(importer, specifier) {
+            return view.uncertifiable_reason(importer, specifier);
+        }
+        let key = (importer.to_owned(), specifier.to_owned());
+        self.scopes_for(importer)
+            .chain(std::iter::once(self))
+            .find_map(|index| index.uncertifiable_imports.get(&key).copied())
     }
 
     #[must_use]
@@ -176,6 +579,17 @@ impl AcceptedContractIndex {
         for (key, contracts) in fallback.imports {
             self.imports.entry(key).or_insert(contracts);
         }
+        // The artifact index is unioned for the same reason the import index
+        // is. Leaving it out made folding several catalogs keep only the last
+        // one's artifacts, and `with_admitted_artifacts` then silently found
+        // nothing for every other catalog's acceptance -- which is what a
+        // project with two certified dependencies has, because `contract
+        // certify` publishes a plain catalog for a single-case package and a
+        // case set for a multi-case one. Measured: two certified packages, both
+        // reported `missing`.
+        for (identity, contracts) in fallback.by_artifact {
+            self.by_artifact.entry(identity).or_insert(contracts);
+        }
         self.identity = self
             .imports
             .iter()
@@ -195,7 +609,102 @@ impl AcceptedContractIndex {
             .extend(fallback.uncertifiable_imports);
         self.uncertifiable_imports
             .retain(|key, _| !self.imports.contains_key(key));
+        for (specifier, refusal) in fallback.admission_refusals {
+            self.admission_refusals.entry(specifier).or_insert(refusal);
+        }
+        for (key, refusal) in fallback.admission_refusals_at {
+            self.admission_refusals_at.entry(key).or_insert(refusal);
+        }
+        self.context_provided_packages
+            .extend(fallback.context_provided_packages);
+        // A fallback's scopes stay scopes: folding them into this index's own
+        // tiers would let a nested catalog answer files outside its directory.
+        for scope in fallback.scopes {
+            self = self.with_scoped(scope.directory, scope.index);
+        }
         self
+    }
+
+    /// Records, per imported specifier, why an acceptance that exists for its
+    /// package was not admitted. See `admission_refusals` on the struct: this
+    /// changes no binding, only what the acceptance gate says.
+    #[must_use]
+    pub fn with_admission_refusals(
+        mut self,
+        refusals: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
+        for (specifier, refusal) in refusals {
+            self.admission_refusals.entry(specifier).or_insert(refusal);
+        }
+        self
+    }
+
+    /// ADR 0153 part 3: packages another installed package depends on, so
+    /// their context premises are unmet in this project. See
+    /// `context_provided_packages` on the struct.
+    #[must_use]
+    pub fn with_context_provided_packages(
+        mut self,
+        packages: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.context_provided_packages.extend(packages);
+        self
+    }
+
+    /// Every package some contract in this index states a context premise
+    /// for (ADR 0153 part 3), in every tier and every scope. The backend asks
+    /// its installed tree about these alone.
+    #[must_use]
+    pub fn context_premise_packages(&self) -> BTreeSet<String> {
+        let mut packages = BTreeSet::new();
+        let mut visit = |contract: &AcceptedContract| {
+            if contract
+                .artifact_case()
+                .exports
+                .values()
+                .any(|export| !export.call.context_premises().is_empty())
+            {
+                packages.insert(contract.package().name.clone());
+            }
+        };
+        self.imports.values().flatten().for_each(&mut visit);
+        self.by_artifact.values().flatten().for_each(&mut visit);
+        self.admitted.values().for_each(&mut visit);
+        self.admitted_at.values().for_each(&mut visit);
+        for scope in &self.scopes {
+            packages.extend(scope.index.context_premise_packages());
+        }
+        packages
+    }
+
+    /// Whether another installed package depends on `package`, so that its
+    /// code may provide a context `package` exports.
+    #[must_use]
+    pub fn context_provided_package(&self, package: &str) -> bool {
+        self.context_provided_packages.contains(package)
+    }
+
+    /// [`Self::with_admission_refusals`] for single importing files, keyed by
+    /// `(importer, specifier)`: the explanation replayed from the install that
+    /// file's own resolution reaches. It answers before the specifier-keyed
+    /// explanation, for that importer only; `None` says that install refused
+    /// nothing, and suppresses the specifier-keyed sentence for that importer.
+    #[must_use]
+    pub fn with_admission_refusals_for(
+        mut self,
+        refusals: impl IntoIterator<Item = ((String, String), Option<String>)>,
+    ) -> Self {
+        for (key, refusal) in refusals {
+            self.admission_refusals_at.entry(key).or_insert(refusal);
+        }
+        self
+    }
+
+    /// Why an acceptance for this specifier's package exists and was not
+    /// admitted, when the backend could say.
+    #[must_use]
+    pub fn admission_refusal(&self, specifier: &str) -> Option<&str> {
+        self.admission_refusals.get(specifier).map(String::as_str)
     }
 
     #[must_use]
@@ -208,7 +717,7 @@ impl AcceptedContractIndex {
     #[must_use]
     pub fn cache_fingerprint(&self) -> [u8; 32] {
         let mut hash = Sha256::new();
-        hash.update(b"solid-checker-accepted-contract-index-v2");
+        hash.update(b"solid-checker-accepted-contract-index-v4");
         hash.update((self.identity.len() as u64).to_be_bytes());
         for binding in &self.identity {
             hash_text(&mut hash, &binding.importer);
@@ -240,6 +749,25 @@ impl AcceptedContractIndex {
                 None => hash.update([0]),
             }
         }
+        hash.update((self.admitted.len() as u64).to_be_bytes());
+        for (specifier, contract) in &self.admitted {
+            hash_text(&mut hash, specifier);
+            let semantic = contract.semantic_identity();
+            hash_text(&mut hash, &semantic.package.name);
+            hash_text(&mut hash, &semantic.package.version);
+            hash_text(&mut hash, &semantic.package.integrity);
+            hash_text(&mut hash, &semantic.artifact_case);
+            hash_text(&mut hash, semantic.semantic_digest.as_str());
+            hash_text(&mut hash, semantic.closed_claims_root.as_str());
+            match &semantic.authentication {
+                Some(authentication) => {
+                    hash.update([1]);
+                    hash_text(&mut hash, authentication.receipt_digest.as_str());
+                    hash_text(&mut hash, authentication.trust_store_digest.as_str());
+                }
+                None => hash.update([0]),
+            }
+        }
         hash.update((self.uncertifiable_imports.len() as u64).to_be_bytes());
         for ((importer, specifier), reason) in &self.uncertifiable_imports {
             hash_text(&mut hash, importer);
@@ -248,6 +776,75 @@ impl AcceptedContractIndex {
                 UncertifiableImportReason::Unspecified => 0,
                 UncertifiableImportReason::ObsoletePolicy1 => 1,
             }]);
+        }
+        hash.update((self.admission_refusals.len() as u64).to_be_bytes());
+        for (specifier, refusal) in &self.admission_refusals {
+            hash_text(&mut hash, specifier);
+            hash_text(&mut hash, refusal);
+        }
+        // Nothing is hashed for an index naming no such package, so every
+        // project keeps the fingerprint it always had until one does.
+        if !self.context_provided_packages.is_empty() {
+            hash.update(b"context-provided-packages");
+            hash.update((self.context_provided_packages.len() as u64).to_be_bytes());
+            for package in &self.context_provided_packages {
+                hash_text(&mut hash, package);
+            }
+        }
+        // Nothing is hashed for an index with no per-importer admission, so a
+        // project whose importers all reach its own installs keeps the
+        // fingerprint it always had.
+        if !self.admitted_at.is_empty() || !self.admission_refusals_at.is_empty() {
+            hash.update(b"admitted-at");
+            hash.update((self.admitted_at.len() as u64).to_be_bytes());
+            for ((importer, specifier), contract) in &self.admitted_at {
+                hash_text(&mut hash, importer);
+                hash_text(&mut hash, specifier);
+                let semantic = contract.semantic_identity();
+                hash_text(&mut hash, &semantic.package.name);
+                hash_text(&mut hash, &semantic.package.version);
+                hash_text(&mut hash, &semantic.package.integrity);
+                hash_text(&mut hash, &semantic.artifact_case);
+                hash_text(&mut hash, semantic.semantic_digest.as_str());
+                hash_text(&mut hash, semantic.closed_claims_root.as_str());
+                match &semantic.authentication {
+                    Some(authentication) => {
+                        hash.update([1]);
+                        hash_text(&mut hash, authentication.receipt_digest.as_str());
+                        hash_text(&mut hash, authentication.trust_store_digest.as_str());
+                    }
+                    None => hash.update([0]),
+                }
+            }
+            hash.update((self.admission_refusals_at.len() as u64).to_be_bytes());
+            for ((importer, specifier), refusal) in &self.admission_refusals_at {
+                hash_text(&mut hash, importer);
+                hash_text(&mut hash, specifier);
+                match refusal {
+                    Some(refusal) => {
+                        hash.update([1]);
+                        hash_text(&mut hash, refusal);
+                    }
+                    None => hash.update([0]),
+                }
+            }
+        }
+        // Nothing is hashed for an index without scopes, so a project with no
+        // nested catalog keeps the fingerprint it always had.
+        if !self.scopes.is_empty() {
+            hash.update(b"scopes");
+            hash.update((self.scopes.len() as u64).to_be_bytes());
+            for scope in &self.scopes {
+                hash_text(&mut hash, &scope.directory);
+                hash.update(scope.index.cache_fingerprint());
+            }
+        }
+        if let Some(view) = &self.inferred_browser {
+            hash.update(b"inferred-browser-host-v1");
+            // Deterministic BTree collections; include config, integration,
+            // source inventory, roots and the final conservative join.
+            hash.update(serde_json::to_vec(&view.hosts).expect("host index is serializable"));
+            hash.update(view.contracts.cache_fingerprint());
         }
         hash.finalize().into()
     }
@@ -258,10 +855,19 @@ impl AcceptedContractIndex {
         specifier: &str,
         identity: &ExportIdentity,
     ) -> Result<AcceptedContractUse<'a>, SemanticQueryError> {
+        if let Some(view) = self.browser_view_at(importer, specifier) {
+            return view.resolve(importer, specifier, identity);
+        }
+        let key = (importer.to_owned(), specifier.to_owned());
         let contract = self
-            .imports
-            .get(&(importer.to_owned(), specifier.to_owned()))
-            .and_then(|contracts| contracts.first())
+            .scopes_for(importer)
+            .chain(std::iter::once(self))
+            .find_map(|index| {
+                index
+                    .imports
+                    .get(&key)
+                    .and_then(|contracts| contracts.first())
+            })
             .ok_or_else(|| SemanticQueryError::MissingImport {
                 importer: importer.into(),
                 specifier: specifier.into(),
@@ -302,13 +908,122 @@ impl AcceptedContractIndex {
         importer: &str,
         specifier: &str,
     ) -> Result<&AcceptedContract, SemanticQueryError> {
-        self.imports
-            .get(&(importer.to_owned(), specifier.to_owned()))
-            .and_then(|contracts| contracts.first())
+        if let Some(view) = self.browser_view_at(importer, specifier) {
+            return view.contract(importer, specifier);
+        }
+        self.scopes_for(importer)
+            .find_map(|scope| scope.own_contract(importer, specifier))
+            .or_else(|| self.own_contract(importer, specifier))
             .ok_or_else(|| SemanticQueryError::MissingImport {
                 importer: importer.into(),
                 specifier: specifier.into(),
             })
+    }
+
+    /// Finds the acceptance issued for exactly this artifact, whatever file
+    /// imported it when the contract was certified.
+    ///
+    /// The caller supplies an identity it derived from its *own* resolution,
+    /// and equality of that identity is the whole check: it commits to the
+    /// package's tarball integrity, its entrypoint and the export conditions,
+    /// so an equal identity is the same published bytes reached the same way.
+    /// The importer is deliberately not consulted — it is what this lookup
+    /// exists to stop requiring — and an identity the loader could not state
+    /// exactly is simply absent here.
+    /// Admits a specifier project-wide when this project's *installed* artifact
+    /// is the one an accepted contract was proven about.
+    ///
+    /// Each entry is `(specifier, artifact identity)` derived by the caller from
+    /// the installed tree: the package's registry integrity, its entrypoint and
+    /// the host's declared export conditions. An identity that matches no
+    /// acceptance is skipped.
+    ///
+    /// This is where an acceptance stops being bound to the file that imported
+    /// it during certification. What justifies dropping the importer is that the
+    /// identity commits to the tarball integrity: if the installed bytes, the
+    /// entrypoint and the conditions are the same, every importer in this
+    /// project reaches the artifact the contract was proven about, whatever file
+    /// it was certified from. A nested install with different bytes derives a
+    /// different identity and is not admitted — the caller must refuse to state
+    /// an identity when the project's installs disagree, rather than pick one.
+    ///
+    /// Importer-keyed acceptances still win: `contract` consults them first, so
+    /// a catalog entry naming an exact file is never displaced by this.
+    ///
+    /// One identity per specifier. Where a project's own resolution cannot
+    /// narrow the candidates to one -- a host that declares no export
+    /// conditions, which is every ESLint and Oxlint run -- the caller decides
+    /// whether the candidates claim the same thing before calling this, because
+    /// deciding needs the document's own content address for a claim and this
+    /// crate cannot compute one. See
+    /// `solid-facts-backend`'s `agreed_admissions`.
+    #[must_use]
+    pub fn with_admitted_artifacts(
+        mut self,
+        admitted: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
+        for (specifier, identity) in admitted {
+            let Some(contract) = self.by_artifact.get(&identity).and_then(|it| it.first()) else {
+                continue;
+            };
+            self.admitted
+                .entry(specifier)
+                .or_insert_with(|| contract.clone());
+        }
+        self
+    }
+
+    /// [`Self::with_admitted_artifacts`] for single importing files: each entry
+    /// is `(importer, specifier, artifact identity)`, derived by the caller
+    /// from the install *that importer's* resolution reaches, and admits the
+    /// specifier for that importer only.
+    ///
+    /// This is how one specifier reaching different installed artifacts from
+    /// different files is admitted: a monorepo root whose sub-packages each
+    /// install their own copy has no project-wide artifact for it, so none of
+    /// them is admitted project-wide, and each file is answered by the install
+    /// its own `node_modules` walk finds. The caller must not also admit such a
+    /// specifier project-wide.
+    ///
+    /// Importer-keyed acceptances still win, and the first identity recorded
+    /// for an import is kept, exactly as for [`Self::with_admitted_artifacts`],
+    /// so tiers keep their precedence when called in order.
+    #[must_use]
+    pub fn with_admitted_artifacts_for(
+        mut self,
+        admitted: impl IntoIterator<Item = (String, String, String)>,
+    ) -> Self {
+        for (importer, specifier, identity) in admitted {
+            let Some(contract) = self.by_artifact.get(&identity).and_then(|it| it.first()) else {
+                continue;
+            };
+            self.admitted_at
+                .entry((importer, specifier))
+                .or_insert_with(|| contract.clone());
+        }
+        self
+    }
+
+    /// The acceptances this project reaches by artifact rather than by
+    /// importer.
+    ///
+    /// `semantic_identity` answers "what did this project import under a
+    /// contract certified from one of its own files", which is the wrong
+    /// question for an acceptance admitted from an installed-tree match — and
+    /// the only question that had an answer while every acceptance was also
+    /// importer-keyed. A report that enumerates what the analysis used has to
+    /// ask both.
+    pub fn admitted_contracts(&self) -> impl Iterator<Item = (&str, &AcceptedContract)> {
+        self.admitted
+            .iter()
+            .map(|(specifier, contract)| (specifier.as_str(), contract))
+    }
+
+    #[must_use]
+    pub fn contract_for_artifact(&self, artifact_identity: &str) -> Option<&AcceptedContract> {
+        self.by_artifact
+            .get(artifact_identity)
+            .and_then(|contracts| contracts.first())
     }
 
     /// Enumerates the runtime surface of the one receipt-authenticated
@@ -401,6 +1116,7 @@ struct ArgumentFacts {
     literals: FiniteFact<Literal>,
     kinds: FiniteFact<ValueKind>,
     properties: BTreeMap<String, PropertyFact>,
+    own_data_keys: FiniteFact<Vec<String>>,
 }
 
 /// Exact, demand-shaped Type Facts for one call expression. Facts are local to
@@ -487,6 +1203,15 @@ impl CallSiteFacts {
         fact: FiniteFact<ValueKind>,
     ) {
         self.arguments.entry((argument, path)).or_default().kinds = fact;
+    }
+
+    /// Only an exact runtime own-data map may supply this fact.
+    fn set_own_data_keys(&mut self, argument: u16, path: Vec<String>, mut names: Vec<String>) {
+        names.sort();
+        self.arguments
+            .entry((argument, path))
+            .or_default()
+            .own_data_keys = FiniteFact::exact(names);
     }
 
     pub fn set_property(
@@ -591,6 +1316,16 @@ impl CallSiteFacts {
                 .arguments
                 .get(&(*argument, path.clone()))
                 .map_or(GuardTruth::Unknown, |facts| facts.kinds.evaluate(kind)),
+            GuardAtom::OwnDataKeys {
+                argument,
+                path,
+                names,
+            } => self
+                .arguments
+                .get(&(*argument, path.clone()))
+                .map_or(GuardTruth::Unknown, |facts| {
+                    facts.own_data_keys.evaluate(names)
+                }),
             GuardAtom::Property {
                 argument,
                 path,
@@ -865,10 +1600,204 @@ fn selected_operations(
     }
 }
 
+/// Owner projection has no selected signature or authenticated artifact-case
+/// key. Only exact argument facts may settle its guards; unsupported axes stay
+/// unknown, even if an artifact-case name happens to be the empty string.
+pub(crate) fn owner_guard_at_call(guard: &Guard, call: &solid_facts::ast::CallFact) -> GuardTruth {
+    use solid_facts::ast::ArgumentLiteralFact;
+
+    let mut facts = CallSiteFacts::default();
+    for atom in &guard.0 {
+        let (argument, path) = match atom {
+            GuardAtom::Literal { argument, path, .. }
+            | GuardAtom::ValueKind { argument, path, .. }
+            | GuardAtom::Property { argument, path, .. }
+            | GuardAtom::OwnDataKeys { argument, path, .. } => (*argument, path),
+            GuardAtom::Signature(_)
+            | GuardAtom::ArgumentCount { .. }
+            | GuardAtom::TupleAlternative { .. }
+            | GuardAtom::ResultProtocol(_)
+            | GuardAtom::ArtifactCase(_) => continue,
+        };
+        let index = usize::from(argument);
+        let Some(value) = call.arguments.get(index).filter(|_| {
+            !call.arguments[..=index]
+                .iter()
+                .any(|argument| argument.spread)
+        }) else {
+            continue;
+        };
+        if path.is_empty() {
+            facts.set_value_kind(
+                argument,
+                path.clone(),
+                syntax_value_kinds(value.runtime_value_kind),
+            );
+        }
+        let Some(literal) = literal_at_path(&value.literal_value, path) else {
+            continue;
+        };
+        match atom {
+            GuardAtom::Literal {
+                value: expected, ..
+            } => {
+                let value = match literal {
+                    ArgumentLiteralFact::Null => Some(Literal::Null),
+                    ArgumentLiteralFact::Boolean(value) => Some(Literal::Bool(value)),
+                    ArgumentLiteralFact::Integer(value) => match expected {
+                        Literal::Number(number) => number
+                            .parse::<f64>()
+                            .ok()
+                            .filter(|number| number.is_finite())
+                            .map(|number_value| {
+                                Literal::Number(if number_value == f64::from(value) {
+                                    number.clone()
+                                } else {
+                                    value.to_string()
+                                })
+                            }),
+                        _ => Some(Literal::Number(value.to_string())),
+                    },
+                    ArgumentLiteralFact::String(value) => Some(Literal::String(value.to_string())),
+                    ArgumentLiteralFact::Unknown
+                    | ArgumentLiteralFact::Function
+                    | ArgumentLiteralFact::Object(_)
+                    | ArgumentLiteralFact::ArrayLength(_) => None,
+                };
+                if let Some(value) = value {
+                    facts.set_literal(argument, path.clone(), FiniteFact::exact(value));
+                }
+            }
+            GuardAtom::ValueKind { .. } if !path.is_empty() => {
+                facts.set_value_kind(argument, path.clone(), literal_value_kinds(&literal));
+            }
+            GuardAtom::OwnDataKeys { .. } => {
+                if let ArgumentLiteralFact::Object(properties) = literal {
+                    facts.set_own_data_keys(
+                        argument,
+                        path.clone(),
+                        properties
+                            .iter()
+                            .map(|property| property.name.to_string())
+                            .collect(),
+                    );
+                }
+            }
+            GuardAtom::Property { name, .. } => {
+                if let ArgumentLiteralFact::Object(properties) = literal {
+                    let property = properties
+                        .iter()
+                        .find(|property| property.name == name.as_str());
+                    let callable = property.map_or_else(FiniteFact::unknown, |property| {
+                        match property.value {
+                            ArgumentLiteralFact::Function => FiniteFact::exact(true),
+                            ArgumentLiteralFact::Unknown => FiniteFact::unknown(),
+                            ArgumentLiteralFact::Null
+                            | ArgumentLiteralFact::Boolean(_)
+                            | ArgumentLiteralFact::Integer(_)
+                            | ArgumentLiteralFact::String(_)
+                            | ArgumentLiteralFact::Object(_)
+                            | ArgumentLiteralFact::ArrayLength(_) => FiniteFact::exact(false),
+                        }
+                    });
+                    facts.set_property(
+                        argument,
+                        path.clone(),
+                        name.clone(),
+                        PropertyFact {
+                            present: FiniteFact::exact(property.is_some()),
+                            callable,
+                        },
+                    );
+                }
+            }
+            GuardAtom::ValueKind { .. }
+            | GuardAtom::Signature(_)
+            | GuardAtom::ArgumentCount { .. }
+            | GuardAtom::TupleAlternative { .. }
+            | GuardAtom::ResultProtocol(_)
+            | GuardAtom::ArtifactCase(_) => {}
+        }
+    }
+    evaluate_guard_with(guard, |atom| match atom {
+        GuardAtom::Literal { .. }
+        | GuardAtom::ValueKind { .. }
+        | GuardAtom::Property { .. }
+        | GuardAtom::OwnDataKeys { .. } => facts.evaluate(atom, ""),
+        GuardAtom::Signature(_)
+        | GuardAtom::ArgumentCount { .. }
+        | GuardAtom::TupleAlternative { .. }
+        | GuardAtom::ResultProtocol(_)
+        | GuardAtom::ArtifactCase(_) => GuardTruth::Unknown,
+    })
+}
+
+fn literal_at_path(
+    root: &solid_facts::ast::ArgumentLiteralFact,
+    path: &[String],
+) -> Option<solid_facts::ast::ArgumentLiteralFact> {
+    use solid_facts::ast::ArgumentLiteralFact;
+    let Some((name, rest)) = path.split_first() else {
+        return Some(root.clone());
+    };
+    match root {
+        ArgumentLiteralFact::Object(properties) => properties
+            .iter()
+            .find(|property| property.name == name.as_str())
+            .and_then(|property| literal_at_path(&property.value, rest)),
+        ArgumentLiteralFact::ArrayLength(length) if name == "length" && rest.is_empty() => {
+            Some(ArgumentLiteralFact::Integer(*length))
+        }
+        _ => None,
+    }
+}
+
+fn literal_value_kinds(value: &solid_facts::ast::ArgumentLiteralFact) -> FiniteFact<ValueKind> {
+    use solid_facts::ast::{ArgumentLiteralFact, RuntimeValueKind};
+    syntax_value_kinds(match value {
+        ArgumentLiteralFact::Unknown => RuntimeValueKind::Unknown,
+        ArgumentLiteralFact::Null => RuntimeValueKind::Nullish,
+        ArgumentLiteralFact::Boolean(_)
+        | ArgumentLiteralFact::Integer(_)
+        | ArgumentLiteralFact::String(_) => RuntimeValueKind::Primitive,
+        ArgumentLiteralFact::Function => RuntimeValueKind::Function,
+        ArgumentLiteralFact::Object(_) => RuntimeValueKind::Object,
+        ArgumentLiteralFact::ArrayLength(_) => RuntimeValueKind::Array,
+    })
+}
+
+fn syntax_value_kinds(kind: solid_facts::ast::RuntimeValueKind) -> FiniteFact<ValueKind> {
+    use solid_facts::ast::RuntimeValueKind;
+    match kind {
+        RuntimeValueKind::Primitive | RuntimeValueKind::Nullish => {
+            FiniteFact::exact(ValueKind::Plain)
+        }
+        RuntimeValueKind::Function => FiniteFact::exact(ValueKind::Callable),
+        // Noncallable does not prove a plain protocol: preserve the previous
+        // owner projection's conservative object/array ValueKind behavior.
+        RuntimeValueKind::Object | RuntimeValueKind::Array => FiniteFact::possibilities(
+            [
+                ValueKind::Plain,
+                ValueKind::Promise,
+                ValueKind::AsyncIterable,
+            ],
+            true,
+        ),
+        RuntimeValueKind::Unknown => FiniteFact::unknown(),
+    }
+}
+
 fn evaluate_guard(guard: &Guard, facts: &CallSiteFacts, selected_case: &str) -> GuardTruth {
+    evaluate_guard_with(guard, |atom| facts.evaluate(atom, selected_case))
+}
+
+fn evaluate_guard_with(
+    guard: &Guard,
+    mut evaluate: impl FnMut(&GuardAtom) -> GuardTruth,
+) -> GuardTruth {
     let mut unknown = false;
     for atom in &guard.0 {
-        match facts.evaluate(atom, selected_case) {
+        match evaluate(atom) {
             GuardTruth::False => return GuardTruth::False,
             GuardTruth::Unknown => unknown = true,
             GuardTruth::True => {}
@@ -878,6 +1807,47 @@ fn evaluate_guard(guard: &Guard, facts: &CallSiteFacts, selected_case: &str) -> 
         GuardTruth::Unknown
     } else {
         GuardTruth::True
+    }
+}
+
+/// The enumeration lower bound is not a bound on every getter. A preceding
+/// accessor may throw, delete a later key or replace its descriptor. The
+/// initial consumer has no completion/mutation proof for such an accessor.
+/// `receiver_exact` must come from a descriptor-aware, non-escaped allocation
+/// proof, not a TypeScript object type. Data-property Gets do not advance
+/// `preceding_getters` and methods held as data are never called by this use.
+#[must_use]
+pub fn enumeration_get_is_guaranteed(
+    protocol: InvokeProtocol,
+    receiver_exact: bool,
+    preceding_getters: usize,
+) -> bool {
+    protocol == InvokeProtocol::GetEnumerableStringValues
+        && receiver_exact
+        && preceding_getters == 0
+}
+
+#[cfg(test)]
+mod enumeration_tests {
+    use super::*;
+
+    #[test]
+    fn getter_strength_requires_receiver_and_prefix_not_only_enumeration() {
+        let protocol = InvokeProtocol::GetEnumerableStringValues;
+        assert!(enumeration_get_is_guaranteed(protocol, true, 0));
+        assert!(!enumeration_get_is_guaranteed(protocol, false, 0));
+        assert!(!enumeration_get_is_guaranteed(protocol, true, 1));
+        assert!(!enumeration_get_is_guaranteed(
+            InvokeProtocol::GetOwnEnumerableValues,
+            true,
+            0
+        ));
+        assert!(!enumeration_get_is_guaranteed(InvokeProtocol::Get, true, 0));
+        assert!(!enumeration_get_is_guaranteed(
+            InvokeProtocol::Call,
+            true,
+            0
+        ));
     }
 }
 

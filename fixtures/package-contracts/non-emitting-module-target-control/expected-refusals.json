@@ -1,0 +1,70 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "non-emitting-module-target-control-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": "./cjs",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "published-artifact",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/bundle.cjs has no runtime ESM exports"
+    },
+    {
+      "entrypoint": "./effects",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "published-artifact",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/effects.js has no runtime ESM exports"
+    },
+    {
+      "entrypoint": "./evaluated-default",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "published-artifact",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: contract emission batch target 7 names entry file <package-root>/evaluated-default.d.ts as its own fact source; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts"
+    },
+    {
+      "entrypoint": "./implemented",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "published-artifact",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: contract emission batch target 8 names entry file <package-root>/implemented.d.ts as its own fact source; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts"
+    },
+    {
+      "entrypoint": "./vitest",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "published-artifact",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/vitest.js has no runtime ESM exports"
+    }
+  ],
+  "inapplicable": [
+    {
+      "entrypoint": "./ambient-js",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-emitting-module-target",
+      "applicability": "verifier-proved-type-only",
+      "reason": "runtime target emits no JavaScript (erasable-statements): 1 module-level statement(s)"
+    },
+    {
+      "entrypoint": "./declare-enum",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-emitting-module-target",
+      "applicability": "verifier-proved-type-only",
+      "reason": "runtime target emits no JavaScript (erasable-statements): 1 module-level statement(s)"
+    }
+  ],
+  "withheldClaims": [],
+  "declinedClosures": []
+}

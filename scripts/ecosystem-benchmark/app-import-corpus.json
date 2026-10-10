@@ -1,0 +1,555 @@
+{
+  "schemaVersion": 1,
+  "comment": "Public Solid 2 applications for `make app-import-metric` (scripts/app-import-metric.mjs): not libraries, forks or templates. Each is pinned to a commit and lockfile digest, names the tsconfig(s) covering its own source, and says why it qualifies. Found 2026-09-28 by GitHub code search for package.json files depending on @solidjs/web, @solidjs/signals, @solidjs/start or a 2.x solid-js, filtered to non-fork, non-archived, non-template repositories with at least one third-party Solid dependency, then reviewed by hand; the three reviewed consumer environments are pinned at their environment commits. `excluded` lists reviewed candidates that cannot be measured, and why.",
+  "pinnedAt": "2026-09-28",
+  "apps": [
+    {
+      "id": "oscartbeaumont-website",
+      "repository": "oscartbeaumont/website",
+      "commit": "60823453a7e5e3aaa52179746d26abb46c7ff373",
+      "commitDate": "2026-09-23T02:16:11+08:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.app.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:dfcd918bea1c15db74e7b16d1e1dd1c5d2c8f780859c45e2ccc458ed1edc331b",
+      "why": "Personal website (SolidStart-less Vite + @solidjs/router + @solidjs/meta) on the rc.9 triple; a reviewed consumer environment (oscartbeaumont-website-main-60823453), pinned at that environment's commit."
+    },
+    {
+      "id": "viviana-ui-web",
+      "repository": "proyecto-viviana/ui",
+      "commit": "b005c00acb61c07b60612430753d3a2400182bbd",
+      "commitDate": "2026-09-24T00:19:53-03:00",
+      "app": "apps/web",
+      "projects": [
+        "apps/web/tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:b4458d8b31edaafcfae3c2881a430199624252086d98af9a75209db7070bf6bf",
+      "packageManager": "pnpm@11.22.0",
+      "why": "The design system's documentation/showcase web app (TanStack Start + @tanstack/solid-router) on rc.9; a reviewed consumer environment (viviana-ui-main-b005c00a), pinned at that environment's commit. Its @proyecto-viviana/* imports are workspace packages and are reported as first-party."
+    },
+    {
+      "id": "kobalte-docs",
+      "repository": "kobaltedev/kobalte",
+      "commit": "e9d426d438b7c9ea0cc81bd1133831a20cd5fcae",
+      "commitDate": "2026-09-24T19:08:55+02:00",
+      "app": "apps/docs",
+      "projects": [
+        "apps/docs/tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:5f9af78c3c3a656485a92bf535b5cf77d23a1f9feb951c7575cad0e8794ab6c9",
+      "packageManager": "pnpm@11.20.0",
+      "why": "Kobalte's documentation site (a SolidStart app that renders every component's examples) on the solid2 branch at the reviewed consumer environment's commit (kobalte-solid2-e9d426d4); @kobalte/core is a workspace link and is reported as first-party."
+    },
+    {
+      "id": "readingroom",
+      "repository": "Sleeping-Donut/readingroom",
+      "commit": "d53aa31e935ce2909cd658f22a96466127b0d340",
+      "commitDate": "2026-09-13T22:18:09+01:00",
+      "app": "frontend",
+      "projects": [
+        "frontend/tsconfig.json"
+      ],
+      "lockfile": "frontend/pnpm-lock.yaml",
+      "lockfileDigest": "sha256:8ce1080a85a80bf71d772554d1e82c36ffffd198c6233ccd5218481ab123dc97",
+      "why": "Self-hosted ebook and audiobook manager; the frontend is a Solid 2 (rc.8) app using @kobalte/core and a dozen @solid-primitives packages."
+    },
+    {
+      "id": "app-game",
+      "repository": "SonyStone/app-game",
+      "commit": "3064fed238a043da90041f8eb86b357e253330bf",
+      "commitDate": "2026-09-23T18:47:44+02:00",
+      "app": "apps/web",
+      "projects": [
+        "apps/web/tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:1f7253aa2b9e1720846a28267cb7ffc7afb4ae1961343acd743ebce2381ce8f5",
+      "packageManager": "pnpm@10.32.1",
+      "why": "A deployed collection of games and graphics experiments (app-game-one.vercel.app) on Solid 2 via a pnpm catalog; apps/web is the deployed shell (the repository-root tsconfig, which spans every workspace package, is refused by the checker's parser). Its sixty @app-game/* imports are workspace packages and are reported as first-party."
+    },
+    {
+      "id": "spotify-desk-thing",
+      "repository": "ansonlichtfuss/spotify-desk-thing",
+      "commit": "b79162ad88a8069943bf2cd4cea9619b354c1106",
+      "commitDate": "2026-09-22T19:57:36-07:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:758a7fbc4f74de81f4c38fefee3942bc8a60ec70d1efe3ff627cf11ef65de712",
+      "why": "Now-playing interface for a Raspberry Pi desk display (83 stars), Solid 2 rc.4 with TanStack Start, Router and Query."
+    },
+    {
+      "id": "sefer",
+      "repository": "Bible-Translation-Tools/Sefer",
+      "commit": "dc8fee08ef68da010af6410178da54acd68f7a43",
+      "commitDate": "2026-09-25T12:41:15-05:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:990520d5901a054c2cecf09d67839b34f1da053a23e37684e216a4c81b9c3250",
+      "packageManager": "pnpm@12.0.0-rc.11",
+      "why": "An organisation's USFM scripture editor, Solid 2 rc.9 with @tanstack/solid-router and @corvu-next components."
+    },
+    {
+      "id": "compass-ui",
+      "repository": "RigelBuild/compass",
+      "commit": "2e4e7b875e371e45c5ffa4ee39715d57cf2049a5",
+      "commitDate": "2026-09-21T22:45:29Z",
+      "app": "apps/ui",
+      "projects": [
+        "apps/ui/tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:b94c4c5d8c299469fe4ef90df42234c8d8e3d027a8e0705e4d6718b37c836d16",
+      "why": "The web UI of an open-source agentic software factory (rigel.build/compass), Solid 2 rc with @kobalte/core, @solidjs/router and @tanstack/solid-query."
+    },
+    {
+      "id": "solid-validation-site",
+      "repository": "sparkstonepdx/solid-validation",
+      "commit": "5dee437f3d84e0441b3fec268566625ec253cd6d",
+      "commitDate": "2026-09-22T15:26:20-07:00",
+      "app": "website/versions/v2",
+      "projects": [
+        "website/versions/v2/tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:aa5fdb7c583282a81255e1318ead3a5a85bb02a08602f5b905d39833a60dbfde",
+      "packageManager": "pnpm@12.4.2",
+      "why": "The deployed documentation website (a SolidStart app) of a validation library, Solid 2 rc.9 with @kobalte/core, @solidjs/router and @solidjs/meta; the site, not the library, is measured."
+    },
+    {
+      "id": "queue-management-ui",
+      "repository": "Michael-cmd-sys/queue-management-patient-flow",
+      "commit": "5960489e2afd04c5ecf2f647243e9759fc2e8fba",
+      "commitDate": "2026-09-06T19:15:16Z",
+      "app": "ui",
+      "projects": [
+        "ui/tsconfig.json"
+      ],
+      "lockfile": "ui/pnpm-lock.yaml",
+      "lockfileDigest": "sha256:01d12dc57d49c6a0e1e392812f8dd9a9e43bb00dc67aaef9615e03e9f15771fa",
+      "why": "Patient-flow queue management system UI (SolidStart, Solid 2 rc.6) with @kobalte/core, @solidjs/router, @solidjs/meta and @tanstack/solid-table."
+    },
+    {
+      "id": "sensor-sim",
+      "repository": "heinergrote/sensor-sim",
+      "commit": "d34c8fcd7e86c92ee95fe4e2a1baf947e12fd871",
+      "commitDate": "2026-09-25T14:40:27+02:00",
+      "app": "packages/frontend",
+      "projects": [
+        "packages/frontend/tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:f1e0cd330784ddadfd75dfc5661267b6b70429c68bebbf7ae8e96105b705713c",
+      "why": "Deployed GPS simulation tool for testing location-aware apps (sensor-sim.h9e.de), SolidStart on Solid 2 rc.6."
+    },
+    {
+      "id": "openbot",
+      "repository": "nightly-labs/openbot",
+      "commit": "26a4968c0f91d79dc3fafff14a8741c6688cf014",
+      "commitDate": "2026-09-28T10:08:52+02:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.web.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:ebdf246de7c89b23d9e8d34a8b4400e5bcca50596a44c3a4d7539333cba58923",
+      "packageManager": "bun@1.4.0",
+      "why": "A local-first desktop workspace for AI agents (246 stars, openbot.run) on Solid 2 rc.0 with @kobalte/core, lucide-solid, solid-recharts and solid-sonner."
+    },
+    {
+      "id": "raybend-website",
+      "repository": "C-Thun/raybend",
+      "commit": "87539ab804abde6c721e9b5136ae8159351a2d22",
+      "commitDate": "2026-09-27T03:54:30+08:00",
+      "app": "website",
+      "projects": [
+        "website/tsconfig.json"
+      ],
+      "lockfile": "website/pnpm-lock.yaml",
+      "lockfileDigest": "sha256:73d56ca3a5a2f96a566215c77e41a092a440915778775844f2a162c920a59e9f",
+      "packageManager": "pnpm@12.3.4",
+      "why": "Website of a photo-manager product, SolidStart on Solid 2 rc.6 with lucide-solid."
+    },
+    {
+      "id": "skyjtx-website",
+      "repository": "SkyJTx/SkyJTx",
+      "commit": "11dc4e0b0c72b6ce1e25bb53db203b52b99b9d11",
+      "commitDate": "2026-09-22T22:13:37+07:00",
+      "app": "apps/skyjt-website",
+      "projects": [
+        "apps/skyjt-website/tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:88683ab139c7f7c49c42a1b481a7cc2704a79095ef0aa0a966e1eeb3f4ebe753",
+      "packageManager": "bun@1.4.2",
+      "why": "A deployed personal website (skyjt.vercel.app), SolidStart on Solid 2 rc.8 with @kobalte/core."
+    },
+    {
+      "id": "lutra-console",
+      "repository": "brian14708/lutra",
+      "commit": "9284e9128729ad392c515623a465bd2e424e3cdd",
+      "commitDate": "2026-09-20T08:41:36+08:00",
+      "app": "console",
+      "projects": [
+        "console/tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:8114b204c4376e723899dc800ebb37ac3239e7d7a9b040f1bf59420cdafe6bdf",
+      "packageManager": "pnpm@12.4.1",
+      "why": "Operator console of a service, SolidStart on Solid 2 rc.8 with @kobalte/core."
+    },
+    {
+      "id": "beacon-web",
+      "repository": "ssshashank/Beacon",
+      "commit": "422caf4b3d3daaffc3b8e3a59c5b020626de61fb",
+      "commitDate": "2026-09-27T02:37:03+05:30",
+      "app": "apps/web",
+      "projects": [
+        "apps/web/tsconfig.json"
+      ],
+      "lockfile": "bun.lockb",
+      "lockfileDigest": "sha256:1f62c79ceff05e9c604883ef959d65ed46d26373d289dbc5dbb019b0957c7650",
+      "why": "Web app of a monorepo product, SolidStart on Solid 2 rc with solid-motionone."
+    },
+    {
+      "id": "probus-hk",
+      "repository": "sinhong2011/probus-hk",
+      "commit": "a40bca2852a03f775ad47b02b4a1edbaeafbe6f6",
+      "commitDate": "2026-09-22T09:31:08+08:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:500f65b59f374c0715367bb280a4ca5fafa96ff4c2ac83a64aadfe4233659ff9",
+      "why": "Deployed offline-first Hong Kong public-transport arrivals app (probus-hk.vercel.app), Solid 2 rc.8 with @kobalte/core, @tanstack/solid-query and @tanstack/solid-router."
+    },
+    {
+      "id": "finds-team",
+      "repository": "moreal/finds.team",
+      "commit": "3c223e9282b5d6a61cfe5cf96be3709659270aec",
+      "commitDate": "2026-09-24T11:05:13+09:00",
+      "app": "frontend",
+      "projects": [
+        "frontend/tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:076bcc5b1f56abe8dc254c646b155b7740e925791520a4c836b5a9900a68d36f",
+      "packageManager": "pnpm@12.5.1",
+      "why": "Team-finding web app frontend, Solid 2 rc.9 with TanStack Start/Router, @tanstack/solid-virtual and @kobalte/core."
+    },
+    {
+      "id": "jibe-run",
+      "repository": "madvib/jibe",
+      "commit": "78ebbf40f2fe2ed1d1025207025d273174295958",
+      "commitDate": "2026-09-04T09:28:15+01:00",
+      "app": "apps/jibe-run",
+      "projects": [
+        "apps/jibe-run/tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:f0c915381d2570886231bacb562762e925ace7c32bbc8c41dd4e377b2a2af5c7",
+      "why": "The runner app of a web-native executable-worktree project, SolidStart on Solid 2 rc.4 with @kobalte/core."
+    },
+    {
+      "id": "civil",
+      "repository": "civilnetwork-dev/Civil",
+      "commit": "3a081157407a99ca076f0245eade156228ea63f3",
+      "commitDate": "2026-09-27T18:01:22-07:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:0c7a099f90628b552c58503d21b3f7f5199462a8d2299022ecce7844e96a50f4",
+      "why": "A deployed tabbed web proxy (civil.quartinal.me), Solid 2 rc.6 with @tanstack/solid-router and @solidjs/meta."
+    },
+    {
+      "id": "helge-dev",
+      "repository": "helgelol/helge.dev",
+      "commit": "81f6cf1657563e775744119c785cffc265d6dea2",
+      "commitDate": "2026-09-24T23:06:30+02:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:9becc92eadb692ed778cb5012000afebb6dc62ba31efdbde5c4b08a6dccffd9d",
+      "why": "A deployed personal website (kubes.no), Solid 2 rc.9 with @solidjs/router, @solidjs/meta and solid-icons."
+    },
+    {
+      "id": "solid-groove",
+      "repository": "afternoon/solid-groove",
+      "commit": "f3340174fb2daba2eba220640731844b8a33d232",
+      "commitDate": "2026-09-27T23:46:16+01:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:3f5dab57c9dd94b40ead51b2e77997a2df7c2998976ec35df4168bd17aef247a",
+      "why": "A collaborative generative music production web app, Solid 2 rc.3 with @solidjs/router, @solidjs/meta and solid-icons."
+    },
+    {
+      "id": "inferay",
+      "repository": "raymondreaming/inferay",
+      "commit": "2d3e6819d27c11fb5fa519fb2639df0b86c88a18",
+      "commitDate": "2026-09-23T19:42:42-05:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:0dae6804d50c39738a351dc7ce40f44d86623e766fbb99e58661f31626184567",
+      "packageManager": "bun@1.4.1",
+      "why": "A deployed product (inferay.com), Solid 2 rc.6 with @solidjs/router and @tanstack/solid-query."
+    },
+    {
+      "id": "jar-hell-web",
+      "repository": "harrel56/jar-hell",
+      "commit": "5e0d76c55e4b23909bcdcc8b6cbcf60b6cd7e06f",
+      "commitDate": "2026-09-27T22:36:07+02:00",
+      "app": "web",
+      "projects": [
+        "web/tsconfig.json"
+      ],
+      "lockfile": "web/package-lock.json",
+      "lockfileDigest": "sha256:dac1fb696edb29e44aa26b8fb3afe7c8e80937129611fef51a417599bba445b6",
+      "why": "Deployed JVM-package insights site (jarhell.harrel.dev), SolidStart on Solid 2 rc.4."
+    },
+    {
+      "id": "dashiboard-ui",
+      "repository": "LimenResearch/DashiBoard",
+      "commit": "3f91389394c1711f5c8380ea3cca89f076e5a534",
+      "commitDate": "2026-09-24T15:49:54+01:00",
+      "app": "dashiboard-ui",
+      "projects": [
+        "dashiboard-ui/tsconfig.json"
+      ],
+      "lockfile": "dashiboard-ui/pnpm-lock.yaml",
+      "lockfileDigest": "sha256:a037c98b894ae7d57e23602463bd921defc463eaac2e2be88b34f1470310488d",
+      "why": "A research group's data-visualisation GUI (Julia backend), SolidStart on Solid 2 rc.4."
+    },
+    {
+      "id": "error-menu-web",
+      "repository": "v3xlabs/error-menu",
+      "commit": "992d406ed4a9eca3a57973ec7d13ec4b0ccbd00e",
+      "commitDate": "2026-09-25T16:16:21+02:00",
+      "app": "web",
+      "projects": [
+        "web/tsconfig.json"
+      ],
+      "lockfile": "web/pnpm-lock.yaml",
+      "lockfileDigest": "sha256:e7b08f174f7068c4a8cc94126c5847e87e263932a41594324e47c0aa3aa9f6fa",
+      "why": "Web UI of a v3xlabs tool, Solid 2 rc.3 with @kobalte/core, @solidjs/router and solid-icons."
+    },
+    {
+      "id": "ai-memory-ui",
+      "repository": "djalmajr/ai-memory-ui",
+      "commit": "35c4cc6b7c932f5dee5815b37d3601e7dff90b58",
+      "commitDate": "2026-09-24T16:45:52-03:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.app.json"
+      ],
+      "lockfile": "package-lock.json",
+      "lockfileDigest": "sha256:adf9b11701d861c0953c42573e26267df1bcc398add888d79c1324ee90c515b5",
+      "why": "A read-only knowledge-browser web UI for an AI memory service, Solid 2 rc.6 with @tanstack/solid-query and @tanstack/solid-router."
+    },
+    {
+      "id": "en-passant",
+      "repository": "GuillaumeSalles/en-passant",
+      "commit": "a789423c288b8ef698dece70aa722adbf7c1851d",
+      "commitDate": "2026-09-21T09:06:42-04:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "package-lock.json",
+      "lockfileDigest": "sha256:a93310b25d7f956bf283cd03dc9364c4eb24f677903760ab6334bfbc5180bb7d",
+      "why": "A deployed chess-repertoire trainer (enpassant.io), Solid 2 rc.9 with @solidjs/router."
+    },
+    {
+      "id": "kui",
+      "repository": "w0rxbend/kui",
+      "commit": "83dd60195d12f10833737bf63a7be372a0a0453f",
+      "commitDate": "2026-09-27T20:33:29+03:00",
+      "app": "frontend",
+      "projects": [
+        "frontend/packages/api/tsconfig.json",
+        "frontend/packages/kernel/tsconfig.json",
+        "frontend/packages/shell/tsconfig.json",
+        "frontend/packages/feature-clusters/tsconfig.json",
+        "frontend/packages/feature-topics/tsconfig.json",
+        "frontend/packages/feature-messages/tsconfig.json",
+        "frontend/packages/feature-consumers/tsconfig.json",
+        "frontend/packages/feature-schemas/tsconfig.json",
+        "frontend/packages/feature-alerts/tsconfig.json",
+        "frontend/packages/feature-connect/tsconfig.json",
+        "frontend/packages/feature-ksql/tsconfig.json"
+      ],
+      "lockfile": "frontend/pnpm-lock.yaml",
+      "lockfileDigest": "sha256:1b0a49d60f8358974f4680abbf50024915240937c18b5a6040be9ea75727dbc4",
+      "packageManager": "pnpm@11.25.0",
+      "why": "A Kafka operations web console, Solid 2 rc.6 with @solidjs/router."
+    },
+    {
+      "id": "derp-media-server",
+      "repository": "DerpyCrabs/derp-media-server",
+      "commit": "ca4647cda72d6217ab24cfbe75f1714bb2e93bc3",
+      "commitDate": "2026-09-22T23:37:06+03:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:1b3baa96022fe51631fe203be94ce539e82a5e8d401fe1ad5bdbd09031b4e5dc",
+      "why": "A self-hosted media server's web UI, Solid 2 rc.8 with @tanstack/solid-query and lucide-solid."
+    },
+    {
+      "id": "jandibat-web",
+      "repository": "moreal/jandibat.org",
+      "commit": "0e8f6b64d1436917ad283088fe753d0a036a3715",
+      "commitDate": "2026-09-28T08:38:16+09:00",
+      "app": "apps/web",
+      "projects": [
+        "apps/web/tsconfig.json"
+      ],
+      "lockfile": "yarn.lock",
+      "lockfileDigest": "sha256:5ba4ca452e239187d5b03fd4a125d6c6723420089a0987170002e9c965bc5616",
+      "packageManager": "yarn@4.18.0",
+      "why": "Web app of jandibat.org, Solid 2 rc.9 with @solidjs/router and solid-relay."
+    },
+    {
+      "id": "donegeon-client",
+      "repository": "chrisbirster/donegeon",
+      "commit": "4d5b3660fec34b4e10eea79fba067490b27ded50",
+      "commitDate": "2026-09-14T22:56:05-04:00",
+      "app": "web/apps/client",
+      "projects": [
+        "web/apps/client/tsconfig.json"
+      ],
+      "lockfile": "web/package-lock.json",
+      "lockfileDigest": "sha256:e938b4388f64c1b4135fb91c05f16b21d76705536aec32499882ee65beddc91a",
+      "packageManager": "npm@10.9.2",
+      "why": "Client of a gamified task-management app, Solid 2 rc.0 with @solidjs/router and @tanstack/solid-query."
+    },
+    {
+      "id": "hoxxes-briefing",
+      "repository": "khmm12/hoxxes-briefing",
+      "commit": "36ab210625350c03d136bbfe4a71d4908e7650fa",
+      "commitDate": "2026-09-05T16:04:17+03:00",
+      "app": "apps/web",
+      "projects": [
+        "apps/web/tsconfig.app.json",
+        "apps/web/tsconfig.sw.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:bcc9f68f02f5c9c901f8fc6ce55911329d620c482e25e3e1732c7ab9ef75b550",
+      "packageManager": "pnpm@12.3.4+sha512.961aa41fb077da3a04a441d9f8e15ebc0c96da8ef710b2eb67bf9ee7cb0610eabd48f1fd85f51cffe73846785fa0f87c56a3a872a1d893f8446741b5cce45457",
+      "why": "A deployed Deep Rock Galactic briefing board (17 stars, hoxxes-briefing.vercel.app), Solid 2 rc.6 with @solidjs/router."
+    },
+    {
+      "id": "a-worse-ereader",
+      "repository": "doug-stewart/a-worse-ereader",
+      "commit": "59baaa9d1eb22213ff1610a93c79d886335aa025",
+      "commitDate": "2026-09-02T14:08:27-07:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:9df88999b624484b0e6ab76c193ce4c0cc8aea8baf1b0c130b0c60540323d779",
+      "why": "An e-reader web app, SolidStart on Solid 2 rc.4."
+    },
+    {
+      "id": "pekochan-blog",
+      "repository": "pekochan069/blog",
+      "commit": "32f56190f7888441c81af9d573cbab55fc7ac9d5",
+      "commitDate": "2026-09-18T16:49:54+09:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:ffe35d1b1bd8111b5b6f48317fb600ebd8927c7153491b78a4b05a7c5eacbe76",
+      "why": "A deployed personal blog (Astro + Solid 2 islands, pekochan069.vercel.app) with @kobalte/core and cmdk-solid."
+    },
+    {
+      "id": "spookysoftware-www",
+      "repository": "dairyisscary/spookysoftware.dev",
+      "commit": "64c67b0c539c96624adcfa3f8a1a69d72e6e1937",
+      "commitDate": "2026-09-11T10:53:13-04:00",
+      "app": "domains/www",
+      "projects": [
+        "domains/www/tsconfig.json"
+      ],
+      "lockfile": "domains/www/pnpm-lock.yaml",
+      "lockfileDigest": "sha256:7c6c10e4af4b00c603b02780e7f41734033d0facdb0f719bd5fa2c0a02be3100",
+      "why": "A deployed website (spookysoftware.dev), Solid 2 rc.7 with @solidjs/router and @solidjs/meta."
+    },
+    {
+      "id": "every-deck-of-cards",
+      "repository": "memarino92/every-deck-of-cards",
+      "commit": "27e760dc6b155a98b24d83b4d7d75eadb5dcba86",
+      "commitDate": "2026-09-14T00:23:54-04:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "pnpm-lock.yaml",
+      "lockfileDigest": "sha256:8f5b6a7916e58902f9f7f807fe4d438f9ef1f6bc848f0a862893e377fd5f7e1a",
+      "packageManager": "pnpm@10.15.0",
+      "why": "A deployed site (everydeckof.cards), Solid 2 rc.7 with @solidjs/router.",
+      "installArgs": [
+        "--config.engine-strict=false"
+      ],
+      "installArgsWhy": "the workspace sets engineStrict and the lockfile's dev dependency jsdom@30.0.1 declares node ^22.22.2 || ^24.15.0 || >=26.0.0; the harness's Node is 24.11.1. The flag turns that refusal into a warning and leaves the frozen tree unchanged."
+    },
+    {
+      "id": "expenses-app",
+      "repository": "jcampuza/expenses-app",
+      "commit": "f24e272713513d7721133159a53ea960c756df13",
+      "commitDate": "2026-09-19T15:12:41-05:00",
+      "app": ".",
+      "projects": [
+        "tsconfig.json"
+      ],
+      "lockfile": "bun.lock",
+      "lockfileDigest": "sha256:923f60e82e9bc82bed327458e3578cdb10a3df9a372c1d4e165cd6e24151f293",
+      "why": "A deployed expenses tracker (expensemate.fyi), Solid 2 rc.9 with @solidjs/router."
+    }
+  ],
+  "excluded": [
+    {
+      "repository": "ritsei/ritsei",
+      "app": "apps/web",
+      "reason": "no lockfile is committed, so no frozen install is possible"
+    },
+    {
+      "repository": "anderfernandes/astral",
+      "app": ".",
+      "reason": "no lockfile is committed, so no frozen install is possible"
+    },
+    {
+      "repository": "ys-chung/tofu",
+      "app": ".",
+      "reason": "no lockfile is committed, so no frozen install is possible"
+    },
+    {
+      "repository": "TrieOH/TheTree",
+      "app": "front/univents-solid",
+      "commit": "977a29956e164bc29b769678396fd1b5ddd0ee43",
+      "reason": "the committed lockfile does not match its manifests (pnpm@11.26.0 --frozen-lockfile: the catalog: specifiers of @solidjs/vite-plugin, typescript and vite disagree with the lockfile), so no frozen install is possible"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "inferred-host-metadata-published",
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "exports": "./dist/index.js"
+}

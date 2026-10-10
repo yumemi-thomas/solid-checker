@@ -1,0 +1,370 @@
+{
+  "format": "parameter-read-origin-counterexample",
+  "authoritative": false,
+  "package": {
+    "integrity": "sha512-/JAt2QD6LFAcFPWuZIP5MIY9Uochg3EIcYOfT8eXkiik/75BLSLjowJvwTGpIZkoEJ9h/T1mPwcfBT+o95mQ1g==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "9e3a39f90eedcde7df5c27279ac1be757e39da76f5891c9f4236f127efddf550"
+    },
+    "name": "parameter-origin-probe",
+    "version": "1.0.0"
+  },
+  "artifact": {
+    "artifact": {
+      "closureSha256": "2c45014fed097720e211da01252cf724b7871ee2986f7cff28005b156f38ea8b",
+      "path": "./index.js",
+      "sha256": "55a08678616be2fd61b98d0e8a8a464a4a8b31c9c5bd25cfdc6a9a89c33112a7"
+    },
+    "declarations": {
+      "path": "./index.d.ts",
+      "sha256": "0ca610c0c2e578ea783bf50f08a5f6988b6752af85e8d8785f484aed0486773c"
+    },
+    "exports": {
+      "read": "summary-ff16a89f1b111c67dd6ed1ae3733587ea34821c338e686b06c670688ecd6da0e"
+    },
+    "resolution": {
+      "runtimeBranch": "/exports/./default",
+      "typesBranch": "/exports/./types"
+    }
+  },
+  "summary": {
+    "call": {
+      "operations": [
+        {
+          "at": {
+            "event": "call",
+            "schedule": "same-stack"
+          },
+          "count": {
+            "max": "many",
+            "min": 0,
+            "scope": "call"
+          },
+          "id": "read-0",
+          "inputs": [
+            {
+              "index": 0,
+              "kind": "parameter",
+              "path": [
+                "foo"
+              ]
+            }
+          ],
+          "kind": "read",
+          "tracking": "untracked",
+          "trigger": {
+            "event": "call"
+          }
+        }
+      ],
+      "reads": [
+        "read-0"
+      ]
+    },
+    "shape": "callable"
+  },
+  "source": {
+    "path": "/private/tmp/parameter-origin-probe/package/index.js",
+    "digest": "sha256:55a08678616be2fd61b98d0e8a8a464a4a8b31c9c5bd25cfdc6a9a89c33112a7",
+    "text": "export function read(input) {\n  input = { foo() { return 1; } };\n  return input.foo();\n}\n"
+  },
+  "archive": {
+    "path": "/private/tmp/parameter-origin-probe/package.tgz",
+    "digest": "sha256:6b3c73c85110b370f2a6d65de5873f8c011dd9854b885d23d35ce84439da7a39"
+  },
+  "catalog": {
+    "path": "/private/tmp/parameter-origin-probe/catalog/accepted-contracts.json",
+    "digest": "sha256:ef68a169a4c9de9aa7b49b68f64e74c648537dcd283f41dcfa43cf72dfec9176",
+    "entry": {
+      "document": "objects/c192b8abe255939ad304dec030703a2dc04ba901d692c97c3ba13c7f54dca8bd.main.json",
+      "documentDigest": "sha256:c192b8abe255939ad304dec030703a2dc04ba901d692c97c3ba13c7f54dca8bd",
+      "receipt": "objects/e50e5e5ba8bcd0f13d2fb3f190772c2ddcc6fcde0ec07abda3ee9085a5609605.receipt.json",
+      "receiptDigest": "sha256:e50e5e5ba8bcd0f13d2fb3f190772c2ddcc6fcde0ec07abda3ee9085a5609605",
+      "bindings": {
+        "importer": "/private/tmp/parameter-origin-probe/.solid-checker-certification-c22ed3f5de22203afcc4c3c60feb039160bddf8a91a39734ff4e1f5338244a37.mjs",
+        "specifier": "parameter-origin-probe",
+        "resolvedImportRoot": "sha256:f55e397bd7d3c8d4ff4d417ee199cb655ce2d54cef05b8f39f8f16a93a9de24e",
+        "semanticDigest": "sha256:8a26c7969272e19239b6b0212c20cff7cd7ad75e240d87434353b6d9ccbaebe3",
+        "artifactProvenanceRoot": "sha256:345c8ad50fdb6670a1c141a389c75add6806df88f46cbf8064dc4a0c61ddb996",
+        "snapshotRoot": "sha256:db81eae0fb562435ba1336b477113098b3459c056effcefbe16b326f0a0e644f",
+        "packageRoot": "sha256:a78cf581bb0792f4ca10e6f912f4b1d1ccfe07349f0dd30dd2668eb0b3a65f02",
+        "manifestRoot": "sha256:6e186f23617491b810d5df26bd2e5fcaa1ee1b313b2465aa3d1a7513adb7ce9d",
+        "artifactsRoot": "sha256:759fba8519adb5a4a4e09d1f6252e18c6e964026896aaaadcf89b465969ae603",
+        "declarationsRoot": "sha256:c14e7e7b5822754ed034d5cdfb0b24c6deb9bae325cfde8d5ea841acdab866b9",
+        "transformRoot": "sha256:33e4474087e3f39227988c3d62e8d857c078a539deb56ec5a58f65e6ed78d142",
+        "exportsRoot": "sha256:328829023c353ceb31368846ab0b353ef9f295ea83c5240bb7e000ce2ad13d62",
+        "closureRoot": "sha256:073a8d480178aed7fdb7767caebefe426e30d72e8d13635c732eadf7d5e584cc",
+        "demandGraphRoot": "sha256:298658aef245a4c6032dc71e73cde64b4065763e655072e9b9305334d6b4da86",
+        "verifiedPositiveRoot": "sha256:38fcff9e62c65cd162aa40655366cc6d12027fb606018f940c45e000d1760549",
+        "witnessRoots": {
+          "accepted-dependency-composition": "sha256:d2fd398b3926f7d5884c721546a41c1f1ce450476943595e07ac4e25fa49c913",
+          "argument-binding": "sha256:6892492b4b6d6417e9d75741852e22b67b35dbaf253f78c3c944f380f5b47976",
+          "artifact-declarations": "sha256:c14e7e7b5822754ed034d5cdfb0b24c6deb9bae325cfde8d5ea841acdab866b9",
+          "callable-path": "sha256:73d80934c2bc055def5c9acd45bd2d534cfa227133175b3f43d9c86ae3a03e2f",
+          "compiler-reconciliation": "sha256:e74dd67c10e2671fbd0087aff3868f8bf7b023435d3509d997b8e62a0a543de9",
+          "domain-exhaustiveness": "sha256:95da99523fd4add87a4026527ed3c31cc3f460b28d73275ccbd4f9c2df0dface",
+          "export-identity": "sha256:328829023c353ceb31368846ab0b353ef9f295ea83c5240bb7e000ce2ad13d62",
+          "export-resolution": "sha256:759fba8519adb5a4a4e09d1f6252e18c6e964026896aaaadcf89b465969ae603",
+          "guard-partition": "sha256:f4c20bba7dc584ef014536ecbdbf0af6201565bc289fbbe1cbd7d39786cc3afb",
+          "manifest-entrypoint": "sha256:6e186f23617491b810d5df26bd2e5fcaa1ee1b313b2465aa3d1a7513adb7ce9d",
+          "module-closure": "sha256:073a8d480178aed7fdb7767caebefe426e30d72e8d13635c732eadf7d5e584cc",
+          "operation-cardinality": "sha256:a1fc4d8af175f9124cf8f51a1ec3e86d57f663512eb93fd4d593407916e85cfc",
+          "operation-reachability": "sha256:82c0f2d409234db7b524ec796a80ea8f06a60d4491f721e51020e0916c01ddab",
+          "package-identity": "sha256:a78cf581bb0792f4ca10e6f912f4b1d1ccfe07349f0dd30dd2668eb0b3a65f02",
+          "recursive-value-shape": "sha256:3201a2f169b95b4c4ad92028a8168a6c8deda91ca213b3f9730927d986267125",
+          "rest-spread-coverage": "sha256:0042a5a345af5f5c2ed2c3b6d1c501296f86dd8a33fab68eb2afe4bcd8d1759e",
+          "selected-signature": "sha256:90e164c89bbcb45458546343bbeaad3e1c253906468c9b25c959dd90539d8509"
+        },
+        "producerSessionsRoot": "sha256:0dd63bb02a193c6624674a0a4b71a0a0e18263393873c578fe11e4231f657c00",
+        "dependencyReceiptsRoot": "sha256:611bf97bc5f2987361b46a193d75c805b187e41b468dbe3cd27e098bd7af1c97",
+        "dependencyTrustRoot": "sha256:d745912dc5ebe21079f8124e72668e2c75f1a0f9c14916be8c75e9a21e680189",
+        "probeGateRoot": "sha256:1103df4c5276e9f0c905c7996fc1b2c9a4b56eba99e0a172c3167341a38c1a94",
+        "closedClaimsRoot": "sha256:0678ba47b9ad469b604b4a36abc4496d267852363294eb23fe00435d87a1be70",
+        "verifierSourceDigest": "sha256:59fa80b0632262b178f5921c4a124bdf5ab9f4c01d0b6656be00c8c2dcc4dfd9",
+        "verifierBuildDigest": "sha256:1c964e799f21cfac956fac851e2c07b80dc343353b99e10ab8e17fe72576e015"
+      },
+      "status": "policy2-persistent-local",
+      "import": {
+        "specifier": "parameter-origin-probe",
+        "importer": "/private/tmp/parameter-origin-probe/.solid-checker-certification-c22ed3f5de22203afcc4c3c60feb039160bddf8a91a39734ff4e1f5338244a37.mjs",
+        "requestedEntrypoint": ".",
+        "packageName": "parameter-origin-probe",
+        "packageVersion": "1.0.0",
+        "packageIntegrity": "sha512-/JAt2QD6LFAcFPWuZIP5MIY9Uochg3EIcYOfT8eXkiik/75BLSLjowJvwTGpIZkoEJ9h/T1mPwcfBT+o95mQ1g==",
+        "packageRoot": "/private/tmp/parameter-origin-probe/package",
+        "packageManifest": {
+          "path": "/private/tmp/parameter-origin-probe/package/package.json",
+          "digest": "sha256:9e3a39f90eedcde7df5c27279ac1be757e39da76f5891c9f4236f127efddf550"
+        },
+        "runtime": {
+          "path": "/private/tmp/parameter-origin-probe/package/index.js",
+          "digest": "sha256:55a08678616be2fd61b98d0e8a8a464a4a8b31c9c5bd25cfdc6a9a89c33112a7"
+        },
+        "declarations": {
+          "path": "/private/tmp/parameter-origin-probe/package/index.d.ts",
+          "digest": "sha256:0ca610c0c2e578ea783bf50f08a5f6988b6752af85e8d8785f484aed0486773c"
+        },
+        "runtimeTrace": {
+          "branch": "/exports/./default",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "."
+            },
+            {
+              "condition": "default",
+              "target": "/exports/."
+            },
+            {
+              "condition": "target",
+              "target": "./index.js"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": "/exports/./types",
+          "steps": [
+            {
+              "condition": "subpath",
+              "target": "."
+            },
+            {
+              "condition": "types",
+              "target": "/exports/."
+            },
+            {
+              "condition": "target",
+              "target": "./index.d.ts"
+            }
+          ]
+        },
+        "closure": {
+          "entries": [
+            {
+              "role": "runtime",
+              "path": "./index.js",
+              "digest": "sha256:55a08678616be2fd61b98d0e8a8a464a4a8b31c9c5bd25cfdc6a9a89c33112a7"
+            },
+            {
+              "role": "declaration",
+              "path": "./index.d.ts",
+              "digest": "sha256:0ca610c0c2e578ea783bf50f08a5f6988b6752af85e8d8785f484aed0486773c"
+            },
+            {
+              "role": "manifest",
+              "path": "./package.json",
+              "digest": "sha256:9e3a39f90eedcde7df5c27279ac1be757e39da76f5891c9f4236f127efddf550"
+            },
+            {
+              "role": "resolution-input",
+              "path": "./package.json",
+              "digest": "sha256:9e3a39f90eedcde7df5c27279ac1be757e39da76f5891c9f4236f127efddf550"
+            }
+          ],
+          "digest": "sha256:2c45014fed097720e211da01252cf724b7871ee2986f7cff28005b156f38ea8b"
+        },
+        "exports": {
+          "read": {
+            "runtime": {
+              "module": {
+                "path": "/private/tmp/parameter-origin-probe/package/index.js",
+                "digest": "sha256:55a08678616be2fd61b98d0e8a8a464a4a8b31c9c5bd25cfdc6a9a89c33112a7"
+              },
+              "exportName": "read"
+            },
+            "declarations": {
+              "module": {
+                "path": "/private/tmp/parameter-origin-probe/package/index.d.ts",
+                "digest": "sha256:0ca610c0c2e578ea783bf50f08a5f6988b6752af85e8d8785f484aed0486773c"
+              },
+              "exportName": "read"
+            }
+          }
+        },
+        "declarationExports": [
+          "read"
+        ],
+        "authority": "standalonePackageResolver"
+      }
+    }
+  },
+  "documentDigest": "sha256:c192b8abe255939ad304dec030703a2dc04ba901d692c97c3ba13c7f54dca8bd",
+  "receiptDigest": "sha256:e50e5e5ba8bcd0f13d2fb3f190772c2ddcc6fcde0ec07abda3ee9085a5609605",
+  "audit": {
+    "format": "solid-checker-contract-certification-audit",
+    "auditVersion": 1,
+    "authoritative": false,
+    "replayable": false,
+    "status": "certified",
+    "package": {
+      "name": "parameter-origin-probe",
+      "version": "1.0.0"
+    },
+    "stage": "catalog-publication",
+    "ordinaryAnalysis": {
+      "receiptAuthenticated": true,
+      "exactCaseSelected": true
+    },
+    "stageDurationsMs": {
+      "artifactAcquisition": 0.35,
+      "proposalGeneration": 93.65,
+      "demandPlanning": 13.63,
+      "witnessAcquisition": 144.28,
+      "certification": 0.02,
+      "receiptIssuance": 0.01,
+      "catalogPublication": 0
+    },
+    "graphPreparation": null,
+    "refusals": [],
+    "withheldClosures": [
+      {
+        "artifactCase": "artifact-case:6d42c2ad417d359c695fe58c1264a8afa7f9400046c429f34522a4b83230056a",
+        "domain": "creates",
+        "export": "read",
+        "reason": "no recipe in corpus",
+        "semanticClaimId": "claim:v1:sha256:e951621054e52c7a24e795bc28ccaa2a6f79ebde5cbf6309b643158d9e804e34"
+      }
+    ],
+    "demandPlans": [
+      {
+        "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
+        "candidateSemanticDigest": "sha256:8a26c7969272e19239b6b0212c20cff7cd7ad75e240d87434353b6d9ccbaebe3",
+        "snapshotRoot": "sha256:db81eae0fb562435ba1336b477113098b3459c056effcefbe16b326f0a0e644f",
+        "provenanceRoot": "sha256:345c8ad50fdb6670a1c141a389c75add6806df88f46cbf8064dc4a0c61ddb996",
+        "demandGraphRoot": "sha256:298658aef245a4c6032dc71e73cde64b4065763e655072e9b9305334d6b4da86",
+        "demands": [
+          {
+            "family": "callable-path",
+            "id": "sha256:021043983ad14eb154932e4204f6cabc471e9de8f9ca99f0018e728163d00d6c",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "export-identity",
+            "id": "sha256:04252722a9e9e5f22667b2773ca48b8e00ea67bd3f17d4eded704c05f7f12286",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "recursive-value-shape",
+            "id": "sha256:1a613288ae86dd8934a68012c9b788c41a54d1096faeb2025a5da3db97855394",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "artifact-declarations",
+            "id": "sha256:2aefe15e4e669cf97e4f7a9791cc1a38b346518ff494f637640f45c4b3be44a9",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "operation-reachability",
+            "id": "sha256:4e893df767328495a49ee1c8fc03f20642470b28734eae4d41c1e547cdaf8f85",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "export-resolution",
+            "id": "sha256:6b019b535a3d5a4d6febbeef8e6f842df0294fa91f579959a4ec100e6201f7f7",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "manifest-entrypoint",
+            "id": "sha256:9f26c3ead54d2d039c9a47f375728771d4e3878ae77213af882c7c9548971573",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "module-closure",
+            "id": "sha256:c4a80c0c3656cf53fc7730bfce086ab8c9b0a897b18d2497e82f5146e070262d",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "package-identity",
+            "id": "sha256:c8feabe48882569514d1b28e08ac48f98d51bacf9041b5fe65e535530aa3a633",
+            "owner": "package-artifact",
+            "satisfiedByArtifactSnapshot": true
+          },
+          {
+            "family": "operation-cardinality",
+            "id": "sha256:cd12a729c165ce83a189a6cec12022b715e56b4a29e065bc3ba2bca29e5c2c53",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "selected-signature",
+            "id": "sha256:d1f17813154e8427d395808010aeaa976d58650ed5c3baaea2aec2714ba546d5",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "recursive-value-shape",
+            "id": "sha256:e116f500db358d134e873d9278c63d10cbb0d111a7d4ab7b8edf9c85d7b4b940",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          },
+          {
+            "family": "rest-spread-coverage",
+            "id": "sha256:e7b156ddb88c9f60050625cfd00a917267b0d32591d211fc03719d99b4ddbd18",
+            "owner": "type-facts",
+            "satisfiedByArtifactSnapshot": false
+          }
+        ]
+      }
+    ]
+  },
+  "runtime": {
+    "result": 1,
+    "callerReadsDuringExport": 0,
+    "controlResult": 2,
+    "callerReadsDuringControl": 1
+  },
+  "typescript": {
+    "version": "5.9.3",
+    "diagnostics": []
+  },
+  "interpretation": "The certified positive caller-member read is contradicted by unconditional replacement before the only member read. This diagnostic is not an ecosystem coverage gain."
+}

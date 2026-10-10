@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/control-flow-child-handler-write/App.tsx",
+      "start": 1555,
+      "end": 1575,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/control-flow-child-handler-write/App.tsx",
+      "start": 1896,
+      "end": 1909,
+      "fixes": 0
+    }
+  ]
+}

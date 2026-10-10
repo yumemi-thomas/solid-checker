@@ -95,6 +95,15 @@ pub(super) fn normalize_guard(guard: &mut Guard, path: &str) -> Result<(), Model
                     reason: "argument-count minimum exceeds its maximum".into(),
                 });
             }
+            GuardAtom::OwnDataKeys { names, .. } => {
+                names.sort();
+                if names.windows(2).any(|names| names[0] == names[1]) {
+                    return Err(ModelError::InvalidGuard {
+                        path: path.into(),
+                        reason: "duplicate own-data key".into(),
+                    });
+                }
+            }
             GuardAtom::Property { name, .. } if name.is_empty() => {
                 return Err(ModelError::InvalidGuard {
                     path: path.into(),
@@ -163,6 +172,7 @@ struct Constraints<'a> {
     literals: BTreeMap<(u16, &'a [String]), &'a Literal>,
     kinds: BTreeMap<(u16, &'a [String]), ValueKind>,
     properties: BTreeMap<(u16, &'a [String], &'a str), Option<bool>>,
+    own_data_keys: BTreeMap<(u16, &'a [String]), &'a [String]>,
     tuple_alternatives: BTreeMap<u16, u16>,
     result_protocol: Option<ValueKind>,
     artifact_case: Option<&'a str>,
@@ -228,6 +238,14 @@ fn atoms_contradict(atoms: &[GuardAtom]) -> bool {
                     _ => false,
                 }
             }
+            GuardAtom::OwnDataKeys {
+                argument,
+                path,
+                names,
+            } => constraints
+                .own_data_keys
+                .insert((*argument, path.as_slice()), names.as_slice())
+                .is_some_and(|existing| existing != names.as_slice()),
             GuardAtom::TupleAlternative {
                 argument,
                 alternative,

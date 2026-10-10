@@ -3,13 +3,13 @@
 //!
 //! A [`Dialect`] bundles everything a Solid version contributes to the
 //! checker: its vocabulary, its compiler adapter, its rule catalog, its rule
-//! documentation, and its bundled package contracts, plus the stable identity
+//! documentation, and its built-in runtime model, plus the stable identity
 //! that keys every cache and retained session. The analysis pipeline receives
 //! the selected `&Dialect` from its entry point — the CLI's `--dialect` flag,
 //! the wasm request, or [`detect`] when a request names none — and never
 //! names a dialect crate directly.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use solid_facts::compiler::CompilerFactsProvider;
 use solid_reactive_ir::{Finding, Program, RuleMetadata, SolveTimings};
@@ -27,6 +27,15 @@ use solid_reactive_ir::{Finding, Program, RuleMetadata, SolveTimings};
 ///
 /// Entries are permanent. Removing one turns a tolerated config back into a
 /// fatal error for the same user, so this list only grows.
+/// The note for every `v1/` identity the 1.x catalog still declared when it was
+/// deleted. They were not retired one at a time for reasons of their own, so
+/// they share one sentence rather than repeating eighteen variants of it.
+///
+/// The `v1/` rows listed individually in [`RETIRED_RULES`] keep their own
+/// notes: a reader whose `v1/imports` disable stopped working needs "this
+/// claim was TypeScript's", and "the dialect is gone" would not tell them that.
+const RETIRED_WITH_THE_V1_CATALOG: &str = "removed 2026-09-16: the Solid 1.x catalog was deleted with its dialect (ADR 0110); a project whose installed solid-js resolves to 1.x is refused with SC9013 rather than analyzed under another catalog";
+
 pub const RETIRED_RULES: &[(&str, &str)] = &[
     (
         "invalid-cleanup-return",
@@ -181,6 +190,37 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "ssr-client-source-outside-loading-boundary",
         "merged 2026-08-20 into async-outside-loading-boundary; existing disables intentionally do not transfer to the wider rule",
     ),
+    // The 18 the 1.x catalog still declared at deletion. Listed by name rather
+    // than matched by a `v1/` prefix so a typo inside the retired namespace is
+    // still refused -- the whole point of this document's validation is that a
+    // misspelling must not silently mean "defaults".
+    ("v1/strict-read-untracked", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/reactive-read-after-await", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/no-destructure", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/components-return-once", RETIRED_WITH_THE_V1_CATALOG),
+    (
+        "v1/reactive-write-in-owned-scope",
+        RETIRED_WITH_THE_V1_CATALOG,
+    ),
+    ("v1/missing-owner", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/missing-effect-function", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/uncalled-accessor", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/reactive-handler-frozen", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/no-direct-mutation", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/reactive-source-uncaptured", RETIRED_WITH_THE_V1_CATALOG),
+    (
+        "v1/reactive-dispatch-unresolved",
+        RETIRED_WITH_THE_V1_CATALOG,
+    ),
+    ("v1/jsx-no-duplicate-props", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/jsx-no-undef", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/prefer-classlist", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/prefer-for", RETIRED_WITH_THE_V1_CATALOG),
+    ("v1/prefer-show", RETIRED_WITH_THE_V1_CATALOG),
+    (
+        "v1/package-contract-incomplete",
+        RETIRED_WITH_THE_V1_CATALOG,
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.
@@ -272,20 +312,14 @@ impl SemanticDemandCapabilities {
     };
     /// Only the 2.0 catalog carries `server-function-rich-argument`, so only it
     /// pays for the library-type identities that rule reads.
-    #[cfg(feature = "dialect-v2")]
     const SOLID_2: Self = Self {
         array_map_receiver_types: true,
         async_array_map_callbacks: true,
         server_argument_library_types: true,
     };
-    #[cfg(feature = "dialect-v1")]
-    const SOLID_1: Self = Self {
-        array_map_receiver_types: true,
-        async_array_map_callbacks: false,
-        server_argument_library_types: false,
-    };
 }
 
+#[derive(Clone, Copy)]
 pub struct Dialect {
     /// Stable identity, folded into every cache key and retained session
     /// identity so artifacts from different dialects can never collide.
@@ -326,33 +360,108 @@ impl Dialect {
     }
 }
 
+/// The stable id and nothing else. A dialect is function pointers, a `&dyn`
+/// vocabulary table and a rule catalog; the id is the only part of it that
+/// means anything in a diagnostic, and it is the part that keys every cache.
+impl std::fmt::Debug for Dialect {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_tuple("Dialect").field(&self.id).finish()
+    }
+}
+
 /// Every dialect the checker can run with. A new dialect registers here and
 /// becomes selectable by id everywhere a dialect can be named.
-pub static ALL: &[&Dialect] = &[
-    #[cfg(feature = "dialect-v2")]
-    &SOLID_V2,
-    #[cfg(feature = "dialect-v1")]
-    &SOLID_V1,
-];
+pub static ALL: &[&Dialect] = &[&SOLID_V2];
 
-/// Resolves a dialect by its stable id.
+// `default_dialect` below has no honest answer for an empty registry, and a
+// build that carried no dialect could not analyze anything anyway. Say so at
+// compile time rather than at the first request.
+const _: () = assert!(!ALL.is_empty(), "a build must carry at least one dialect");
+
+/// Release variants of the registered dialects: one per vocabulary a
+/// language's [`solid_dialect::Dialect::review_installation`] can answer an
+/// installation with, other than the language's own.
+///
+/// Not in [`ALL`]: a variant is not a language. It is the same catalog,
+/// compiler and runtime model with a vocabulary that answers some questions
+/// differently for the installed releases (the rc.9 and rc.1-rc.8 reviews: the
+/// store root typing and `omit`'s predicate form from `@solidjs/signals`,
+/// `until`, and `dynamic`'s options from `@solidjs/web`). It has an id of its own, `<language>@<variant key>`,
+/// because the id keys every cache, retained session and daemon socket, and a
+/// result computed under one vocabulary must never answer for another;
+/// [`by_id`] resolves it so the daemon can forward the selection it hashed.
+/// The key is spelled from the vocabulary's answers, so moving the audited
+/// release renames no variant.
+///
+/// Built once from the vocabularies rather than listed here, so a dialect that
+/// adds an answer adds its variants without shared code naming them.
+pub static RELEASE_VARIANTS: std::sync::LazyLock<Vec<Dialect>> = std::sync::LazyLock::new(|| {
+    ALL.iter()
+        .flat_map(|language| {
+            language.vocabulary.variants().iter().map(|vocabulary| {
+                let key = vocabulary
+                    .variant_key()
+                    .expect("every listed variant names how it differs from its language");
+                Dialect {
+                    id: format!("{}@{key}", language.id).leak(),
+                    vocabulary: *vocabulary,
+                    ..**language
+                }
+            })
+        })
+        .collect()
+});
+
+/// Resolves a dialect by its stable id: a registered language, or one of its
+/// [`RELEASE_VARIANTS`].
 #[must_use]
 pub fn by_id(id: &str) -> Option<&'static Dialect> {
-    ALL.iter().copied().find(|dialect| dialect.id == id)
+    ALL.iter()
+        .copied()
+        .chain(RELEASE_VARIANTS.iter())
+        .find(|dialect| dialect.id == id)
+}
+
+/// The dialect that analyzes with `vocabulary`, the one `language`'s own
+/// review chose: the language itself, or its [`RELEASE_VARIANTS`] entry.
+fn for_vocabulary(
+    language: &'static Dialect,
+    vocabulary: Option<&'static dyn solid_dialect::Dialect>,
+) -> &'static Dialect {
+    let Some(key) = vocabulary.and_then(|vocabulary| vocabulary.variant_key()) else {
+        return language;
+    };
+    RELEASE_VARIANTS
+        .iter()
+        .find(|variant| {
+            variant.vocabulary.variant_key() == Some(key)
+                && variant.vocabulary.version() == language.vocabulary.version()
+        })
+        .expect("a language's review answers only with the variants it lists")
 }
 
 /// The dialect entry points fall back to when a request names none and
-/// nothing resolves.
+/// nothing resolves: **the newest one [`ALL`] carries**.
+///
+/// Read from the registry rather than named by a literal. A `Defaulted`
+/// detection is an absence — no installed `solid-js`, or a manifest whose
+/// version field is not a version — and the language a project that states no
+/// version most likely means is the current one. A literal would have gone on
+/// answering the *older* default the day a newer dialect was added, and
+/// nothing would have said so; `Version`'s ordering is declaration order, so
+/// this follows the registry instead.
+///
+/// Within that language, the vocabulary is the one it names for a project
+/// with nothing installed ([`solid_dialect::Dialect::defaulted_vocabulary`]):
+/// the language itself, or one of its [`RELEASE_VARIANTS`].
 #[must_use]
 pub fn default_dialect() -> &'static Dialect {
-    #[cfg(feature = "dialect-v2")]
-    {
-        &SOLID_V2
-    }
-    #[cfg(all(not(feature = "dialect-v2"), feature = "dialect-v1"))]
-    {
-        &SOLID_V1
-    }
+    let language = ALL
+        .iter()
+        .copied()
+        .max_by_key(|dialect| dialect.vocabulary.version())
+        .expect("the const assertion above holds ALL non-empty");
+    for_vocabulary(language, language.vocabulary.defaulted_vocabulary())
 }
 
 /// The dialect for a Solid language version, if this build includes it.
@@ -363,24 +472,359 @@ pub fn by_version(version: solid_dialect::Version) -> Option<&'static Dialect> {
         .find(|dialect| dialect.vocabulary.version() == version)
 }
 
+/// The diagnostic identity of the unsupported-runtime refusal.
+///
+/// Held here, not read from a catalog, because the refusal is decided
+/// **before** a dialect is chosen: it has to be emittable in any feature
+/// configuration, including one whose default catalog does not declare it.
+/// The Solid 2 catalog declares it too -- that is where adapters, suppression
+/// configuration and `docs/rules/` look it up -- and
+/// `the_refusal_identity_is_the_one_the_catalog_publishes` pins the two
+/// together so they cannot drift. See ADR 0110.
+pub const UNSUPPORTED_RUNTIME_CODE: &str = "SC9013";
+/// The rule name paired with [`UNSUPPORTED_RUNTIME_CODE`].
+pub const UNSUPPORTED_RUNTIME_RULE: &str = "unsupported-solid-runtime";
+
+/// The diagnostic identity of the unaudited-release notice: the installed
+/// release is of a carried major, and the vocabulary was not audited on it.
+///
+/// Held here for the same reason as [`UNSUPPORTED_RUNTIME_CODE`] -- detection
+/// decides it, not a rule -- and pinned to the catalog the same way.
+pub const UNAUDITED_RELEASE_CODE: &str = "SC9014";
+/// The rule name paired with [`UNAUDITED_RELEASE_CODE`].
+pub const UNAUDITED_RELEASE_RULE: &str = "unaudited-solid-release";
+
+/// What the dialect walk found, and where it found it.
+///
+/// The three cases are **not** the same answer, and a caller that must refuse
+/// an unsupported runtime cannot tell them apart from a dialect alone:
+///
+/// - an installed `solid-js` whose major this build carries,
+/// - an installed `solid-js` whose major this build has **no** dialect for —
+///   whether or not [`solid_dialect::Version`] even names that major,
+/// - nothing installed, or a manifest whose version field is not a version.
+///
+/// Each case that read a manifest carries the exact path it read, because a
+/// refusal has to say *which* `package.json` decided it — the walk is
+/// unbounded and the deciding file is frequently not the one beside the
+/// project.
+#[derive(Clone, Debug)]
+pub enum Detection {
+    /// The nearest installed `solid-js` names a released major this build
+    /// carries a dialect for.
+    Installed {
+        /// The dialect that analyzes this installation: the language, or the
+        /// [`RELEASE_VARIANTS`] entry its review chose.
+        dialect: &'static Dialect,
+        version: solid_dialect::Version,
+        manifest: PathBuf,
+        /// The `version` field exactly as the manifest spelled it.
+        installed: String,
+        /// Every package the language names as deciding a release-dependent
+        /// answer ([`solid_dialect::Dialect::release_owners`]), as resolved.
+        releases: Vec<ResolvedRelease>,
+        /// The language vocabulary's open gaps for that installation. Any gap
+        /// means the analysis carries the `SC9014` notice
+        /// ([`release_notice`]).
+        gaps: Vec<solid_dialect::InstallationGap>,
+    },
+    /// The nearest installed `solid-js` names a major this build has no
+    /// dialect for. **Never a dialect**: there is no correct one to pick, and
+    /// picking the default would analyze the project under a language it does
+    /// not run. The caller refuses.
+    ///
+    /// This covers both shapes of "no dialect". `Modelled(V1)` is a major the
+    /// build still recognises in order to refuse it; `UnmodelledMajor` is one
+    /// no variant names at all, which is the case a future `solid-js@3` lands
+    /// in. They refuse identically and on purpose: a dialect that has not been
+    /// written yet is not a reason to analyze a project under a different
+    /// language, and the alternative — `None` from
+    /// [`solid_dialect::Version::for_solid_js`] falling through to
+    /// [`Defaulted`](Self::Defaulted) — is precisely the silent-2.0 hole
+    /// ADR 0110 § 1 closed for 1.x.
+    Unsupported {
+        classification: solid_dialect::Classification,
+        /// The `version` field exactly as the manifest spelled it. The
+        /// refusal quotes this rather than the classified major, because
+        /// "1.9.14" tells the reader which install to go and change and
+        /// "Solid 1.x" does not.
+        installed: String,
+        manifest: PathBuf,
+        /// `Some` when the major *is* carried and its vocabulary refuses this
+        /// release line ([`solid_dialect::InstallationReview::Refused`]) -- the
+        /// pre-beta `2.0.0-experimental.x` today. The refusal then has to say
+        /// why, because "carries no dialect for it" would be false.
+        refusal: Option<&'static solid_dialect::RefusedRelease>,
+    },
+    /// Nothing resolved, or the nearest manifest's version field is not a
+    /// version (`workspace:*`, an empty or absent field). `manifest` is that
+    /// manifest when the walk stopped at one, and `None` when no
+    /// `node_modules/solid-js` was found at all.
+    ///
+    /// A *number* never lands here. `0.5.0` and `3.0.0` are answers about an
+    /// installed runtime, and an answer this build cannot honour is refused
+    /// rather than defaulted; only an absence defaults.
+    Defaulted { manifest: Option<PathBuf> },
+}
+
 /// Resolves the dialect a project speaks from the `solid-js` it would
 /// actually import: the nearest `node_modules/solid-js/package.json` above
 /// the project file, walked the way a bundler resolves.
 ///
 /// Deliberately **not** read from any loaded contract — a bundled contract
 /// carries the version the checker ships, not the one the project installed.
-/// Falls back to the default dialect when nothing resolves (no node_modules,
-/// a non-version like `workspace:*`, or a major nobody has released), which
-/// is what every request without an installed solid-js got before detection
-/// existed.
+///
+/// A `detect` that collapsed [`Detection::Unsupported`] onto the default
+/// dialect used to sit in front of this. It was the hole ADR 0110 § 1 closed:
+/// it analyzed a project under a language it does not run and told it nothing.
+/// Every caller reads the [`Detection`] and refuses `Unsupported` with
+/// `SC9013`; `Defaulted` — no `node_modules/solid-js`, or a manifest naming no
+/// released major — keeps the default, because an absence is not a
+/// contradicted answer.
 #[must_use]
-pub fn detect(project: &Path) -> &'static Dialect {
-    resolved_solid_version(project)
-        .and_then(by_version)
-        .unwrap_or_else(default_dialect)
+pub fn detect_detailed(project: &Path) -> Detection {
+    let Some((classification, installed, manifest)) = resolved_solid_version(project) else {
+        return Detection::Defaulted { manifest: None };
+    };
+    let Some(classification) = classification else {
+        return Detection::Defaulted {
+            manifest: Some(manifest),
+        };
+    };
+    if let solid_dialect::Classification::Modelled(version) = classification
+        && let Some(language) = by_version(version)
+    {
+        // The major chose the language; the installed releases are the
+        // vocabulary's to judge. Asked of the language's own vocabulary, so a
+        // variant never reviews the installations that select it.
+        let releases = resolved_releases(language.vocabulary, project, &manifest, &installed);
+        let installation = releases
+            .iter()
+            .map(|release| solid_dialect::InstalledRelease {
+                package: release.package,
+                version: release.version.as_deref(),
+            })
+            .collect::<Vec<_>>();
+        return match language.vocabulary.review_installation(&installation) {
+            solid_dialect::InstallationReview::Refused(refusal) => Detection::Unsupported {
+                classification,
+                installed,
+                manifest,
+                refusal: Some(refusal),
+            },
+            solid_dialect::InstallationReview::Analyzed { vocabulary, gaps } => {
+                Detection::Installed {
+                    dialect: for_vocabulary(language, vocabulary),
+                    version,
+                    manifest,
+                    installed,
+                    releases,
+                    gaps,
+                }
+            }
+        };
+    }
+    Detection::Unsupported {
+        classification,
+        installed,
+        manifest,
+        refusal: None,
+    }
 }
 
-fn resolved_solid_version(project: &Path) -> Option<solid_dialect::Version> {
+/// One [`solid_dialect::ReleaseOwner`] as resolved for a project.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResolvedRelease {
+    /// The owner's package name.
+    pub package: &'static str,
+    /// The resolved manifest's `version` field exactly as spelled; `None`
+    /// when no manifest carrying a version string resolved.
+    pub version: Option<String>,
+    /// The manifest that resolved, if any.
+    pub manifest: Option<PathBuf>,
+}
+
+/// An installation the analysis proceeds on without the vocabulary having
+/// been audited on it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReleaseNotice {
+    /// The `solid-js` `version` field exactly as the manifest spelled it.
+    pub installed: String,
+    /// The `solid-js` manifest that selected the language; the notice is
+    /// located there.
+    pub manifest: PathBuf,
+    /// Every release owner, as resolved.
+    pub releases: Vec<ResolvedRelease>,
+    /// The open gaps, never empty.
+    pub gaps: Vec<solid_dialect::InstallationGap>,
+    /// What to pin to certify ([`solid_dialect::Dialect::audited_installation`]).
+    pub audited: &'static [(&'static str, &'static str)],
+    /// Where the project reaches a scoped gap's exports, one site per
+    /// distinct reach: why each scoped gap in `gaps` is due. Empty until the
+    /// notice is scoped to a project's facts ([`ReleaseNotice::scoped_to`]).
+    pub reaches: Vec<GapReach>,
+}
+
+/// One site that makes a scoped gap ([`solid_dialect::GapScope`]) due.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GapReach {
+    pub message: String,
+    pub path: String,
+    pub span: solid_facts::core::Span,
+}
+
+/// The `SC9014` notice for analyzing `project` under `dialect`, if one is due.
+///
+/// Due when detection selects exactly this dialect for the installed release
+/// and the release is not audited. A dialect detection did *not* select --
+/// an explicit `--dialect` naming another vocabulary -- is a decision rather
+/// than a detection, and gets no notice, exactly as it gets no `SC9013`.
+///
+/// Read from disk on every call rather than handed down from the selection
+/// site, because the daemon receives only the dialect id it was spawned with
+/// and must still say which release it analyzed.
+///
+/// This is the installation's notice: every gap, scoped ones included. What a
+/// project's analysis carries is [`ReleaseNotice::scoped_to`] its facts, which
+/// drops a scoped gap the project does not reach.
+#[must_use]
+pub fn release_notice(dialect: &'static Dialect, project: &Path) -> Option<ReleaseNotice> {
+    let Detection::Installed {
+        dialect: detected,
+        version,
+        manifest,
+        installed,
+        releases,
+        gaps,
+    } = detect_detailed(project)
+    else {
+        return None;
+    };
+    if detected.id != dialect.id || gaps.is_empty() {
+        return None;
+    }
+    let audited = by_version(version).map_or(&[][..], |language| {
+        language.vocabulary.audited_installation()
+    });
+    Some(ReleaseNotice {
+        installed,
+        manifest,
+        releases,
+        gaps,
+        audited,
+        reaches: Vec::new(),
+    })
+}
+
+/// Every manifest the installation review read for `project`, resolved or
+/// not: what a watcher must hash so that an install moving one owner between
+/// releases does not keep serving the previous answer. An owner that did not
+/// resolve contributes the path an install would most likely create, so
+/// creating it is seen too.
+#[must_use]
+pub fn release_manifests(project: &Path) -> Vec<PathBuf> {
+    let Some((Some(solid_dialect::Classification::Modelled(version)), installed, manifest)) =
+        resolved_solid_version(project)
+    else {
+        return Vec::new();
+    };
+    let Some(language) = by_version(version) else {
+        return Vec::new();
+    };
+    let mut paths = vec![manifest.clone()];
+    for release in resolved_releases(language.vocabulary, project, &manifest, &installed) {
+        if let Some(found) = release.manifest {
+            paths.push(found);
+        } else if let Some(node_modules) = manifest.parent().and_then(Path::parent) {
+            paths.push(node_modules.join(release.package).join("package.json"));
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+/// Resolves every release owner `vocabulary` names for `project`, in order.
+///
+/// `solid-js` is the manifest detection already read. Every other owner is
+/// the nearest `node_modules/<package>/package.json` carrying a version string
+/// above where it resolves from: the project, or the *real* directory of the
+/// owner it is resolved from. The real directory, because a package manager
+/// that links packages (pnpm) places a package's own dependencies beside its
+/// target, not beside the link; resolving from the link would read whatever
+/// the project root happens to have.
+fn resolved_releases(
+    vocabulary: &dyn solid_dialect::Dialect,
+    project: &Path,
+    solid_js_manifest: &Path,
+    solid_js_version: &str,
+) -> Vec<ResolvedRelease> {
+    let mut releases: Vec<ResolvedRelease> = Vec::new();
+    for owner in vocabulary.release_owners() {
+        let resolved = if owner.package == "solid-js" && owner.resolved_from.is_none() {
+            Some((solid_js_version.to_owned(), solid_js_manifest.to_path_buf()))
+        } else {
+            let start = match owner.resolved_from {
+                None => Some(project.to_path_buf()),
+                Some(from) => releases
+                    .iter()
+                    .find(|release| release.package == from)
+                    .and_then(|release| release.manifest.as_deref())
+                    .and_then(Path::parent)
+                    .map(|directory| {
+                        std::fs::canonicalize(directory).unwrap_or_else(|_| directory.into())
+                    }),
+            };
+            start.and_then(|start| nearest_package_version(&start, owner.package))
+        };
+        let (version, manifest) = resolved.map_or((None, None), |(version, manifest)| {
+            (Some(version), Some(manifest))
+        });
+        releases.push(ResolvedRelease {
+            package: owner.package,
+            version,
+            manifest,
+        });
+    }
+    releases
+}
+
+/// The nearest `node_modules/<package>/package.json` above `start` whose
+/// `version` field is a string, as `(version, manifest)`. A manifest with no
+/// version string is skipped exactly as [`resolved_solid_version`] skips one.
+fn nearest_package_version(start: &Path, package: &str) -> Option<(String, PathBuf)> {
+    let start = if start.is_dir() {
+        start
+    } else {
+        start.parent()?
+    };
+    start.ancestors().find_map(|directory| {
+        let manifest = directory
+            .join("node_modules")
+            .join(package)
+            .join("package.json");
+        let encoded = std::fs::read_to_string(&manifest).ok()?;
+        let version = serde_json::from_str::<serde_json::Value>(&encoded)
+            .ok()?
+            .get("version")?
+            .as_str()?
+            .to_owned();
+        Some((version, manifest))
+    })
+}
+
+/// The nearest installed `solid-js`, as
+/// `(classification, version as written, manifest path)`.
+///
+/// The outer `Option` is "did the walk find a manifest carrying a version
+/// string at all"; the inner one is whether that string is a version. They are
+/// separate answers and the caller needs both: a missing install and an
+/// install spelled `workspace:*` both default, but only the second can name
+/// the file that decided it. The raw version string rides along because a
+/// refusal has to quote what it actually read.
+fn resolved_solid_version(
+    project: &Path,
+) -> Option<(Option<solid_dialect::Classification>, String, PathBuf)> {
     let start = if project.is_dir() {
         project
     } else {
@@ -404,22 +848,42 @@ fn resolved_solid_version(project: &Path) -> Option<solid_dialect::Version> {
         else {
             continue;
         };
-        // A version string that names no released major ("workspace:*",
-        // "0.5.0", "3.0.0") stops the walk and answers `None` -- per
-        // `Version::for_solid_js`'s docs, refusing to classify is deliberate,
-        // and the caller falls back to the v2 default. This is the nearest
-        // `solid-js` the project would import; a resolvable-but-unclassifiable
-        // install is an answer, not an absence.
-        return solid_dialect::Version::for_solid_js(&version);
+        // Whatever the version field says, this is the nearest `solid-js` the
+        // project would import, so the walk stops here either way. A string
+        // that is not a version at all ("workspace:*") answers `None` and the
+        // caller falls back to the default; a major nobody here carries
+        // classifies as `UnmodelledMajor` and is refused, because a
+        // resolvable-but-uncarried install is a contradicted answer rather
+        // than an absence.
+        return Some((
+            solid_dialect::Version::for_solid_js(&version),
+            version,
+            manifest,
+        ));
     }
     None
 }
 
+/// The Solid 2 language: the vocabulary whose variant key is `None`,
+/// [`solid_dialect::Solid2::CONSERVATIVE`], so the plain `solid-v2` id names
+/// the same answers whichever release is audited. The audited triple and a
+/// defaulted project reach theirs through the review and [`default_dialect`];
+/// today both are this one.
 #[cfg(feature = "dialect-v2")]
-static SOLID_V2: Dialect = Dialect {
+static SOLID_V2: Dialect = SOLID_V2_LANGUAGE;
+
+/// The rc.9 triple's dialect: the [`RELEASE_VARIANTS`] entry whose vocabulary
+/// is [`solid_dialect::Solid2::RC9`]. Named for tests; detection reaches it
+/// through the installation review like any other variant.
+#[cfg(all(test, feature = "dialect-v2"))]
+static SOLID_V2_RC9: std::sync::LazyLock<&'static Dialect> =
+    std::sync::LazyLock::new(|| for_vocabulary(&SOLID_V2, Some(&solid_dialect::Solid2::RC9)));
+
+#[cfg(feature = "dialect-v2")]
+const SOLID_V2_LANGUAGE: Dialect = Dialect {
     id: "solid-v2",
     compiler_facts_identity: solid_v2_compiler::COMPILER_FACTS_IDENTITY,
-    vocabulary: &solid_dialect::Solid2,
+    vocabulary: &solid_dialect::Solid2::CONSERVATIVE,
     rule_count: solid_v2_rules::Rule::ALL.len(),
     compiler: || Box::new(solid_v2_compiler::NativeCompilerFacts),
     solve_measured: solid_v2_rules::solve_measured,
@@ -437,30 +901,6 @@ static SOLID_V2: Dialect = Dialect {
     },
     semantic_demands: SemanticDemandCapabilities::SOLID_2,
     catalog_capabilities: solid_v2_rules::CATALOG_CAPABILITIES,
-};
-
-#[cfg(feature = "dialect-v1")]
-static SOLID_V1: Dialect = Dialect {
-    id: "solid-v1",
-    compiler_facts_identity: solid_v1_compiler::COMPILER_FACTS_IDENTITY,
-    vocabulary: &solid_dialect::Solid1x,
-    rule_count: solid_v1_rules::Rule::ALL.len(),
-    compiler: || Box::new(solid_v1_compiler::NativeCompilerFacts),
-    solve_measured: solid_v1_rules::solve_measured,
-    docs_url: solid_v1_rules::docs_url,
-    has_rule: |name| {
-        solid_v1_rules::Rule::ALL
-            .into_iter()
-            .any(|rule| rule.metadata().name == name)
-    },
-    rule_metadata: |name| {
-        solid_v1_rules::Rule::ALL
-            .into_iter()
-            .find(|rule| rule.metadata().name == name)
-            .map(solid_v1_rules::Rule::metadata)
-    },
-    semantic_demands: SemanticDemandCapabilities::SOLID_1,
-    catalog_capabilities: solid_v1_rules::CATALOG_CAPABILITIES,
 };
 
 #[cfg(test)]
@@ -601,6 +1041,8 @@ mod tests {
                 module: "sample-package".into(),
                 export: "sampleExport".into(),
                 reexported: false,
+                site: solid_reactive_ir::ContractDefectSite::Import,
+                admission_refusal: None,
             },
             StaticDefectKind::MissingEffectFunction,
             StaticDefectKind::ReactiveSourceUncaptured {
@@ -634,6 +1076,8 @@ mod tests {
         ];
         Program {
             reads: vec![ReactiveRead {
+                package_internal: false,
+                summary_attributed: false,
                 kind: "signal".into(),
                 accessor: "sampleAccessor".into(),
                 location: location(1),
@@ -645,6 +1089,10 @@ mod tests {
                 origin_context: "".into(),
                 uncertain: false,
                 missing_jsx_census: false,
+                host_callback_timing: false,
+                project_consumer_non_strict: false,
+                callback_invocation_unproven: false,
+                callee_callback_timing: false,
             }],
             writes: vec![ReactiveWrite {
                 setter: "sampleSetter".into(),
@@ -663,8 +1111,11 @@ mod tests {
                 runtime_uncertain: false,
                 caller_uncertain: false,
                 conditional_owner: false,
+                later_run_unowned: false,
                 component_uncertain: false,
+                after_await: false,
                 missing_jsx_census: false,
+                through_contract: false,
                 report: true,
             }],
             async_reads: vec![AsyncRead {
@@ -679,6 +1130,10 @@ mod tests {
                 options_opaque: false,
                 ssr_client_hole: false,
                 server_rendering_unresolved: false,
+                host_callback_timing: false,
+                callee_callback_timing: false,
+                invocation_context_unproven: false,
+                mount_unresolved: false,
             }],
             static_defects: defect_kinds
                 .into_iter()
@@ -718,6 +1173,28 @@ mod tests {
         .any(|identifier| identifier == expected)
     }
 
+    /// The default is read from the registry, not named.
+    ///
+    /// With one dialect this cannot fail, which is exactly why it is written
+    /// as a property rather than as `assert_eq!(default_dialect().id,
+    /// "solid-v2")`: the assertion that would have to change on the day a
+    /// newer dialect is added is the assertion that would be wrong that day.
+    #[test]
+    fn the_default_is_the_newest_dialect_the_registry_carries() {
+        let newest = ALL
+            .iter()
+            .map(|dialect| dialect.vocabulary.version())
+            .max()
+            .expect("ALL is non-empty");
+        assert_eq!(default_dialect().vocabulary.version(), newest);
+        // Registered: the language itself or one of its release variants,
+        // resolvable by id to this very value.
+        assert!(
+            by_id(default_dialect().id).is_some_and(|found| std::ptr::eq(found, default_dialect())),
+            "the default must be a registered dialect, not a value beside the registry"
+        );
+    }
+
     #[test]
     fn dialect_ids_are_unique_and_resolvable() {
         for dialect in ALL {
@@ -735,24 +1212,14 @@ mod tests {
         );
         assert_eq!(
             RETIRED_RULES.len(),
-            39,
-            "eight pre-existing TypeScript redundancies plus 31 catalog-reduction identities"
+            57,
+            "eight pre-existing TypeScript redundancies, 31 catalog-reduction identities, and the 18 the 1.x catalog still declared when ADR 0110 deleted it"
         );
     }
 
     #[test]
     fn every_catalog_identity_resolves_to_its_metadata() {
         for dialect in ALL {
-            #[cfg(feature = "dialect-v1")]
-            if dialect.id == "solid-v1" {
-                for rule in solid_v1_rules::Rule::ALL {
-                    assert_eq!(
-                        (dialect.rule_metadata)(rule.metadata().name),
-                        Some(rule.metadata())
-                    );
-                }
-            }
-            #[cfg(feature = "dialect-v2")]
             if dialect.id == "solid-v2" {
                 for rule in solid_v2_rules::Rule::ALL {
                     assert_eq!(
@@ -762,84 +1229,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
-    #[test]
-    fn all_style_preferences_are_default_enabled_preset_members() {
-        let expected = HashSet::from([
-            "v1/prefer-classlist",
-            "v1/prefer-for",
-            "v1/prefer-show",
-            "prefer-for",
-            "prefer-show",
-        ]);
-        let observed = solid_v1_rules::Rule::ALL
-            .into_iter()
-            .map(|rule| rule.metadata())
-            .chain(
-                solid_v2_rules::Rule::ALL
-                    .into_iter()
-                    .map(|rule| rule.metadata()),
-            )
-            .filter_map(|metadata| {
-                assert!(
-                    metadata.default_enabled,
-                    "{} unexpectedly remains default-disabled",
-                    metadata.name
-                );
-                (metadata.presets == ["preferences"]).then_some(metadata.name)
-            })
-            .collect::<HashSet<_>>();
-        assert_eq!(observed, expected);
-    }
-
-    /// The documentation and suppression model both depend on this exact
-    /// ownership split. Keep it derived from the two catalogs rather than
-    /// maintaining an unaudited second list in prose. The one test that must
-    /// see both catalogs at once; every other test asks the registry, so
-    /// single-dialect feature builds still compile the suite.
-    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
-    #[test]
-    fn rule_catalogs_keep_the_shared_and_version_only_split() {
-        let v1 = solid_v1_rules::Rule::ALL
-            .into_iter()
-            .map(|rule| rule.metadata().code)
-            .collect::<HashSet<_>>();
-        let v2 = solid_v2_rules::Rule::ALL
-            .into_iter()
-            .map(|rule| rule.metadata().code)
-            .collect::<HashSet<_>>();
-        let shared = v1.intersection(&v2).copied().collect::<HashSet<_>>();
-        let expected = HashSet::from([
-            "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1007", "SC2001", "SC2003",
-            "SC4001", "SC7001", "SC8003", "SC8014", "SC8015", "SC9005", "SC9011", "SC9012",
-        ]);
-        assert_eq!(shared, expected);
-        assert_eq!(
-            solid_v1_rules::Rule::ALL
-                .into_iter()
-                .filter(|rule| shared.contains(rule.metadata().code))
-                .count(),
-            16
-        );
-        assert_eq!(
-            solid_v2_rules::Rule::ALL
-                .into_iter()
-                .filter(|rule| shared.contains(rule.metadata().code))
-                .count(),
-            16
-        );
-        assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 16,
-            2,
-            "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
-        );
-        assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 16,
-            10,
-            "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
-        );
     }
 
     /// Catalogs own user-facing wording, but the generated export index still
@@ -969,14 +1358,35 @@ mod tests {
         .unwrap();
         let project = root.join("src/tsconfig.json");
         std::fs::write(&project, "{}").unwrap();
-        assert_eq!(detect(&project).id, "solid-v1");
+        // The classification, not the dialect id: a 1.x install resolves to
+        // `Version::V1` in every build, and only a build carrying the 1.x
+        // dialect can turn that into one.
+        assert!(matches!(
+            detect_detailed(&project),
+            Detection::Installed {
+                version: solid_dialect::Version::V1,
+                ..
+            } | Detection::Unsupported {
+                classification: solid_dialect::Classification::Modelled(solid_dialect::Version::V1,),
+                ..
+            }
+        ));
 
         std::fs::write(
             package.join("package.json"),
             r#"{"name":"solid-js","version":"2.0.0-rc.0"}"#,
         )
         .unwrap();
-        assert_eq!(detect(&project).id, "solid-v2");
+        assert!(matches!(
+            detect_detailed(&project),
+            Detection::Installed {
+                version: solid_dialect::Version::V2,
+                ..
+            } | Detection::Unsupported {
+                classification: solid_dialect::Classification::Modelled(solid_dialect::Version::V2,),
+                ..
+            }
+        ));
 
         // No resolvable version answers the default rather than guessing.
         std::fs::write(
@@ -984,7 +1394,10 @@ mod tests {
             r#"{"name":"solid-js","version":"workspace:*"}"#,
         )
         .unwrap();
-        assert_eq!(detect(&project).id, default_dialect().id);
+        assert!(matches!(
+            detect_detailed(&project),
+            Detection::Defaulted { manifest: Some(_) }
+        ));
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1009,10 +1422,30 @@ mod tests {
 
         // Unparseable JSON and a version-less manifest are both the walk
         // continuing, exactly like an unreadable file.
+        //
+        // Asserted as *which manifest the walk selected*, which is the claim.
+        // Reading it off a dialect id instead made this test depend on the 1.x
+        // dialect being compiled in, and it failed in the
+        // `--features dialect-v2` arm for a reason that has nothing to do with
+        // the walk.
+        let selected = |detection: Detection| match detection {
+            Detection::Installed { manifest, .. } | Detection::Unsupported { manifest, .. } => {
+                manifest
+            }
+            Detection::Defaulted { manifest } => {
+                panic!("the outer 1.x install is a resolution, not a default: {manifest:?}")
+            }
+        };
         std::fs::write(inner.join("package.json"), "{ not json").unwrap();
-        assert_eq!(detect(&project).id, "solid-v1");
+        assert_eq!(
+            selected(detect_detailed(&project)),
+            outer.join("package.json")
+        );
         std::fs::write(inner.join("package.json"), r#"{"name":"solid-js"}"#).unwrap();
-        assert_eq!(detect(&project).id, "solid-v1");
+        assert_eq!(
+            selected(detect_detailed(&project)),
+            outer.join("package.json")
+        );
 
         // A parseable version that classifies stops the walk at the nearest
         // manifest, masking the outer 1.x -- resolution order, not breakage.
@@ -1021,7 +1454,599 @@ mod tests {
             r#"{"name":"solid-js","version":"2.0.0-rc.0"}"#,
         )
         .unwrap();
-        assert_eq!(detect(&project).id, "solid-v2");
+        assert_eq!(
+            selected(detect_detailed(&project)),
+            inner.join("package.json")
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The three outcomes `detect` collapses, kept apart -- and the manifest
+    /// path a refusal has to name. The walk is unbounded, so the deciding
+    /// `package.json` is frequently not the one beside the project, and a
+    /// refusal that cannot say which file decided it is not actionable.
+    #[test]
+    fn detection_separates_an_install_from_a_default_and_names_the_manifest() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-dialect-detection-{}",
+            std::process::id()
+        ));
+        let package = root.join("node_modules/solid-js");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let manifest = package.join("package.json");
+        let project = root.join("src/tsconfig.json");
+        std::fs::write(&project, "{}").unwrap();
+
+        std::fs::write(&manifest, r#"{"name":"solid-js","version":"2.0.0-rc.0"}"#).unwrap();
+        match detect_detailed(&project) {
+            Detection::Installed {
+                dialect,
+                version,
+                manifest: read,
+                ..
+            } => {
+                assert_eq!(dialect.id, "solid-v2");
+                assert_eq!(version, solid_dialect::Version::V2);
+                // Named from two directories up, not from beside the project.
+                assert_eq!(read, manifest);
+            }
+            // A build without the 2.0 dialect still resolves the install and
+            // still names the file; only the dialect is missing.
+            Detection::Unsupported {
+                classification: solid_dialect::Classification::Modelled(solid_dialect::Version::V2),
+                installed,
+                manifest: read,
+                ..
+            } => {
+                assert_eq!(read, manifest);
+                assert_eq!(installed, "2.0.0-rc.0");
+            }
+            other => panic!("an installed 2.0 is a resolution: {other:?}"),
+        }
+
+        // Resolvable but unclassifiable: a default that can still say which
+        // file it read, which is what separates it from nothing installed.
+        std::fs::write(&manifest, r#"{"name":"solid-js","version":"workspace:*"}"#).unwrap();
+        match detect_detailed(&project) {
+            Detection::Defaulted {
+                manifest: Some(read),
+            } => assert_eq!(read, manifest),
+            other => panic!("an unclassifiable version defaults, and names its file: {other:?}"),
+        }
+
+        // Nothing installed anywhere above: a default with no file to name.
+        std::fs::remove_dir_all(root.join("node_modules")).unwrap();
+        assert!(matches!(
+            detect_detailed(&project),
+            Detection::Defaulted { manifest: None }
+        ));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The refusal's identity is held in two places on purpose; this is what
+    /// stops them drifting.
+    ///
+    /// [`UNSUPPORTED_RUNTIME_CODE`] is what the emission actually writes, and
+    /// it cannot read a catalog because the refusal happens before a dialect
+    /// is chosen. The Solid 2 catalog is where every *consumer* resolves the
+    /// identity -- the npm rules manifest, suppression configuration, the
+    /// docs URL -- so a disagreement between them would publish a code no
+    /// adapter recognizes while the tool emitted it anyway.
+    #[cfg(feature = "dialect-v2")]
+    #[test]
+    fn the_refusal_identity_is_the_one_the_catalog_publishes() {
+        let dialect = by_id("solid-v2").expect("the 2.0 dialect is compiled in");
+        let metadata = (dialect.rule_metadata)(UNSUPPORTED_RUNTIME_RULE)
+            .unwrap_or_else(|| panic!("the 2.0 catalog must declare {UNSUPPORTED_RUNTIME_RULE}"));
+        assert_eq!(metadata.code, UNSUPPORTED_RUNTIME_CODE);
+        assert_eq!(metadata.name, UNSUPPORTED_RUNTIME_RULE);
+        assert!(
+            metadata.uncertifiable,
+            "the refusal asserts nothing about the project's source, so it is an \
+             uncertifiable result and not a violation"
+        );
+        assert_eq!(metadata.severity, "error");
+    }
+
+    /// The refusal snapshot is the *whole* result, and its shape is the claim.
+    #[test]
+    fn the_refusal_snapshot_carries_one_finding_and_measures_nothing() {
+        let snapshot = crate::diagnostics::unsupported_runtime_snapshot(
+            "1.9.14",
+            Path::new("/tmp/app/node_modules/solid-js/package.json"),
+            None,
+        );
+        assert_eq!(snapshot.status, "uncertifiable");
+        assert_eq!(
+            snapshot.findings.len(),
+            1,
+            "a second finding would assert something about source that was \
+             never analyzed under the language it runs"
+        );
+        let finding = &snapshot.findings[0];
+        assert_eq!(finding.id, UNSUPPORTED_RUNTIME_CODE);
+        assert_eq!(finding.rule, UNSUPPORTED_RUNTIME_RULE);
+        assert_eq!(finding.kind, "uncertifiable");
+        assert!(
+            finding.message.contains("1.9.14"),
+            "the refusal quotes the version it read, not the classified major: {}",
+            finding.message
+        );
+        assert_eq!(
+            finding.primary_location.path, "/tmp/app/node_modules/solid-js/package.json",
+            "the deciding manifest is the location, because it is the file to change"
+        );
+        assert_eq!(
+            snapshot.metrics.files_analyzed, 0,
+            "nothing was read; reporting otherwise would overstate what happened"
+        );
+        assert!(snapshot.package_summaries.is_empty());
+    }
+
+    /// A named major with no vocabulary behind it refuses.
+    ///
+    /// This is the half of the refusal that `Version` can still express:
+    /// `V1` exists precisely so detection can *recognise* `1.9.14` in order to
+    /// turn it down. The other half -- a major no variant names at all --
+    /// classifies as `UnmodelledMajor` and is pinned end to end by
+    /// `a_major_this_build_does_not_name_is_refused_like_one_it_does` in
+    /// `tests/dialects_process.rs`, because its whole claim is about what the
+    /// process emits.
+    #[test]
+    fn a_named_major_with_no_dialect_behind_it_is_unsupported() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-dialect-unsupported-{}",
+            std::process::id()
+        ));
+        let package = root.join("node_modules/solid-js");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(
+            package.join("package.json"),
+            r#"{"name":"solid-js","version":"1.9.14"}"#,
+        )
+        .unwrap();
+        let project = root.join("src/tsconfig.json");
+        std::fs::write(&project, "{}").unwrap();
+
+        let detection = detect_detailed(&project);
+        assert!(
+            matches!(
+                &detection,
+                Detection::Unsupported {
+                    classification: solid_dialect::Classification::Modelled(
+                        solid_dialect::Version::V1,
+                    ),
+                    ..
+                }
+            ),
+            "a 1.x install is unsupported, not a 2.0 project: {detection:?}"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A scratch project whose nearest `node_modules/solid-js` names `version`,
+    /// beside no other Solid package.
+    fn installed_project(tag: &str, version: &str) -> (PathBuf, PathBuf) {
+        installed_triple(tag, Some(version), None, None)
+    }
+
+    /// A scratch project with a hoisted `node_modules` holding each of the
+    /// three Solid 2 packages given a version.
+    fn installed_triple(
+        tag: &str,
+        solid_js: Option<&str>,
+        signals: Option<&str>,
+        web: Option<&str>,
+    ) -> (PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-dialect-release-{tag}-{}",
+            std::process::id()
+        ));
+        for (package, version) in [
+            ("solid-js", solid_js),
+            ("@solidjs/signals", signals),
+            ("@solidjs/web", web),
+        ] {
+            let Some(version) = version else { continue };
+            let directory = root.join("node_modules").join(package);
+            std::fs::create_dir_all(&directory).unwrap();
+            std::fs::write(
+                directory.join("package.json"),
+                format!(r#"{{"name":"{package}","version":"{version}"}}"#),
+            )
+            .unwrap();
+        }
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let project = root.join("src/tsconfig.json");
+        std::fs::write(&project, "{}").unwrap();
+        (root, project)
+    }
+
+    /// The release classification end to end through detection: which dialect
+    /// analyzes each installation, and whether the analysis carries the
+    /// notice.
+    #[cfg(feature = "dialect-v2")]
+    #[test]
+    fn detection_classifies_the_installed_triple() {
+        const RC3: Option<&str> = Some("2.0.0-rc.3");
+        const RC9: Option<&str> = Some("2.0.0-rc.9");
+        // (solid-js, signals, web, selected dialect id, notice due)
+        let rows = [
+            (RC3, RC3, RC3, "solid-v2", true),
+            // rc.0's optimistic-store setter meets no owned-scope guard (N5),
+            // its one answer that differs from rc.3's: a reviewed variant, so
+            // no notice.
+            (
+                Some("2.0.0-rc.0"),
+                Some("2.0.0-rc.0"),
+                None,
+                "solid-v2@optimistic-store-setter-unguarded",
+                true,
+            ),
+            (
+                Some("2.0.0-rc.1"),
+                Some("2.0.0-rc.1"),
+                Some("2.0.0-rc.1"),
+                "solid-v2",
+                true,
+            ),
+            (
+                Some("2.0.0-rc.2"),
+                Some("2.0.0-rc.2"),
+                Some("2.0.0-rc.2"),
+                "solid-v2",
+                true,
+            ),
+            (RC3, RC3, None, "solid-v2", true),
+            (
+                RC9,
+                RC9,
+                RC9,
+                "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+dynamic-static+store-setter-guards-roots",
+                true,
+            ),
+            // A fresh install of the audited solid-js today (the rc.1-rc.8
+            // review § 5): the store answer is signals rc.9's.
+            (
+                RC3,
+                RC9,
+                RC3,
+                "solid-v2@store-root-mutable+omit-predicate+flush-in-action+store-setter-guards-roots",
+                true,
+            ),
+            (
+                Some("2.0.0-rc.4"),
+                Some("2.0.0-rc.4"),
+                Some("2.0.0-rc.4"),
+                "solid-v2",
+                true,
+            ),
+            (
+                Some("2.0.0-rc.6"),
+                Some("2.0.0-rc.6"),
+                Some("2.0.0-rc.6"),
+                "solid-v2@until",
+                true,
+            ),
+            (
+                Some("2.0.0-rc.7"),
+                Some("2.0.0-rc.7"),
+                Some("2.0.0-rc.7"),
+                "solid-v2@store-root-mutable+until",
+                true,
+            ),
+            // No signals beside solid-js: the conservative answers, and the
+            // notice.
+            (RC9, None, RC9, "solid-v2@dynamic-static", true),
+            (RC3, None, RC3, "solid-v2", true),
+            (
+                Some("2.0.0-rc.10"),
+                Some("2.0.0-rc.10"),
+                Some("2.0.0-rc.10"),
+                "solid-v2@dynamic-options-unread",
+                true,
+            ),
+            (Some("2.0.0-beta.19"), RC3, RC3, "solid-v2", true),
+            (Some("2.0.0"), RC3, RC3, "solid-v2", true),
+        ];
+        for (index, (solid_js, signals, web, id, notice_due)) in rows.into_iter().enumerate() {
+            let (root, project) = installed_triple(&format!("row{index}"), solid_js, signals, web);
+            let detection = detect_detailed(&project);
+            let Detection::Installed {
+                dialect,
+                installed: read,
+                releases,
+                ..
+            } = &detection
+            else {
+                panic!("{solid_js:?} is analyzed: {detection:?}");
+            };
+            let row = format!("{solid_js:?}/{signals:?}/{web:?}");
+            assert_eq!(dialect.id, id, "{row}");
+            assert_eq!(Some(read.as_str()), solid_js);
+            assert_eq!(
+                releases
+                    .iter()
+                    .map(|release| release.version.as_deref())
+                    .collect::<Vec<_>>(),
+                vec![solid_js, signals, web],
+                "{row}"
+            );
+            let notice = release_notice(dialect, &project);
+            assert_eq!(notice.is_some(), notice_due, "{row}: {notice:?}");
+            if let Some(notice) = notice {
+                assert_eq!(Some(notice.installed.as_str()), solid_js);
+                assert_eq!(
+                    notice.manifest,
+                    root.join("node_modules/solid-js/package.json")
+                );
+                assert!(!notice.gaps.is_empty());
+                assert_eq!(notice.audited.len(), 3);
+            }
+            // A dialect detection did not pick is a decision: no notice. The
+            // audited language under an rc.9 install is the `--dialect
+            // solid-v2` escape hatch.
+            if dialect.id != SOLID_V2.id {
+                assert_eq!(release_notice(&SOLID_V2, &project), None, "{row}");
+            }
+            std::fs::remove_dir_all(&root).unwrap();
+        }
+    }
+
+    /// `@solidjs/signals` resolves from the installed `solid-js`, the way that
+    /// package's own re-export does: a copy nested under `solid-js` wins over
+    /// the hoisted one.
+    #[cfg(feature = "dialect-v2")]
+    #[test]
+    fn signals_resolves_from_the_installed_solid_js() {
+        let (root, project) = installed_triple(
+            "nested-signals",
+            Some("2.0.0-rc.3"),
+            Some("2.0.0-rc.3"),
+            Some("2.0.0-rc.3"),
+        );
+        // The rc.3 triple is reviewed, and older than the audited release:
+        // that is its one gap.
+        let notice = release_notice(&SOLID_V2, &project).expect("rc.3 is older than audited");
+        assert_eq!(notice.gaps.len(), 1, "{notice:?}");
+        let nested = root.join("node_modules/solid-js/node_modules/@solidjs/signals");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(
+            nested.join("package.json"),
+            r#"{"name":"@solidjs/signals","version":"2.0.0-rc.9"}"#,
+        )
+        .unwrap();
+        let Detection::Installed {
+            dialect, releases, ..
+        } = detect_detailed(&project)
+        else {
+            panic!("analyzed");
+        };
+        assert_eq!(
+            dialect.id,
+            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+store-setter-guards-roots"
+        );
+        assert_eq!(releases[1].version.as_deref(), Some("2.0.0-rc.9"));
+        let nested_manifest = "node_modules/solid-js/node_modules/@solidjs/signals/package.json";
+        assert!(
+            releases[1]
+                .manifest
+                .as_ref()
+                .is_some_and(|manifest| manifest.ends_with(nested_manifest)),
+            "{releases:?}"
+        );
+        // Every manifest the review read is a watched input, and an owner
+        // that did not resolve contributes the path an install would create.
+        let watched = release_manifests(&project);
+        assert!(
+            watched
+                .iter()
+                .any(|path| path.ends_with("node_modules/solid-js/package.json"))
+        );
+        assert!(
+            watched.iter().any(|path| path.ends_with(nested_manifest)),
+            "{watched:?}"
+        );
+        std::fs::remove_dir_all(root.join("node_modules/@solidjs/web")).unwrap();
+        assert!(
+            release_manifests(&project)
+                .iter()
+                .any(|path| path.ends_with("node_modules/@solidjs/web/package.json"))
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The pre-beta experiment is refused although its major is carried, and
+    /// the refusal carries the vocabulary's reason.
+    #[cfg(feature = "dialect-v2")]
+    #[test]
+    fn the_pre_beta_experiment_is_refused_with_its_reason() {
+        let (root, project) = installed_project("experimental", "2.0.0-experimental.1");
+        let detection = detect_detailed(&project);
+        let Detection::Unsupported {
+            classification,
+            installed,
+            refusal: Some(refusal),
+            manifest,
+        } = &detection
+        else {
+            panic!("2.0.0-experimental.1 is refused: {detection:?}");
+        };
+        assert_eq!(
+            *classification,
+            solid_dialect::Classification::Modelled(solid_dialect::Version::V2)
+        );
+        assert_eq!(installed, "2.0.0-experimental.1");
+        assert_eq!(refusal.line, "2.0.0-experimental.x");
+        let snapshot =
+            crate::diagnostics::unsupported_runtime_snapshot(installed, manifest, Some(refusal));
+        assert_eq!(snapshot.status, "uncertifiable");
+        assert_eq!(snapshot.findings.len(), 1);
+        let message = &snapshot.findings[0].message;
+        assert!(
+            message.contains("2.0.0-experimental.1")
+                && message.contains("argument 2")
+                && !message.contains("carries no dialect"),
+            "the refusal states the vocabulary's reason, not an absent dialect: {message}"
+        );
+        // The release it points to is the audited one, read from the
+        // vocabulary rather than spelled in the hint.
+        let audited = by_version(solid_dialect::Version::V2)
+            .expect("2.0 is carried")
+            .vocabulary
+            .audited_installation();
+        assert_eq!(refusal.audited, audited);
+        let hint = &snapshot.findings[0].hint;
+        assert!(
+            hint.contains(&format!("(the audited one is {})", audited[0].1)),
+            "{hint}"
+        );
+        assert_eq!(snapshot.findings[0].id, UNSUPPORTED_RUNTIME_CODE);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Every variant is one its language lists, named after its key,
+    /// resolvable by id, absent from the language registry, and the same
+    /// catalog as its language.
+    #[cfg(feature = "dialect-v2")]
+    #[test]
+    fn every_release_variant_is_one_its_language_lists() {
+        assert!(!RELEASE_VARIANTS.is_empty());
+        for variant in RELEASE_VARIANTS.iter() {
+            let language = ALL
+                .iter()
+                .copied()
+                .find(|language| language.vocabulary.version() == variant.vocabulary.version())
+                .expect("a variant belongs to a registered language");
+            let key = variant
+                .vocabulary
+                .variant_key()
+                .expect("a variant names its key");
+            assert_eq!(variant.id, format!("{}@{key}", language.id));
+            assert_eq!(by_id(variant.id).map(|found| found.id), Some(variant.id));
+            assert!(std::ptr::eq(
+                for_vocabulary(language, Some(variant.vocabulary)),
+                variant
+            ));
+            assert!(!ALL.iter().any(|registered| registered.id == variant.id));
+            // The variant is the same catalog; only the vocabulary moves.
+            assert_eq!(variant.rule_count, language.rule_count);
+            assert_eq!(
+                variant.compiler_facts_identity,
+                language.compiler_facts_identity
+            );
+        }
+        let mut ids = RELEASE_VARIANTS
+            .iter()
+            .map(|variant| variant.id)
+            .collect::<Vec<_>>();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), RELEASE_VARIANTS.len(), "variant ids are unique");
+        // B1, as the dialects detection selects for the rc.3 and rc.9 triples
+        // answer it.
+        assert!(SOLID_V2.vocabulary.store_root_properties_are_readonly());
+        assert!(!SOLID_V2_RC9.vocabulary.store_root_properties_are_readonly());
+        // B3: only rc.9's `omit` can invoke its lone second argument.
+        let omit = solid_dialect::Primitive::Omit;
+        assert!(
+            !SOLID_V2
+                .vocabulary
+                .callback_runs_on_result_access(omit, 1, 2)
+        );
+        assert!(
+            SOLID_V2_RC9
+                .vocabulary
+                .callback_runs_on_result_access(omit, 1, 2)
+        );
+        assert!(std::ptr::eq(for_vocabulary(&SOLID_V2, None), &SOLID_V2));
+        // The language is the vocabulary ids are spelled against, and a
+        // project with nothing installed gets the one the dialect names for
+        // it, whichever entry that is.
+        assert_eq!(SOLID_V2.vocabulary.variant_key(), None);
+        assert!(std::ptr::eq(
+            default_dialect(),
+            for_vocabulary(&SOLID_V2, Some(&solid_dialect::Solid2::DEFAULTED))
+        ));
+    }
+
+    /// The notice's identity is held here and published by the catalog; this
+    /// keeps them from drifting, as for the refusal.
+    #[cfg(feature = "dialect-v2")]
+    #[test]
+    fn the_notice_identity_is_the_one_the_catalog_publishes() {
+        let dialect = by_id("solid-v2").expect("the 2.0 dialect is compiled in");
+        let metadata = (dialect.rule_metadata)(UNAUDITED_RELEASE_RULE)
+            .unwrap_or_else(|| panic!("the 2.0 catalog must declare {UNAUDITED_RELEASE_RULE}"));
+        assert_eq!(metadata.code, UNAUDITED_RELEASE_CODE);
+        assert!(metadata.uncertifiable);
+        let (root, project) = installed_triple(
+            "notice-wording",
+            Some("2.0.0-rc.3"),
+            Some("2.0.0-rc.9"),
+            Some("2.0.0-rc.3"),
+        );
+        let detected = match detect_detailed(&project) {
+            Detection::Installed { dialect, .. } => dialect,
+            other => panic!("analyzed: {other:?}"),
+        };
+        let notice = release_notice(detected, &project).expect("a mixed triple has gaps");
+        let finding = crate::diagnostics::unaudited_release_finding(&notice);
+        assert_eq!(finding.id, metadata.code);
+        assert_eq!(finding.rule, metadata.name);
+        assert_eq!(finding.severity, metadata.severity);
+        assert_eq!(finding.kind, "uncertifiable");
+        assert_eq!(finding.subject_kind, "project");
+        let found = "solid-js 2.0.0-rc.3, @solidjs/signals 2.0.0-rc.9 and @solidjs/web 2.0.0-rc.3";
+        assert!(finding.message.contains(found), "{}", finding.message);
+        // The advice pins all three, and names what it found.
+        assert!(
+            finding.hint.contains(
+                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.13, the audited release of each"
+            ) && finding
+                .hint
+                .contains(&format!("this project resolves {found}")),
+            "{}",
+            finding.hint
+        );
+        assert!(
+            !finding.message.contains("  ") && !finding.hint.contains("  "),
+            "wording is one line of prose: {:?} / {:?}",
+            finding.message,
+            finding.hint
+        );
+        assert!(
+            // signals rc.9 carries no gap of its own any more; the mixed
+            // triple's is the rc.1-rc.8 review's.
+            finding
+                .hint
+                .contains("The review is docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md."),
+            "the notice points at the reviews: {}",
+            finding.hint
+        );
+        let gaps = finding
+            .evidence
+            .iter()
+            .filter(|step| step.message.starts_with("known gap "))
+            .count();
+        assert_eq!(gaps, notice.gaps.len(), "every gap is named");
+        assert_eq!(
+            finding
+                .evidence
+                .iter()
+                .filter(|step| step.message.contains("resolves here"))
+                .count(),
+            3,
+            "every owner's manifest is evidence"
+        );
+        assert_eq!(
+            &*finding.primary_location.path,
+            root.join("node_modules/solid-js/package.json")
+                .display()
+                .to_string()
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

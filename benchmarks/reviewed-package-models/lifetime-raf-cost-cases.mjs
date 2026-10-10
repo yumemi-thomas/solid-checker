@@ -1,0 +1,14 @@
+const cases = [];
+const prelude = `import { onCleanup } from 'solid-js'; import { render } from '@solidjs/web'; const h = (globalThis as any).__experiment, audit = (globalThis as any).__resourceAudit;
+function lifetime() { const scope = audit?.scope('component') ?? { run: (fn: Function) => fn(), bind: (fn: Function) => fn, end: () => {} }; onCleanup(() => queueMicrotask(() => scope.end())); return scope; }`;
+for (const role of ['target', 'control']) cases.push({ id: `lifetime-raf-restart-${role}`, package: '@solid-primitives/raf',
+  source: `${prelude} import { createRAF } from '@solid-primitives/raf'; function App() { const scope = lifetime(); const [, start, stop] = createRAF(() => h.values.calls = (h.values.calls ?? 0) + 1);
+scope.run(start); h.restart = scope.bind(() => { ${role === 'target' ? 'start();' : ''} }); h.stop = stop; return <p>raf probe</p>; } h.dispose = render(() => <App />, document.getElementById('root')!);`,
+  flow: async (page, step) => { await step('dispose-restart', () => page.evaluate(async () => { const h = globalThis.__experiment; h.dispose(); h.disposals++; await Promise.resolve(); h.values.before = h.values.calls ?? 0; h.restart(); })); await page.waitForTimeout(90); await page.evaluate(() => { const h = globalThis.__experiment; h.stop(); h.values.resourceAudit = globalThis.__resourceAudit?.snapshot() ?? null; }); },
+  provenance: { role, pair: 'raf-restart', expectedIssue: role === 'target', expectedKind: 'animation-frame', boundary: 'stop resources at component disposal' } });
+cases.push({ id: 'lifetime-operation-cost-control', package: '@solid-primitives/event-listener', packages: ['@solid-primitives/event-listener'],
+  source: `${prelude} import { makeEventListener } from '@solid-primitives/event-listener'; function App() { const scope = lifetime(), target = new EventTarget(), callback = () => {};
+h.measure = () => { const samples = []; for (let batch = 0; batch < 10; batch++) { const start = performance.now(); scope.run(() => { for (let i = 0; i < 200; i++) { const clear = makeEventListener(target, 'test', callback); clear(); const id = setTimeout(callback, 1000); clearInterval(id); } }); if (batch) samples.push(performance.now() - start); } h.values.samples = samples; h.values.operationsPerSample = 800; }; return <p>cost probe</p>; } h.dispose = render(() => <App />, document.getElementById('root')!);`,
+  flow: async (page, step) => { await step('measure-cancelled-resources', () => page.evaluate(() => globalThis.__experiment.measure())); await page.evaluate(async () => { const h = globalThis.__experiment; h.dispose(); h.disposals++; await Promise.resolve(); h.values.resourceAudit = globalThis.__resourceAudit?.snapshot() ?? null; }); },
+  provenance: { role: 'control', pair: 'operation-cost', expectedIssue: false, measuresCost: true, registrationsPerSample: 400 } });
+export default cases;

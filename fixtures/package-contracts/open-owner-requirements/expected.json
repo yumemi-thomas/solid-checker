@@ -1,0 +1,80 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "eb9b9d866bac70bb7b15433aa686dbefc57be416716dfc7622803b7626e40949",
+            "path": "./index.js",
+            "sha256": "e0eeadae6376984b3e12bddb970f1cbdabfb052d8600d005f0ffb7a197e7ee37"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "0475de83142c751cde13194e81c5b521a9bc27cdb30064f6e4ca70f15258fac3"
+          },
+          "exports": {
+            "addCleanup": "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a",
+            "cleanupThenUndescribed": "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a",
+            "conditionalCleanupThenUndescribed": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "registerCleanup": "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:4077632e0d41091cce2c32905cfd92126a8d981f6560ea57820a2d878bdc06d6",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "4077632e0d41091cce2c32905cfd92126a8d981f6560ea57820a2d878bdc06d6"
+    },
+    "name": "open-owner-requirements",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a": {
+      "call": {
+        "cleanups": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "cleanup",
+            "owner": {
+              "requires": "required",
+              "requiresCleanup": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

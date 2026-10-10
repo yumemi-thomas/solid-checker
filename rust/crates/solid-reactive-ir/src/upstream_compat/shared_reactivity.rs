@@ -258,7 +258,7 @@ fn expected_function_got_expression(
             };
             if context.dialect.static_event_values_are_attributes()
                 && (static_string_expression(context, file, expression).is_some()
-                    || super::solid1x_syntax::expression_is_static_literal(file, expression))
+                    || super::syntax::expression_is_static_literal(file, expression))
             {
                 // Solid 1.x freezes this value into a plain attribute instead
                 // of installing it as a listener. It is therefore not a
@@ -547,9 +547,8 @@ fn no_direct_mutation(
         let Some(symbol) = source_symbol_at(context, file, root) else {
             continue;
         };
-        // Proven accessors and proven props roots are both readonly through
-        // members; `prop_sources` covers the props objects the accessor map
-        // does not.
+        // `prop_sources` proves the props container, not the mutability of
+        // values supplied through it. Store sources have their own proof.
         let (name, _) = match context.accessors.get(symbol) {
             Some(source) => source,
             None => {
@@ -560,9 +559,49 @@ fn no_direct_mutation(
             }
         };
         let props = !context.accessors.contains_key(symbol);
+        // `const { program } = props` binds the *value* of one property, not
+        // the props container: `program.x = y` writes to whatever object the
+        // caller passed (a plain mutable one as often as not), so it is not a
+        // write to a readonly proxy. The binding shape is the fact -- a
+        // whole-object alias (`const p = props`) keeps the container proof.
+        if props
+            && file.ast.bindings.iter().any(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Object
+                    && binding.object_slots.iter().any(|slot| {
+                        context
+                            .entities
+                            .get(&location(file.path.shared(), slot.local.span))
+                            == Some(symbol)
+                    })
+            })
+        {
+            continue;
+        }
         let name = name.as_str();
         let through_member = root != assignment.target;
         let kind = context.source_kinds.get(symbol).copied();
+        // A member chain rooted at a *call* writes to whatever that call
+        // returned, and this rule's claim -- the write is dropped because
+        // Solid handed out a readonly proxy -- is a claim about the reactive
+        // container, not about its value. Calling a signal accessor yields the
+        // stored value, so `el()!.style.color = "red"` mutates a DOM node and
+        // `obj().a = 2` mutates a plain object: both writes land, and neither
+        // is this rule's. Nine such findings were measured against
+        // `@kobalte/core`, every one of them wrong.
+        //
+        // Only the container binding itself is proven readonly here: `props`,
+        // a store root, or an accessor written through without being called.
+        // `peel_ts_sugar_span` peels `!` and `as` but never a call or a member,
+        // so the deliberate `(state as { count: number }).count = 1` case below
+        // still reaches its branch, and only the call form leaves.
+        if through_member
+            && file
+                .ast
+                .call_at(file.ast.peel_ts_sugar_span(root))
+                .is_some()
+        {
+            continue;
+        }
         // `createMutable` is the one Solid 1.x source whose proxy is designed
         // to be written through directly. It still behaves like a store for
         // reads, but treating that shared read shape as readonly recreates
@@ -580,6 +619,29 @@ fn no_direct_mutation(
         if props && !through_member {
             continue;
         }
+        // Props are shallow: `props.state.count = 1` may write through an
+        // application-owned mutable proxy or a plain object. Only a write to
+        // the props container's own property is proven dropped here. Keep
+        // transparent wrappers, but never infer the nested value's behavior
+        // from the root's readonly behavior.
+        if props
+            && (!file
+                .ast
+                .identifiers
+                .iter()
+                .any(|identifier| identifier.span == file.ast.peel_ts_sugar_span(root))
+                || !file
+                    .ast
+                    .members
+                    .iter()
+                    .find(|member| member.span == file.ast.peel_ts_sugar_span(assignment.target))
+                    .is_some_and(|member| {
+                        file.ast.peel_ts_sugar_span(member.object)
+                            == file.ast.peel_ts_sugar_span(root)
+                    }))
+        {
+            continue;
+        }
         let target = if through_member {
             if props {
                 DirectMutationTarget::Props
@@ -594,7 +656,7 @@ fn no_direct_mutation(
         // A write to the root record's *own* property is TS2540 where the
         // dialect's store type is `Readonly` at that level -- 2.0 -- so it is
         // TypeScript's, not this rule's. The readonly-ness is shallow, so a
-        // nested record and a props object both stay here; 1.x's store type is
+        // nested store record and a direct props property stay here; 1.x's store type is
         // mutable throughout, and its rule is unaffected.
         //
         // The root must be a bare identifier. `(state as { count: number }).count

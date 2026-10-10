@@ -1,0 +1,58 @@
+function flush(fn) {
+  if (fn) {
+    syncDepth++;
+    try {
+      return fn();
+    } finally {
+      // Decrement even if the drain throws (a throwing effect): a leaked
+      // syncDepth would stop `schedule()` from ever queuing a microtask again.
+      try {
+        flush();
+      } finally {
+        syncDepth--;
+      }
+    }
+  }
+  if (globalQueue._running) {
+    if (inTrackedQueueCallback) {
+      throw new Error(
+        "Cannot call flush() from inside onSettled or createTrackedEffect. flush() is not reentrant there. " +
+          "Writes made here are processed in the same flush's continuation; to force a drain afterwards, defer it: queueMicrotask(() => flush())."
+      );
+    }
+    if (inEffectCallback) {
+      const message =
+        "[FLUSH_IN_EFFECT_CALLBACK] flush() called from inside an effect callback is a no-op: the flush that runs effects is already in progress. " +
+        "Writes made here are processed in the same flush's continuation; to force a drain afterwards, defer it: queueMicrotask(() => flush()).";
+      emitDiagnostic({
+        code: "FLUSH_IN_EFFECT_CALLBACK",
+        kind: "lifecycle",
+        severity: "warn",
+        message
+      });
+      console.warn(message);
+    }
+    return;
+  }
+  if (halted) return;
+  let count = 0;
+  // `flush()` is an explicit drain point, so it must also process an active
+  // transition even if no microtask was scheduled for it yet.
+  while (scheduled$1 || activeTransition) {
+    if (++count === 1e5) {
+      // Attribution beats a bare guard (#3140): say what kept the loop alive.
+      // A completed transition being re-activated reads `done=true` here —
+      // the corpse-revival signature — while application-driven runaways
+      // (#2843) usually show staged work naming the culprit node.
+      const t = activeTransition;
+      throw new Error(
+        `Potential Infinite Loop Detected. Kept alive by ${scheduled$1 ? "scheduled work" : "an active transition"}${
+          t
+            ? `; transition: done=${t._done === true}, pending=${t._pendingNodes.length}, optimistic=${t._optimisticNodes.length}, asyncReporters=${t._asyncReporters.size}`
+            : ""
+        }${lastStagedNodeName ? `; last staged node: ${lastStagedNodeName}` : ""}`
+      );
+    }
+    globalQueue.flush();
+  }
+}

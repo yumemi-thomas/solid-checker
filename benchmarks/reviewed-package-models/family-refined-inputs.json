@@ -1,0 +1,15 @@
+{
+  "authority": false,
+  "certification": false,
+  "datasets": [
+    {
+      "group": "refined",
+      "browser": "rust/target/family-refined-browser/browser/results.json",
+      "static": "rust/target/family-refined-static/results.json"
+    }
+  ],
+  "precisionChecks": [
+    "rust/target/family-transfer-browser/browser/results.json",
+    "rust/target/family-transfer-root-browser/browser/results.json"
+  ]
+}

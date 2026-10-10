@@ -1,0 +1,252 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "12cfd7e2298c86d97a0f1854cee480f5886ee8fd482528cb566fc39d11d7c947",
+            "path": "./dist/index.js",
+            "sha256": "70b6fcf4e5d01edd181d8fee9faa2c7502c9a3236da81609e1663e52ff2c0c53"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "37102bfc23638f3c7187cadf130368a5dac785de5da2ba7922e8c89a6ab92bab"
+          },
+          "exports": {
+            "createSelection": "authored-createSelection",
+            "getTextNodes": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-Je/EokdP5ULTBaskSFIogo0xAbHwnZqvQNYkjvp/nwA/xPt7jN9iS1m4TDo376k0hTwqvlpFqTcPfAK5+em/cw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "a00a71afc0757d2f2835fc9cec59d50db0e661802d98300e9b3185f91c29f232"
+    },
+    "name": "@solid-primitives/selection",
+    "version": "1.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createSelection": {
+      "call": {
+        "operations": [
+          {
+            "id": "create-selection",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "selection"
+            ]
+          },
+          {
+            "id": "create-selected",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "selected"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "selected-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "selected-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "selected-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "selected"
+              }
+            ],
+            "owner": {
+              "source": "created",
+              "resource": "selected-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "selected-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "selection"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-selection",
+          "create-selected"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "computations": [
+          "selected-effect"
+        ],
+        "reads": [
+          "selected-read"
+        ],
+        "callbacks": [],
+        "resources": [
+          {
+            "id": "selection",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "selected",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "selected-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

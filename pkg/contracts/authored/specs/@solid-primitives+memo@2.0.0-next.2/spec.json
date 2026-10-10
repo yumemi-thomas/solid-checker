@@ -1,0 +1,747 @@
+{
+  "package": "@solid-primitives/memo",
+  "version": "2.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "pairs": "../_pairs/@solid-primitives+memo",
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createLazyMemo": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "lazy-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "lazy-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "calc",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "lazy-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "lazy-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "trigger": {
+              "event": "external-event",
+              "resource": "lazy-memo-owner"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "options-get",
+            "kind": "invoke",
+            "protocol": "get",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "option-name-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-call"
+            },
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "inputs": [
+              {
+                "kind": "parameter",
+                "index": 2,
+                "path": [
+                  "name"
+                ]
+              }
+            ]
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "calc"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "options-get"
+          }
+        ],
+        "computations": [
+          "lazy-memo"
+        ],
+        "resources": [
+          {
+            "id": "lazy-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [
+          "option-name-read"
+        ],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Browser branch returns exactly the lazy memo accessor.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Construction reads only options?.name in DEV; option-name-read names argument 2.name. calc executes only on demand and is enumerated as a callback. No built-in function property read is reactive by premise.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Exactly calc in the lazy tracked memo and an optional options.name property Get in DEV. The get protocol row retains caller getter behavior rather than declaring it inert.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:95-117 \u2014 Exactly one createMemo with optional ambient owner, requiring children if present; lazy-memo is the complete census and never requires an owner to exist. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints)."
+      },
+      "probes": [
+        {
+          "label": "calc-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Demand the lazy memo so its tracked calc actually runs. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "createMemoCache": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:119-135 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "reactive-write-in-owned-scope",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          },
+          {
+            "id": "delayed-cache-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads"
+        ],
+        "reads": [
+          "delayed-cache-read"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:119-135 \u2014 No call-time reactive read: construction allocates Map, captures getOwner and uses typeof on overload args. Later memo reads are delayed-cache-read."
+      },
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/memo/dist/index.js:119-135; No host branch: both return the same cache-dispatch callable, capture the call owner, create cached memos with runWithOwner, and read each memo before returning its value. The delayed-cache-read already permits zero. Creates, callbacks, and returns remain open; only the browser-closed reads domain is retained.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "reads"
+        ],
+        "closures": {
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solid-primitives/memo/dist/index.js:119-135; No host branch: both return the same cache-dispatch callable, capture the call owner, create cached memos with runWithOwner, and read each memo before returning its value. The delayed-cache-read already permits zero. Creates, callbacks, and returns remain open; only the browser-closed reads domain is retained.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/deep-trackStore-argument-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/solid-dnd/node_modules/@solid-primitives/memo/dist/index.js:119-135 \u2014 No call-time reactive read: construction allocates Map, captures getOwner and uses typeof on overload args. Later memo reads are delayed-cache-read."
+        }
+      }
+    },
+    "createReducer": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 Complete constructor census including generic function-valued initialValue and options comparator/getters. Returned dispatch remains an opaque member; its invocation is an obligation unless separately described (ADR 0234). Browser probes pending.",
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "initial-leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Legal function-valued T selects createSignal's computed branch; its optional parent must allow children."
+        },
+        {
+          "label": "initial-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Function-valued initialValue executes as tracked signal derivation; misuse writes sink there.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "dispatcher-owner",
+          "rule": "missing-owner",
+          "why": "Returned dispatch invokes the captured reducer on the invoking stack. Drive it with/without captured component owner and register cleanup inside the reducer.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "options-get",
+          "rule": "strict-read-untracked",
+          "why": "Object spread invokes a legal options.name getter on the component stack; misuse getter reads source untracked, correct getter uses untrack."
+        },
+        {
+          "label": "equals-owner",
+          "rule": "missing-owner",
+          "why": "SignalOptions.equals runs on a dispatched write; restore owner only in correct.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "call": {
+        "operations": [
+          {
+            "id": "reducer-state-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "reducer-state"
+            ]
+          },
+          {
+            "id": "reducer-initial-compute",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "reducer-initial-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "initial-value",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "reducer-initial-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "reducer-initial-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-get",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "protocol": "get"
+          },
+          {
+            "id": "dispatcher",
+            "kind": "invoke",
+            "trigger": {
+              "event": "result-access"
+            },
+            "at": {
+              "event": "result-access",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "equals",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 2,
+                  "path": [
+                    "equals"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "reducer-state"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "reducer-state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "reducer-initial-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [
+          "reducer-state-production"
+        ],
+        "computations": [
+          "reducer-initial-compute"
+        ],
+        "reads": [],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "initial-value"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "options-get"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "dispatcher"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": [
+                "equals"
+              ]
+            },
+            "operation": "equals"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 The constructor never calls state(). It spreads P2 options and passes initialValue to createSignal. A function-valued initialValue, getters and equals/reducer callbacks are caller invocations, not unstated package accessor reads; later setter uses the node's stored current value.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 Exactly one reactive source; a callable initialValue uses createSignal's tracked computed node with optional parent, requiring children when present. Noncallable initialValue creates only a signal. Core reactive API semantics at cited rc.13 entrypoint, no other package constructor.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 Constructor may invoke callable initialValue in tracked computation and options getters through spread. Later dispatch invokes dispatcher; signal updates may invoke supplied equals on their execution stack. Each callback family is explicitly listed. Minimum zero avoids assuming dispatch/recompute/comparison occurs.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 Every normal completion returns exactly [stateAccessor, dispatchWrapper]. Tuple enumeration is closed; dispatch is an opaque callable member, whose uses retain ADR 0234 obligations.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solid-primitives/memo/dist/index.js:148-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createReducer-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5454-5551,5633-5688,6738-6795,6893-6898 \u2014 The primitive constructor performs no onCleanup or onSettled registration. Cleanup that caller callbacks may install belongs to their separately stated invocation, not the package census."
+      }
+    },
+    "createPureReaction": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - A-discarded browser constructor creates no reaction yet, invokes no onInvalidate, performs no reactive reads and registers exactly one required cleanup. Retained owner and onInvalidate are not modeled captures; returned tracking graph is omitted.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "pure-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "pure-return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "returned-callable"
+            }
+          }
+        ],
+        "callbacks": [],
+        "reads": [],
+        "creates": [],
+        "cleanups": [
+          "pure-cleanup"
+        ],
+        "returns": [
+          "pure-return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - getOwner is owner metadata, not a reactive read. No signal/memo read before returning the tracker. All tracking/untrack/reaction behavior is confined to the omitted returned graph.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser returns one tracker arrow; server returns one no-op arrow. Both are returned-callable with graph omitted; no invocation or capture proof.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser constructor creates no reactive source, owner or computation. createReaction occurs only within the omitted tracker graph.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - onInvalidate is retained, never called during construction. tracking is a later invocation argument; neither is a factory callback invocation.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser onCleanup at 31 registers exactly one required disposed-flag cleanup. No other factory cleanup."
+      },
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Sound host-free weakening: server returns a no-op callable at 27 before getOwner/cleanup. The same opaque return shape covers both; only pure-cleanup needs minZero. Reads/creates/callbacks stay empty on both factory paths.",
+        "minZero": [
+          "pure-cleanup"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - getOwner is owner metadata, not a reactive read. No signal/memo read before returning the tracker. All tracking/untrack/reaction behavior is confined to the omitted returned graph.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser returns one tracker arrow; server returns one no-op arrow. Both are returned-callable with graph omitted; no invocation or capture proof.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser constructor creates no reactive source, owner or computation. createReaction occurs only within the omitted tracker graph.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - onInvalidate is retained, never called during construction. tracking is a later invocation argument; neither is a factory callback invocation.",
+          "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Server line 27 skips all setup and returns an opaque no-op callable; browser census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/memo-createPureReaction-module-scope-browser/node_modules/@solid-primitives/memo/dist/index.js:26-44 - Browser onCleanup at 31 registers exactly one required disposed-flag cleanup. No other factory cleanup."
+        }
+      },
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Required factory cleanup rejects a leaf; component owner accepts it. No later returned-callable use."
+        }
+      ]
+    }
+  }
+}

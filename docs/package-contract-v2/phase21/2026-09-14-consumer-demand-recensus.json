@@ -1,0 +1,2379 @@
+{
+ "measuredOn": "2026-09-14",
+ "corpus": {
+  "projects": 146,
+  "roots": [
+   "solidjs-community/solid-primitives",
+   "corvudev/corvu",
+   "kobaltedev/kobalte",
+   "solidjs/solid-docs"
+  ]
+ },
+ "totals": {
+  "distinctExports": 242,
+  "callSites": 2585,
+  "inCorpusExports": 159,
+  "inCorpusSites": 1958
+ },
+ "rows": [
+  {
+   "sites": 254,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "mergeDefaultProps",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:24f1b": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:a63e2": 1,
+     "veto did not complete: gate sha256:d2f49": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 164,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "mergeRefs",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 157,
+   "projects": 57,
+   "package": "@solid-primitives/utils",
+   "export": "access",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate describes call-time invocati": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 112,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "callHandler",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:creates census refuses an unresolved callee at /private/var/": 4
+    },
+    "callbacks": {
+     "census:creates census refuses an unresolved callee at /private/var/": 4
+    },
+    "reads": {
+     "noRecipe": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 98,
+   "projects": 39,
+   "package": "@solid-primitives/utils",
+   "export": "noop",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 91,
+   "projects": 34,
+   "package": "@solid-primitives/utils",
+   "export": "INTERNAL_OPTIONS",
+   "closed": [
+    "callbacks",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 66,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "access",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 60,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "createGenerateId",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:ddf89": 1,
+     "veto did not complete: gate sha256:14cad": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 51,
+   "projects": 28,
+   "package": "@solid-primitives/utils",
+   "export": "asArray",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 48,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "composeEventHandlers",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:creates census refuses an unresolved callee at /private/var/": 4
+    },
+    "callbacks": {
+     "census:creates census refuses an unresolved callee at /private/var/": 4
+    },
+    "reads": {
+     "noRecipe": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 37,
+   "projects": 24,
+   "package": "@solid-primitives/utils",
+   "export": "tryOnCleanup",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 37,
+   "projects": 22,
+   "package": "@solid-primitives/utils",
+   "export": "entries",
+   "closed": [
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 34,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "focusWithoutScrolling",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:dc059": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:c1798": 1,
+     "veto did not complete: gate sha256:86209": 1
+    },
+    "returns": {
+     "veto did not complete: gate sha256:7583f": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 28,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "visuallyHiddenStyles",
+   "closed": [
+    "callbacks",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 27,
+   "projects": 13,
+   "package": "@solid-primitives/rootless",
+   "export": "createHydratableSingletonRoot",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 4
+    },
+    "creates": {
+     "census:creates census refuses a resolved callee that is neither a d": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 27,
+   "projects": 18,
+   "package": "@solid-primitives/utils",
+   "export": "trueFn",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 27,
+   "projects": 14,
+   "package": "@solid-primitives/utils",
+   "export": "accessWith",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 24,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "contains",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:c5748": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:a3b92": 1,
+     "veto did not complete: gate sha256:5d7b1": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 22,
+   "projects": 22,
+   "package": "@solid-primitives/utils",
+   "export": "keys",
+   "closed": [
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 22,
+   "projects": 22,
+   "package": "@solid-primitives/utils",
+   "export": "createCallbackStack",
+   "closed": [
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses a call through \"cb\" declared at /priv": 62
+    },
+    "creates": {
+     "census:creates census refuses a call through \"cb\" declared at /priv": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 20,
+   "projects": 11,
+   "package": "@solid-primitives/utils",
+   "export": "createHydratableSignal",
+   "closed": [
+    "reads"
+   ],
+   "open": {
+    "creates": {
+     "census:creates census finds no function-like declaration node for \"": 42,
+     "census:creates census refuses a resolved callee that is neither a d": 20
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 20,
+   "projects": 18,
+   "package": "@solid-primitives/utils",
+   "export": "createMicrotask",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 18,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isFunction",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:71fab": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:956fc": 1,
+     "veto did not complete: gate sha256:0f2ed": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 18,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "getDocument",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:f7403": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:d6411": 1,
+     "veto did not complete: gate sha256:1d739": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 16,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "clamp",
+   "closed": [
+    "callbacks",
+    "creates"
+   ],
+   "open": {
+    "reads": {
+     "noRecipe": 5
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 12,
+   "projects": 5,
+   "package": "@solid-primitives/utils",
+   "export": "pick",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:nested-parameter": 3
+    },
+    "creates": {
+     "census:nested-parameter": 1
+    },
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 12,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "accessArray",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 11,
+   "projects": 6,
+   "package": "@solid-primitives/utils",
+   "export": "asAccessor",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 11,
+   "projects": 7,
+   "package": "@solid-primitives/utils",
+   "export": "arrayEquals",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 10,
+   "projects": 6,
+   "package": "@solid-primitives/utils",
+   "export": "isServer",
+   "closed": [
+    "callbacks",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 10,
+   "projects": 10,
+   "package": "@solid-primitives/utils",
+   "export": "isObject",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 10,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "EventKey",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:f70e5": 1,
+     "veto did not complete: gate sha256:05a0f": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:d0bec": 1,
+     "veto did not complete: gate sha256:ea550": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 9,
+   "projects": 4,
+   "package": "@solid-primitives/utils",
+   "export": "push",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses a resolved callee that is neither a d": 3
+    },
+    "creates": {
+     "census:creates census refuses a resolved callee that is neither a d": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 8,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "getWindow",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:4c57a": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "census:call-result": 2,
+     "veto did not complete: gate sha256:18d3f": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 8,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "useCurrentPageData",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 7,
+   "projects": 5,
+   "package": "@solid-primitives/utils",
+   "export": "handleDiffArray",
+   "closed": [
+    "returns"
+   ],
+   "open": {
+    "callbacks": {
+     "census:written-parameter": 62
+    },
+    "reads": {
+     "census:reads-census premise required: the property-access-unknown-a": 62
+    },
+    "creates": {
+     "census:written-parameter": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 7,
+   "projects": 5,
+   "package": "@solid-primitives/rootless",
+   "export": "createSingletonRoot",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 4
+    },
+    "creates": {
+     "census:creates census refuses \"disposeRoot\" declared at /private/va": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 7,
+   "projects": 6,
+   "package": "@solid-primitives/utils",
+   "export": "chain",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 4,
+   "package": "@solid-primitives/utils",
+   "export": "drop",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 3
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 4,
+   "package": "@solid-primitives/utils",
+   "export": "filterOut",
+   "closed": [
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: coercion": 3
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: coercion": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 4,
+   "package": "@solid-primitives/utils",
+   "export": "isDev",
+   "closed": [
+    "callbacks",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 6,
+   "projects": 4,
+   "package": "@solid-primitives/trigger",
+   "export": "TriggerCache",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 5
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 4,
+   "package": "@solid-primitives/utils",
+   "export": "remove",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:creates census refuses a resolved callee that is neither a d": 1
+    },
+    "callbacks": {
+     "census:creates census refuses a resolved callee that is neither a d": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 2,
+   "package": "@solid-primitives/platform",
+   "export": "isIOS",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:014b8": 2,
+     "veto did not complete: gate sha256:a4a7f": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:3de83": 2,
+     "veto did not complete: gate sha256:d7674": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 2,
+   "package": "@solid-primitives/platform",
+   "export": "isSafari",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "noRecipe": 3
+    },
+    "reads": {
+     "noRecipe": 3
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "snapValueToStep",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 2,
+     "veto did not complete: gate sha256:4f705": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:dd3ae": 1,
+     "veto did not complete: gate sha256:cd0f1": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isPointInPolygon",
+   "closed": [
+    "creates"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 5
+    },
+    "reads": {
+     "noRecipe": 5
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isMac",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:ambient-declaration": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "census:ambient-declaration": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 6,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "useLocale",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 5,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "update",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 5,
+   "projects": 5,
+   "package": "@solid-primitives/utils",
+   "export": "EQUALS_FALSE_OPTIONS",
+   "closed": [
+    "callbacks",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 4,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "splice",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses a resolved callee that is neither a d": 3
+    },
+    "creates": {
+     "census:creates census refuses a resolved callee that is neither a d": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "clamp",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 4,
+   "projects": 4,
+   "package": "@solid-primitives/utils",
+   "export": "reverseChain",
+   "closed": [
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses \"callback\" declared at /private/var/f": 62
+    },
+    "creates": {
+     "census:creates census refuses \"callback\" declared at /private/var/f": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "removeItems",
+   "closed": [
+    "creates"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 3
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@solid-primitives/scheduled",
+   "export": "debounce",
+   "closed": [
+    "reads"
+   ],
+   "open": {
+    "creates": {
+     "census:creates census refuses the local declaration `clear` (\"clear": 5,
+     "census:creates census refuses a resolved callee that is neither a d": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 4,
+   "package": "@solid-primitives/marker",
+   "export": "createMarker",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 4,
+   "projects": 4,
+   "package": "@solid-primitives/marker",
+   "export": "makeSearchRegex",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:call-result": 3
+    },
+    "reads": {
+     "census:reads-census premise required: the property-access-unknown-a": 3
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isAppleDevice",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:ambient-declaration": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "census:ambient-declaration": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "getEventPoint",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:ef6a3": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:b7b15": 1,
+     "veto did not complete: gate sha256:84117": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isWebKit",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:ambient-declaration": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "scrollIntoViewport",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: coercion": 2,
+     "veto did not complete: gate sha256:6f5c6": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "removeItemFromArray",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:30a77": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:d3db8": 1,
+     "veto did not complete: gate sha256:d317c": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isString",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:66762": 1,
+     "veto did not complete: gate sha256:81c99": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "getActiveElement",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:79ae8": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:3d960": 1,
+     "veto did not complete: gate sha256:a5727": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "getFocusableTreeWalker",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:creates census finds no function-like declaration node for \"": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@solidjs/start",
+   "export": "clientOnly",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/core",
+   "export": "Select",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/core",
+   "export": "Tabs",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 4,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "useSolidBaseRoute",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "createIdGenerator",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/memo",
+   "export": "createLazyMemo",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 4
+    },
+    "creates": {
+     "census:creates census finds no function-like declaration node for \"": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "afterPaint",
+   "closed": [
+    "creates",
+    "reads",
+    "returns"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "falseFn",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/permission",
+   "export": "createPermission",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 3
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "wrapSetter",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate describes call-time invocati": 20
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "split",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:local-binding": 1
+    },
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/rootless",
+   "export": "createSubRoot",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "filterNonNullable",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "ofClass",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "dropRight",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 3
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "filter",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "sort",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an unresolved callee at /private/var/": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "map",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "slice",
+   "closed": [
+    "creates"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "concat",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:written-parameter": 1
+    },
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "flatten",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:nested-parameter": 3
+    },
+    "reads": {
+     "census:reads-census premise required: the property-access-unknown-a": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "add",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: coercion": 3
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: coercion": 1
+    },
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "substract",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: coercion": 3
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: coercion": 1
+    },
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "multiply",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: coercion": 3
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: coercion": 1
+    },
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "divide",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: coercion": 3
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: coercion": 1
+    },
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "power",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: coercion": 3
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: coercion": 1
+    },
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "clamp",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "omit",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: property": 1
+    },
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: property": 2
+    },
+    "reads": {
+     "noRecipe": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "get",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 3
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/utils",
+   "export": "merge",
+   "closed": [
+    "callbacks",
+    "creates",
+    "reads"
+   ],
+   "open": null,
+   "state": "all-closed"
+  },
+  {
+   "sites": 3,
+   "projects": 2,
+   "package": "@solid-primitives/utils",
+   "export": "compare",
+   "closed": [
+    "creates",
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 62
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solid-primitives/trigger",
+   "export": "createTriggerCache",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses the standard-library member `Callable": 5
+    },
+    "reads": {
+     "noRecipe": 5
+    },
+    "creates": {
+     "census:creates census refuses the standard-library member `Callable": 5
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solidjs/start",
+   "export": "FileRoutes",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@kobalte/solidbase",
+   "export": "SolidBaseRoot",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solidjs/start",
+   "export": "StartClient",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solidjs/start",
+   "export": "mount",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@kobalte/solidbase",
+   "export": "getHtmlProps",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solidjs/start",
+   "export": "StartServer",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@solidjs/start",
+   "export": "createHandler",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 3,
+   "projects": 3,
+   "package": "@kobalte/solidbase",
+   "export": "defineTheme",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solid-primitives/keyed",
+   "export": "keyArray",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solid-primitives/platform",
+   "export": "isMobile",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:ae043": 2,
+     "veto did not complete: gate sha256:ccb22": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:06afc": 2,
+     "veto did not complete: gate sha256:1456e": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solid-primitives/tween",
+   "export": "createTween",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 3
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: coercion": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solid-primitives/platform",
+   "export": "isWindows",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:a232f": 2,
+     "veto did not complete: gate sha256:201d4": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:a46cb": 2,
+     "veto did not complete: gate sha256:9f0fc": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solid-primitives/rootless",
+   "export": "createSharedRoot",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "default",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: jsx-elem": 2,
+     "census:not-a-reference": 2
+    },
+    "reads": {
+     "noRecipe": 4
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: jsx-elem": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "default",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: jsx-elem": 2,
+     "census:not-a-reference": 2
+    },
+    "reads": {
+     "noRecipe": 4
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: jsx-elem": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "DefaultThemeComponentsProvider",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "createSolidBase",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solidjs/start",
+   "export": "solidStart",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "createGlobalListeners",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:nested-parameter": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "Key",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "getPrecision",
+   "closed": [
+    "reads"
+   ],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an unresolved callee at /private/var/": 2,
+     "census:the callbacks closure candidate enumerates no invocation, bu": 2
+    },
+    "creates": {
+     "veto did not complete: gate sha256:7b95c": 1,
+     "veto did not complete: gate sha256:0fa3b": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isNumber",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:15ef5": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:d3933": 1,
+     "veto did not complete: gate sha256:e7609": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "accessWith",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "addItemToArray",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:b1bf3": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:5710d": 1,
+     "veto did not complete: gate sha256:27f27": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "getAllTabbableIn",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses the standard-library member `Array.fi": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:54c58": 1
+    },
+    "creates": {
+     "census:creates census refuses the standard-library member `Array.fi": 2,
+     "census:nested-parameter": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isFocusable",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census finds no function-like declaration node for \"": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:87565": 1
+    },
+    "creates": {
+     "census:creates census finds no function-like declaration node for \"": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isCtrlKey",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:ambient-declaration": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "noop",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:b7f70": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "veto did not complete: gate sha256:18c5b": 1,
+     "veto did not complete: gate sha256:9531d": 1
+    },
+    "returns": {
+     "veto did not complete: gate sha256:739e3": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "createMediaQuery",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "createEventListener",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "scrollIntoView",
+   "closed": [],
+   "open": {
+    "creates": {
+     "veto did not complete: gate sha256:6bc52": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "createFocusManager",
+   "closed": [],
+   "open": {
+    "creates": {
+     "census:creates census refuses the local declaration `last` (\"last\" ": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "getScrollParent",
+   "closed": [
+    "creates"
+   ],
+   "open": {
+    "callbacks": {
+     "census:the callbacks closure candidate enumerates no invocation, bu": 2,
+     "veto did not complete: gate sha256:5dfdb": 1
+    },
+    "reads": {
+     "noRecipe": 5
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/utils",
+   "export": "isIOS",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:ambient-declaration": 1
+    },
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "census:ambient-declaration": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "SidebarProvider",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "useThemeListener",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "usePace",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solid-primitives/context",
+   "export": "createContextProvider",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 2
+    },
+    "creates": {
+     "census:nested-parameter": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "useFrontmatter",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "useSidebar",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/core",
+   "export": "Collapsible",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/core",
+   "export": "Dialog",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "getThemeVariant",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "setTheme",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/core",
+   "export": "Popover",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "useSolidBaseRouteFallbackOptions",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solidjs/meta",
+   "export": "Title",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 4
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solidjs/start",
+   "export": "HttpStatusCode",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "usePrevNext",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/core",
+   "export": "Dialog",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@solid-primitives/platform",
+   "export": "isAppleDevice",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "veto did not complete: gate sha256:7ff42": 2,
+     "veto did not complete: gate sha256:47b1b": 1
+    },
+    "reads": {
+     "veto did not complete: gate sha256:6e521": 2,
+     "veto did not complete: gate sha256:34657": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "useRouteSolidBaseConfig",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 2,
+   "projects": 2,
+   "package": "@kobalte/solidbase",
+   "export": "useSolidBaseContext",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 1,
+   "projects": 1,
+   "package": "@solid-primitives/scheduled",
+   "export": "throttle",
+   "closed": [
+    "creates"
+   ],
+   "open": {
+    "reads": {
+     "noRecipe": 7
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 1,
+   "projects": 1,
+   "package": "@solid-primitives/timer",
+   "export": "createPolled",
+   "closed": [],
+   "open": {
+    "reads": {
+     "noRecipe": 1
+    },
+    "creates": {
+     "census:creates census refuses a resolved callee that is neither a d": 2,
+     "census:call-result": 1
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 1,
+   "projects": 1,
+   "package": "@solid-primitives/memo",
+   "export": "createWritableMemo",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 1,
+   "projects": 1,
+   "package": "@solid-primitives/storage",
+   "export": "makePersisted",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 1,
+   "projects": 1,
+   "package": "@kobalte/solidbase",
+   "export": "createDefaultThemeFilesystemSidebar",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 1,
+   "projects": 1,
+   "package": "@kobalte/solidbase",
+   "export": "default",
+   "closed": [],
+   "open": {
+    "callbacks": {
+     "census:creates census refuses an uncensused invoking form: jsx-elem": 2,
+     "census:not-a-reference": 2
+    },
+    "reads": {
+     "noRecipe": 4
+    },
+    "creates": {
+     "census:creates census refuses an uncensused invoking form: jsx-elem": 2
+    }
+   },
+   "state": "open"
+  },
+  {
+   "sites": 1,
+   "projects": 1,
+   "package": "@solidjs/start",
+   "export": "createMiddleware",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  },
+  {
+   "sites": 1,
+   "projects": 1,
+   "package": "@kobalte/solidbase",
+   "export": "createFilesystemSidebar",
+   "closed": [],
+   "open": null,
+   "state": "no-ledger-entry"
+  }
+ ],
+ "demandedPackagesNotInCorpus": [
+  {
+   "package": "@solidjs/testing-library",
+   "sites": 133
+  },
+  {
+   "package": "@solid-primitives/props",
+   "sites": 78
+  },
+  {
+   "package": "@solid-primitives/a11y",
+   "sites": 64
+  },
+  {
+   "package": "@solid-primitives/event-listener",
+   "sites": 63
+  },
+  {
+   "package": "solid-heroicons",
+   "sites": 58
+  },
+  {
+   "package": "@tanstack/solid-router",
+   "sites": 40
+  },
+  {
+   "package": "@solidjs/router",
+   "sites": 34
+  },
+  {
+   "package": "solid-presence",
+   "sites": 26
+  },
+  {
+   "package": "@solid-primitives/static-store",
+   "sites": 26
+  },
+  {
+   "package": "esbuild-plugin-solid",
+   "sites": 19
+  },
+  {
+   "package": "storybook-solidjs-vite",
+   "sites": 16
+  },
+  {
+   "package": "vite-plugin-solid",
+   "sites": 11
+  },
+  {
+   "package": "solid-prevent-scroll",
+   "sites": 10
+  },
+  {
+   "package": "@solid-primitives/resize-observer",
+   "sites": 8
+  },
+  {
+   "package": "@solid-primitives/media",
+   "sites": 7
+  },
+  {
+   "package": "@solid-primitives/page-utilities",
+   "sites": 6
+  },
+  {
+   "package": "@tanstack/solid-start",
+   "sites": 6
+  },
+  {
+   "package": "@solid-primitives/intersection-observer",
+   "sites": 4
+  },
+  {
+   "package": "@solid-primitives/scroll",
+   "sites": 4
+  },
+  {
+   "package": "@solid-primitives/queue",
+   "sites": 3
+  }
+ ],
+ "sc9005ByGate": {
+  "acceptance-gate": 2585,
+  "unknown-callback-execution": 983
+ },
+ "sitesByOpenDomain": {
+  "callbacks": 917,
+  "reads": 834,
+  "creates": 804,
+  "returns": 36
+ },
+ "byState": {
+  "all-closed": {
+   "exports": 21,
+   "sites": 473
+  },
+  "open": {
+   "exports": 91,
+   "sites": 1141
+  },
+  "no-ledger-entry": {
+   "exports": 47,
+   "sites": 344
+  }
+ },
+ "note": "Every SC9005 import-site finding in this corpus is at the acceptance gate; none names an open claim domain. The closed/open columns come from benchmarks/ecosystem/report.json and describe what a closure would move once a consumer accepts a contract, not what it moves today."
+}

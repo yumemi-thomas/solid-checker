@@ -1,0 +1,31 @@
+{
+  "status": "observed; findings snapshot is fixtures/findings-snapshots/reactive-ir__package-closed-map-owner-consumer.json",
+  "violations": [
+    "module direct call",
+    "module namespace wrapped method call",
+    "Leaf first call"
+  ],
+  "clean": [
+    "createRoot twin",
+    "Shadowed local function"
+  ],
+  "uncertifiable": [
+    "alias erasure",
+    "missing key",
+    "extra key",
+    "nonliteral config",
+    "named handler",
+    "spread",
+    "getter",
+    "computed key",
+    "__proto__",
+    "Proxy",
+    "argument spread",
+    "Leaf alias erasure",
+    "Leaf unknown config"
+  ],
+  "rules": [
+    "missing-owner",
+    "leaf-owner-forbidden-call"
+  ]
+}

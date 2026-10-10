@@ -1,11 +1,52 @@
 "use strict";
 
-const { existsSync, readFileSync, readdirSync } = require("node:fs");
+const { existsSync, readFileSync, readdirSync, readlinkSync } = require("node:fs");
 const { dirname, isAbsolute, join, parse, resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { createHash } = require("node:crypto");
 
 const packageVersion = require("./package.json").version;
 const snapshotCache = new Map();
+/**
+ * Subject kinds whose `relatedLocations` are further sites of the finding
+ * itself: the checker collapses one package-contract obligation per package,
+ * or per package export, over the whole project (`projection.rs`,
+ * `collapse_unaccepted_contract_defects`).
+ */
+const SITE_SUBJECTS = new Set(["package", "package-export"]);
+
+/**
+ * The native analysis's `solid-checker: note:` stderr lines, per snapshot.
+ *
+ * A note is not a finding: it says something about the run itself -- today,
+ * that a discovered project catalog was withheld because no receipt trust
+ * configuration was supplied, so the contracts it carries were not admitted.
+ * The standalone CLI prints it to the terminal; the adapter captures the
+ * child's stderr, so without this the note died in a pipe ESLint never shows
+ * and the user saw uncertified imports with no reason given.
+ */
+const snapshotNotices = new WeakMap();
+
+const NOTE_PREFIX = "solid-checker: note: ";
+
+function stderrNotices(stderr) {
+  return (stderr ?? "")
+    .split(/\r?\n/)
+    .filter(line => line.startsWith(NOTE_PREFIX))
+    .map(line => line.slice(NOTE_PREFIX.length).trim())
+    .filter(line => line.length > 0);
+}
+
+const TRUST_REMEDY =
+  "In ESLint, set settings.solidChecker.receiptTrustConfiguration to that trust file.";
+
+/** A note as an ESLint message, naming the setting behind the flag it cites. */
+function noticeMessage(notice) {
+  const remedy = notice.includes("--receipt-trust-configuration")
+    ? `\n\n${TRUST_REMEDY}`
+    : "";
+  return `[solid-checker note] ${notice}${remedy}`;
+}
 
 /**
  * Per-file registry of the diagnostic identities that enabled per-rule rules
@@ -22,6 +63,9 @@ const snapshotCache = new Map();
  * config dropped the per-rule rules — starts from a clean registry.
  */
 const ownedRules = new Map();
+
+/** The rule whose uncertifiable findings are contract gaps (ADR 0248). */
+const CONTRACT_GAP_RULE = "package-contract-incomplete";
 
 function registerOwnedRule(filename, ruleName) {
   let owned = ownedRules.get(filename);
@@ -119,6 +163,96 @@ function runtimeConfiguration(config) {
   };
 }
 
+/**
+ * A configured path, resolved exactly as `project` and `snapshotPath` are:
+ * against `settings.solidChecker.cwd`, else the ESLint process's working
+ * directory. Passed to the native checker absolute, because the checker runs
+ * in the tsconfig's directory and a daemon may run somewhere else again.
+ */
+function configuredPath(config, name) {
+  const value = config[name];
+  if (value == null) return null;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`settings.solidChecker.${name} must be a non-empty string`);
+  }
+  return resolve(config.cwd ?? process.cwd(), value);
+}
+
+/**
+ * The receipt trust configuration, as a cache identity: its resolved path and
+ * the digest of its bytes. The native daemon already hashes the file into its
+ * cached-answer inputs; this is the same rule for the adapter's in-process
+ * snapshot cache, so an edited or replaced trust file re-runs the analysis in
+ * a persistent ESLint session instead of serving a verdict it no longer
+ * supports. An unreadable file is a configuration error, reported before any
+ * analysis starts and not cached, so fixing the file recovers.
+ */
+function receiptTrust(config) {
+  const path = configuredPath(config, "receiptTrustConfiguration");
+  if (path == null) return null;
+  let bytes;
+  try {
+    bytes = readFileSync(path);
+  } catch (error) {
+    throw new Error(
+      "solid-checker adapter could not read settings.solidChecker.receiptTrustConfiguration " +
+      `${path}: ${error.message}`
+    );
+  }
+  return { path, sha256: createHash("sha256").update(bytes).digest("hex") };
+}
+
+// Identity only; native owns recognition and host proof. Inventory/presence is
+// recomputed before every lookup, including directory additions and symlinks.
+// No config execution, second checker run, parser or adapter host policy.
+function inferenceFingerprint(project, runtime) {
+  if (runtime?.target || runtime?.conditions?.length || runtime?.frameworkTransforms?.length ||
+      runtime?.build || runtime?.rendering || runtime?.programBoundary === "open") return null;
+  const directory = dirname(project);
+  const configs = ["ts", "js", "mts", "mjs", "cts", "cjs"].map(ext => `vite.config.${ext}`);
+  if (!["index.html", ...configs].some(name => existsSync(join(directory, name)))) return null;
+  const hash = createHash("sha256");
+  hash.update("inferred-host-inputs-v1\0");
+  const record = (path, bytes, kind = "file") => {
+    hash.update(JSON.stringify([path, kind, bytes.length]));
+    hash.update(bytes);
+  };
+  const file = path => {
+    try { record(path, readFileSync(path)); }
+    catch (error) { record(path, Buffer.from(error.code ?? "unreadable"), "unreadable"); }
+  };
+  const visit = path => {
+    let entries;
+    try { entries = readdirSync(path, { withFileTypes: true }); }
+    catch (error) { record(path, Buffer.from(error.code ?? "unreadable"), "unreadable-directory"); return; }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const child = join(path, entry.name);
+      if ([".git", "node_modules"].includes(entry.name)) continue;
+      if (entry.isSymbolicLink()) {
+        try { record(child, Buffer.from(readlinkSync(child)), "symlink"); }
+        catch (error) { record(child, Buffer.from(error.code ?? "unreadable"), "unreadable-symlink"); }
+      } else if (entry.isDirectory()) {
+        visit(child);
+      } else if (entry.isFile() && /\.(?:[cm]?[jt]sx?|tsrx|json|html)$/.test(entry.name)) {
+        file(child);
+      }
+    }
+  };
+  visit(directory);
+  for (let ancestor = dirname(directory); ; ancestor = dirname(ancestor)) {
+    const path = join(ancestor, "package.json");
+    if (existsSync(path)) file(path);
+    else record(path, Buffer.alloc(0), "absent");
+    if (dirname(ancestor) === ancestor) break;
+  }
+  for (const name of ["package.json", "dist/esm/index.mjs", "dist/cjs/index.cjs"]) {
+    const path = join(directory, "node_modules", "@solidjs", "vite-plugin", name);
+    if (existsSync(path)) file(path);
+    else record(path, Buffer.alloc(0), "absent");
+  }
+  return hash.digest("hex");
+}
+
 function loadSnapshot(context) {
   const config = configuration(context);
   if (config.snapshot != null) return config.snapshot;
@@ -136,12 +270,17 @@ function loadSnapshot(context) {
   const commandArgs = config.command || process.env.SOLID_CHECKER_BIN
     ? [...(config.commandArgs ?? [])]
     : [join(__dirname, "bin", "solid-checker.mjs")];
-  const acceptedContracts = typeof config.acceptedContracts === "string"
-    ? config.acceptedContracts
-    : null;
+  const acceptedContracts = configuredPath(config, "acceptedContracts");
+  const trust = receiptTrust(config);
   const dialect = config.dialect ?? null;
   const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
   const runtime = runtimeConfiguration(config);
+  const runtimeResolution = config.runtimeResolution ?? "off";
+  if (!["required", "off"].includes(runtimeResolution)) {
+    throw new Error("settings.solidChecker.runtimeResolution must be required or off");
+  }
+  const observesRuntime = runtimeResolution === "required" || commandArgs.includes("--runtime-resolution");
+  const inferredHostInputs = inferenceFingerprint(project, runtime);
   const configuredRules = Array.isArray(config.enableRule) ? config.enableRule : [];
   const activeDefaultDisabled = [...(ownedRules.get(contextFilename(context)) ?? [])]
     .filter(rule => manifestEntriesByRule.get(rule)?.defaultEnabled === false);
@@ -151,12 +290,18 @@ function loadSnapshot(context) {
     commandArgs,
     project,
     acceptedContracts,
+    trust,
     dialect,
     presets,
     enableRules,
-    runtime
+    runtime,
+    runtimeResolution,
+    inferredHostInputs
   });
-  if (snapshotCache.has(key)) {
+  // Inference now depends on installed transitive plugin bytes. Let native
+  // validate that closure on every request instead of duplicating its resolver
+  // and allowlist in this adapter's in-process cache.
+  if (!observesRuntime && inferredHostInputs === null && snapshotCache.has(key)) {
     const cached = snapshotCache.get(key);
     if (cached instanceof Error) throw cached;
     return cached;
@@ -179,7 +324,9 @@ function loadSnapshot(context) {
     "json"
   ];
   if (dialect) args.push("--dialect", dialect);
+  if (runtimeResolution === "required") args.push("--runtime-resolution", "required");
   if (acceptedContracts) args.push("--accepted-contracts", acceptedContracts);
+  if (trust) args.push("--receipt-trust-configuration", trust.path);
   for (const preset of presets) args.push("--preset", preset);
   for (const rule of enableRules) args.push("--enable-rule", rule);
   if (runtime?.target) args.push("--runtime-target", runtime.target);
@@ -197,14 +344,24 @@ function loadSnapshot(context) {
   const result = spawnSync(command, args, {
     cwd: dirname(project),
     encoding: "utf8",
-    env: process.env
+    env: {
+      ...process.env,
+      SOLID_CHECKER_RUNTIME_RESOLVER: process.env.SOLID_CHECKER_RUNTIME_RESOLVER
+        ?? join(__dirname, "scripts", "runtime-resolver.mjs")
+    }
   });
   if (result.error) {
     throw failure(`solid-checker adapter could not start analysis: ${result.error.message}`);
   }
   if (result.status !== 0) {
+    const stderr = result.stderr.trim();
+    // A named policy-2 catalog without trust refuses by citing the CLI flag;
+    // name the setting that supplies it here.
+    const remedy = !trust && stderr.includes("--receipt-trust-configuration")
+      ? `\n\n${TRUST_REMEDY}`
+      : "";
     throw failure(
-      `solid-checker adapter analysis failed (${result.status}): ${result.stderr.trim()}`
+      `solid-checker adapter analysis failed (${result.status}): ${stderr}${remedy}`
     );
   }
   let snapshot;
@@ -212,6 +369,13 @@ function loadSnapshot(context) {
     snapshot = JSON.parse(result.stdout);
   } catch (error) {
     throw failure(`solid-checker adapter received invalid JSON: ${error.message}`);
+  }
+  const notices = stderrNotices(result.stderr);
+  if (inferredHostInputs !== inferenceFingerprint(project, runtime)) {
+    throw failure("solid-checker adapter inferred-host inputs changed during analysis; retry lint");
+  }
+  if (notices.length > 0 && snapshot && typeof snapshot === "object") {
+    snapshotNotices.set(snapshot, notices);
   }
   snapshotCache.set(key, snapshot);
   return snapshot;
@@ -246,7 +410,11 @@ function findingMessage(finding) {
   const hint = finding.hint ? `\n\n${finding.hint}` : "";
   const docsUrl = finding.documentationUrl ?? docsUrlsByRule.get(finding.rule);
   const docs = docsUrl ? `\n\nDocs: ${docsUrl}` : "";
-  return `[${finding.id}] ${finding.message}${hint}${docs}`;
+  const host = (finding.evidence ?? [])
+    .filter(step => step.message?.startsWith("inferred browser:"))
+    .map(step => `\n\n${step.message}`)
+    .join("");
+  return `[${finding.id}] ${finding.message}${hint}${host}${docs}`;
 }
 
 function fixForFinding(fixer, finding, sourceCode, filename) {
@@ -272,6 +440,7 @@ const adapterSchema = [{
     project: { type: "string" },
     cwd: { type: "string" },
     acceptedContracts: { type: "string" },
+    receiptTrustConfiguration: { type: "string" },
     dialect: { type: "string" },
     preset: { type: "array", items: { type: "string" } },
     enableRule: { type: "array", items: { type: "string" } },
@@ -289,8 +458,29 @@ function projectFindings(context, program, findings) {
   const filename = contextFilename(context);
   for (const finding of findings) {
     const location = finding.primaryLocation;
-    if (location?.path && !samePath(location.path, filename)) continue;
-    const range = location ? findingRange(sourceCode, location) : [0, 0];
+    // A project-scoped finding is about the project, not about a file in it:
+    // the refusal to analyze an unsupported Solid runtime is located at the
+    // deciding `node_modules/solid-js/package.json`, which ESLint never lints.
+    // Matching it by path would drop it silently and leave the user with a
+    // clean run over a project that was never analyzed at all -- exactly the
+    // false certification the finding exists to prevent. So it is reported on
+    // every linted file, and its span is this file's origin rather than an
+    // offset into some other file's bytes.
+    const projectScoped = finding.subjectKind === "project";
+    // A finding about a package or one package export is collapsed over the
+    // project: its related locations are further *sites* of the same finding,
+    // not supporting context. Report it in every file holding a site, at that
+    // file's first one, so the collapse never hides a file's sites from ESLint.
+    const collapsed = SITE_SUBJECTS.has(finding.subjectKind);
+    const site = collapsed
+      ? [location, ...(finding.relatedLocations ?? [])]
+        .filter(candidate => candidate?.path && samePath(candidate.path, filename))
+        .reduce((first, candidate) =>
+          first && first.startByte <= candidate.startByte ? first : candidate, undefined)
+      : location;
+    if (!projectScoped && collapsed && !site) continue;
+    if (!projectScoped && site?.path && !samePath(site.path, filename)) continue;
+    const range = site && !projectScoped ? findingRange(sourceCode, site) : [0, 0];
     context.report({
       node: program,
       loc: {
@@ -304,6 +494,33 @@ function projectFindings(context, program, findings) {
       fix: finding.fixes?.length
         ? fixer => fixForFinding(fixer, finding, sourceCode, filename)
         : undefined
+    });
+  }
+}
+
+/**
+ * Report the snapshot's run notes on this file.
+ *
+ * A note is about the run, not about a file, so it is reported the way a
+ * project-scoped finding is: on every linted file, at the file's origin. Once
+ * per ESLint process would pin it to whichever file happened to be linted
+ * first -- an editor, which lints the open file alone, would show it on one
+ * buffer and never again, and `eslint --cache` would replay it on an
+ * arbitrary file. ESLint gives a plugin no project-level message and no
+ * warning channel its formatters or editors display; `process.emitWarning`
+ * reaches only a terminal, which is the invisibility this replaces.
+ */
+function reportNotices(context, program, snapshot) {
+  const notices = snapshotNotices.get(snapshot);
+  if (!notices) return;
+  const sourceCode = context.sourceCode ?? context.getSourceCode();
+  const origin = sourceCode.getLocFromIndex(0);
+  for (const notice of notices) {
+    context.report({
+      node: program,
+      loc: { start: origin, end: origin },
+      messageId: "notice",
+      data: { message: noticeMessage(notice) }
     });
   }
 }
@@ -327,10 +544,53 @@ const certification = {
         // that rule reports them at its own severity, so certification
         // reporting them again would duplicate every one of its findings.
         const owned = ownedRules.get(contextFilename(context));
+        // ADR 0248: an import without a complete contract is a gap in what
+        // the analysis can see, not a finding about the user's code (ADR
+        // 0202). Editors showed one warning per such import, so the
+        // catch-all rule leaves them out; enabling
+        // `solid-checker/package-contract-incomplete` reports them again.
         const findings = (snapshot.findings ?? []).filter(
-          finding => !owned?.has(finding.rule)
+          finding =>
+            !owned?.has(finding.rule) &&
+            !(finding.rule === CONTRACT_GAP_RULE && finding.kind === "uncertifiable")
         );
         projectFindings(context, program, findings);
+      }
+    };
+  }
+};
+
+/**
+ * The run's notes, and nothing else, as their own rule.
+ *
+ * A note never fails a lint by itself: it names a configuration the run fell
+ * back from, not a defect, so every shipped config enables this rule at
+ * `warn`, and a project that sets it to `off` has chosen not to see notes.
+ * It is its own rule rather than a message of `certification` or of a
+ * per-rule rule because a message takes its rule's severity, and those are
+ * errors under `recommended`.
+ *
+ * It loads the snapshot every other rule of the pass loads (the cache key
+ * reads only the settings, the options, and the per-file registry, all fixed
+ * before the first `Program`), so enabling it spawns no second analysis. It
+ * keeps no state across passes, so a pass that ended in a thrown analysis
+ * cannot cost a later pass its note.
+ */
+const contractNote = {
+  meta: {
+    type: "suggestion",
+    docs: {
+      description:
+        "Report solid-checker run notes, including browser-host inference decisions and withheld project contract catalogs",
+      recommended: true
+    },
+    schema: adapterSchema,
+    messages: { notice: "{{message}}" }
+  },
+  create(context) {
+    return {
+      Program(program) {
+        reportNotices(context, program, loadSnapshot(context));
       }
     };
   }
@@ -433,7 +693,7 @@ const manifestEntriesByRule = new Map(
 
 const plugin = {
   meta: { name: "solid-checker", version: packageVersion },
-  rules: { certification },
+  rules: { certification, "contract-note": contractNote },
   configs: {}
 };
 
@@ -444,13 +704,17 @@ const DEPRECATED_RULE_KEYS = [
   ["component-props-destructure", "no-destructure"],
   ["component-returns-conditionally", "components-return-once"],
   ["expected-function-got-expression", "reactive-handler-frozen"],
-  ["v1/expected-function-got-expression", "v1/reactive-handler-frozen"],
+  // The `v1/` alias went with the 1.x catalog (ADR 0110): a deprecation alias
+  // can only delegate to a rule that still exists, and its target does not.
   ["resolve-in-reactive-scope", "resolve-in-tracked-scope"],
   ["sync-node-received-async", "sync-computation-received-async"]
 ];
 
 for (const catalog of Object.values(manifests)) {
   for (const entry of catalog.rules) {
+    if (Object.hasOwn(plugin.rules, entry.name)) {
+      throw new Error(`catalog rule ${entry.name} collides with an adapter rule`);
+    }
     plugin.rules[entry.name] = reportingRule(entry, catalog);
   }
 }
@@ -474,7 +738,10 @@ for (const [oldName, currentName] of DEPRECATED_RULE_KEYS) {
 
 plugin.configs.recommended = {
   plugins: { "solid-checker": plugin },
-  rules: { "solid-checker/certification": "error" }
+  rules: {
+    "solid-checker/certification": "error",
+    "solid-checker/contract-note": "warn"
+  }
 };
 for (const catalog of Object.values(manifests)) {
   plugin.configs[catalog.config] = {
@@ -485,13 +752,27 @@ for (const catalog of Object.values(manifests)) {
       // the per-file registry above makes certification skip every finding a
       // per-rule rule owns, so both orders report each finding exactly once.
       "solid-checker/certification": "off",
+      // Every shipped config enables the note rule at `warn`, so no listing
+      // order can make a note fail a lint.
+      "solid-checker/contract-note": "warn",
+      // ADR 0248: contract gaps are opt-in. They are not findings about the
+      // user's code, so no shipped config enables them.
       ...Object.fromEntries(
-        catalog.rules.filter(entry => entry.defaultEnabled).map(entry => [
+        catalog.rules
+          .filter(entry => entry.defaultEnabled && entry.name !== CONTRACT_GAP_RULE)
+          .map(entry => [
           `solid-checker/${entry.name}`,
           entry.severity === "error" ? "error" : "warn"
         ])
       )
     }
+  };
+  // ADR 0269: the dialect config with the browser runtime target. For client
+  // applications, where analyzed code runs in the browser; a later config
+  // that sets `settings.solidChecker.runtime` overrides it.
+  plugin.configs[`browser-${catalog.config}`] = {
+    ...plugin.configs[catalog.config],
+    settings: { solidChecker: { runtime: { target: "browser" } } }
   };
   const preferenceRules = catalog.rules.filter(entry =>
     entry.presets.includes("preferences")
@@ -499,12 +780,15 @@ for (const catalog of Object.values(manifests)) {
   plugin.configs[`preferences-${catalog.config}`] = {
     plugins: { "solid-checker": plugin },
     settings: { solidChecker: { preset: ["preferences"] } },
-    rules: Object.fromEntries(
-      preferenceRules.map(entry => [
-        `solid-checker/${entry.name}`,
-        entry.severity === "error" ? "error" : "warn"
-      ])
-    )
+    rules: {
+      "solid-checker/contract-note": "warn",
+      ...Object.fromEntries(
+        preferenceRules.map(entry => [
+          `solid-checker/${entry.name}`,
+          entry.severity === "error" ? "error" : "warn"
+        ])
+      )
+    }
   };
 }
 

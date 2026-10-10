@@ -51,6 +51,7 @@ import { fileURLToPath } from "node:url";
 import { openGateCache } from "./lib/gate-cache.mjs";
 import { createWorkerPool, gateConcurrency, mapPool } from "./lib/pool.mjs";
 import {
+  DIALECTS,
   canonicalRule,
   catalogEntries,
   prepareDialectBases,
@@ -67,6 +68,7 @@ const ledger = JSON.parse(readFileSync(LEDGER, "utf8"));
 
 const EXPECTATIONS = new Set(Object.keys(ledger.expectations));
 const CASE_COMPILER_OPTIONS = new Set(["verbatimModuleSyntax"]);
+const UNAUDITED_RELEASE = "unaudited-solid-release";
 
 /** Fail loudly rather than skip -- the same contract the oracle's provisioning check keeps. */
 const locate = (variable, ...candidates) => {
@@ -108,11 +110,8 @@ const validate = (testCase, index) => {
     failures.push(message);
     return { failures, skip: true };
   };
-  if (testCase.dialect !== "v1" && testCase.dialect !== "v2") {
-    return stop(`${label}: dialect must be exactly "v1" or "v2"`);
-  }
-  if (testCase.dialect === "v2" && testCase.rule.startsWith("v1/")) {
-    return stop(`${label}: a v2 case cannot name a v1/ catalog rule`);
+  if (!DIALECTS.includes(testCase.dialect)) {
+    return stop(`${label}: dialect must be one of ${DIALECTS.map((d) => JSON.stringify(d)).join(", ")}`);
   }
   if (testCase.sourceExtension !== undefined && !["ts", "tsx"].includes(testCase.sourceExtension)) {
     return stop(`${label}: sourceExtension must be exactly "ts" or "tsx"`);
@@ -191,6 +190,19 @@ const evaluate = (testCase, index, { perPass, checkerPasses }) => {
   };
   const done = () => ({ result, failures });
 
+  // The oracle must install the release the checker audits. If the two drift
+  // apart, every case is analyzed beside an SC9014 notice whose subject is the
+  // whole project -- and the case no longer asks whether TypeScript reports
+  // what the *audited* vocabulary reports. Named here, once per case, rather
+  // than surfacing as a subject overlap with every diagnostic in the ledger.
+  if (checkerPasses.some(([, observed]) => observed.findings.some((f) => f.rule === UNAUDITED_RELEASE))) {
+    failures.push(
+      `${label}: the checker reported ${UNAUDITED_RELEASE} (SC9014) on the oracle install, so` +
+        ` fixtures/tsc-oracle/packages.json does not install the release the checker audits` +
+        ` (AUDITED_INSTALLATION in rust/crates/solid-dialect/src/solid_2/releases.rs). Move them together.`,
+    );
+  }
+
   if (testCase.checker !== "reports" && testCase.checker !== "silent") {
     failures.push(
       `${label}: every case must declare 'checker' as "reports" or "silent" --` +
@@ -231,14 +243,13 @@ const evaluate = (testCase, index, { perPass, checkerPasses }) => {
   // still pass. A distinct claim must be explicit at this case, not inferred
   // from the rule having been legitimate somewhere else.
   const distinctFindings = new Map(
-    (testCase.distinctFindings ?? []).map((entry) => [
-      testCase.dialect === "v1" && !entry.rule.startsWith("v1/") ? `v1/${entry.rule}` : entry.rule,
-      entry.why,
-    ]),
+    (testCase.distinctFindings ?? []).map((entry) => [entry.rule, entry.why]),
   );
   for (const [passName, diagnostics] of perPass) {
     const checker = checkerPasses.find(([name]) => name === passName)[1];
     for (const finding of checker.findings) {
+      // Its subject is the whole project; the release check above names it.
+      if (finding.rule === UNAUDITED_RELEASE) continue;
       const overlapping = diagnostics.filter((diagnostic) => subjectsOverlap(finding, diagnostic));
       if (!overlapping.length) continue;
       const targetIsDistinct = finding.rule === expectedRule && testCase.expect === "distinct-claim";
@@ -315,7 +326,7 @@ prepareDialectBases();
 // the same published .d.ts files report, and invalidating 322 TypeScript
 // programs for that unrelated event was the dominant warm-gate cost.
 const concurrency = gateConcurrency();
-const oracleRoots = [oracleProject("v1").root, oracleProject("v2").root];
+const oracleRoots = DIALECTS.map((dialect) => oracleProject(dialect).root);
 const typescriptCache = openGateCache({
   gate: "tsc-oracle-typescript",
   scriptPath: fileURLToPath(import.meta.url),
@@ -375,8 +386,23 @@ for (const [index, testCase] of ledger.cases.entries()) {
 // verdict on it.
 const EXEMPT = {
   "package-contract-incomplete": "asks whether a package ships a usable reactivity contract, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
-  "v1/package-contract-incomplete": "same -- the subject is a third-party package's contract, not Solid's types",
   "server-function-module-directive": "needs a module-level \"use server\" prologue and the project's server surface",
+  // The one catalog identity with no source subject at all. It is decided by
+  // dialect detection from the nearest node_modules/solid-js/package.json,
+  // before any source is read, and it is emitted without passing through the
+  // rules engine -- so there is no snippet to compile and no expression for
+  // TypeScript to have an opinion about. The absolute rule is satisfied
+  // vacuously rather than by evidence, which is why this is an exemption and
+  // not a case. Its own pin is in `dialects_process`, run in the one feature
+  // configuration where the refusal is reachable.
+  "unsupported-solid-runtime": "the subject is which solid-js version is installed, not any expression in the project; no snippet can express it and tsc has nothing to say about it",
+  // The same subject, one step further: which *release* of a carried major is
+  // installed. Also decided by dialect detection and appended beside the
+  // analysis rather than produced by the rules engine, and the oracle installs
+  // the audited release (fixtures/tsc-oracle/packages.json), on which the
+  // notice cannot appear -- every case asserts that it does not. Its pins are in
+  // `dialects_process` and `dialect.rs`.
+  "unaudited-solid-release": "the subject is which solid-js release is installed, not any expression in the project; no snippet can express it and tsc has nothing to say about it",
 };
 
 const catalogRules = catalogEntries.map((rule) => rule.name);

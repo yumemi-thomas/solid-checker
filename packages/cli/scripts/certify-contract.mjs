@@ -16,23 +16,59 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { inspectRetainedCertificationFloor } from "./retained-certification-floor.mjs";
+import { fileURLToPath } from "node:url";
+import {
+  RECOVERY_GRAPH_CASE_BUDGET,
+  recoveryGraphBudgetRefusal,
+  selectRecoveryPreparation,
+  retainedProposalGraphCases,
+  certifyRetainedProposalSelection,
+  selectBySubdivision
+} from "./retained-proposal-graphs.mjs";
+import {
+  graphNodeAuditRecord,
+  graphNodeCasesFromNativeOutput,
+  graphNodeRecordSet,
+  graphNodesAuditField
+} from "./graph-node-records.mjs";
+export { RECOVERY_GRAPH_CASE_BUDGET, recoveryGraphBudgetRefusal };
+
+/// The repository/package root the runtime-probe harness source manifest is
+/// recomputed against. This file lives at `<root>/packages/cli/scripts/`, and
+/// the manifest names its members relative to `<root>`.
+const harnessRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 import { runNativeAsync } from "../bin/launcher.mjs";
+
+// The native checker's `SOLID_CHECKER_TIMINGS` lines go to its stderr, which
+// the launcher pipes and a successful exit would otherwise drop. Forward them
+// when timings were asked for, so a slow certification is attributable from
+// the CLI the same way it is from the binary.
+function forwardNativeTimings(child) {
+  if (!process.env.SOLID_CHECKER_TIMINGS || !child.stderr) return;
+  process.stderr.write(child.stderr);
+}
 import {
   ArtifactResolutionError,
   ArtifactResolutionSession,
   locateExternalDependencyPackageRoot,
+  nodeBuiltinSpecifier,
   resolvePackageArtifactClosure
 } from "./artifact-resolution.mjs";
 export { locateExternalDependencyPackageRoot } from "./artifact-resolution.mjs";
 import {
   CERTIFICATION_INPUTS_FORMAT,
+  REFUSAL_CLASSES,
   artifactCaseDisposition,
+  certificationHost,
+  declaredApplicabilityClaims,
   finiteArtifactCandidates,
   finiteConditionPartitions,
   finiteEntrypoints,
@@ -40,10 +76,11 @@ import {
   prepareArtifact
 } from "./generate-package-contract.mjs";
 import {
-  bunLockLocatorForInstalledPackage,
-  createBunLockSelectionIndex,
-  exactBunLockSelection,
-  publishedGraphRequestKey
+  createLockSelectionIndex,
+  exactLockSelection,
+  publishedGraphRequestKey,
+  SUPPORTED_LOCKFILES,
+  UNSUPPORTED_LOCKFILES
 } from "./published-contract-graph.mjs";
 
 export const contractCertifyHelp = `Usage:
@@ -53,6 +90,12 @@ Acquires the exact published package archive, generates an open proposal,
 asks Rust for policy-2 proof demands, and attempts authoritative certification.
 The catalog is replaced only after Rust has produced accepted bytes and a
 configured issuer has produced a receipt. Audit files are non-authoritative.
+
+While it runs, certification writes a one-line importer module beside the
+package root (.solid-checker-certification-<hash>.mjs) and resolves the
+package from it. The file is removed before certify exits -- on success,
+refusal, failure, or a terminating signal -- and one an earlier run left
+behind is adopted and removed. The receipt keeps its path as an identity only.
 
 Options:
   --package-root <DIR>    Installed package root (default: current directory)
@@ -65,6 +108,9 @@ Options:
   --registry-origin <URL> Exact HTTPS registry origin (default: npm registry)
   --entrypoint <SUBPATH>  Exact exported subpath (repeatable)
   --conditions <LIST>     Exact runtime conditions, comma-separated
+  --host <browser|node>   Certify for one host (ADR 0140): every artifact case
+                          carries the host condition, so the contract applies
+                          only to a consumer that declares that host
   --proposal-refusal-audit <FILE>
                           Reuse a complete current dependency-refusal census
                           after authenticated artifact acquisition
@@ -74,10 +120,51 @@ Options:
                           .certification-inputs.json sidecars) instead of
                           regenerating it; anything that does not match
                           regenerates
+  --dependency-graph-lane When the root proposal generates only partially and
+                          its own refusal census names exact
+                          dependency-composition cases, certify those cases
+                          through the published-dependency-graph lane instead of
+                          publishing the partial proposal without them. The two
+                          lanes describe different case sets -- the graph lane
+                          covers exactly the refused cases, the partial proposal
+                          exactly the others -- so this is a choice, not a
+                          strict improvement, and it is off by default. Also
+                          retries a single generated case after an exact native
+                          callback-flow refusal, only in a fresh catalog.
+                          A root whose cases all generated but whose *closures*
+                          declined on an unaccepted external dependency has the
+                          same want with no refusal to read it off; those
+                          declines name exact cases too, and this flag composes
+                          them the same way
+  --recover-entrypoints  Re-certify generated cases together with exact refused
+                          dependency-composition cases. For a new value-only
+                          publication, isolate proof-refused artifact cases and
+                          re-certify the successful subset (at most 1024 cases).
+                          Never shrinks an existing publication or reuses trial
+                          receipts. Unproved cases retain explicit refusals
+  --probe-recipe-corpus <DIR>
+                          Hand-authored, claim-addressed runtime-probe recipes
+                          (a directory holding recipes.json plus its modules).
+                          Required only when a proposal closes a claim domain:
+                          such a claim schedules a mandatory contradiction veto
+                          that has to be executed, and without a corpus that
+                          gate refuses instead of certifying an unvetoed
+                          closure. Claim ids are content digests, so the way to
+                          learn one is to certify once and read the refusal,
+                          which names the exact claim that has no recipe. The
+                          corpus may not live inside the analyzed package
   --audit-output <FILE>   Write a non-replayable diagnostic transcript
   -h, --help              Show this help
 
 Environment:
+  SOLID_CHECKER_PROBE_NODE <FILE>
+                          Real path of the Node executable the probe harness is
+                          launched with. It must be the path this verifier
+                          build pinned (make PROBE_NODE=...), and it must be
+                          a real path: the adapter refuses a symlink, because a
+                          symlink is a name that can be repointed at other
+                          bytes after the pin was taken. Defaults to the
+                          "node" on PATH
   SOLID_CHECKER_REGISTRY_CACHE <DIR>
                           Content-addressed store for registry bytes already
                           acquired for an exact (origin, package, version,
@@ -86,6 +173,16 @@ Environment:
   SOLID_CHECKER_REGISTRY_CONCURRENCY <N>
                           Parallel registry acquisitions per certification
                           (default 8)
+
+Exit status:
+  0  Certified, published, and admissible: the receipt states the dependency
+     environment a consumer tree must reproduce.
+  1  Certified and published, but not admitted: the dependency environment
+     was not acquired, so the receipt states none and no project applies the
+     entry; or the tree it was certified in does not itself admit the entry.
+     The last line on stderr says why. Certify again once the reason is
+     repaired (for example, a lockfile the certifier reads).
+  2  Refused or failed; nothing was published.
 `;
 
 export const contractCertificationStages = Object.freeze([
@@ -98,10 +195,75 @@ export const contractCertificationStages = Object.freeze([
   "catalogPublication"
 ]);
 
+/// Whether this census row says "this case needs an accepted contract for a
+/// dependency that was not in scope".
+///
+/// Decided from the structured class the generator records at the moment it
+/// builds the row (`artifactRefusalClass` in generate-package-contract.mjs),
+/// which is derived from the error's own code or the native emitter's
+/// machine-readable marker line -- never from the sentence a human reads.
+///
+/// The regex is a **legacy fallback only**, for an audit sidecar written before
+/// the `class` field existed (a checked-in benchmark artifact, or a proposal
+/// generated by an older CLI and handed over with `--proposal-refusal-audit`).
+/// A row that carries a class is answered by the class alone: a reason that
+/// happens to quote one of these phrases must not override a row the generator
+/// classified as a fact about the publisher's own bytes.
 export function isExactDependencyCompositionRefusal(refusal) {
+  if (typeof refusal?.class === "string" && refusal.class) {
+    return refusal.class === REFUSAL_CLASSES.DependencyComposition;
+  }
   return /external export-all|unaccepted external dependency|accepted dependency contract|accepted dependency .* exact .* binding/i.test(
     refusal?.reason ?? ""
   );
+}
+
+/// Whether a proposal that generated *partially* has a frontier the
+/// published-dependency-graph lane is the answer for.
+///
+/// The distinction the routing rests on: a dependency-composition refusal says
+/// "this case needs an accepted contract for a dependency that was not in
+/// scope", which the graph lane supplies by acquiring, generating and
+/// certifying that dependency first. Every other refusal class -- a `.cjs`
+/// entrypoint with no declaration target, a `.d.ts` naming itself as its own
+/// fact source, an entry file whose runtime/declaration export sets do not
+/// intersect -- is a fact about the *publisher's own bytes*, and no dependency
+/// catalog changes it. Reusing the emitted proposal is the right answer for
+/// those, and re-deciding the lane for them would only lose the cases that did
+/// generate.
+///
+/// Takes the refusal rows, so the caller may read them from a census sidecar
+/// (the CLI) or from an already-measured result (a harness). Each row is
+/// classified by `isExactDependencyCompositionRefusal`, which reads the
+/// structured class the generator recorded and falls back to prose only for a
+/// census written before that field existed.
+export function partialProposalHasDependencyFrontier(refusals) {
+  return (
+    Array.isArray(refusals) &&
+    refusals.length > 0 &&
+    refusals.some(isExactDependencyCompositionRefusal)
+  );
+}
+
+/// The demand and family a native certifier refusal names, so the audit
+/// sidecar attributes it instead of recording `demandId: null, family: null`
+/// for every semantic refusal alike.
+///
+/// This reads only the two shapes the native certifier's own error types
+/// produce -- `Type Facts demand <id> is unsupported: ... (family=<f>)` and
+/// `Type Facts demand <id> is locally open: <f> (<artifact-case>:<export>):
+/// ...`. Anything else stays unattributed: a reason this cannot parse is
+/// reported exactly as it was, never guessed at, and the sidecar's nulls are
+/// the honest answer for it.
+export function nativeRefusalAttribution(reason) {
+  const text = typeof reason === "string" ? reason : "";
+  const demand = /Type Facts demand (sha256:[0-9a-f]{64})\b/.exec(text);
+  const declared = /\(family=([a-z][a-z0-9-]*)\)/.exec(text);
+  const open = / is locally open: ([a-z][a-z0-9-]*) \(/.exec(text);
+  return {
+    demandId: demand?.[1] ?? null,
+    family: declared?.[1] ?? open?.[1] ?? null
+  };
 }
 
 export class CertificationRefusal extends Error {
@@ -115,6 +277,78 @@ export class CertificationRefusal extends Error {
     this.demandId = demandId;
     this.family = family;
     this.refusals = refusals;
+  }
+}
+
+/// Refuses an artifact case whose **own runtime module graph** imports a
+/// subpath that the installed dependency's `exports` map provably excludes.
+///
+/// Returns nothing and throws a `CertificationRefusal` when it fires. Three
+/// premises, all of which must hold, and each of which one measured row taught:
+///
+///  1. **The edge is the case's own runtime import.** `axis === "runtime"` on
+///     an edge of the case's own closure. The declaration-axis walk is a
+///     *type* graph that no runtime resolves — a `.d.ts` naming
+///     `jiti/lib/types` is erased — and a specifier belonging to a transitive
+///     source package is that package's import, not this case's. Firing on
+///     those attributed a grandchild's specifier to the root's artifact case.
+///  2. **The dependency declares an `exports` map.** A package with no
+///     `exports` does not restrict its subpaths at all: Node applies
+///     PACKAGE_EXPORTS_RESOLVE only when the field is present, and otherwise
+///     resolves `pkg/sub` as a legacy path. `dayjs@1.11.23`,
+///     `picomatch@2.3.2` and `fetch-blob@3.2.0` ship no `exports` and all
+///     three publish the requested file. (`artifact-resolution.mjs` no longer
+///     answers `not-exported` for them either; this is the second gate on the
+///     same mistake, because the claim is about the map and must not be
+///     inferable from its absence.)
+///  3. **The map, replayed under this run's conditions, answers
+///     `not-exported`.** Not "the file is missing" (`target-not-found`) and
+///     not "no condition matched" (`conditions-unmatched`, which stays the
+///     unresolved-dependency frontier). A `"./*"` or other pattern key that
+///     matches the request is a match, so a wildcard map never answers this.
+///     The legacy `browser` field cannot rescue it: Node ignores `browser`
+///     whenever `exports` is present, and it only substitutes one file for
+///     another rather than adding a subpath. `imports` (`#specifier`) is a
+///     different resolution that no package specifier reaches.
+///
+/// What is left when all three hold is a broken import: the package is
+/// present, its manifest is the published one, an exact Bun lock selection
+/// names that copy, and its own export map publishes nothing for the module
+/// the case imports at runtime. `@solid-primitives/favicon`,
+/// `@solid-primitives/drag-drop` and `@tanstack/solid-query-devtools` all
+/// import `solid-js/web`, which Solid 2 retired.
+function refuseCaseImportingUnexportedTarget({
+  entrypoint,
+  conditions,
+  dependency,
+  located,
+  resolutionSession
+}) {
+  if (dependency.axis !== "runtime") return;
+  if (located.dependencyManifest.exports === undefined) return;
+  try {
+    resolvePackageArtifactClosure(
+      {
+        importer: located.dependencyImporter,
+        specifier: located.specifier,
+        packageRoot: located.dependencyRoot,
+        conditions,
+        resolutionKind: "import",
+        integrity: located.dependencyLock.integrity
+      },
+      resolutionSession
+    );
+  } catch (error) {
+    if (!(error instanceof ArtifactResolutionError) || error.code !== "not-exported") return;
+    throw new CertificationRefusal({
+      stage: "artifact-case",
+      owner: "certifier",
+      reason:
+        `artifact case ${entrypoint} [${conditions.join(", ")}] imports ` +
+        `dependency-target-not-exported: ${located.specifier} is not exported by ` +
+        `${located.dependencyManifest.name}@${located.dependencyManifest.version} ` +
+        `under conditions [${conditions.join(", ")}]`
+    });
   }
 }
 
@@ -196,8 +430,12 @@ export function parseCertifyArguments(arguments_) {
     registryOrigin: "https://registry.npmjs.org",
     entrypoints: [],
     conditions: [],
+    host: null,
     proposalRefusalAudit: "",
     proposal: "",
+    dependencyGraphLane: false,
+    recoverEntrypoints: false,
+    probeRecipeCorpus: "",
     auditOutput: "",
     issuerConfiguration: process.env.SOLID_CHECKER_POLICY2_ISSUER_CONFIG ?? "",
     trustConfigurationOutput: process.env.SOLID_CHECKER_POLICY2_TRUST_CONFIG ?? "",
@@ -206,6 +444,16 @@ export function parseCertifyArguments(arguments_) {
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
     if (["--help", "-h"].includes(argument)) return { ...options, help: true };
+    // The one valueless option, so it is read before the value extraction the
+    // rest of the parser requires.
+    if (argument === "--dependency-graph-lane") {
+      options.dependencyGraphLane = true;
+      continue;
+    }
+    if (argument === "--recover-entrypoints") {
+      options.recoverEntrypoints = true;
+      continue;
+    }
     const separator = argument.indexOf("=");
     const key = separator < 0 ? argument : argument.slice(0, separator);
     const value = separator < 0 ? arguments_[++index] : argument.slice(separator + 1);
@@ -219,9 +467,11 @@ export function parseCertifyArguments(arguments_) {
     else if (key === "--entrypoint") options.entrypoints.push(value);
     else if (key === "--conditions") {
       options.conditions.push(...value.split(",").map(item => item.trim()).filter(Boolean));
-    } else if (key === "--audit-output") options.auditOutput = value;
+    } else if (key === "--host") options.host = certificationHost(value);
+    else if (key === "--audit-output") options.auditOutput = value;
     else if (key === "--proposal-refusal-audit") options.proposalRefusalAudit = value;
     else if (key === "--proposal") options.proposal = value;
+    else if (key === "--probe-recipe-corpus") options.probeRecipeCorpus = value;
     else if (key === "--issuer-configuration") options.issuerConfiguration = value;
     else if (key === "--trust-configuration-output") options.trustConfigurationOutput = value;
     else throw new Error(`unknown contract certification argument ${key}`);
@@ -234,7 +484,28 @@ export function parseCertifyArguments(arguments_) {
   if (!/^https:\/\/[^/?#@]+$/.test(options.registryOrigin)) {
     throw new Error("--registry-origin must be a canonical HTTPS origin without a path");
   }
+  if (probeCorpusExpected() && !options.probeRecipeCorpus) {
+    throw new Error(
+      "SOLID_CHECKER_EXPECT_PROBE_CORPUS is set but no --probe-recipe-corpus was given: " +
+        "without a corpus every proposable closure is withheld as \"no recipe in corpus\" by " +
+        "construction and veto synthesis never runs, so no census result can be read from this run"
+    );
+  }
   return options;
+}
+
+/// Whether this run is required to be given a probe recipe corpus.
+///
+/// The twin of `SOLID_CHECKER_EXPECT_PROBE_PINS`, and for the same failure
+/// shape: a run that silently proved less than the reader believes. Planning
+/// withholds a closure candidate as `no recipe in corpus` both when a real
+/// corpus lacks a recipe for it -- a finding -- and when no corpus was
+/// configured at all, where it is a property of the invocation and the
+/// implementation census was never consulted. A measuring harness sets this
+/// so the second case fails loudly at argument time instead of returning a
+/// full withheld set that means nothing.
+export function probeCorpusExpected(env = process.env) {
+  return env.SOLID_CHECKER_EXPECT_PROBE_CORPUS === "1";
 }
 
 function exactRegistryPackageUrl(origin, packageName) {
@@ -425,7 +696,15 @@ async function acquirePublishedArtifact({
   });
 }
 
-function certificationPlannings(generated, artifactSnapshot) {
+/// A planning that says its dependency environment was not acquired, when it
+/// was not; the planning unchanged otherwise. The field is written only when it
+/// carries a reason, so a request that acquired everything is byte-identical to
+/// one from before the field existed.
+export function withEnvironmentNotAcquired(planning, reason) {
+  return reason ? { ...planning, dependencyEnvironmentNotAcquired: reason } : planning;
+}
+
+function certificationPlannings(generated, artifactSnapshot, options = null) {
   return generated.certificationInputs.map(input => ({
     schemaVersion: 1,
     proposal: generated.output,
@@ -433,13 +712,344 @@ function certificationPlannings(generated, artifactSnapshot) {
     exportConditions: [...new Set([...input.conditions, "import"])].sort(),
     registryOrigin: artifactSnapshot.registryOrigin,
     registryMetadata: artifactSnapshot.metadataPath,
-    archive: artifactSnapshot.archivePath
+    archive: artifactSnapshot.archivePath,
+    // Every planning carries the whole declared applicability census, not a
+    // share of it: each one is an independent native transaction, and a case
+    // the proposal omitted must be re-proved by whichever transaction accepts
+    // that proposal.
+    inapplicableCases: generated.inapplicableCases ?? [],
+    // The recipe corpus the execution will be handed, so the reviewed plan is
+    // the recipe-gated plan the execution certifies against: a `creates`
+    // closure candidate with no recipe is withheld by name at planning, and
+    // the plan names neither its demand nor its gate.
+    ...(options?.probeRecipeCorpus
+      ? { probeRecipeCorpus: resolve(options.probeRecipeCorpus) }
+      : {})
   }));
+}
+
+/// The closure candidates the native transaction withheld by name, read off
+/// its stdout. One `solid-checker:withheld-closure=<json>` line per candidate
+/// (`main.rs`'s `report_withheld_closures`); anything else on stdout is not a
+/// record and is left alone. Audit material only: the accepted contract itself
+/// already says the withheld domains are open.
+export const WITHHELD_CLOSURE_MARKER = "solid-checker:withheld-closure=";
+
+/// Whether each receipt the transaction issued states a dependency
+/// environment: one `solid-checker:dependency-environment=<json>` line per
+/// receipt (`main.rs`'s `report_dependency_environment`). Returns the receipts
+/// that state none, with the reason, or `null` when every receipt states one
+/// (or the native side reported nothing, as an older build does).
+export const DEPENDENCY_ENVIRONMENT_MARKER = "solid-checker:dependency-environment=";
+
+/// The exit status of a `contract certify` that published an entry no project
+/// will admit: its receipt authenticates but states no dependency environment.
+///
+/// Neither of the two statuses the command already had is true of it. `0` says
+/// "certified", and a CI step chained on `&&` then ships a catalog entry that
+/// reaches no project file. `2` says "refused", and nothing was refused: the
+/// catalog *was* replaced, the receipt is valid, and a caller reading `2` would
+/// look for a refusal audit that does not exist. `1` is what the rest of this
+/// CLI already means by "ran to completion, and the result needs action" --
+/// `contract check`, `--certify` and `contract generate --missing` all exit `1`
+/// in exactly that sense -- so it is the one status that says this.
+export const CERTIFIED_NOT_ADMITTED_EXIT_CODE = 1;
+
+/// The line `contract certify` prints last when a receipt states no dependency
+/// environment. The publication still succeeded and the receipt still
+/// authenticates, which is exactly why it has to be said: nothing else about
+/// the run would tell the user that no consumer will ever apply it. It names
+/// the entry, not the catalog, because the catalog accumulates: every other
+/// entry in it is admitted or not on its own receipt.
+export function dependencyEnvironmentNotAcquiredMessage(reason, subject = "") {
+  return `solid-checker: ${subject ? `${subject} ` : ""}certified but not admitted: ` +
+    `dependency environment not acquired: ${reason}; its receipt states no environment, ` +
+    `so no project will apply this entry (exit ${CERTIFIED_NOT_ADMITTED_EXIT_CODE})`;
+}
+
+/// The line `contract certify` prints last when the tree it certified in would
+/// not admit the entry it just published (`solid-checker:self-admission=`
+/// lines, `main.rs`'s `report_self_admission`): the admission rule itself was
+/// asked, and `reason` is its answer.
+export function selfAdmissionRefusedMessage(reason, subject = "") {
+  return `solid-checker: ${subject ? `${subject} ` : ""}certified but not admitted: ${reason}; ` +
+    `the tree it was certified in does not admit this entry, so no project that installs ` +
+    `the same tree will apply it (exit ${CERTIFIED_NOT_ADMITTED_EXIT_CODE})`;
+}
+
+/// What one successful `contract certify` amounts to, from the
+/// dependency-environment and self-admission lines its native transaction
+/// reported: whether the published entry is admitted, the exit status that says
+/// so, and the line to print last (`null` when there is nothing to say -- an
+/// admitted entry prints nothing, as before).
+///
+/// An environment that was not acquired is the more specific answer and wins;
+/// otherwise the first entry the certifying tree refuses decides. A native
+/// build that reports no self-admission lines (an older one) is not treated as
+/// a refusal.
+export function certificationOutcome(manifest, dependencyEnvironment, selfAdmission = null) {
+  const subject = manifest?.name && manifest?.version ? `${manifest.name}@${manifest.version}` : "";
+  const notAcquired = dependencyEnvironment?.notAcquired?.[0] ?? null;
+  if (!notAcquired) {
+    const refused = selfAdmission?.refused?.[0] ?? null;
+    if (refused) {
+      return Object.freeze({
+        status: "certified-not-admitted",
+        admitted: false,
+        exitCode: CERTIFIED_NOT_ADMITTED_EXIT_CODE,
+        selfAdmissionRefused: refused.reason,
+        message: selfAdmissionRefusedMessage(refused.reason, subject)
+      });
+    }
+    return Object.freeze({ status: "certified", admitted: true, exitCode: 0, message: null });
+  }
+  return Object.freeze({
+    status: "certified-not-admitted",
+    admitted: false,
+    exitCode: CERTIFIED_NOT_ADMITTED_EXIT_CODE,
+    dependencyEnvironmentNotAcquired: notAcquired.reason,
+    message: dependencyEnvironmentNotAcquiredMessage(
+      notAcquired.reason,
+      manifest?.name && manifest?.version ? `${manifest.name}@${manifest.version}` : ""
+    )
+  });
+}
+
+/// The certifying tree's own admission of each entry the transaction published:
+/// one `solid-checker:self-admission=<json>` line per entry. Returns the
+/// entries it refuses, with the reason, or `null` when the native side
+/// reported nothing (an older build, or a controlled execution).
+export const SELF_ADMISSION_MARKER = "solid-checker:self-admission=";
+
+export function selfAdmissionFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(SELF_ADMISSION_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(SELF_ADMISSION_MARKER.length));
+      if (record && typeof record === "object") records.push(record);
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  if (!records.length) return null;
+  return {
+    entries: records.length,
+    refused: records
+      .filter(record => record.admitted !== true)
+      .map(record => ({
+        reason: typeof record.reason === "string" ? record.reason : "not admitted",
+        ...(record.specifier ? { specifier: record.specifier } : {})
+      }))
+  };
+}
+
+export function dependencyEnvironmentFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(DEPENDENCY_ENVIRONMENT_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(DEPENDENCY_ENVIRONMENT_MARKER.length));
+      if (record && typeof record === "object") records.push(record);
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  if (!records.length) return null;
+  const unstated = records.filter(record => record.stated !== true);
+  return {
+    receipts: records.length,
+    notAcquired: unstated.map(record => ({
+      reason: typeof record.reason === "string" ? record.reason : "not stated",
+      ...(record.node ? { node: record.node } : {})
+    }))
+  };
+}
+
+/// The rung below it: one operation the transaction withdrew from the document
+/// it published, because a positive fact the operation states could not be
+/// certified. A certified contract weaker than its proposal has to say so.
+export const WITHHELD_OPERATION_MARKER = "solid-checker:withheld-operation=";
+
+const CLOSURE_CANDIDATE_MARKER = "solid-checker:closure-candidates=";
+const CERTIFIED_CLOSURE_MARKER = "solid-checker:certified-closures=";
+/// One line per certified plan (and per graph node): the recipe address of
+/// every claim a recipe could serve, beside its semantic claim id.
+export const RECIPE_ADDRESS_MARKER = "solid-checker:recipe-addresses=";
+
+/// Every (claim id, recipe address) pair the run stated, unbounded.
+///
+/// A recipe address (ADR 0117) hashes the claim's bytes and value but no
+/// dependency's accepted contract digest, so a recipe keyed by it survives a
+/// dependency's certified contract changing. This is the table the corpus is
+/// migrated and scaffolded from, so unlike the candidate sample above it is
+/// never truncated: a pair missing here is a recipe nobody can re-key.
+/// Diagnostic only; the native loader recomputes every address itself.
+export function recipeAddressesFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(RECIPE_ADDRESS_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(RECIPE_ADDRESS_MARKER.length));
+      if (!record || typeof record !== "object" || !Array.isArray(record.addresses)) continue;
+      for (const entry of record.addresses) {
+        if (typeof entry?.semanticClaimId !== "string" || typeof entry?.recipeAddress !== "string") {
+          continue;
+        }
+        records.push({
+          artifactCase: typeof record.artifactCase === "string" ? record.artifactCase : null,
+          ...(record.node ? { node: record.node } : {}),
+          semanticClaimId: entry.semanticClaimId,
+          recipeAddress: entry.recipeAddress
+        });
+      }
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  return records;
+}
+
+/// What the canonical main a receipt binds actually closes.
+///
+/// The fourth and last of the accounting: proposal offered, planner derived,
+/// gating withheld, receipt binds. Diagnostic only.
+export function certifiedClosuresFromNativeOutput(stdout) {
+  const perCase = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(CERTIFIED_CLOSURE_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(CERTIFIED_CLOSURE_MARKER.length));
+      if (record && typeof record === "object") perCase.push(record);
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  if (!perCase.length) return null;
+  // Summed, never truncated: `closed` below is capped, and a corpus pass that
+  // read a domain tally off a capped list would report a smaller yield rather
+  // than a partial one.
+  const closedByDomain = {};
+  for (const record of perCase) {
+    for (const [domain, count] of Object.entries(record.closedByDomain ?? {})) {
+      closedByDomain[domain] = (closedByDomain[domain] ?? 0) + count;
+    }
+  }
+  return {
+    cases: perCase.length,
+    count: perCase.reduce((total, record) => total + (record.count ?? 0), 0),
+    ...(Object.keys(closedByDomain).length ? { closedByDomain } : {}),
+    // The graph lanes emit one record per *node*, so the node identity has to
+    // survive the flatten or a composed row's closures cannot be attributed to
+    // the package that carries them -- which is the whole reason to read this
+    // field at corpus scale.
+    closed: perCase
+      .flatMap(record =>
+        (record.closed ?? []).map(row => (record.node ? { ...row, node: record.node } : row))
+      )
+      .slice(0, 64),
+    ...(perCase.some(record => record.unreadable)
+      ? { unreadable: perCase.find(record => record.unreadable).unreadable }
+      : {})
+  };
+}
+
+/// What the planner derived from the proposal, before gating.
+///
+/// The third of three answers a lost closure needs: `plannedProposal` says
+/// what the proposal offered, this says what the planner made of it, and
+/// `withheldClosures` says what gating took away. Diagnostic only.
+export function closureCandidatesFromNativeOutput(stdout) {
+  // One line per certified artifact case, so this sums rather than takes the
+  // first: a multi-case entrypoint that derived candidates for one case and
+  // none for another must not read as either extreme.
+  const perCase = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(CLOSURE_CANDIDATE_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(CLOSURE_CANDIDATE_MARKER.length));
+      if (record && typeof record === "object" && typeof record.count === "number") {
+        perCase.push(record);
+      }
+    } catch {
+      // Malformed is not a record.
+    }
+  }
+  if (!perCase.length) return null;
+  return {
+    cases: perCase.length,
+    count: perCase.reduce((total, record) => total + record.count, 0),
+    candidates: perCase
+      .flatMap(record =>
+        (record.candidates ?? []).map(row =>
+          record.node ? { ...row, node: record.node } : row
+        )
+      )
+      .slice(0, 64)
+  };
+}
+
+export function withheldOperationsFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(WITHHELD_OPERATION_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(WITHHELD_OPERATION_MARKER.length));
+      if (
+        record &&
+        typeof record === "object" &&
+        typeof record.artifactCase === "string" &&
+        typeof record.export === "string" &&
+        typeof record.operation === "string" &&
+        typeof record.reason === "string"
+      ) {
+        records.push(record);
+      }
+    } catch {
+      // A malformed diagnostic line is not authority for anything and never
+      // fails a transaction, exactly as the closure marker's is not.
+    }
+  }
+  return records;
+}
+
+export function withheldClosuresFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(WITHHELD_CLOSURE_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(WITHHELD_CLOSURE_MARKER.length));
+      if (
+        record &&
+        typeof record === "object" &&
+        typeof record.export === "string" &&
+        typeof record.domain === "string" &&
+        typeof record.reason === "string"
+      ) {
+        records.push(record);
+      }
+    } catch {
+      // A malformed line is not a record; the honest answer is to omit it
+      // rather than to invent fields for it.
+    }
+  }
+  return records;
 }
 
 async function planDemands({ options, generated, artifactSnapshot, scratch }) {
   const plans = [];
-  for (const [index, planning] of certificationPlannings(generated, artifactSnapshot).entries()) {
+  for (const [index, planning] of certificationPlannings(
+    generated,
+    artifactSnapshot,
+    options
+  ).entries()) {
     const requestPath = join(scratch, `certification-request-${index}.json`);
     const outputPath = join(scratch, `certification-plan-${index}.json`);
     writeFileSync(requestPath, `${JSON.stringify(planning, null, 2)}\n`);
@@ -454,6 +1064,7 @@ async function planDemands({ options, generated, artifactSnapshot, scratch }) {
       { cwd: options.packageRoot, env: { SOLID_CHECKER_DAEMON: "0" } }
     );
     if (child.error) throw new Error(`could not start the native checker: ${child.error.message}`);
+  forwardNativeTimings(child);
     if (child.status !== 0) {
       throw new Error(
         child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`
@@ -476,6 +1087,53 @@ function reviewGraphProposal(generated) {
     }
   };
   visit(review);
+  if (artifactCases.size === 0) {
+    // An inert module has no semantic demands, so its native proposal plan has
+    // no demand-bearing artifactCase field to review. The dependency catalog
+    // still needs the exact case identity for the later graph replay. Derive
+    // it from the one inert wire case with the same length-prefixed inputs as
+    // contract_document::artifact_case_id; any other empty plan remains a
+    // refusal rather than an inferred dependency identity.
+    const proposal = JSON.parse(readFileSync(generated.output, "utf8"));
+    const cases = Object.entries(proposal.entrypoints ?? {}).flatMap(
+      ([entrypoint, value]) => (value?.cases ?? []).map(case_ => ({ entrypoint, case_ }))
+    );
+    if (
+      cases.length === 1 &&
+      cases[0].case_?.initialization === "inert" &&
+      Object.keys(cases[0].case_?.exports ?? {}).length === 0
+    ) {
+      const { entrypoint, case_: case_ } = cases[0];
+      const hash = createHash("sha256");
+      const text = value => {
+        const bytes = Buffer.from(value, "utf8");
+        const length = Buffer.alloc(8);
+        length.writeBigUInt64BE(BigInt(bytes.length));
+        hash.update(length);
+        hash.update(bytes);
+      };
+      const digest = value => `sha256:${String(value).replace(/^sha256:/i, "").toLowerCase()}`;
+      const artifact = value => {
+        text(value.path);
+        text(digest(value.sha256));
+      };
+      hash.update("solid-checker:artifact-case:v1");
+      text(entrypoint);
+      if (!case_.resolution || typeof case_.resolution.runtimeBranch !== "string" ||
+          typeof case_.resolution.typesBranch !== "string") {
+        throw new Error("inert graph proposal is missing its exact resolution trace");
+      }
+      text("runtime");
+      text(case_.resolution.runtimeBranch);
+      text("types");
+      text(case_.resolution.typesBranch);
+      artifact(case_.artifact);
+      artifact(case_.declarations);
+      text(digest(case_.artifact.closureSha256));
+      hash.update(Buffer.from([0]));
+      artifactCases.add(`artifact-case:${hash.digest("hex")}`);
+    }
+  }
   if (artifactCases.size !== 1) {
     throw new Error(
       `exact graph proposal plan named ${artifactCases.size} artifact cases; expected one`
@@ -488,11 +1146,44 @@ function reviewGraphProposal(generated) {
   };
 }
 
-function findBunLock(packageRoot) {
+/// Finds the nearest lockfile above an installed package, and names the package
+/// manager that wrote it.
+///
+/// The file name is the format decision, here and in Rust: nothing sniffs
+/// content, and a directory holding two lockfiles is refused rather than ordered
+/// by preference, because which one installed this tree would then be a guess.
+function findLockfile(packageRoot) {
   let directory = resolve(packageRoot);
   while (true) {
-    const candidate = join(directory, "bun.lock");
-    if (existsSync(candidate)) return candidate;
+    const found = SUPPORTED_LOCKFILES.flatMap(({ fileName, packageManager }) => {
+      const candidate = join(directory, fileName);
+      return existsSync(candidate) ? [{ path: candidate, packageManager }] : [];
+    });
+    if (found.length > 1) {
+      throw new CertificationRefusal({
+        stage: "artifact-acquisition",
+        owner: "package-manager",
+        reason: `${directory} holds ${found.length} lockfiles (${found
+          .map(entry => entry.packageManager)
+          .join(", ")}); which one installed ${packageRoot} is not decidable`
+      });
+    }
+    if (found.length === 1) return found[0];
+    // A lockfile this adapter does not read, with none it does beside it, is
+    // the one that installed this tree. Walking past it to an ancestor's
+    // lockfile would read a selection for some other install.
+    const unsupported = UNSUPPORTED_LOCKFILES.filter(fileName =>
+      existsSync(join(directory, fileName))
+    );
+    if (unsupported.length) {
+      throw new CertificationRefusal({
+        stage: "artifact-acquisition",
+        owner: "package-manager",
+        reason:
+          `${join(directory, unsupported[0])} is not a lockfile format this certifier reads; ` +
+          `expected one of ${SUPPORTED_LOCKFILES.map(entry => entry.fileName).join(", ")}`
+      });
+    }
     const parent = dirname(directory);
     if (parent === directory) break;
     directory = parent;
@@ -500,7 +1191,9 @@ function findBunLock(packageRoot) {
   throw new CertificationRefusal({
     stage: "artifact-acquisition",
     owner: "package-manager",
-    reason: `no exact Bun text lockfile exists above ${packageRoot}`
+    reason:
+      `no exact lockfile exists above ${packageRoot}; expected one of ` +
+      SUPPORTED_LOCKFILES.map(entry => entry.fileName).join(", ")
   });
 }
 
@@ -520,23 +1213,84 @@ function findBunLock(packageRoot) {
 /// program then cannot resolve the reference, and the demands that needed it
 /// stay open exactly as they were.
 function createCompilerSourceCollector({
-  bunLockPath,
-  bunLockIndex,
+  lockfilePath,
+  lockPackageManager,
+  lockIndex,
   scratch,
   resolutionSession,
   scratchPrefix,
-  onUnnameable = null
+  onUnnameable = null,
+  // Called with the package name of a dependency the closure reaches but that
+  // is not installed (an absent optional peer). Nothing is supplied for it,
+  // which is fail-closed for the proof; the caller decides what it means for
+  // the stated environment.
+  onUnlocated = null,
+  // Also follow each source package's *runtime* imports under the case's
+  // conditions, so the probe workspace carries what that runtime loads. Node's
+  // `node` condition selects `@solidjs/web`'s `dist/server.js`, which imports
+  // `seroval` and `seroval-plugins`; neither is reached through declarations,
+  // so a probe importing the package under test failed with
+  // `ERR_MODULE_NOT_FOUND` before any gate could run. A runtime-only package
+  // is supplied exactly like any other source (lock-selected, archive
+  // integrity-checked), but it is never evidence the proof relies on: one that
+  // cannot be located or named is skipped rather than withheld, because
+  // withholding poisons a name the declarations may still need, and a missing
+  // runtime package already fails its probe closed.
+  followRuntimeDependencies = false
 }) {
   const sourceArtifacts = new Map();
   const compilerSourceClosures = new Map();
+  // Who resolved what: for each installed source root, every lookup the walk
+  // made that reached it -- the importer's package root and the bare name
+  // looked up. The receipt's dependency environment states these as its
+  // resolution edges, and admission replays exactly them from each importer's
+  // own installed location instead of demanding that every located package
+  // see one copy of every name, which no pnpm tree does.
+  const resolutionsByRoot = new Map();
+  const canonicalPackageRoot = root => {
+    try {
+      return realpathSync(resolve(root));
+    } catch {
+      return resolve(root);
+    }
+  };
+  const recordResolution = (installedRoot, located) => {
+    if (!located.importerPackageRoot) return;
+    const importerPackageRoot = canonicalPackageRoot(located.importerPackageRoot);
+    const specifier = packageNameOfSpecifier(located.specifier);
+    const key = canonicalPackageRoot(installedRoot);
+    let edges = resolutionsByRoot.get(key);
+    if (!edges) resolutionsByRoot.set(key, (edges = new Map()));
+    edges.set(JSON.stringify([importerPackageRoot, specifier]), { importerPackageRoot, specifier });
+  };
+  const resolvedFromOf = installedRoot =>
+    [...(resolutionsByRoot.get(canonicalPackageRoot(installedRoot))?.values() ?? [])].sort(
+      (left, right) =>
+        left.importerPackageRoot.localeCompare(right.importerPackageRoot) ||
+        left.specifier.localeCompare(right.specifier)
+    );
   let nextSourceIndex = 0;
   const locateExternalFrom = (ownerRoot, dependency) => {
-    if (dependency.specifier.startsWith("node:")) return null;
+    if (nodeBuiltinSpecifier(dependency.specifier)) return null;
     const dependencyName = packageNameOfSpecifier(dependency.specifier);
-    const dependencyImporter = resolve(
+    // ADR 0184, amended by ADR 0188: from the importer's real path, as Node
+    // and TypeScript (without `preserveSymlinks`) resolve it. A pnpm link's own
+    // dependencies sit beside its target under `.pnpm/<name>@<version>/
+    // node_modules`, not above the link: from `app/node_modules/solid-js`
+    // nothing is installed above, and a copy hoisted above a link
+    // (`app/node_modules/seroval`) is not the one the package resolves.
+    // Admission replays these lookups from real paths too, so a lookup from the
+    // written path would certify an environment no install reproduces.
+    const writtenImporter = resolve(
       ownerRoot,
       dependency.importerPath ?? dependency.source
     );
+    let dependencyImporter = writtenImporter;
+    try {
+      dependencyImporter = realpathSync(writtenImporter);
+    } catch {
+      // A missing file keeps its written path, and the lookup below reports it.
+    }
     const dependencyRoot = locateExternalDependencyPackageRoot(
       dependencyImporter,
       dependency
@@ -545,14 +1299,17 @@ function createCompilerSourceCollector({
     const dependencyManifest = JSON.parse(
       readFileSync(join(dependencyRoot, "package.json"), "utf8")
     );
-    const dependencyLock = exactBunLockSelection(
-      bunLockIndex,
-      dependencyManifest.name,
-      dependencyManifest.version,
-      bunLockLocatorForInstalledPackage(bunLockPath, dependencyRoot)
-    );
+    const dependencyLock = exactLockSelection({
+      index: lockIndex,
+      packageManager: lockPackageManager,
+      lockfilePath,
+      packageRoot: dependencyRoot,
+      packageName: dependencyManifest.name,
+      packageVersion: dependencyManifest.version
+    });
     return {
       ...dependency,
+      importerPackageRoot: ownerRoot,
       dependencyImporter,
       dependencyRoot,
       dependencyManifest,
@@ -566,6 +1323,11 @@ function createCompilerSourceCollector({
     visiting = new Set()
   ) => {
     const installedRoot = resolve(located.dependencyRoot);
+    // Before anything returns: a second importer reaching an already-walked
+    // copy is a second edge, even though the walk below it is not repeated,
+    // and a lookup that reaches a graph node's package (a semantic root) is
+    // an edge of that node, reported on its own request.
+    recordResolution(installedRoot, located);
     if (semanticRoots.has(installedRoot)) return [];
     const memoKey = JSON.stringify([
       installedRoot,
@@ -612,7 +1374,7 @@ function createCompilerSourceCollector({
         scratch: sourceScratch,
         packageName: located.dependencyManifest.name,
         packageVersion: located.dependencyManifest.version,
-        lockfile: resolve(bunLockPath),
+        lockfile: resolve(lockfilePath),
         lockLocator: located.dependencyLock.locator,
         installedPackageRoot: installedRoot
       };
@@ -636,12 +1398,63 @@ function createCompilerSourceCollector({
         integrity: located.dependencyLock.integrity
       }, resolutionSession);
     } catch (error) {
-      if (["target-not-found", "declarations-not-found"].includes(error?.code)) {
+      // A specifier the located package does not resolve is a fact about that
+      // *specifier*, not about the package's bytes. The package's own
+      // published declarations are exactly what they were, so they are still
+      // supplied and only the closure *behind* the failed specifier is
+      // dropped: the private project then reports that one module missing,
+      // which is what it is.
+      //
+      // Letting the failure escape instead unnames the whole package, because
+      // both callers answer a throw by withholding
+      // `packageNameOfSpecifier(specifier)` — and the name a subpath
+      // specifier carries is the name of a package that authenticated
+      // perfectly. `@solid-primitives/favicon`'s compiled output imports
+      // `solid-js/web`, which Solid 2 no longer exports; withholding
+      // `solid-js` for it deleted every Solid declaration from the witness
+      // program, collapsed `Component<Props>` and every other imported alias
+      // to `any`, and manufactured an `openType` root the published typings
+      // do not have. Substitution — the risk withholding exists to prevent —
+      // is unaffected: each source is authenticated against its own lock
+      // selection in Rust, which still withholds a name whose copy disagrees.
+      if (error instanceof ArtifactResolutionError) {
         return [source];
       }
       throw error;
     }
     const transitive = [source];
+    if (followRuntimeDependencies) {
+      const declared = new Set(
+        closure.externalDependencies
+          .filter(dependency => dependency.axis === "declarations")
+          .map(dependency => packageNameOfSpecifier(dependency.specifier))
+      );
+      for (const dependency of closure.externalDependencies.filter(
+        dependency =>
+          dependency.axis === "runtime" &&
+          !declared.has(packageNameOfSpecifier(dependency.specifier))
+      )) {
+        let child;
+        try {
+          child = locateExternalFrom(closure.packageRoot, dependency);
+        } catch {
+          continue;
+        }
+        if (!child) continue;
+        try {
+          transitive.push(
+            ...await collectCompilerSources(
+              child,
+              sourceConditions,
+              semanticRoots,
+              nextVisiting
+            )
+          );
+        } catch {
+          continue;
+        }
+      }
+    }
     for (const dependency of closure.externalDependencies.filter(
       dependency => dependency.axis === "declarations"
     )) {
@@ -652,7 +1465,12 @@ function createCompilerSourceCollector({
       if (onUnnameable) {
         try {
           const child = locateExternalFrom(closure.packageRoot, dependency);
-          if (!child) continue;
+          if (!child) {
+            if (!nodeBuiltinSpecifier(dependency.specifier)) {
+              onUnlocated?.(packageNameOfSpecifier(dependency.specifier));
+            }
+            continue;
+          }
           transitive.push(
             ...await collectCompilerSources(
               child,
@@ -661,13 +1479,18 @@ function createCompilerSourceCollector({
               nextVisiting
             )
           );
-        } catch {
-          onUnnameable(packageNameOfSpecifier(dependency.specifier));
+        } catch (error) {
+          onUnnameable(packageNameOfSpecifier(dependency.specifier), error);
         }
         continue;
       }
       const child = locateExternalFrom(closure.packageRoot, dependency);
-      if (!child) continue;
+      if (!child) {
+        if (!nodeBuiltinSpecifier(dependency.specifier)) {
+          onUnlocated?.(packageNameOfSpecifier(dependency.specifier));
+        }
+        continue;
+      }
       transitive.push(
         ...await collectCompilerSources(
           child,
@@ -682,6 +1505,11 @@ function createCompilerSourceCollector({
   return {
     locateExternalFrom,
     collectCompilerSources,
+    resolvedFromOf,
+    // Exposed so the artifact-case policy replays a dependency edge through
+    // the same memoized resolver the collector uses, instead of a second one
+    // that could disagree with it.
+    resolutionSession,
     sourceArtifacts,
     compilerSourceClosureCount: () => compilerSourceClosures.size
   };
@@ -750,7 +1578,8 @@ export function isReusableDependencyRefusalAudit({
   integrity,
   certificationImporter,
   entrypoints = [],
-  conditions = []
+  conditions = [],
+  host = null
 }) {
   if (
     audit?.format !== "solid-checker-contract-proposal-refusals" ||
@@ -780,7 +1609,7 @@ export function isReusableDependencyRefusalAudit({
     candidates = finiteArtifactCandidates(
       manifest,
       currentEntrypoints.entrypoints,
-      finiteConditionPartitions(manifest, conditions),
+      finiteConditionPartitions(manifest, conditions, host),
       packageRoot
     ).filter(candidate =>
       // Re-derived here rather than read from the untrusted audit: a case the
@@ -866,6 +1695,11 @@ export function isReusableDependencyRefusalAudit({
 /// the package root and catalog it certifies. Exported so a harness that
 /// generates a proposal ahead of certification can generate it under the same
 /// importer and hand it over with `--proposal`.
+///
+/// The name is a path identity: receipts and catalog entries are keyed on it,
+/// and nothing after certification needs the file to exist (the catalog reader
+/// canonicalizes a missing importer by its directory). The file itself exists
+/// only while certification runs -- see `claimCertificationImporter`.
 export function certificationImporterPathFor({ packageRoot, catalog }) {
   const resolvedRoot = realpathSync(resolve(packageRoot));
   const resolvedCatalog = resolve(
@@ -878,6 +1712,88 @@ export function certificationImporterPathFor({ packageRoot, catalog }) {
     .update(resolvedCatalog)
     .digest("hex");
   return join(dirname(resolvedRoot), `.solid-checker-certification-${importerIdentity}.mjs`);
+}
+
+const CERTIFICATION_IMPORTER_SOURCE = "export {};\n";
+const CERTIFICATION_IMPORTER_SIGNALS = Object.freeze(["SIGINT", "SIGTERM", "SIGHUP"]);
+// Importers this process has materialized and not yet removed. Every exit path
+// that does not reach the owner's `finally` -- `process.exit`, an uncaught
+// exception, a terminating signal -- removes them from here.
+const liveCertificationImporters = new Set();
+let certificationImporterHooks = null;
+
+function removeLiveCertificationImporters() {
+  for (const path of liveCertificationImporters) {
+    try {
+      rmSync(path, { force: true });
+    } catch {
+      // Best effort on the way out; a failure here must not mask the exit.
+    }
+  }
+  liveCertificationImporters.clear();
+}
+
+function installCertificationImporterHooks() {
+  if (certificationImporterHooks) return;
+  const onExit = () => removeLiveCertificationImporters();
+  const onSignal = signal => {
+    removeLiveCertificationImporters();
+    uninstallCertificationImporterHooks();
+    // Re-raise only when this handler was the signal's sole listener: the
+    // default action then terminates exactly as it would have without it. A
+    // host that listens for the signal itself has already been told.
+    if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+  };
+  process.on("exit", onExit);
+  for (const signal of CERTIFICATION_IMPORTER_SIGNALS) process.on(signal, onSignal);
+  certificationImporterHooks = { onExit, onSignal };
+}
+
+function uninstallCertificationImporterHooks() {
+  if (!certificationImporterHooks) return;
+  const { onExit, onSignal } = certificationImporterHooks;
+  process.off("exit", onExit);
+  for (const signal of CERTIFICATION_IMPORTER_SIGNALS) process.off(signal, onSignal);
+  certificationImporterHooks = null;
+}
+
+/// Materializes the certification importer at `path` for the duration of one
+/// certification and returns the function that removes it. Certification must
+/// leave nothing in the user's installed tree, so the caller releases it on
+/// every path out (`finally`), and a process exit, uncaught exception or
+/// terminating signal that bypasses the caller removes it too.
+///
+/// A file already at `path` with exactly the importer's bytes is one an earlier
+/// run left behind (killed with SIGKILL, or a build that kept the file after
+/// success): the name is derived from this package root and catalog, so it is
+/// this certification's own, and it is adopted and removed with this run. Any
+/// other bytes there are not ours and refuse. Two concurrent certifications of
+/// the same package root into the same catalog share the name and would remove
+/// each other's file; they already race on that catalog.
+export function claimCertificationImporter(path) {
+  try {
+    writeFileSync(path, CERTIFICATION_IMPORTER_SOURCE, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (
+      error?.code !== "EEXIST" ||
+      readFileSync(path, "utf8") !== CERTIFICATION_IMPORTER_SOURCE
+    ) {
+      throw error;
+    }
+  }
+  liveCertificationImporters.add(path);
+  installCertificationImporterHooks();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    liveCertificationImporters.delete(path);
+    try {
+      rmSync(path, { force: true });
+    } finally {
+      if (liveCertificationImporters.size === 0) uninstallCertificationImporterHooks();
+    }
+  };
 }
 
 function samePathIdentity(left, right) {
@@ -912,7 +1828,8 @@ export function reusableProposalInputs({
   integrity,
   certificationImporter,
   entrypoints = [],
-  conditions = []
+  conditions = [],
+  host = null
 }) {
   const digest = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
   const sameList = (left, right) =>
@@ -936,6 +1853,9 @@ export function reusableProposalInputs({
     !samePathIdentity(inputs.certificationImporter, certificationImporter) ||
     !sameList(inputs?.entrypoints, entrypoints) ||
     !sameList(inputs?.conditions, conditions) ||
+    // ADR 0140: a proposal enumerated for another host (or for none) describes
+    // other cases and another closure.
+    (inputs?.host ?? null) !== (host ?? null) ||
     inputs?.document?.sha256 !== digest(documentBytes) ||
     inputs?.plan?.sha256 !== digest(planBytes) ||
     !Array.isArray(inputs?.certificationInputs) ||
@@ -944,27 +1864,57 @@ export function reusableProposalInputs({
     return null;
   }
   let expected;
+  let expectedClaims;
   try {
     const current = finiteEntrypoints(manifest, entrypoints, packageRoot);
-    expected = new Set(
-      finiteArtifactCandidates(
+    const candidates = finiteArtifactCandidates(
+      manifest,
+      current.entrypoints,
+      finiteConditionPartitions(manifest, conditions, host),
+      packageRoot
+    ).map(candidate => ({
+      ...candidate,
+      disposition: artifactCaseDisposition({
         manifest,
-        current.entrypoints,
-        finiteConditionPartitions(manifest, conditions),
-        packageRoot
-      )
-        .filter(candidate =>
-          artifactCaseDisposition({
-            manifest,
-            packageRoot,
-            entrypoint: candidate.entrypoint,
-            conditions: candidate.conditions
-          }) === null
-        )
+        packageRoot,
+        entrypoint: candidate.entrypoint,
+        conditions: candidate.conditions
+      })
+    }));
+    expected = new Set(
+      candidates
+        .filter(candidate => candidate.disposition === null)
         .map(candidate => artifactCaseCoordinate(candidate.entrypoint, candidate.conditions))
+    );
+    // A reused proposal omitted these cases on the strength of a content
+    // premise. Recompute the census rather than trusting the sidecar's copy of
+    // it: an omitted claim would reach certification unproved, and an invented
+    // one would refuse a proposal for a case that was never omitted.
+    expectedClaims = new Set(
+      declaredApplicabilityClaims(
+        candidates
+          .filter(candidate => candidate.disposition !== null)
+          .map(candidate => ({
+            entrypoint: candidate.entrypoint,
+            conditions: candidate.conditions,
+            class: candidate.disposition.class,
+            reason: candidate.disposition.reason
+          }))
+      ).map(claim => artifactCaseCoordinate(claim.entrypoint, claim.conditions))
     );
   } catch {
     return null;
+  }
+  // A sidecar written before this field existed declares nothing, which is
+  // admissible only for a package whose census claims nothing: the equality
+  // below refuses reuse the moment a claim would have to travel unproved.
+  const declaredClaims = Array.isArray(inputs.inapplicableCases)
+    ? inputs.inapplicableCases
+    : [];
+  if (declaredClaims.length !== expectedClaims.size) return null;
+  for (const claim of declaredClaims) {
+    const coordinate = artifactCaseCoordinate(claim?.entrypoint, claim?.conditions);
+    if (coordinate === null || !expectedClaims.has(coordinate)) return null;
   }
   for (const input of inputs.certificationInputs) {
     const coordinate = artifactCaseCoordinate(input?.entrypoint, input?.conditions);
@@ -1011,7 +1961,61 @@ function storeMergedObject(source, target) {
   copyFileSync(source, target);
 }
 
-function mergeProposalDependencies(dependencies, outputRoot) {
+/// Every module of a package that re-exports a given specifier, keyed by that
+/// specifier -- not only the first one in canonical order.
+///
+/// One graph node still stands for one specifier: `prepareState` proves every
+/// occurrence locates the same installed copy before it plans anything. But
+/// the private generation catalog is keyed by `(importer, specifier)`, and
+/// emission asks it about the artifact case's *entry module* and about every
+/// relative module the export chain walks through. Naming one arbitrary
+/// occurrence answers whichever query happens to match it and silently
+/// withholds the accepted contract from the rest, which is then
+/// indistinguishable from having no dependency at all: `motion-solidjs@0.6.0`
+/// re-exports `motion-dom` from four modules, `dist/v1/core/render-style.mjs`
+/// sorted first, and its entry module's `addScaleCorrector` bridge therefore
+/// resolved against nothing.
+///
+/// `edges` are the caller's already-filtered static runtime dependency edges, so the
+/// census cannot disagree with the set of nodes that gets planned.
+export function staticRuntimeDependencies(resolved) {
+  return resolved.externalDependencies.filter(
+    dependency => dependency.axis === "runtime" &&
+      (dependency.kind === "reexport" || dependency.kind === "import")
+  );
+}
+
+// A refusal is a discovery hint, never authority. Only request an additional
+// contract for a declaration re-export present in this exact module census.
+// The native graph must still certify that dependency and bind its receipt to
+// the declaration importer; source-only archives do not supply these bindings.
+export function staticBindingDependencies(resolved, artifactCase, refusals = []) {
+  const conditionsKey = value => JSON.stringify([...new Set([...(value ?? []), "import"])].sort());
+  const requested = new Set();
+  for (const refusal of refusals) {
+    if (refusal.entrypoint !== artifactCase.entrypoint ||
+        conditionsKey(refusal.conditions) !== conditionsKey(artifactCase.conditions)) continue;
+    const match = /^accepted dependency (.+) has no exact declarations binding for export [^\n]+$/.exec(refusal.reason ?? "");
+    if (match) requested.add(match[1]);
+  }
+  return [
+    ...staticRuntimeDependencies(resolved),
+    ...resolved.externalDependencies.filter(edge => edge.axis === "declarations" &&
+      edge.kind === "reexport" && requested.has(edge.specifier))
+  ];
+}
+
+export function reexportImporterCensus(packageRoot, edges) {
+  const census = new Map();
+  for (const edge of edges) {
+    const importers = census.get(edge.specifier) ?? new Set();
+    importers.add(resolve(packageRoot, edge.importerPath ?? edge.source));
+    census.set(edge.specifier, importers);
+  }
+  return census;
+}
+
+export function mergeProposalDependencies(dependencies, outputRoot) {
   if (dependencies.length === 0) {
     return { catalog: "", proposalDependencies: {} };
   }
@@ -1038,16 +2042,37 @@ function mergeProposalDependencies(dependencies, outputRoot) {
       dependency.planning.proposal,
       join(outputRoot, "objects", documentName)
     );
-    contracts.push({
-      document: `objects/${documentName}`,
-      documentDigest,
-      import: resolution
-    });
+    // One entry per module of the consuming package that imports or re-exports this
+    // specifier. `prepareState` located every one of them and refused the node
+    // outright unless they all resolved to the same installed copy, so the
+    // only field that differs between these entries is the importer -- exactly
+    // the field the generation-time index is keyed by. The entries share one
+    // document object; emission reads whichever occurrence its export chain
+    // arrives at.
+    const importers = dependency.reexportImporters?.length
+      ? dependency.reexportImporters
+      : [resolution.importer];
+    if (!importers.includes(resolution.importer)) {
+      throw new Error(
+        `dependency ${dependency.viaSpecifier} names an importer outside its occurrence census`
+      );
+    }
+    for (const importer of importers) {
+      contracts.push({
+        document: `objects/${documentName}`,
+        documentDigest,
+        import: importer === resolution.importer ? resolution : { ...resolution, importer }
+      });
+    }
     proposalDependencies[dependency.viaSpecifier] = {
       packageName: dependency.node.packageName,
       artifactCase: dependency.demandPlan.selectedArtifactCase,
       acceptedContractDigest: dependency.demandPlan.candidateSemanticDigest,
-      exports: resolution.exports ?? {}
+      exports: resolution.exports ?? {},
+      // ADR 0154: what the dependency withholds under ADR 0150, so a dependent
+      // that forwards exactly such a name withholds it too instead of
+      // refusing. Absent when empty, so no other record changes by a byte.
+      ...withheldExportsOf(resolution)
     };
   }
   contracts.sort((left, right) =>
@@ -1063,11 +2088,55 @@ function mergeProposalDependencies(dependencies, outputRoot) {
   return { catalog, proposalDependencies };
 }
 
+/// The names a resolution withholds as unavailable under ADR 0150 and ADR
+/// 0154, as a planned dependency's `withheldExports`.
+export function withheldExportsOf(resolution) {
+  const withheld = [
+    ...new Set([
+      ...(resolution?.foreignDeclarationExports ?? []),
+      ...(resolution?.forwardedForeignExports ?? []),
+      ...(resolution?.runtimeWithheldExports ?? [])
+    ])
+  ].sort();
+  return withheld.length > 0 ? { withheldExports: withheld } : {};
+}
+
+/// ADR 0156: the record a dependent is generated with for each direct
+/// dependency node ADR 0129 pruned: `{ [viaSpecifier]: { packageName, exports
+/// } }`, where `exports` are the names the pruned node's resolution binds on
+/// both axes inside its own package. A name it forwards from another package
+/// is not listed: the certifier accepts only an exact own binding.
+///
+/// The record is a claim; the native transaction replays the pruned node from
+/// its archive (`graphCaseSet.cases[].pruned`) and refuses a disagreement.
+export function prunedDependencyRecords(dependencies) {
+  const records = {};
+  for (const dependency of dependencies) {
+    const resolution = dependency.state?.planning?.resolution;
+    if (!resolution || typeof dependency.viaSpecifier !== "string") continue;
+    const root = `${resolution.packageRoot}/`;
+    const own = target =>
+      typeof target?.module?.path === "string" &&
+      target.module.path.startsWith(root) &&
+      !target.module.path.slice(root.length).split("/").includes("node_modules");
+    const exports = Object.entries(resolution.exports ?? {})
+      .filter(([, binding]) => own(binding?.runtime) && own(binding?.declarations))
+      .map(([name]) => name)
+      .sort();
+    if (records[dependency.viaSpecifier]) {
+      throw new Error(`dependency graph repeats pruned specifier ${dependency.viaSpecifier}`);
+    }
+    records[dependency.viaSpecifier] = { packageName: dependency.state.node.packageName, exports };
+  }
+  return records;
+}
+
 function graphNodeExecutionInput(state) {
   return {
-    planning: state.planning,
-    lockfile: state.node.bunLockPath,
+    planning: withEnvironmentNotAcquired(state.planning, state.environmentNotAcquired),
+    lockfile: state.node.lockfilePath,
     lockLocator: state.node.lockLocator,
+    resolvedFrom: state.resolvedFrom ?? [],
     sourceDependencies: (state.sourceDependencies ?? []).map(source => ({
       packageName: source.packageName,
       packageVersion: source.packageVersion,
@@ -1076,7 +2145,8 @@ function graphNodeExecutionInput(state) {
       archive: source.archive,
       lockfile: source.lockfile,
       lockLocator: source.lockLocator,
-      installedPackageRoot: source.installedPackageRoot
+      installedPackageRoot: source.installedPackageRoot,
+      resolvedFrom: source.resolvedFrom ?? []
     }))
   };
 }
@@ -1086,7 +2156,10 @@ export function buildPublishedGraphExecutionRequest({
   typefactsExecutable,
   issuerConfiguration,
   catalogRoot,
-  trustConfigurationOutput
+  trustConfigurationOutput,
+  probeHarnessRoot,
+  probeNodeExecutable,
+  probeRecipeCorpus
 }) {
   if (!Array.isArray(cases) || cases.length === 0) {
     throw new TypeError("published graph execution requires at least one root case");
@@ -1095,12 +2168,16 @@ export function buildPublishedGraphExecutionRequest({
     root: graphNodeExecutionInput(item.root),
     dependencies: item.nodes
       .filter(state => state !== item.root)
-      .map(graphNodeExecutionInput)
+      .map(graphNodeExecutionInput),
+    ...(item.pruned?.length ? { pruned: item.pruned.map(graphNodeExecutionInput) } : {})
   });
+  const probes = probeRecipeCorpus
+    ? { probeHarnessRoot, probeNodeExecutable, probeRecipeCorpus }
+    : {};
   if (cases.length > 1) {
     const nodes = new Map();
     for (const item of cases) {
-      for (const state of item.nodes) {
+      for (const state of [...item.nodes, ...(item.pruned ?? [])]) {
         const key = state.node?.key;
         if (typeof key !== "string" || !key) {
           throw new TypeError("published graph case-set node has no full-identity key");
@@ -1115,13 +2192,17 @@ export function buildPublishedGraphExecutionRequest({
     }
     return {
       schemaVersion: 5,
+      ...probes,
       graphCaseSet: {
         nodes: [...nodes]
           .sort(([left], [right]) => left.localeCompare(right))
           .map(([key, input]) => ({ key, ...input })),
         cases: cases.map(item => ({
           root: item.root.node.key,
-          nodes: [...new Set(item.nodes.map(state => state.node.key))].sort()
+          nodes: [...new Set(item.nodes.map(state => state.node.key))].sort(),
+          ...(item.pruned?.length
+            ? { pruned: [...new Set(item.pruned.map(state => state.node.key))].sort() }
+            : {})
         }))
       },
       typefactsExecutable: resolve(typefactsExecutable),
@@ -1132,6 +2213,7 @@ export function buildPublishedGraphExecutionRequest({
   }
   return {
     schemaVersion: 3,
+    ...probes,
     graph: graphFor(cases[0]),
     typefactsExecutable: resolve(typefactsExecutable),
     issuerConfiguration: resolve(issuerConfiguration),
@@ -1139,6 +2221,10 @@ export function buildPublishedGraphExecutionRequest({
     trustConfigurationOutput: resolve(trustConfigurationOutput)
   };
 }
+
+// Sequence of native `--execute-contract-certification` launches in this
+// process, so concurrent transactions never share a request file.
+let nativeExecutionSequence = 0;
 
 async function executePreparedPublishedGraphs({
   options,
@@ -1160,9 +2246,17 @@ async function executePreparedPublishedGraphs({
     typefactsExecutable,
     issuerConfiguration: options.issuerConfiguration,
     catalogRoot,
-    trustConfigurationOutput
+    trustConfigurationOutput,
+    ...probeHarnessRequest(options)
   });
-  const requestPath = join(scratch, `published-graph-execution-${cases[0].root.index}.json`);
+  // Unique per execution, not per first case: every trial of a retained-floor
+  // selection starts with the same base case, and trials now run side by side.
+  // Two of them sharing one request file handed one verifier the other's
+  // planning, which refused a case for a graph node it did not depend on.
+  const requestPath = join(
+    scratch,
+    `published-graph-execution-${cases[0].root.index}-${++nativeExecutionSequence}.json`
+  );
   writeFileSync(requestPath, `${JSON.stringify(execution, null, 2)}\n`);
   const child = await runNativeAsync(
     "solid-checker",
@@ -1170,31 +2264,206 @@ async function executePreparedPublishedGraphs({
     { cwd: options.packageRoot, env: { SOLID_CHECKER_DAEMON: "0" } }
   );
   if (child.error) throw new Error(`could not start the native checker: ${child.error.message}`);
+  forwardNativeTimings(child);
   if (child.status !== 0) {
+    const reason =
+      child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`;
     throw new CertificationRefusal({
       stage: "witness-acquisition",
       owner: "certifier",
-      reason: child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`
+      reason,
+      ...nativeRefusalAttribution(reason)
     });
   }
-  return { authority: "native-certification-complete", catalogRoot };
+  return {
+    authority: "native-certification-complete",
+    catalogRoot,
+    dependencyEnvironment: dependencyEnvironmentFromNativeOutput(child.stdout),
+    selfAdmission: selfAdmissionFromNativeOutput(child.stdout),
+    withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
+    withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
+    closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
+    certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout),
+    recipeAddresses: recipeAddressesFromNativeOutput(child.stdout),
+    graphNodeCases: graphNodeCasesFromNativeOutput(child.stdout)
+  };
 }
 
-function reachableGraphStates(root, byKey) {
+function reachableGraphStates(root, byKey, admit = () => true) {
   const found = new Set();
   const visit = state => {
     if (found.has(state.node.key)) return;
-    for (const dependency of state.node.dependencies) visit(byKey.get(dependency.node));
+    for (const dependency of state.node.dependencies) {
+      const child = byKey.get(dependency.node);
+      if (admit(child)) visit(child);
+    }
     found.add(state.node.key);
   };
   visit(root);
   return [...byKey.values()].filter(state => found.has(state.node.key));
 }
 
-async function mapWithExactConcurrency(items, concurrency, worker) {
+/// ADR 0156: the pruned dependency nodes a case must transport so the
+/// certifier can replay them from their archives. A pruned node is carried
+/// only when a node of the case withholds an exact forward of one of its
+/// exports (`runtimeWithheldExports`); its own dependencies join the case so its
+/// resolution plans. It is planned, never finalized and never bound.
+export function withPrunedDependencyNodes(item, byKey) {
+  const members = new Set(item.nodes);
+  const pruned = [];
+  for (const state of item.nodes) {
+    if (!(state.planning?.resolution?.runtimeWithheldExports?.length > 0)) continue;
+    for (const dependency of state.directDependencies ?? []) {
+      if (dependency.state?.statesNothing && !pruned.includes(dependency.state)) {
+        pruned.push(dependency.state);
+      }
+    }
+  }
+  if (pruned.length === 0) return item;
+  const nodes = [...item.nodes];
+  for (const node of pruned) {
+    for (const reached of reachableGraphStatesWithoutStatementlessNodes(node, byKey)) {
+      if (reached !== node && !members.has(reached)) {
+        members.add(reached);
+        nodes.push(reached);
+      }
+    }
+  }
+  return { ...item, nodes, pruned };
+}
+
+/// The graph a case certifies once every statementless dependency node has
+/// left it (ADR 0129). Each such node's dependents were generated without it,
+/// so neither it nor anything reached only through it is part of the case.
+export function reachableGraphStatesWithoutStatementlessNodes(root, byKey) {
+  return reachableGraphStates(root, byKey, state => !state?.statesNothing);
+}
+
+/// Whether a graph node's generated proposal states nothing and proposes
+/// nothing: one artifact case, no module-initialization claim, no closure
+/// candidate, and every export `{ call: {}, shape: "unknown" }` (empty lists
+/// only). Such a proposal has no semantic claim a receipt could close
+/// (`derive_closed_claims_root` answers `NoClosedClaims`), so no certification
+/// can ever accept it and no dependent can project it.
+///
+/// Conservative in the only direction that matters for precision: anything
+/// this reading does not recognize answers `false`, which keeps the node and
+/// its existing refusal. Answering `true` is never unsound, because a pruned
+/// dependency is simply unaccepted for its dependents: a re-export of it still
+/// refuses, a closure reaching an ordinary package declines, and a core edge
+/// takes the dialect's answer, as in the default lane (ADR 0027).
+export function graphProposalStatesNothing(document, plan) {
+  if (!Array.isArray(plan?.closureCandidates) || plan.closureCandidates.length > 0) return false;
+  const cases = Object.values(document?.entrypoints ?? {}).flatMap(value => value?.cases ?? []);
+  if (cases.length !== 1) return false;
+  const [artifactCase] = cases;
+  if (artifactCase?.initialization !== undefined) return false;
+  const exports = Object.values(artifactCase?.exports ?? {});
+  if (exports.length === 0) return false;
+  return exports.every(id => {
+    const summary = document.summaries?.[id];
+    if (!summary || typeof summary !== "object" || Array.isArray(summary)) return false;
+    if (Object.keys(summary).some(key => key !== "call" && key !== "shape")) return false;
+    if (summary.shape !== "unknown") return false;
+    const call = summary.call ?? {};
+    if (typeof call !== "object" || Array.isArray(call)) return false;
+    return Object.values(call).every(value => Array.isArray(value) && value.length === 0);
+  });
+}
+
+/// A graph node that could not be prepared, acquired or generated is a fact
+/// about that node, not about the transaction. Its dependents' proposals are
+/// generated *against* its contract, so the refusal reaches every node above
+/// it -- and only those. Nothing weaker would be sound: a dependent generated
+/// without the dependency it names is exactly the dependency-blind proposal
+/// this lane exists to replace.
+///
+/// A node that *generated* but states nothing is not a refusal and does not
+/// come through here (ADR 0129): it is pruned, and its dependents generate
+/// against it as an unaccepted dependency, which is what that node's contract
+/// could only ever have told them.
+export function cascadeGraphNodeRefusals(states, nodeRefusals) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const state of states) {
+      if (nodeRefusals.has(state.node.key)) continue;
+      const blocked = state.directDependencies.find(
+        dependency => nodeRefusals.has(dependency.state.node.key)
+      );
+      if (!blocked) continue;
+      const cause = nodeRefusals.get(blocked.state.node.key);
+      nodeRefusals.set(state.node.key, {
+        stage: cause.stage,
+        reason: `dependency ${blocked.viaSpecifier} refused: ${cause.reason}`
+      });
+      changed = true;
+    }
+  }
+  return nodeRefusals;
+}
+
+/// Splits prepared artifact cases into the ones whose whole graph is intact
+/// and the ones a refused node reaches, naming the exact node that refused.
+/// A case is never kept with a node missing from its graph, and a refused
+/// case is never dropped silently -- it leaves an explicit coordinate and
+/// reason for the audit.
+export function graphCasesWithoutRefusedNodes({
+  prepared,
+  byKey,
+  nodeRefusals,
+  reachable = reachableGraphStates
+}) {
+  const cases = [];
+  const refusals = [];
+  for (const item of prepared) {
+    const nodes = reachable(item.root, byKey);
+    const refused = nodes.find(state => nodeRefusals.has(state.node.key));
+    if (!refused) {
+      cases.push({ ...item, nodes });
+      continue;
+    }
+    const cause = nodeRefusals.get(refused.node.key);
+    refusals.push({
+      entrypoint: item.artifactCase.entrypoint,
+      conditions: [...item.artifactCase.conditions],
+      stage: cause.stage,
+      reason:
+        `graph node ${refused.node.packageName}@${refused.node.packageVersion} ` +
+        `${refused.node.entrypoint} [${refused.node.conditions.join(",")}] refused: ${cause.reason}`
+    });
+  }
+  return { cases, refusals };
+}
+
+/// Why a graph that dropped a retained case must be abandoned, as a message,
+/// or `null` when every retained case survived preparation.
+///
+/// The retained cases are the ones the proposal lane already generated and
+/// would publish. Here -- unlike at certification time, where every case is
+/// still unproved -- the comparison is certain rather than a wager: a retained
+/// case this graph cannot even prepare is one this lane certainly will not
+/// publish. Taking the lane anyway would trade a covered case for a chance at
+/// a frontier one.
+export function retainedCaseFloorRefusal(retainedCases, survived, caseRefusals) {
+  const lost = retainedCases.filter(value => !survived.has(value));
+  if (lost.length === 0) return null;
+  const [first] = lost;
+  const refusal = caseRefusals.find(
+    value => value.entrypoint === first.entrypoint &&
+      JSON.stringify(value.conditions) === JSON.stringify(first.conditions)
+  );
+  return (
+    `published dependency graph would drop ${lost.length} retained artifact case(s) the ` +
+    `proposal already covers, starting at ${first.entrypoint} ` +
+    `[${first.conditions.join(",")}]: ${refusal?.reason ?? "preparation refused it"}`
+  );
+}
+
+export async function mapWithExactConcurrency(items, concurrency, worker) {
   const results = new Array(items.length);
   let cursor = 0;
-  await Promise.all(
+  const settled = await Promise.allSettled(
     Array.from({ length: Math.min(concurrency, items.length) }, async () => {
       while (cursor < items.length) {
         const index = cursor++;
@@ -1202,6 +2471,11 @@ async function mapWithExactConcurrency(items, concurrency, worker) {
       }
     })
   );
+  // Recovery may start a fresh preparation after a failed one. Do not let
+  // workers from that failed transaction keep writing into its scratch tree
+  // after its caller observes the failure or removes the tree.
+  const failed = settled.find(result => result.status === "rejected");
+  if (failed) throw failed.reason;
   return results;
 }
 
@@ -1217,6 +2491,232 @@ export function publishedGraphPreparationConcurrency(env = process.env) {
   return value;
 }
 
+/// The published-dependency-graph preparation for a proposal that generated
+/// *partially*, as `{ graph, trace }`: `graph` is the prepared lane, or `null`
+/// when that lane does not apply or cannot be prepared.
+///
+/// `trace` is what the audit must record about a lane that was asked for and
+/// not taken. It is `null` when there was no frontier to prepare -- the row
+/// simply does not want this lane, which the reused/generated proposal already
+/// says -- and a `{ partialProposalFrontier: "unprepared", reason }` row when
+/// preparation was attempted and failed. Falling back silently would leave a
+/// requested lane that never happened indistinguishable from one never
+/// requested, and the reason a graph could not be prepared is exactly the fact
+/// a reader of the audit is looking for.
+///
+/// Same preparation as the failed-generation path -- same acquisition, same
+/// per-node generation, same `prepareState` identity proofs, same native
+/// reconstruction of every root, closure, edge and receipt. Nothing about the
+/// evidence is relaxed for having arrived here from a success: the refusal
+/// census is untrusted input either way, `preparePublishedGraphFallback` reads
+/// only the case coordinates out of it, and every node is authenticated against
+/// its own Bun lock selection before it can authorize anything.
+///
+/// It reports no graph rather than throwing in two cases, because the caller
+/// has a valid alternative in hand that a throw would discard:
+///
+///   * the census names no exact dependency-composition case, so there is no
+///     frontier for this lane (the same condition
+///     `preparePublishedGraphFallback` reports as
+///     "proposal refusal has no exact dependency-composition case");
+///   * preparation itself failed *for every artifact case*. Preparation
+///     isolates a broken node to the exact cases whose graph reaches it, so
+///     arriving here means no case survived. The partial proposal is then
+///     certified exactly as it is without the flag, so an unpreparable graph
+///     costs the run nothing it had before. A *refusal* raised during
+///     preparation -- a missing issuer or trust configuration, which are
+///     request errors and not graph facts -- still propagates.
+///
+/// `prepare` is injectable so the decision can be tested without a registry, a
+/// native process, or an authenticated archive; the default is the one
+/// preparation this lane has.
+export class RetainedCasePreparationRefusal extends Error {}
+
+/// The dependency frontier a closure-decline census carries, or `null` when it
+/// carries none.
+///
+/// `partialProposalHasDependencyFrontier` reads refused artifact *cases*; a
+/// row whose cases all resolved records the same want as
+/// `unaccepted-external-dependency` decline records instead. Reported so an
+/// audit can distinguish "no frontier" from "a frontier that was composed",
+/// and so a composition that could not be prepared says which specifier it
+/// was trying to reach.
+function declinedDependencyFrontier(declinedClosures) {
+  if (!Array.isArray(declinedClosures)) return null;
+  const records = declinedClosures.filter(
+    record => record?.kind === "unaccepted-external-dependency"
+  );
+  if (records.length === 0) return null;
+  const specifiers = [
+    ...new Set(
+      records
+        .map(record => record?.package || record?.location || "")
+        .filter(name => name !== "")
+    )
+  ].sort();
+  return {
+    reason:
+      "the dependency frontier is recorded as closure declines, not as refused artifact cases",
+    declinedDependencyRecords: records.length,
+    // Bounded: an audit line, not an inventory. The census sidecar holds the
+    // full set for anyone who needs it.
+    declinedDependencySpecifiers: specifiers.slice(0, 8),
+    declinedDependencySpecifiersTotal: specifiers.length
+  };
+}
+
+/// The exact artifact cases whose closures declined on an unaccepted external
+/// dependency, as `{ entrypoint, conditions }` acquisition coordinates.
+///
+/// These are cases that *generated*. Nothing about them refused, so they carry
+/// no refusal row and `recoveryGraphCases` never sees them; the want is
+/// recorded once per declined closure instead, and the same case appears in
+/// dozens of records. Deduplicated on the exact coordinate pair, with `import`
+/// folded in the way every other acquisition request here folds it, so two
+/// spellings of one selection cannot become two cases.
+export function declinedDependencyGraphCases(declinedClosures) {
+  if (!Array.isArray(declinedClosures)) return [];
+  const seen = new Map();
+  for (const record of declinedClosures) {
+    if (record?.kind !== "unaccepted-external-dependency") continue;
+    if (typeof record.entrypoint !== "string" || !Array.isArray(record.conditions)) continue;
+    if (record.conditions.some(condition => typeof condition !== "string")) continue;
+    const conditions = [...new Set([...record.conditions, "import"])].sort();
+    const key = JSON.stringify([record.entrypoint, conditions]);
+    if (!seen.has(key)) seen.set(key, { entrypoint: record.entrypoint, conditions });
+  }
+  return [...seen.values()].sort((left, right) =>
+    left.entrypoint.localeCompare(right.entrypoint) ||
+    JSON.stringify(left.conditions).localeCompare(JSON.stringify(right.conditions))
+  );
+}
+
+export async function preparedGraphForPartialProposal(
+  { output, ...preparation },
+  { prepare = preparePublishedGraphFallback, prepareCases = preparePublishedGraphCases } = {}
+) {
+  const refusalPath = `${output}.refusals.json`;
+  if (!existsSync(refusalPath)) return { graph: null, trace: null };
+  let audit;
+  try {
+    audit = JSON.parse(readFileSync(refusalPath, "utf8"));
+  } catch {
+    return { graph: null, trace: null };
+  }
+  if (!partialProposalHasDependencyFrontier(audit?.refusals)) {
+    // A frontier the census records as *declines* rather than as a refused
+    // artifact case. The row wants an accepted dependency contract every bit
+    // as much; `@solid-primitives/memo` is the worked example, one case, none
+    // refused, and every export unknown behind 21 `unaccepted-external-
+    // dependency` declines naming `@solid-primitives/utils`.
+    //
+    // A declined case is an *acquisition coordinate* every bit as exact as a
+    // refused one, and `preparePublishedGraphCases` is deliberately separate
+    // from the refusal-driven selector so a caller may request a case without
+    // fabricating a refusal for it. So compose: acquire, generate and certify
+    // the named dependency, then regenerate the root with that accepted
+    // contract in its private catalog, which is the entire content of the
+    // decline.
+    const frontier = Array.isArray(audit?.declinedClosures) ? audit.declinedClosures : [];
+    const declined = declinedDependencyFrontier(frontier);
+    if (!declined) return { graph: null, trace: null };
+    const cases = declinedDependencyGraphCases(frontier);
+    if (cases.length === 0) {
+      // Declines whose records carry no exact coordinate pair -- a census
+      // written before those fields existed. The frontier is still named,
+      // because returning a bare `null` here is what made the graph lane a
+      // silent no-op and is the failure this function's other exits are
+      // careful to avoid.
+      return { graph: null, trace: { partialProposalFrontier: "declined-only", ...declined } };
+    }
+    try {
+      const scratch = mkdtempSync(join(preparation.scratch, "declined-frontier-"));
+      const graph = await prepareCases({
+        ...preparation,
+        scratch,
+        dependencyCases: cases
+      });
+      graph.timing.declinedDependencyFrontier = {
+        declinedDependencyRecords: declined.declinedDependencyRecords,
+        declinedDependencySpecifiers: declined.declinedDependencySpecifiers,
+        declinedDependencySpecifiersTotal: declined.declinedDependencySpecifiersTotal,
+        composedArtifactCases: cases.length
+      };
+      return { graph, trace: null };
+    } catch (error) {
+      if (error instanceof CertificationRefusal) throw error;
+      // The frontier is still named, and now the attempt is too. A row that
+      // asked for composition and did not get it must not read like a row
+      // that was never shaped to compose.
+      return {
+        graph: null,
+        trace: {
+          partialProposalFrontier: "declined-only",
+          ...declined,
+          composedArtifactCases: cases.length,
+          preparationRefusal: error?.message ?? String(error)
+        }
+      };
+    }
+  }
+  try {
+    return { graph: await prepare({ output, ...preparation }), trace: null };
+  } catch (error) {
+    if (error instanceof CertificationRefusal) throw error;
+    if (error instanceof RetainedCasePreparationRefusal &&
+        preparation.options?.recoverEntrypoints && preparation.generated) {
+      try {
+        const scratch = mkdtempSync(join(preparation.scratch, "retained-preparation-"));
+        const graph = await prepare({ output, ...preparation, scratch, retainGeneratedCases: true });
+        graph.timing.retainedPreparationFallback = { reason: error.message };
+        return { graph, trace: null };
+      } catch (retryError) {
+        if (retryError instanceof CertificationRefusal) throw retryError;
+        return { graph: null, trace: { partialProposalFrontier: "unprepared",
+          reason: error.message, retainedPreparationRefusal: retryError?.message ?? String(retryError) } };
+      }
+    }
+    return {
+      graph: null,
+      trace: {
+        partialProposalFrontier: "unprepared",
+        reason: error?.message ?? String(error)
+      }
+    };
+  }
+}
+
+/// Coordinates are acquisition requests, never receipt authority. The native
+/// transaction replays all roots and dependency receipts, then verifies the
+/// published set through ordinary discovery. Never union catalog directories.
+export function recoveryGraphCases(generated, refusals) {
+  const retained = generated?.certificationInputs;
+  if (!Array.isArray(retained) || retained.length === 0) {
+    throw new Error("entrypoint recovery has no generated artifact cases to preserve");
+  }
+  const frontier = refusals.filter(isExactDependencyCompositionRefusal);
+  const seen = new Set();
+  const cases = [...retained, ...frontier].map(input => {
+    if (typeof input.entrypoint !== "string" ||
+        !Array.isArray(input.conditions) ||
+        input.conditions.some(condition => typeof condition !== "string")) {
+      throw new Error("entrypoint recovery requires exact entrypoint and condition coordinates");
+    }
+    // Import is implicit in native graph acquisition. Different spellings of
+    // the same selection must not turn a conflicting duplicate into two cases.
+    const conditions = [...new Set([...input.conditions, "import"])].sort();
+    const key = JSON.stringify([input.entrypoint, conditions]);
+    if (seen.has(key)) throw new Error(`entrypoint recovery has conflicting duplicate case ${key}`);
+    seen.add(key);
+    return { entrypoint: input.entrypoint, conditions };
+  });
+  return {
+    cases,
+    retainedCases: cases.slice(0, retained.length),
+    remainingRefusals: refusals.filter(refusal => !isExactDependencyCompositionRefusal(refusal))
+  };
+}
+
 async function preparePublishedGraphFallback({
   options,
   manifest,
@@ -1224,7 +2724,9 @@ async function preparePublishedGraphFallback({
   output,
   certificationImporter,
   rootArtifactSnapshot,
-  fetch_
+  fetch_,
+  generated = null,
+  retainGeneratedCases = false
 }) {
   if (!options.issuerConfiguration) {
     throw new CertificationRefusal({
@@ -1249,9 +2751,37 @@ async function preparePublishedGraphFallback({
   if (dependencyCases.length === 0) {
     throw new Error("proposal refusal has no exact dependency-composition case");
   }
-  const bunLockPath = findBunLock(options.packageRoot);
-  const bunLock = readFileSync(bunLockPath, "utf8");
-  const bunLockIndex = createBunLockSelectionIndex(bunLock);
+  const recovery = options.recoverEntrypoints && generated
+    ? recoveryGraphCases(generated, audit.refusals ?? [])
+    : null;
+  return preparePublishedGraphCases({
+    options, manifest, scratch, certificationImporter, rootArtifactSnapshot,
+    fetch_, generated, dependencyCases, recovery, retainGeneratedCases
+  });
+}
+
+// Exact case coordinates are acquisition requests, not claims that generation
+// refused them. Keep graph preparation separate from the refusal-driven lane
+// selector so a bounded investigation can request a case without fabricating
+// a refusal. Every graph still crosses native archive/lock/receipt verification.
+export async function preparePublishedGraphCases({
+  options, manifest, scratch, certificationImporter, rootArtifactSnapshot,
+  fetch_, generated = null, dependencyCases, recovery = null, retainGeneratedCases = false
+}) {
+  if (!Array.isArray(dependencyCases) || dependencyCases.length === 0) {
+    throw new Error("published graph preparation requires explicit artifact cases");
+  }
+  mkdirSync(scratch, { recursive: true });
+  if (!rootArtifactSnapshot) {
+    rootArtifactSnapshot = await acquirePublishedArtifact({ options, manifest, scratch, fetch_ });
+  }
+  const { path: lockfilePath, packageManager: lockPackageManager } = findLockfile(
+    options.packageRoot
+  );
+  const lockIndex = createLockSelectionIndex(
+    readFileSync(lockfilePath, "utf8"),
+    lockPackageManager
+  );
   const preparedCases = [];
   const demandPlans = [];
   // The artifact-case set is one acquisition transaction. Reuse a node only
@@ -1262,6 +2792,7 @@ async function preparePublishedGraphFallback({
   const pendingByKey = new Map();
   const publishedArtifacts = new Map();
   const graphResolutionSession = new ArtifactResolutionSession();
+  let graphEnvironmentNotAcquired = null;
   let nextNodeIndex = 0;
   const publishedArtifactKey = (nodeManifest, integrity) => JSON.stringify([
     options.registryOrigin,
@@ -1295,14 +2826,23 @@ async function preparePublishedGraphFallback({
   const {
     locateExternalFrom,
     collectCompilerSources,
+    resolvedFromOf,
     sourceArtifacts,
     compilerSourceClosureCount
   } = createCompilerSourceCollector({
-    bunLockPath,
-    bunLockIndex,
+    lockfilePath,
+    lockPackageManager,
+    lockIndex,
     scratch,
     resolutionSession: graphResolutionSession,
-    scratchPrefix: "graph"
+    scratchPrefix: "graph",
+    // The collector is shared by every node, so a transitive gap cannot be
+    // attributed to one; it marks the whole graph, which is the conservative
+    // side -- every node's environment then goes unstated.
+    onUnlocated: name => {
+      graphEnvironmentNotAcquired ??=
+        `${name} is reached by a graph node's closure but is not installed`;
+    }
   });
 
   const prepareArtifactCase = async (artifactCase, caseIndex) => {
@@ -1318,29 +2858,41 @@ async function preparePublishedGraphFallback({
       const nodeManifest = JSON.parse(
         readFileSync(join(resolved.packageRoot, "package.json"), "utf8")
       );
-      const lock = exactBunLockSelection(
-        bunLockIndex,
-        resolved.packageName,
-        resolved.packageVersion,
-        bunLockLocatorForInstalledPackage(bunLockPath, resolved.packageRoot)
-      );
+      const lock = exactLockSelection({
+        index: lockIndex,
+        packageManager: lockPackageManager,
+        lockfilePath,
+        packageRoot: resolved.packageRoot,
+        packageName: resolved.packageName,
+        packageVersion: resolved.packageVersion
+      });
       if (lock.integrity !== request.integrity) {
         throw new Error(
-          `Bun lock integrity for ${resolved.packageName}@${resolved.packageVersion} disagrees with acquisition`
+          `${lockPackageManager} lock integrity for ${resolved.packageName}@${resolved.packageVersion} disagrees with acquisition`
         );
+      }
+      const canonicalPackageRoot = realpathSync(resolve(resolved.packageRoot));
+      let canonicalImporter;
+      try {
+        canonicalImporter = realpathSync(resolve(request.importer));
+      } catch {
+        // The generated root importer is normally materialized already, but a
+        // caller may provide an exact synthetic importer for a bounded graph
+        // preparation. Preserve its resolved identity until native replay.
+        canonicalImporter = resolve(request.importer);
       }
       const node = {
         key,
-        importer: resolve(request.importer),
+        importer: canonicalImporter,
         specifier: request.specifier,
-        packageRoot: resolve(resolved.packageRoot),
+        packageRoot: canonicalPackageRoot,
         packageName: resolved.packageName,
         packageVersion: resolved.packageVersion,
         integrity: request.integrity,
         entrypoint: resolved.requestedEntrypoint,
         conditions,
         lockLocator: lock.locator,
-        bunLockPath: resolve(bunLockPath),
+        lockfilePath: resolve(lockfilePath),
         dependencies: []
       };
       const nodeIndex = nextNodeIndex++;
@@ -1352,7 +2904,7 @@ async function preparePublishedGraphFallback({
       const directDependencies = [];
       const locatedDependencies = new Map();
       const addSemanticDependency = async dependency => {
-        if (dependency.specifier.startsWith("node:")) {
+        if (nodeBuiltinSpecifier(dependency.specifier)) {
           throw new Error(
             `runtime-library-policy-required: ${dependency.specifier} is not a package receipt`
           );
@@ -1372,7 +2924,8 @@ async function preparePublishedGraphFallback({
             specifier: dependency.specifier,
             packageRoot: located.dependencyRoot,
             conditions,
-            integrity: located.dependencyLock.integrity
+            integrity: located.dependencyLock.integrity,
+            declarationOnly: dependency.axis === "declarations"
           },
           false,
           nextAncestry
@@ -1381,9 +2934,15 @@ async function preparePublishedGraphFallback({
         directDependencies.push({ state: child, viaSpecifier: dependency.specifier });
         return true;
       };
-      for (const dependency of resolved.externalDependencies.filter(
-        dependency => dependency.axis === "runtime" && dependency.kind === "reexport"
-      )) {
+      // A declaration-only dependency first uses the independent proposal
+      // lane. Its runtime imports remain authenticated compiler sources, not
+      // inferred behavioral contracts. Native verification still rejects any
+      // claim that actually requires a dependency receipt.
+      const semanticEdges = request.declarationOnly ? [] : isRoot
+        ? staticBindingDependencies(resolved, artifactCase, dependencyCases)
+        : staticRuntimeDependencies(resolved);
+      const reexportImporters = reexportImporterCensus(node.packageRoot, semanticEdges);
+      for (const dependency of semanticEdges) {
         await addSemanticDependency(dependency);
       }
       const sortDependencies = () => {
@@ -1400,9 +2959,17 @@ async function preparePublishedGraphFallback({
         directDependencies.map(dependency => resolve(dependency.state.node.packageRoot))
       );
       const ownSourceDependencies = [];
+      let environmentNotAcquired = null;
       for (const dependency of resolved.externalDependencies) {
         const located = locateExternalFrom(node.packageRoot, dependency);
-        if (!located) continue;
+        if (!located) {
+          if (!nodeBuiltinSpecifier(dependency.specifier)) {
+            environmentNotAcquired ??=
+              `${packageNameOfSpecifier(dependency.specifier)} is reached by the closure ` +
+              "but is not installed";
+          }
+          continue;
+        }
         ownSourceDependencies.push(
           ...await collectCompilerSources(located, conditions, semanticRoots)
         );
@@ -1415,15 +2982,18 @@ async function preparePublishedGraphFallback({
       ]);
       const preparedState = {
         index: `${caseIndex}-${nodeIndex}`,
+        isRoot,
         node,
         nodeIndex,
         nodeManifest,
         artifactSnapshot,
         generatedOutput,
         directDependencies,
+        reexportImporters,
         planning: null,
         demandPlan: null,
         sourceDependencies,
+        environmentNotAcquired,
         scratch: nodeScratch
       };
       byKey.set(node.key, preparedState);
@@ -1431,7 +3001,8 @@ async function preparePublishedGraphFallback({
     };
     const prepareNode = async (request, isRoot = false, ancestry = []) => {
       const conditions = [...new Set([...(request.conditions ?? []), "import"])].sort();
-      const key = publishedGraphRequestKey({ ...request, conditions });
+      const key = publishedGraphRequestKey({ ...request, conditions }) +
+        (request.declarationOnly ? ":declaration-proposal" : "");
       if (ancestry.includes(key)) {
         throw new Error(`published dependency graph cycle: ${[...ancestry, key].join(" -> ")}`);
       }
@@ -1439,7 +3010,10 @@ async function preparePublishedGraphFallback({
       if (!state) {
         let preparation = pendingByKey.get(key);
         if (!preparation) {
-          if (byKey.size + pendingByKey.size >= 256 || ancestry.length > 64) {
+          // 1024 nodes, matching POLICY_2_GRAPH_NODE_LIMIT: a node is one
+          // (artifact, importing module) pair, and importer variants share
+          // their generation, so the bound is on discovery, not on work.
+          if (byKey.size + pendingByKey.size >= 1024 || ancestry.length > 64) {
             throw new Error("published dependency graph exceeds policy-2 node/depth limits");
           }
           const nextAncestry = [...ancestry, key];
@@ -1466,17 +3040,71 @@ async function preparePublishedGraphFallback({
     );
     return { root, nodes: reachableGraphStates(root, byKey) };
   };
-  const prepared = await mapWithExactConcurrency(
-    dependencyCases,
+  // A node that cannot be resolved, located or acquired is a fact about that
+  // node, and the artifact cases whose graph reaches it are the exact set it
+  // refuses. Preparing them together in one transaction is what makes the
+  // dependency evidence shared; it must not also make one broken node refuse
+  // every case. Cases are therefore prepared independently, refused nodes are
+  // recorded by name, and the lane is abandoned only when nothing survives --
+  // which is when the caller's proposal fallback is the better answer.
+  // Preparing semantic graphs for all 118 retained Kobalte cases (59
+  // entrypoints) exceeded the process-tree budget. Large sets keep those
+  // proposals and their ordinary compiler sources as independent roots,
+  // preparing semantic dependencies only for the bounded missing frontier.
+  const { graphCases: requestedCases, retainedProposalCases } =
+    selectRecoveryPreparation(recovery, dependencyCases, { retainGeneratedCases });
+  const caseRefusals = [];
+  const nodeRefusals = new Map();
+  const prepared = (await mapWithExactConcurrency(
+    requestedCases,
     publishedGraphPreparationConcurrency(),
-    prepareArtifactCase
+    async (artifactCase, caseIndex) => {
+      try {
+        const preparedCase = await prepareArtifactCase(artifactCase, caseIndex);
+        return { ...preparedCase, artifactCase };
+      } catch (error) {
+        if (error instanceof CertificationRefusal) throw error;
+        caseRefusals.push({
+          entrypoint: artifactCase.entrypoint,
+          conditions: [...(artifactCase.conditions ?? [])],
+          stage: "graph-preparation",
+          reason: error?.message ?? String(error)
+        });
+        return null;
+      }
+    }
+  )).filter(Boolean);
+  if (prepared.length === 0) {
+    throw new Error(
+      `published dependency graph prepared no artifact case: ${
+        caseRefusals[0]?.reason ?? "no artifact case was requested"
+      }`
+    );
+  }
+  // Nodes no surviving root reaches were prepared for a refused case alone.
+  // Acquiring and generating them would spend this transaction's budget on
+  // evidence nothing can use, and let their own failures refuse a graph they
+  // are not part of.
+  const reachableFromPrepared = new Set(
+    prepared.flatMap(item =>
+      reachableGraphStates(item.root, byKey).map(state => state.node.key)
+    )
   );
+  for (const key of [...byKey.keys()]) {
+    if (!reachableFromPrepared.has(key)) byKey.delete(key);
+  }
   const sourceByKey = new Map();
+  const sourceRefusals = new Map();
+  const retainedSourceKeys = new Set(
+    [...byKey.values()].flatMap(state => state.sourceDependencies.map(source => source.key))
+  );
   const acquisitionUnits = [
     ...[...byKey.values()]
       .filter(state => !state.artifactSnapshot)
       .map(state => ({ kind: "node", state })),
-    ...[...sourceArtifacts.values()].map(source => ({ kind: "source", source }))
+    ...[...sourceArtifacts.values()]
+      .filter(source => retainedSourceKeys.has(source.key))
+      .map(source => ({ kind: "source", source }))
   ];
   const graphAcquisitionStartedAt = performance.now();
   await mapWithExactConcurrency(
@@ -1484,18 +3112,33 @@ async function preparePublishedGraphFallback({
     publishedGraphPreparationConcurrency(),
     async unit => {
       if (unit.kind === "node") {
-        unit.state.artifactSnapshot = await acquireSharedPublishedArtifact(
-          unit.state.nodeManifest,
-          unit.state.node.integrity,
-          unit.state.scratch
-        );
+        try {
+          unit.state.artifactSnapshot = await acquireSharedPublishedArtifact(
+            unit.state.nodeManifest,
+            unit.state.node.integrity,
+            unit.state.scratch
+          );
+        } catch (error) {
+          if (error instanceof CertificationRefusal) throw error;
+          nodeRefusals.set(unit.state.node.key, {
+            stage: "graph-acquisition",
+            reason: error?.message ?? String(error)
+          });
+        }
         return;
       }
-      const artifact = await acquireSharedPublishedArtifact(
-        unit.source.manifest,
-        unit.source.integrity,
-        unit.source.scratch
-      );
+      let artifact;
+      try {
+        artifact = await acquireSharedPublishedArtifact(
+          unit.source.manifest,
+          unit.source.integrity,
+          unit.source.scratch
+        );
+      } catch (error) {
+        if (error instanceof CertificationRefusal) throw error;
+        sourceRefusals.set(unit.source.key, error?.message ?? String(error));
+        return;
+      }
       sourceByKey.set(unit.source.key, {
         packageName: unit.source.packageName,
         packageVersion: unit.source.packageVersion,
@@ -1504,23 +3147,55 @@ async function preparePublishedGraphFallback({
         archive: artifact.archivePath,
         lockfile: unit.source.lockfile,
         lockLocator: unit.source.lockLocator,
-        installedPackageRoot: unit.source.installedPackageRoot
+        installedPackageRoot: unit.source.installedPackageRoot,
+        resolvedFrom: resolvedFromOf(unit.source.installedPackageRoot)
       });
     }
   );
   for (const state of byKey.values()) {
-    state.sourceDependencies = state.sourceDependencies.map(source => {
+    // Every closure walk is complete by now, so this is every lookup a
+    // declaration source made that reached this node's package.
+    state.resolvedFrom = resolvedFromOf(state.node.packageRoot);
+    if (nodeRefusals.has(state.node.key)) continue;
+    const acquiredSources = [];
+    let unacquired = null;
+    for (const source of state.sourceDependencies) {
       const acquired = sourceByKey.get(source.key);
       if (!acquired) {
-        throw new Error(`compiler source ${source.packageName}@${source.packageVersion} was not acquired`);
+        unacquired = `compiler source ${source.packageName}@${source.packageVersion} was not acquired${
+          sourceRefusals.has(source.key) ? `: ${sourceRefusals.get(source.key)}` : ""
+        }`;
+        break;
       }
-      return acquired;
-    });
+      acquiredSources.push(acquired);
+    }
+    if (unacquired) {
+      nodeRefusals.set(state.node.key, { stage: "graph-acquisition", reason: unacquired });
+      continue;
+    }
+    state.sourceDependencies = acquiredSources;
   }
+  cascadeGraphNodeRefusals([...byKey.values()], nodeRefusals);
   const graphAcquisitionDurationMs =
     Math.round((performance.now() - graphAcquisitionStartedAt) * 100) / 100;
-  const pendingGeneration = new Set(byKey.values());
+  const pendingGeneration = new Set(
+    [...byKey.values()].filter(state => !nodeRefusals.has(state.node.key))
+  );
   let proposalGenerations = 0;
+  let proposalGenerationsShared = 0;
+  const statesNothingNodes = [];
+  // Importer variants of one artifact generate once. A node is keyed by the
+  // module that imported it, so one package's many entrypoints put the same
+  // `solid-js` into the graph once per importing module; every such variant is
+  // the same package root, integrity, entrypoint and conditions over the same
+  // dependency variants, and the generator's `--certification-importer` changes
+  // nothing in the emitted document -- only `certificationInputs[].resolution.
+  // importer` names it. The first variant generates; the others take its
+  // document with their own importer written back into the resolution, and
+  // native certification still replays each variant's resolution from its own
+  // importer before anything is trusted. Keyed as a promise so two variants in
+  // one frontier share a single in-flight generation.
+  const generationByVariantKey = new Map();
   const proposalFrontiers = [];
   while (pendingGeneration.size > 0) {
     const ready = [...pendingGeneration]
@@ -1534,53 +3209,151 @@ async function preparePublishedGraphFallback({
       ready,
       publishedGraphPreparationConcurrency(),
       async state => {
-        const dependencies = state.directDependencies.map(dependency => ({
-          ...dependency.state,
-          viaSpecifier: dependency.viaSpecifier
-        }));
-        const merged = mergeProposalDependencies(
-          dependencies,
-          join(state.scratch, `dependency-catalog-${dependencies.length}`)
-        );
-        const generationArguments = [
-          "--package-root",
-          state.node.packageRoot,
-          "--output",
-          state.generatedOutput,
-          "--integrity",
-          state.node.integrity,
-          "--entrypoint",
-          state.node.entrypoint,
-          "--certification-importer",
-          state.node.importer
-        ];
-        const explicitConditions = state.node.conditions.filter(
-          condition => condition !== "import"
-        );
-        if (explicitConditions.length) {
-          generationArguments.push("--conditions", explicitConditions.join(","));
-        }
-        const generated = await generatePackageContract(generationArguments, {
-          quiet: true,
-          proposalDependencies: merged.proposalDependencies,
-          proposalDependencyCatalog: merged.catalog,
-          privateGraphPreparation: true,
-          exactConditions: explicitConditions
-        });
-        const plannings = certificationPlannings(generated, state.artifactSnapshot);
-        if (plannings.length !== 1) {
-          throw new Error(
-            `exact graph node ${state.node.packageName}@${state.node.packageVersion} produced ${plannings.length} artifact cases`
+        // A node whose proposal cannot be generated refuses the artifact
+        // cases that reach it, not the transaction. Its dependents cannot
+        // generate against a contract it never produced, so the cascade
+        // below removes them from this frontier rather than leaving the
+        // loop with nothing ready.
+        const generateNodeProposal = async () => {
+          const dependencies = state.directDependencies
+            .filter(dependency => !dependency.state.statesNothing)
+            .map(dependency => ({
+            ...dependency.state,
+            viaSpecifier: dependency.viaSpecifier,
+            reexportImporters: [
+              ...(state.reexportImporters.get(dependency.viaSpecifier) ?? [])
+            ].sort()
+          }));
+          const merged = mergeProposalDependencies(
+            dependencies,
+            join(state.scratch, `dependency-catalog-${dependencies.length}`)
           );
+          // ADR 0156: each direct dependency ADR 0129 pruned, with the names it
+          // exports exactly, so an exact forward of one is withheld instead of
+          // refusing this node. Never an accepted dependency.
+          const prunedDependencies = prunedDependencyRecords(
+            state.directDependencies.filter(dependency => dependency.state.statesNothing)
+          );
+          const generationArguments = [
+            "--package-root",
+            state.node.packageRoot,
+            "--output",
+            state.generatedOutput,
+            "--integrity",
+            state.node.integrity,
+            "--entrypoint",
+            state.node.entrypoint,
+            "--certification-importer",
+            state.node.importer
+          ];
+          const explicitConditions = state.node.conditions.filter(
+            condition => condition !== "import"
+          );
+          if (explicitConditions.length) {
+            generationArguments.push("--conditions", explicitConditions.join(","));
+          }
+          const variantKey = JSON.stringify([
+            state.node.packageRoot,
+            state.node.integrity,
+            state.node.entrypoint,
+            state.node.conditions,
+            dependencies
+              .map(dependency => [dependency.viaSpecifier, dependency.variantKey ?? dependency.node.key])
+              .sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1])),
+            prunedDependencies
+          ]);
+          state.variantKey = variantKey;
+          let generated;
+          const shared = generationByVariantKey.get(variantKey);
+          if (shared) {
+            let representative;
+            try {
+              representative = await shared;
+            } catch (error) {
+              throw new Error(
+                `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
+                `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
+                { cause: error }
+              );
+            }
+            proposalGenerationsShared += 1;
+            generated = {
+              ...representative,
+              certificationInputs: representative.certificationInputs.map(input => ({
+                ...input,
+                resolution: { ...input.resolution, importer: state.node.importer }
+              }))
+            };
+          } else {
+            const generation = generatePackageContract(generationArguments, {
+              quiet: true,
+              proposalDependencies: merged.proposalDependencies,
+              proposalDependencyCatalog: merged.catalog,
+              prunedDependencies,
+              privateGraphPreparation: true,
+              exactConditions: explicitConditions
+            });
+            generationByVariantKey.set(variantKey, generation);
+            try {
+              generated = await generation;
+            } catch (error) {
+              throw new Error(
+                `published dependency graph node ${state.node.packageName}@${state.node.packageVersion} ` +
+                `${state.node.entrypoint} [${state.node.conditions.join(",")}] refused: ${error.message}`,
+                { cause: error }
+              );
+            }
+          }
+          // The audit reads this node's proposal sidecars once preparation is
+          // over (`graphNodeAuditRecord`); nothing else consults it.
+          state.generatedForAudit = generated;
+          const plannings = certificationPlannings(generated, state.artifactSnapshot, options);
+          if (plannings.length !== 1) {
+            throw new Error(
+              `exact graph node ${state.node.packageName}@${state.node.packageVersion} produced ${plannings.length} artifact cases`
+            );
+          }
+          // This plan is diagnostic orchestration material only. The final
+          // native case-set transaction independently decodes the proposal and
+          // derives every authority-bearing demand.
+          const reviewedPlan = reviewGraphProposal(generated);
+          state.auditArtifactCase = reviewedPlan.selectedArtifactCase;
+          state.planning = plannings[0];
+          state.demandPlan = reviewedPlan;
+          proposalGenerations += 1;
+          // ADR 0129: a dependency node whose proposal states nothing and
+          // proposes nothing can never be issued a receipt, so it is no
+          // accepted dependency for anyone. It leaves the graph instead of
+          // refusing every node above it; its dependents generate without it,
+          // exactly as the default lane generates against an unaccepted
+          // dependency.
+          if (
+            !state.isRoot &&
+            graphProposalStatesNothing(
+              JSON.parse(readFileSync(generated.output, "utf8")),
+              JSON.parse(readFileSync(generated.plan, "utf8"))
+            )
+          ) {
+            state.statesNothing = true;
+            statesNothingNodes.push({
+              packageName: state.node.packageName,
+              packageVersion: state.node.packageVersion,
+              entrypoint: state.node.entrypoint,
+              conditions: [...state.node.conditions]
+            });
+            return;
+          }
+          demandPlans[state.nodeIndex] = reviewedPlan;
+        };
+        try {
+          await generateNodeProposal();
+        } catch (error) {
+          if (error instanceof CertificationRefusal) throw error;
+          nodeRefusals.set(state.node.key, {
+            stage: "graph-generation",
+            reason: error?.message ?? String(error)
+          });
         }
-        // This plan is diagnostic orchestration material only. The final
-        // native case-set transaction independently decodes the proposal and
-        // derives every authority-bearing demand.
-        const reviewedPlan = reviewGraphProposal(generated);
-        state.planning = plannings[0];
-        state.demandPlan = reviewedPlan;
-        demandPlans[state.nodeIndex] = reviewedPlan;
-        proposalGenerations += 1;
       }
     );
     proposalFrontiers.push({
@@ -1588,23 +3361,117 @@ async function preparePublishedGraphFallback({
       durationMs: Math.round((performance.now() - frontierStartedAt) * 100) / 100
     });
     for (const state of ready) pendingGeneration.delete(state);
+    cascadeGraphNodeRefusals([...pendingGeneration], nodeRefusals);
+    for (const state of [...pendingGeneration]) {
+      if (nodeRefusals.has(state.node.key)) pendingGeneration.delete(state);
+    }
   }
-  preparedCases.push(...prepared);
-  for (const item of preparedCases) {
-    item.nodes = reachableGraphStates(item.root, byKey);
+  if (graphEnvironmentNotAcquired) {
+    for (const state of byKey.values()) {
+      state.environmentNotAcquired ??= graphEnvironmentNotAcquired;
+    }
   }
+  const surviving = graphCasesWithoutRefusedNodes({
+    prepared,
+    byKey,
+    nodeRefusals,
+    reachable: reachableGraphStatesWithoutStatementlessNodes
+  });
+  caseRefusals.push(...surviving.refusals);
+  preparedCases.push(...surviving.cases.map(item => withPrunedDependencyNodes(item, byKey)));
+  if (preparedCases.length === 0) {
+    throw new Error(
+      `published dependency graph prepared no artifact case: ${
+        caseRefusals[0]?.reason ?? "no artifact case survived preparation"
+      }`
+    );
+  }
+  let retainedRoots = [];
+  if (retainedProposalCases.length) {
+    const lock = exactLockSelection({
+      index: lockIndex,
+      packageManager: lockPackageManager,
+      lockfilePath,
+      packageRoot: options.packageRoot,
+      packageName: manifest.name,
+      packageVersion: manifest.version
+    });
+    if (lock.integrity !== options.integrity) {
+      throw new Error("retained proposal lock integrity disagrees with its archive");
+    }
+    const {
+      sourcesByInput: sourceDependenciesByInput,
+      environmentNotAcquired: retainedEnvironmentNotAcquired
+    } = await acquireRootCompilerSourcesWithEnvironment({
+      options, generated, scratch, fetch_
+    });
+    retainedRoots = retainedProposalGraphCases({
+      plannings: certificationPlannings(generated, rootArtifactSnapshot, options)
+        .map(planning => withEnvironmentNotAcquired(planning, retainedEnvironmentNotAcquired)),
+      sourceDependenciesByInput, coordinates: retainedProposalCases,
+      lockfile: resolve(lockfilePath), lockLocator: lock.locator
+    });
+    demandPlans.push(...await planDemands({ options, generated,
+      artifactSnapshot: rootArtifactSnapshot, scratch }));
+    preparedCases.unshift(...retainedRoots);
+    recovery.retainedProposalRoots = true;
+  }
+  // Recovery's selection strategy reads these coordinates and requires them to
+  // describe exactly the cases the graph carries, retained ones first. A case
+  // that never prepared is not a case this transaction can publish, so it
+  // leaves the set and stays visible as an explicit preparation refusal.
+  //
+  // The retained cases are the floor, and here -- unlike at certification time
+  // -- the comparison is certain rather than a wager. A retained case is one
+  // the proposal lane already generated and would publish; a retained case
+  // this graph cannot even prepare is one this lane certainly will not. Taking
+  // the lane anyway would trade a proved case for a chance at a frontier one.
+  // So a dropped retained case abandons the graph, and the caller publishes
+  // the proposal exactly as it would have without the lane.
+  if (recovery) {
+    const survived = new Set(preparedCases.map(item => item.artifactCase));
+    const floor = retainedCaseFloorRefusal(recovery.retainedCases, survived, caseRefusals);
+    if (floor) throw new RetainedCasePreparationRefusal(floor);
+    recovery.expectedCases = recovery.cases;
+    recovery.preparationRefusals = caseRefusals;
+    recovery.cases = recovery.cases.filter(value => survived.has(value));
+  }
+  // Every node's own records, read from the sidecars its generation left in
+  // this scratch before the transaction removes it: what the plain lane keeps
+  // beside its generated contract, per node. Audit only.
+  const nodeRecords = graphNodeRecordSet([...byKey.values()].map(state =>
+    graphNodeAuditRecord({
+      node: state.node,
+      isRoot: state.isRoot,
+      artifactCase: state.auditArtifactCase ?? null,
+      output: state.generatedForAudit?.output ?? state.generatedOutput,
+      plan: state.generatedForAudit?.plan ?? null,
+      statesNothing: state.statesNothing === true,
+      refusal: nodeRefusals.get(state.node.key) ?? null
+    })
+  ));
   return {
     preparedCases,
+    nodeRecords,
     demandPlans: demandPlans.filter(Boolean),
     timing: {
+      ...(recovery ? { entrypointRecovery: recovery } : {}),
+      ...(caseRefusals.length ? { preparationRefusals: caseRefusals } : {}),
+      requestedCases: requestedCases.length + retainedRoots.length,
+      retainedProposalCases: retainedRoots.length,
+      preparedDependencyGraphCases: surviving.cases.length,
       rootCases: preparedCases.length,
-      canonicalNodes: byKey.size,
+      canonicalNodes: byKey.size + retainedRoots.length,
       acquiredPublishedArtifacts: publishedArtifacts.size,
       acquisitionUnits: acquisitionUnits.length,
       graphAcquisitionDurationMs,
       resolutionSession: graphResolutionSession.statistics(),
       compilerSourceClosureCensus: compilerSourceClosureCount(),
       proposalGenerations,
+      // Nodes that took an importer variant's document instead of generating;
+      // `proposalGenerations - proposalGenerationsShared` generators ran.
+      proposalGenerationsShared,
+      ...(statesNothingNodes.length ? { statesNothingNodes } : {}),
       proposalFrontiers,
       graphNodeReferences: preparedCases.reduce((total, item) => total + item.nodes.length, 0),
       nativeCertificationTransactions: 1,
@@ -1644,45 +3511,121 @@ async function preparePublishedGraphFallback({
 /// could not authenticate must not reach any of them.
 ///
 /// Returns one array of acquired sources per certification input, positionally.
-export async function acquireRootCompilerSources({ options, generated, scratch, fetch_ }) {
+export async function acquireRootCompilerSources(args) {
+  return (await acquireRootCompilerSourcesWithEnvironment(args)).sourcesByInput;
+}
+
+/// [`acquireRootCompilerSources`], plus whether the dependency environment the
+/// certification will state was acquired at all.
+///
+/// Withholding a name is fail-closed for the *proof* -- the reference resolves
+/// to `any` and the demands that needed it stay open -- but it is not
+/// fail-closed for the *environment*. The receipt states the roots the census
+/// admitted, and a withheld name is by construction not among them, so the
+/// environment would read "the proof read no such package" in a tree where
+/// installing it changes the answer. An npm tree made that the common case:
+/// with no lockfile this reader understood, every name was withheld and every
+/// receipt stated the empty environment, which consumers admit anywhere.
+///
+/// So `environmentNotAcquired` names the first reason any package the closure
+/// reaches could not be identified by `{name, version, integrity}`, and the
+/// native certifier then states no environment root. It is `null` only when
+/// every external package the closure reaches was named -- which includes the
+/// genuinely dependency-free package, whose closure reaches none and which
+/// needs no lockfile at all.
+export async function acquireRootCompilerSourcesWithEnvironment({
+  options, generated, scratch, fetch_
+}) {
   const empty = generated.certificationInputs.map(() => []);
-  let bunLockPath;
-  try {
-    bunLockPath = findBunLock(options.packageRoot);
-  } catch {
-    return empty;
+  const reasons = [];
+  const notAcquired = reason => {
+    if (!reasons.includes(reason)) reasons.push(reason);
+  };
+  const external = dependency => !nodeBuiltinSpecifier(dependency.specifier);
+  // Resolved before any lockfile is read: whether the closure reaches another
+  // package at all is a fact about the artifact, and it is the whole question
+  // for a package that reaches none.
+  const perInputResolution = [];
+  for (const input of generated.certificationInputs) {
+    const conditions = [...new Set([...(input.conditions ?? []), "import"])].sort();
+    try {
+      perInputResolution.push({
+        input,
+        conditions,
+        resolved: resolvePackageArtifactClosure({
+          importer: input.resolution.importer,
+          specifier: input.resolution.specifier,
+          packageRoot: input.resolution.packageRoot ?? options.packageRoot,
+          conditions,
+          resolutionKind: "import",
+          integrity: options.integrity
+        }, null)
+      });
+    } catch (error) {
+      perInputResolution.push({ input, conditions, resolved: null });
+      notAcquired(
+        `the closure of ${input.resolution.specifier} could not be resolved: ` +
+          `${error instanceof Error ? error.message : error}`
+      );
+    }
   }
-  let bunLockIndex;
+  const reachesExternal = perInputResolution.some(
+    ({ resolved }) => resolved?.externalDependencies.some(external)
+  );
+  const result = sourcesByInput => ({
+    sourcesByInput,
+    environmentNotAcquired: reasons.length ? reasons[0] : null
+  });
+  if (!reachesExternal) return result(empty);
+  let lockfilePath;
+  let lockPackageManager;
   try {
-    bunLockIndex = createBunLockSelectionIndex(readFileSync(bunLockPath, "utf8"));
-  } catch {
-    return empty;
+    ({ path: lockfilePath, packageManager: lockPackageManager } = findLockfile(
+      options.packageRoot
+    ));
+  } catch (error) {
+    notAcquired(
+      error instanceof CertificationRefusal ? error.reason : String(error?.message ?? error)
+    );
+    return result(empty);
   }
-  const sourceScratch = join(scratch, "root-sources");
-  mkdirSync(sourceScratch, { recursive: true });
+  let lockIndex;
+  try {
+    lockIndex = createLockSelectionIndex(
+      readFileSync(lockfilePath, "utf8"),
+      lockPackageManager
+    );
+  } catch (error) {
+    notAcquired(
+      `${lockfilePath} could not be read as a ${lockPackageManager} lockfile: ` +
+        `${error instanceof Error ? error.message : error}`
+    );
+    return result(empty);
+  }
+  // Recovery invokes this repeatedly in one transaction. Each collector starts
+  // its source index at zero, so sharing a directory turns EEXIST into a false
+  // unavailable-source disposition and can remove authenticated dependencies.
+  const sourceScratch = mkdtempSync(join(scratch, "root-sources-"));
   const withheldNames = new Set();
+  const withhold = (name, reason) => {
+    withheldNames.add(name);
+    notAcquired(`${name} could not be identified by name, version and integrity: ${reason}`);
+  };
   const collector = createCompilerSourceCollector({
-    bunLockPath,
-    bunLockIndex,
+    lockfilePath,
+    lockPackageManager,
+    lockIndex,
     scratch: sourceScratch,
     resolutionSession: new ArtifactResolutionSession(),
     scratchPrefix: "root",
-    onUnnameable: name => withheldNames.add(name)
+    onUnnameable: (name, error) =>
+      withhold(name, error instanceof Error ? error.message : String(error ?? "unnameable")),
+    onUnlocated: name => notAcquired(`${name} is reached by the closure but is not installed`),
+    followRuntimeDependencies: true
   });
   const perInput = [];
-  for (const input of generated.certificationInputs) {
-    const conditions = [...new Set([...(input.conditions ?? []), "import"])].sort();
-    let resolved;
-    try {
-      resolved = resolvePackageArtifactClosure({
-        importer: input.resolution.importer,
-        specifier: input.resolution.specifier,
-        packageRoot: input.resolution.packageRoot ?? options.packageRoot,
-        conditions,
-        resolutionKind: "import",
-        integrity: options.integrity
-      }, null);
-    } catch {
+  for (const { input, conditions, resolved } of perInputResolution) {
+    if (!resolved) {
       perInput.push([]);
       continue;
     }
@@ -1690,10 +3633,32 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
     for (const dependency of resolved.externalDependencies) {
       try {
         const located = collector.locateExternalFrom(resolved.packageRoot, dependency);
-        if (!located) continue;
+        if (!located) {
+          if (external(dependency)) {
+            notAcquired(
+              `${packageNameOfSpecifier(dependency.specifier)} is reached by the closure ` +
+                "but is not installed"
+            );
+          }
+          continue;
+        }
+        refuseCaseImportingUnexportedTarget({
+          entrypoint: input.entrypoint ?? ".",
+          conditions,
+          dependency,
+          located,
+          resolutionSession: collector.resolutionSession
+        });
         found.push(...await collector.collectCompilerSources(located, conditions, new Set()));
-      } catch {
-        withheldNames.add(packageNameOfSpecifier(dependency.specifier));
+      } catch (error) {
+        // A refused case is not an unnameable package: the dependency is
+        // authenticated and its declarations must still reach every case that
+        // does resolve, which is the repair this loop's own catch exists for.
+        if (error instanceof CertificationRefusal) throw error;
+        withhold(
+          packageNameOfSpecifier(dependency.specifier),
+          error instanceof Error ? error.message : String(error)
+        );
       }
     }
     perInput.push(canonicalCompilerSources(found));
@@ -1723,18 +3688,70 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
           archive: artifact.archivePath,
           lockfile: source.lockfile,
           lockLocator: source.lockLocator,
-          installedPackageRoot: source.installedPackageRoot
+          installedPackageRoot: source.installedPackageRoot,
+          resolvedFrom: collector.resolvedFromOf(source.installedPackageRoot)
         });
-      } catch {
-        withheldNames.add(source.packageName);
+      } catch (error) {
+        withhold(
+          source.packageName,
+          `its published archive could not be acquired (${
+            error instanceof Error ? error.message : error
+          })`
+        );
       }
     }
   );
-  return perInput.map(sources =>
+  return result(perInput.map(sources =>
     sources
       .map(source => acquiredByKey.get(source.key))
       .filter(acquired => acquired && !withheldNames.has(acquired.packageName))
-  );
+  ));
+}
+
+/// The probe-harness paths the native transaction needs, or nothing.
+///
+/// All three or none: a partially configured harness is a refusal in Rust
+/// rather than a silently narrower binding. Note what is *not* here — the
+/// request cannot declare a sandbox kind or an isolation policy. The verifier
+/// computes both from the scheme it actually runs, so no caller can assert an
+/// isolation property the transaction does not have.
+///
+/// The harness root is this repository/package root, because the harness
+/// source manifest the verifier recomputes covers `packages/cli/...` paths
+/// relative to it.
+function probeHarnessRequest(options) {
+  if (!options.probeRecipeCorpus) return {};
+  const node = options.probeNodeExecutable || process.env.SOLID_CHECKER_PROBE_NODE || "";
+  const resolvedNode = node ? realpathSync(resolve(node)) : probeNodeOnPath();
+  if (!resolvedNode) {
+    throw new CertificationRefusal({
+      stage: "witness-acquisition",
+      owner: "probe-gate",
+      reason:
+        "a probe recipe corpus was configured but no Node executable could be resolved; set SOLID_CHECKER_PROBE_NODE to the real path this build pinned"
+    });
+  }
+  return {
+    probeHarnessRoot: harnessRoot,
+    probeNodeExecutable: resolvedNode,
+    probeRecipeCorpus: resolve(options.probeRecipeCorpus)
+  };
+}
+
+/// The `node` on PATH, by real path, or "" when there is none. The adapter
+/// refuses a symlink, so the resolution has to end at real bytes.
+function probeNodeOnPath() {
+  for (const directory of (process.env.PATH ?? "").split(":")) {
+    if (!directory) continue;
+    const candidate = join(directory, "node");
+    try {
+      const real = realpathSync(candidate);
+      if (statSync(real).isFile()) return real;
+    } catch {
+      continue;
+    }
+  }
+  return "";
 }
 
 async function executeNativeCertification({
@@ -1776,8 +3793,14 @@ async function executeNativeCertification({
   const catalogRoot = options.catalog.endsWith("accepted-contracts.json")
     ? dirname(options.catalog)
     : options.catalog;
-  const requestPath = join(scratch, "certification-execution.json");
-  const sourceDependenciesByInput = await acquireRootCompilerSources({
+  // One request file per transaction: recovery trials of one scratch may now
+  // run side by side, and two of them writing the same path would hand one
+  // verifier the other's planning.
+  const requestPath = join(scratch, `certification-execution-${++nativeExecutionSequence}.json`);
+  const {
+    sourcesByInput: sourceDependenciesByInput,
+    environmentNotAcquired
+  } = await acquireRootCompilerSourcesWithEnvironment({
     options,
     generated,
     scratch,
@@ -1785,13 +3808,17 @@ async function executeNativeCertification({
   });
   const plannings = generated.certificationInputs.map((input, index) => ({
       schemaVersion: 1,
+      ...(environmentNotAcquired
+        ? { dependencyEnvironmentNotAcquired: environmentNotAcquired }
+        : {}),
       proposal: generated.output,
       resolution: input.resolution,
       exportConditions: [...new Set([...input.conditions, "import"])].sort(),
       registryOrigin: artifactSnapshot.registryOrigin,
       registryMetadata: artifactSnapshot.metadataPath,
       archive: artifactSnapshot.archivePath,
-      sourceDependencies: sourceDependenciesByInput[index] ?? []
+      sourceDependencies: sourceDependenciesByInput[index] ?? [],
+      inapplicableCases: generated.inapplicableCases ?? []
   }));
   const execution = {
     schemaVersion: plannings.length === 1 ? 1 : 2,
@@ -1799,7 +3826,8 @@ async function executeNativeCertification({
     typefactsExecutable: resolve(typefactsExecutable),
     issuerConfiguration: resolve(options.issuerConfiguration),
     catalogRoot,
-    trustConfigurationOutput: resolve(options.trustConfigurationOutput)
+    trustConfigurationOutput: resolve(options.trustConfigurationOutput),
+    ...probeHarnessRequest(options)
   };
   writeFileSync(requestPath, `${JSON.stringify(execution, null, 2)}\n`);
   const child = await runNativeAsync(
@@ -1808,74 +3836,404 @@ async function executeNativeCertification({
     { cwd: options.packageRoot, env: { SOLID_CHECKER_DAEMON: "0" } }
   );
   if (child.error) throw new Error(`could not start the native checker: ${child.error.message}`);
+  forwardNativeTimings(child);
   if (child.status !== 0) {
+    const reason =
+      child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`;
     throw new CertificationRefusal({
       stage: "witness-acquisition",
       owner: "certifier",
-      reason: child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`
+      reason,
+      ...nativeRefusalAttribution(reason)
     });
   }
-  return { authority: "native-certification-complete", catalogRoot };
+  return {
+    authority: "native-certification-complete",
+    catalogRoot,
+    dependencyEnvironment: dependencyEnvironmentFromNativeOutput(child.stdout),
+    selfAdmission: selfAdmissionFromNativeOutput(child.stdout),
+    withheldClosures: withheldClosuresFromNativeOutput(child.stdout),
+    withheldOperations: withheldOperationsFromNativeOutput(child.stdout),
+    closureCandidates: closureCandidatesFromNativeOutput(child.stdout),
+    certifiedClosures: certifiedClosuresFromNativeOutput(child.stdout),
+    recipeAddresses: recipeAddressesFromNativeOutput(child.stdout)
+  };
 }
 
-async function executeNativeOrGraphCertification({
+/// Whether the catalog root already publishes an acceptance for `packageName`,
+/// in its plain catalog or any case set its pointer names.
+///
+/// Conservative in the direction the recovery guards need: anything it cannot
+/// read -- an unparsable file, a pointer version it does not know, no package
+/// name to ask about -- answers `true`, as the bare directory check it replaces
+/// did for every existing root. Only a root whose every published entry is
+/// readable and names another package answers `false`.
+export function publicationHoldsPackage(catalogRoot, packageName) {
+  if (!existsSync(catalogRoot)) return false;
+  if (typeof packageName !== "string" || !packageName) return true;
+  const readJson = path => JSON.parse(readFileSync(path, "utf8"));
+  const catalogHolds = path => {
+    const catalog = readJson(path);
+    if (!Array.isArray(catalog?.contracts)) throw new Error("unreadable catalog");
+    return catalog.contracts.some(entry => entry?.import?.packageName !== undefined
+      ? entry.import.packageName === packageName
+      : true);
+  };
+  try {
+    const plain = join(catalogRoot, "accepted-contracts.json");
+    if (existsSync(plain) && catalogHolds(plain)) return true;
+    const pointerPath = join(catalogRoot, "accepted-contract-case-set.json");
+    if (!existsSync(pointerPath)) return false;
+    const pointer = readJson(pointerPath);
+    const documents = pointer?.caseSetVersion === 1 ? [pointer.document]
+      : pointer?.caseSetVersion === 2 && Array.isArray(pointer.caseSets)
+        ? pointer.caseSets.map(reference => reference?.document)
+        : null;
+    if (!documents || documents.some(document => typeof document !== "string")) return true;
+    for (const document of documents) {
+      const documentPath = join(catalogRoot, document);
+      const caseSet = readJson(documentPath);
+      if (!Array.isArray(caseSet?.cases)) return true;
+      for (const entry of caseSet.cases) {
+        if (typeof entry?.catalog !== "string") return true;
+        if (catalogHolds(join(dirname(documentPath), entry.catalog))) return true;
+      }
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+export async function executeNativeOrGraphCertification({
   options,
   generated,
   graph,
   artifactSnapshot,
   scratch,
-  fetch_
-}) {
-  if (!graph) {
-    return executeNativeCertification({
-      options,
+  fetch_,
+  caseRecovery = null,
+  prepareGeneratedGraph = null
+}, { executeNative = executeNativeCertification, executeGraph = executePreparedPublishedGraphs } = {}) {
+  const catalogRoot = options.catalog.endsWith("accepted-contracts.json")
+    ? dirname(options.catalog) : options.catalog;
+  // A refused native attempt can itself create this directory. Capture the
+  // protection before either lane runs, never reinterpret that later directory
+  // as a pre-existing publication or discard a publication that was here.
+  // Since catalogs accumulate (one entry per package), "a publication exists"
+  // means one for *this* package: a recovery subset can only replace this
+  // package's entries, never another's.
+  const existingPublication = publicationHoldsPackage(catalogRoot, artifactSnapshot?.package);
+  const certifyGenerated = async (recovery, destination = options, publicationExists = existingPublication, trialPrefix = "independent-case-trial") => {
+    if (recovery) {
+      let round = 0;
+      return certifyIndependentCaseSelection({
+        cases: generated.certificationInputs,
+        recovery,
+        existingPublication: publicationExists,
+        certify: async (inputs, publish) => {
+          const trial = join(scratch, `${trialPrefix}-${++round}`);
+          recovery.nativeCertificationTransactions = round;
+          let output = generated.output;
+          if (inputs.length !== generated.certificationInputs.length) {
+            mkdirSync(trial, { recursive: true });
+            output = join(trial, "proposal.json");
+            writeFileSync(output, `${JSON.stringify(projectProposalCases(
+              JSON.parse(readFileSync(generated.output, "utf8")), inputs
+            ))}\n`);
+          }
+          return executeNative({
+            options: publish ? destination : { ...destination,
+              catalog: join(trial, "catalog"), trustConfigurationOutput: join(trial, "trust.json") },
+            generated: { ...generated, output, certificationInputs: inputs },
+            artifactSnapshot, scratch, fetch_
+          });
+        }
+      });
+    }
+    return executeNative({
+      options: destination,
       generated,
       artifactSnapshot,
       scratch,
       fetch_
     });
+  };
+  if (!graph) {
+    try {
+      return await certifyGenerated(caseRecovery);
+    } catch (error) {
+      // No accepted case can be traded for this retry: the ordinary single
+      // case just refused, and the destination had no publication beforehand.
+      // Infrastructure failures and multi-case proposals retain their refusal.
+      if (!prepareGeneratedGraph || existingPublication ||
+          generated?.certificationInputs?.length !== 1 ||
+          !(error instanceof CertificationRefusal) ||
+          error.owner !== "certifier" || error.stage !== "witness-acquisition" ||
+          !error.demandId || !["argument-binding", "callable-path"].includes(error.family)) throw error;
+      const prepared = await prepareGeneratedGraph(error);
+      return executeGraph({ options, cases: prepared.preparedCases, scratch,
+        catalogRoot, trustConfigurationOutput: options.trustConfigurationOutput });
+    }
   }
-  const catalogRoot = options.catalog.endsWith("accepted-contracts.json")
-    ? dirname(options.catalog)
-    : options.catalog;
-  return executePreparedPublishedGraphs({
+  const execute = (cases, catalogRoot, trustConfigurationOutput) => executeGraph({
     options,
-    cases: graph.preparedCases,
+    cases,
     scratch,
     catalogRoot,
-    trustConfigurationOutput: options.trustConfigurationOutput
+    trustConfigurationOutput
+  });
+  const recovery = graph.timing?.entrypointRecovery;
+  if (!options.recoverEntrypoints || !recovery) {
+    return execute(graph.preparedCases, catalogRoot, options.trustConfigurationOutput);
+  }
+  let round = 0;
+  const establishFloor = generated && recovery.retainedProposalRoots && existingPublication === false ? async () => {
+    const selection = {}, privateRoot = join(scratch, "verified-retained-floor");
+    const destination = { ...options, catalog: join(privateRoot, "catalog"), trustConfigurationOutput: join(privateRoot, "trust.json") };
+    const result = await certifyGenerated(selection, destination, false, "retained-floor-trial");
+    if (result.authority !== "native-certification-complete" || result.catalogRoot !== destination.catalog) throw new Error("retained floor requires a completed native publication in its private destination");
+    const key = item => JSON.stringify([item.entrypoint, [...new Set([...item.conditions, "import"])].sort()]);
+    const wanted = new Set(selection.publishedCases.map(key));
+    const proposal = JSON.parse(readFileSync(generated.output, "utf8"));
+    const expected = generated.certificationInputs.filter(input => wanted.has(key(input))).map(input => {
+      const projected = projectProposalCases(proposal, [input]);
+      const { exports: _exports, ...artifact } = projected.entrypoints[input.entrypoint].cases[0];
+      return { coordinate: selection.publishedCases.find(item => key(item) === key(input)),
+        package: projected.package, selection: artifact, resolution: input.resolution };
+    });
+    const publication = inspectRetainedCertificationFloor({ catalogRoot: result.catalogRoot, expected });
+    return { acceptedCases: selection.publishedCases, caseRefusals: selection.caseRefusals ?? [], publication,
+      nativeCertificationTransactions: selection.nativeCertificationTransactions };
+  } : null;
+  return certifyRecoverableCaseSelection({
+    cases: graph.preparedCases,
+    recovery,
+    existingPublication,
+    establishFloor,
+    fallback: generated ? async error => {
+      recovery.graphRefusal = { stage: error.stage, owner: error.owner,
+        demandId: error.demandId, family: error.family, reason: error.reason };
+      const independent = graph.timing.independentCaseRecovery = {};
+      const result = await certifyGenerated(independent);
+      recovery.publishedCases = [...independent.publishedCases];
+      recovery.caseRefusals = [...(recovery.caseRefusals ?? []), ...(independent.caseRefusals ?? [])];
+      const key = item => JSON.stringify([item.entrypoint, [...item.conditions].sort()]);
+      const published = new Set(recovery.publishedCases.map(key));
+      recovery.unpublishedCases = recovery.cases.filter(item => !published.has(key(item)));
+      graph.timing.retainedProposalFallback = true;
+      graph.timing.reusedProposal = graph.timing.reusedProposalForRecovery === true;
+      return result;
+    } : null,
+    certify: async (cases, publish) => {
+      graph.timing.nativeCertificationTransactions = ++round;
+      graph.timing.typeFactsCaseSetBatches = round;
+      const trial = join(scratch, `recovery-trial-${round}`);
+      return execute(cases, publish ? catalogRoot : join(trial, "catalog"),
+        publish ? options.trustConfigurationOutput : join(trial, "trust.json"));
+    }
   });
 }
 
-function unavailableWitnessRefusal(plans) {
-  const demands = plans.flatMap(plan => plan.demands ?? []);
-  const missing = demands
-    .filter(demand => !demand.satisfiedByArtifactSnapshot)
-    .map(demand => ({
-      demandId: demand.id,
-      family: demand.family,
-      owner: demand.owner,
-      reason:
-        demand.owner === "probe-gate"
-          ? "the mandatory policy-2 probe harness and runtime-image binding are unavailable"
-          : `the automatic ${demand.owner} witness adapter is unavailable`
-    }));
-  if (missing.length === 0) {
-    throw new CertificationRefusal({
-      stage: "receipt-issuance",
-      owner: "trust",
-      reason: "no configured policy-2 receipt issuer is available"
+// Select whole unaccepted artifact cases, never individual claims. Native
+// planning independently authenticates each coordinate and requires its case
+// census to equal this proposal's census before any receipt is published.
+export function projectProposalCases(document, inputs) {
+  const entrypoints = {};
+  for (const input of inputs) {
+    const resolution = input.resolution;
+    if (!resolution || document.package.name !== resolution.packageName ||
+        document.package.version !== resolution.packageVersion ||
+        document.package.integrity !== resolution.packageIntegrity ||
+        input.entrypoint !== resolution.requestedEntrypoint) {
+      throw new Error("case projection requires exact package and entrypoint identities");
+    }
+    const matches = (document.entrypoints[input.entrypoint]?.cases ?? []).filter(item =>
+      resolve(resolution.packageRoot, item.artifact.path) === resolution.runtime.path &&
+      `sha256:${item.artifact.sha256}` === resolution.runtime.digest &&
+      resolve(resolution.packageRoot, item.declarations.path) === resolution.declarations.path &&
+      `sha256:${item.declarations.sha256}` === resolution.declarations.digest &&
+      item.resolution.runtimeBranch === resolution.runtimeTrace.branch &&
+      item.resolution.typesBranch === resolution.declarationTrace.branch
+    );
+    if (matches.length !== 1) throw new Error("case projection requires one exact artifact selection");
+    const selected = entrypoints[input.entrypoint] ??= { cases: [] };
+    if (selected.cases.includes(matches[0])) throw new Error("case projection contains a duplicate artifact selection");
+    selected.cases.push(matches[0]);
+  }
+  if (!inputs.length) throw new Error("case projection cannot publish an empty census");
+  const summaries = {};
+  for (const entrypoint of Object.values(entrypoints)) {
+    for (const item of entrypoint.cases) {
+      for (const reference of Object.values(item.exports)) {
+        const id = typeof reference === "string" ? reference : reference.summary;
+        if (!Object.hasOwn(document.summaries, id)) throw new Error("case projection references a missing summary");
+        summaries[id] = document.summaries[id];
+      }
+    }
+  }
+  return { ...document, entrypoints, summaries };
+}
+
+// The proposal is unaccepted, so no case is assumed proved. Every selected
+// subset gets a fresh native transaction, including final publication. An
+// existing publication cannot be replaced with a smaller set by this lane.
+export async function certifyIndependentCaseSelection({ cases, recovery, existingPublication, certify }) {
+  if (typeof existingPublication !== "boolean") throw new Error("independent recovery requires an explicit publication-state check");
+  const coordinates = recoveryGraphCases({ certificationInputs: cases }, []).cases;
+  recovery.expectedCases = coordinates;
+  const isProofRefusal = error => error instanceof CertificationRefusal &&
+    error.owner === "certifier" && error.stage === "witness-acquisition";
+  let combinedFailure;
+  try {
+    const result = await certify(cases, true);
+    recovery.publishedCases = coordinates;
+    return result;
+  } catch (error) {
+    if (!isProofRefusal(error) || existingPublication || cases.length < 2 || cases.length > 1024) throw error;
+    combinedFailure = error;
+    recovery.combinedRefusal = error.reason ?? error.message;
+  }
+  const selected = [], accepted = [];
+  recovery.caseRefusals = [];
+  const refuse = (index, error) => {
+    recovery.caseRefusals.push({ ...coordinates[index], stage: error.stage,
+        owner: error.owner, demandId: error.demandId ?? null,
+        family: error.family ?? null, reason: error.reason ?? error.message });
+  };
+  // Subdivision for every size (ADR 0059, amended 2026-09-14): the growing
+  // prefix that sets of 32 and under used spent one native transaction per
+  // case and re-certified every accepted case in each of them. Successful
+  // batches provide selection hints only: the complete union is independently
+  // verified before publication.
+  recovery.strategy = "binary-subdivision";
+  const subdivided = await selectBySubdivision({ cases, certify, isProofRefusal });
+  for (const { index, error } of subdivided.refusals) refuse(index, error);
+  for (const index of subdivided.accepted) {
+    selected.push(cases[index]);
+    accepted.push(coordinates[index]);
+  }
+  if (!selected.length) throw combinedFailure;
+  const result = await certify(selected, true);
+  recovery.publishedCases = accepted;
+  return result;
+}
+
+// Selection is orchestration only. Every trial and final publication asks the
+// native verifier to rebuild all proofs, dependencies, trust and case bindings.
+// Trial receipts never become inputs to the final transaction.
+export async function certifyRecoverableCaseSelection({
+  cases,
+  recovery,
+  certify,
+  fallback = null,
+  establishFloor = null,
+  // ADR 0070. `false` asserts that nothing was published before this attempt,
+  // which is what allows a retained-baseline failure to publish a subset of
+  // the prepared set instead of abandoning the graph. `null` is "not asked",
+  // and keeps the original behaviour: a caller that cannot state the
+  // publication state must not reduce one.
+  existingPublication = null
+}) {
+  if (fallback) {
+    try {
+      return await certifyRecoverableCaseSelection({ cases, recovery, certify, existingPublication, establishFloor });
+    } catch (error) {
+      if (!(error instanceof CertificationRefusal) || error.owner !== "certifier" || error.stage !== "witness-acquisition") throw error;
+      return fallback(error);
+    }
+  }
+  if (recovery.retainedProposalRoots) {
+    return certifyRetainedProposalSelection({ cases, recovery, certify,
+      establishFloor: existingPublication === false ? establishFloor : null,
+      isProofRefusal: error => error instanceof CertificationRefusal &&
+        error.owner === "certifier" && error.stage === "witness-acquisition"
     });
   }
-  const first = missing[0];
-  throw new CertificationRefusal({
-    stage: "witness-acquisition",
-    owner: first.owner,
-    demandId: first.demandId,
-    family: first.family,
-    reason: first.reason,
-    refusals: missing
-  });
+  const retainedCount = recovery.retainedCases.length;
+  if (!retainedCount || retainedCount >= cases.length || cases.length > 32 ||
+      recovery.cases.length !== cases.length ||
+      JSON.stringify(recovery.cases.slice(0, retainedCount)) !== JSON.stringify(recovery.retainedCases)) {
+    return certify(cases, true);
+  }
+  const isProofRefusal = error => error instanceof CertificationRefusal &&
+    error.owner === "certifier" && error.stage === "witness-acquisition";
+  try {
+    const result = await certify(cases, true);
+    recovery.publishedCases = [...recovery.cases];
+    return result;
+  } catch (error) {
+    if (!isProofRefusal(error)) throw error;
+    recovery.combinedRefusal = error.reason ?? error.message;
+  }
+  // A retained case is mandatory for *this* strategy: it is the baseline every
+  // trial extends, so a baseline failure ends it rather than silently dropping
+  // coverage the original proposal selected.
+  //
+  // ADR 0070: ending the strategy is not the same as abandoning the graph. The
+  // prepared set is the retained cases *plus* the dependency-composition
+  // frontier, and the proposal this otherwise falls back to never contained
+  // that frontier — those cases refused at generation for want of a dependency
+  // binding. Losing all of them because one retained case cannot be proved
+  // throws away the only lane that ever covered them. So select independently
+  // across the whole prepared set instead, retained cases included, on the one
+  // condition that makes publishing a subset safe: nothing was published here
+  // before. A caller that cannot state that keeps the original behaviour.
+  const selected = cases.slice(0, retainedCount);
+  const accepted = recovery.cases.slice(0, retainedCount);
+  try {
+    await certify(selected, false);
+  } catch (error) {
+    if (!isProofRefusal(error) || existingPublication !== false) throw error;
+    recovery.retainedBaselineRefusal = error.reason ?? error.message;
+    recovery.strategy = "independent-prepared-selection";
+    selected.length = 0;
+    accepted.length = 0;
+    recovery.caseRefusals = [];
+    // Subdivision, not a growing prefix. Every trial here re-certifies the
+    // whole prepared graph -- for `@kobalte/utils` that is 113 nodes -- so a
+    // transaction per case is the difference between finishing and hitting the
+    // certification budget. A batch that proves is a selection *hint* only; the
+    // complete union is certified again before anything is published.
+    const prepared = await selectBySubdivision({ cases, certify, isProofRefusal });
+    for (const { index, error: failure } of prepared.refusals) {
+      recovery.caseRefusals.push({
+        ...recovery.cases[index],
+        stage: failure.stage, owner: failure.owner,
+        demandId: failure.demandId ?? null, family: failure.family ?? null,
+        reason: failure.reason ?? failure.message
+      });
+    }
+    for (const index of prepared.accepted) {
+      selected.push(cases[index]);
+      accepted.push(recovery.cases[index]);
+    }
+    // Nothing survived, so this lane has no answer at all. Rethrow the baseline
+    // refusal and let the proposal fallback have its turn.
+    if (!selected.length) throw error;
+    const result = await certify(selected, true);
+    recovery.publishedCases = accepted;
+    return result;
+  }
+  recovery.caseRefusals = [];
+  const remaining = await selectBySubdivision({ cases: cases.slice(retainedCount), base: selected, certify, isProofRefusal });
+  for (const { index, error } of remaining.refusals) {
+    recovery.caseRefusals.push({
+      ...recovery.cases[retainedCount + index],
+      stage: error.stage, owner: error.owner,
+      demandId: error.demandId ?? null, family: error.family ?? null,
+      reason: error.reason ?? error.message
+    });
+  }
+  for (const index of remaining.accepted) {
+    selected.push(cases[retainedCount + index]);
+    accepted.push(recovery.cases[retainedCount + index]);
+  }
+  // Native duplicate/conflict checks and ordinary consumer verification still
+  // gate the complete final selection, even when every private trial passed.
+  const result = await certify(selected, true);
+  recovery.publishedCases = accepted;
+  return result;
 }
 
 function writeAudit(
@@ -1884,7 +4242,11 @@ function writeAudit(
   refusal,
   demandPlans,
   stageDurationsMs,
-  graphPreparation = null
+  graphPreparation = null,
+  withheldClosures = [],
+  withheldOperations = [],
+  probeCorpus = null,
+  graphNodes = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -1909,6 +4271,20 @@ function writeAudit(
         stageDurationsMs,
         graphPreparation,
         refusals: refusal.refusals ?? [],
+        withheldClosures,
+        withheldOperations,
+        // The probe recipe corpus this run was given, or `null` when it was given
+        // none. It qualifies every `no recipe in corpus` record above: with a
+        // corpus, that reason is a finding about the closure, reached after the
+        // census ran and veto synthesis was offered. With `null`, planning
+        // withheld every proposable candidate by construction and neither ran --
+        // the reason is a property of this invocation. Without this field the two
+        // withheld sets are byte-identical in shape and a reader has no way to
+        // tell which one they are holding.
+        probeCorpus,
+        // A graph that was prepared and then refused still generated its
+        // nodes; their records say what each proposed. Absent on other lanes.
+        ...(graphNodes ? { graphNodes } : {}),
         demandPlans: demandPlans.map(plan => ({
           policyDigest: plan.policyDigest,
           candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -1924,12 +4300,51 @@ function writeAudit(
   );
 }
 
+/// Which domains the proposal certification actually planned from states as
+/// closed, per artifact case and export.
+///
+/// Diagnostic only, and it exists because two rounds of investigating a lost
+/// closure were inference across this exact boundary. A certified document
+/// that closes nothing can mean the certifier dropped the closure or that the
+/// proposal never carried one, and until this was recorded there was no way
+/// to tell them apart from the outside — `--proposal` silently regenerates
+/// when any of its parameters mismatch, so even the file on disk is not
+/// evidence of what was planned.
+function plannedClosureSummary(proposalPath) {
+  try {
+    const document = JSON.parse(readFileSync(proposalPath, "utf8"));
+    const summaries = document.summaries ?? {};
+    const rows = [];
+    for (const [entrypoint, value] of Object.entries(document.entrypoints ?? {})) {
+      for (const [index, artifactCase] of (value.cases ?? [value]).entries()) {
+        for (const [export_, key] of Object.entries(artifactCase.exports ?? {})) {
+          const closed = summaries[key]?.call?.closed ?? [];
+          if (closed.length) rows.push({ entrypoint, case: index, export: export_, closed });
+        }
+      }
+    }
+    return { proposal: proposalPath, closures: rows.length, rows: rows.slice(0, 64) };
+  } catch (error) {
+    return { proposal: proposalPath, unreadable: String(error?.message ?? error) };
+  }
+}
+
 function writeSuccessAudit(
   path,
   manifest,
   demandPlans,
   stageDurationsMs,
-  graphPreparation = null
+  graphPreparation = null,
+  withheldClosures = [],
+  withheldOperations = [],
+  plannedProposal = null,
+  closureCandidates = null,
+  certifiedClosures = null,
+  probeCorpus = null,
+  recipeAddresses = [],
+  dependencyEnvironment = null,
+  selfAdmission = null,
+  graphNodes = null
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -1940,12 +4355,59 @@ function writeSuccessAudit(
     authoritative: false,
     replayable: false,
     status: "certified",
+    // Written only when a receipt states no dependency environment: it then
+    // authenticates, and no consumer admits it by artifact (ADR 0125).
+    ...(dependencyEnvironment?.notAcquired?.length ? { dependencyEnvironment } : {}),
+    // Written only when the certifying tree refuses an entry it just
+    // published: the receipt authenticates and states an environment, and the
+    // admission rule still says no.
+    ...(selfAdmission?.refused?.length ? { selfAdmission } : {}),
     package: { name: manifest.name, version: manifest.version },
     stage: "catalog-publication",
     ordinaryAnalysis: { receiptAuthenticated: true, exactCaseSelected: true },
     stageDurationsMs,
     graphPreparation,
     refusals: [],
+    // Closure candidates recipe-gated planning withheld by name: each names
+    // the export, the domain, the exact semantic claim id a recipe would have
+    // had to carry, and the reason. The certified contract leaves those
+    // domains open; this is the record of why.
+    withheldClosures,
+    // The rung below them: operations withdrawn from the published document
+    // because a positive fact they state could not be certified. The export
+    // still publishes, its domain open, stating one claim fewer.
+    withheldOperations,
+    // The probe recipe corpus this run was given, or `null` when it was given
+    // none. It qualifies every `no recipe in corpus` record above: with a
+    // corpus, that reason is a finding about the closure, reached after the
+    // census ran and veto synthesis was offered. With `null`, planning
+    // withheld every proposable candidate by construction and neither ran --
+    // the reason is a property of this invocation. Without this field the two
+    // withheld sets are byte-identical in shape and a reader has no way to
+    // tell which one they are holding.
+    probeCorpus,
+    // What the planned proposal offered, so a document that closes nothing
+    // can be told apart from a proposal that offered nothing.
+    plannedProposal,
+    // What the planner derived from that proposal, before gating. With
+    // `plannedProposal` above and `withheldClosures`, the three together say
+    // where a closure went.
+    closureCandidates,
+    // And what the receipt actually binds. A domain in `closureCandidates`,
+    // absent here, with nothing in `withheldClosures`, is a closure lost
+    // outside every mechanism meant to account for it.
+    certifiedClosures,
+    // Every claim's recipe address (ADR 0117), unbounded: what re-keys and
+    // scaffolds the recipe corpus.
+    recipeAddresses,
+    // Published-graph lane only: each node's own generation records -- the
+    // closure declines, artifact-case refusals, withheld claims, unresolved
+    // claims and closure candidates the plain lane keeps beside its generated
+    // contract -- plus which artifact case each certified node digest selects,
+    // so a node the catalog names only by digest joins its record. The
+    // withheld closures and operations above already carry their node.
+    // Deduplicated and bounded, with every cap's remainder counted.
+    ...(graphNodes ? { graphNodes } : {}),
     demandPlans: demandPlans.map(plan => ({
       policyDigest: plan.policyDigest,
       candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -1982,7 +4444,8 @@ function reuseEmittedProposal({ options, manifest, certificationImporter, propos
     integrity: options.integrity,
     certificationImporter,
     entrypoints: options.entrypoints,
-    conditions: options.conditions
+    conditions: options.conditions,
+    host: options.host
   });
   if (!admitted) return null;
   writeFileSync(proposalOutput, documentBytes);
@@ -1995,6 +4458,15 @@ function reuseEmittedProposal({ options, manifest, certificationImporter, propos
   } catch {
     // The refusal census is a separate, separately validated reuse.
   }
+  try {
+    // ADR 0158 § 3: diagnostic only, reused with the proposal it describes.
+    writeFileSync(
+      `${proposalOutput}.attribution.json`,
+      readFileSync(`${options.proposal}.attribution.json`)
+    );
+  } catch {
+    // A proposal generated before the sidecar existed has none.
+  }
   return {
     package: manifest.name,
     version: manifest.version,
@@ -2002,6 +4474,7 @@ function reuseEmittedProposal({ options, manifest, certificationImporter, propos
     plan: `${proposalOutput}.proposal.json`,
     schemaVersion: 1,
     certificationInputs: admitted.certificationInputs,
+    inapplicableCases: admitted.inapplicableCases ?? [],
     accepted: false
   };
 }
@@ -2028,35 +4501,46 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   if (!manifest.name || !manifest.version) {
     throw new Error("package.json must declare an exact package name and version");
   }
-  const scratch = mkdtempSync(join(tmpdir(), "solid-checker-certify-"));
-  const importerIdentity = createHash("sha256")
-    .update("solid-checker:certification-importer:v1\0")
-    .update(options.packageRoot)
-    .update("\0")
-    .update(options.catalog)
-    .digest("hex");
-  const certificationImporterPath = join(
-    dirname(options.packageRoot),
-    `.solid-checker-certification-${importerIdentity}.mjs`
-  );
-  let createdCertificationImporter = false;
+  // The importer sits beside the package root so that resolving the package's
+  // own specifier from it walks the same node_modules chain a consumer's
+  // import does. It is materialized only while certification runs and removed
+  // on every way out; the receipt and catalog keep its path as an identity.
+  const certificationImporterPath = certificationImporterPathFor({
+    packageRoot: options.packageRoot,
+    catalog: options.catalog
+  });
+  const releaseCertificationImporter = claimCertificationImporter(certificationImporterPath);
+  let certificationImporter;
+  let scratch;
   try {
-    writeFileSync(certificationImporterPath, "export {};\n", { flag: "wx", mode: 0o600 });
-    createdCertificationImporter = true;
+    certificationImporter = realpathSync(certificationImporterPath);
+    scratch = mkdtempSync(join(tmpdir(), "solid-checker-certify-"));
   } catch (error) {
-    if (
-      error?.code !== "EEXIST" ||
-      readFileSync(certificationImporterPath, "utf8") !== "export {};\n"
-    ) {
-      throw error;
-    }
+    releaseCertificationImporter();
+    throw error;
   }
-  const certificationImporter = realpathSync(certificationImporterPath);
   const demandPlans = [];
   let graphPreparation = null;
   let reusedProposal = false;
+  // The proposal path certification planned from, whichever branch produced
+  // it — reused from disk or regenerated here. Read for the audit only.
+  let plannedProposalPath = null;
+  let withheldClosures = [];
+  let withheldOperations = [];
+  let closureCandidates = null;
+  let certifiedClosures = null;
+  let recipeAddresses = [];
+  let dependencyEnvironment = null;
+  let selfAdmission = null;
+  // Published-graph lane only, audit only: the prepared graph's per-node
+  // records and the native transaction's node-to-artifact-case mapping.
+  let graphNodeRecords = null;
+  let graphNodeCases = null;
+  const graphNodesAudit = () => graphNodesAuditField(graphNodeRecords, graphNodeCases);
   const stageDurationsMs = {};
-  let certified = false;
+  // Returned to the caller, which owns the exit status: `bin/solid-checker.mjs`
+  // and the benchmark worker both map it through `outcome.exitCode`.
+  let outcome = null;
   const measure = async (stage, operation) => {
     const started = process.hrtime.bigint();
     try {
@@ -2093,7 +4577,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           if (options.conditions.length) {
             generationArguments.push("--conditions", options.conditions.join(","));
           }
-          if (options.proposalRefusalAudit) {
+          if (options.host) generationArguments.push("--host", options.host);
+          if (options.proposalRefusalAudit && !options.recoverEntrypoints) {
             // Retain the exact bytes that were parsed and validated. Re-reading
             // the path for the scratch copy would let a concurrent replacement
             // substitute a different, incomplete root census after validation.
@@ -2104,7 +4589,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
               integrity: options.integrity,
               certificationImporter,
               entrypoints: options.entrypoints,
-              conditions: options.conditions
+              conditions: options.conditions,
+              host: options.host
             });
             if (existingAuditBytes) {
               // The authenticated archive has already been acquired by the
@@ -2131,12 +4617,46 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           const reused = options.proposal
             ? reuseEmittedProposal({ options, manifest, certificationImporter, proposalOutput })
             : null;
-          if (reused) {
+          if (reused && !options.recoverEntrypoints) {
             reusedProposal = true;
             return { authority: "rust", generated: reused, graph: null };
           }
           try {
-            const generated = await generatePackageContract(generationArguments, { quiet: true });
+            const generated = reused ?? await generatePackageContract(generationArguments, { quiet: true });
+            reusedProposal = Boolean(reused);
+            plannedProposalPath = generated?.output ?? null;
+            // Generation succeeded, so `generated` is a real answer for the
+            // cases that produced one. When it is only a *partial* answer and
+            // the missing cases refused on dependency composition, the caller
+            // may prefer the lane that certifies exactly those cases with an
+            // authenticated dependency catalog behind them. The graph lane is
+            // not a superset of the partial proposal -- it covers the refused
+            // cases and not the others -- which is why it is opt-in.
+            if (options.dependencyGraphLane || options.recoverEntrypoints) {
+              const { graph, trace } = await preparedGraphForPartialProposal({
+                options,
+                manifest,
+                scratch,
+                output: proposalOutput,
+                certificationImporter,
+                rootArtifactSnapshot: artifactSnapshot,
+                fetch_,
+                generated
+              });
+              if (graph) {
+                reusedProposal = false;
+                graphPreparation = Object.assign(graph.timing, {
+                  partialProposalFrontier: true,
+                  ...(options.recoverEntrypoints ? { reusedProposalForRecovery: Boolean(reused) } : {})
+                });
+                return { authority: "rust", generated: options.recoverEntrypoints ? generated : null, graph };
+              }
+              // A lane that was requested, attempted and could not be prepared
+              // leaves the partial proposal as the answer -- but it must leave
+              // a trace, or the audit reads exactly like a row that never
+              // wanted the lane.
+              if (trace) graphPreparation = { ...(graphPreparation ?? {}), ...trace };
+            }
             return { authority: "rust", generated, graph: null };
           } catch (rootFailure) {
             try {
@@ -2179,19 +4699,64 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
         }),
         certify: async ({ witnesses }) => measure("certification", async () => {
           requireProduct(witnesses, "certification", "native-certification-complete");
+          withheldOperations = Array.isArray(witnesses?.withheldOperations)
+            ? witnesses.withheldOperations
+            : [];
+          withheldClosures = Array.isArray(witnesses?.withheldClosures)
+            ? witnesses.withheldClosures
+            : [];
+          closureCandidates = witnesses?.closureCandidates ?? null;
+          certifiedClosures = witnesses?.certifiedClosures ?? null;
+          recipeAddresses = Array.isArray(witnesses?.recipeAddresses) ? witnesses.recipeAddresses : [];
+          dependencyEnvironment = witnesses?.dependencyEnvironment ?? null;
+          selfAdmission = witnesses?.selfAdmission ?? null;
+          graphNodeCases = Array.isArray(witnesses?.graphNodeCases) ? witnesses.graphNodeCases : null;
           return { authority: "rust", witnesses };
         })
       },
       evidence: {
         obtainWitnesses: async ({ artifactSnapshot, openProposal }) =>
-          measure("witnessAcquisition", () => executeNativeOrGraphCertification({
-            options,
-            generated: openProposal.generated,
-            graph: openProposal.graph,
-            artifactSnapshot,
-            scratch,
-            fetch_
-          }))
+          measure("witnessAcquisition", () => {
+            const caseRecovery = options.recoverEntrypoints && !openProposal.graph &&
+              openProposal.generated?.certificationInputs.length > 1 ? {} : null;
+            if (caseRecovery) graphPreparation = { ...(graphPreparation ?? {}), independentCaseRecovery: caseRecovery };
+            graphNodeRecords = openProposal.graph?.nodeRecords ?? null;
+            return executeNativeOrGraphCertification({
+              options,
+              generated: openProposal.generated,
+              graph: openProposal.graph,
+              artifactSnapshot,
+              scratch,
+              fetch_,
+              caseRecovery,
+              prepareGeneratedGraph: !openProposal.graph &&
+                (options.dependencyGraphLane || options.recoverEntrypoints) ? async originalRefusal => {
+                const trace = {
+                  originalRefusal: originalRefusal.reason ?? originalRefusal.message,
+                  demandId: originalRefusal.demandId,
+                  family: originalRefusal.family,
+                  originalProposalDigest: `sha256:${createHash("sha256").update(readFileSync(openProposal.generated.output)).digest("hex")}`,
+                  cases: openProposal.generated.certificationInputs.map(({ entrypoint, conditions }) => ({ entrypoint, conditions }))
+                };
+                graphPreparation = { ...(graphPreparation ?? {}), generatedProposalProofFallback: trace };
+                try {
+                  const graph = await preparePublishedGraphCases({
+                    options, manifest, scratch: join(scratch, "generated-proof-fallback"),
+                    certificationImporter, rootArtifactSnapshot: artifactSnapshot, fetch_,
+                    dependencyCases: trace.cases
+                  });
+                  graphPreparation = { ...graph.timing, generatedProposalProofFallback: trace };
+                  graphNodeRecords = graph.nodeRecords ?? null;
+                  reusedProposal = false;
+                  demandPlans.splice(0, demandPlans.length, ...graph.demandPlans);
+                  return graph;
+                } catch (error) {
+                  trace.preparationRefusal = error?.message ?? String(error);
+                  throw originalRefusal;
+                }
+              } : null
+            });
+          })
       },
       issuer: {
         issue: async ({ accepted }) => measure("receiptIssuance", async () => ({
@@ -2208,9 +4773,20 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       manifest,
       demandPlans,
       stageDurationsMs,
-      reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation
+      { ...(graphPreparation ?? {}), reusedProposal },
+      withheldClosures,
+      withheldOperations,
+      plannedProposalPath ? plannedClosureSummary(plannedProposalPath) : null,
+      closureCandidates,
+      certifiedClosures,
+      options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null,
+      recipeAddresses,
+      dependencyEnvironment,
+      selfAdmission,
+      graphNodesAudit()
     );
-    certified = true;
+    outcome = certificationOutcome(manifest, dependencyEnvironment, selfAdmission);
+    if (outcome.message) process.stderr.write(`${outcome.message}\n`);
   } catch (error) {
     const refusal =
       error instanceof CertificationRefusal
@@ -2226,13 +4802,22 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       refusal,
       demandPlans,
       stageDurationsMs,
-      graphPreparation
+      // Same merge as the success audit: which lane produced the proposal is a
+      // fact about the attempt, and a refused attempt needs it attributed just
+      // as much as a certified one.
+      reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation,
+      withheldClosures,
+      withheldOperations,
+      options.probeRecipeCorpus ? resolve(options.probeRecipeCorpus) : null,
+      graphNodesAudit()
     );
     throw refusal;
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
-    if (!certified && createdCertificationImporter) {
-      rmSync(certificationImporterPath, { force: true });
+    try {
+      rmSync(scratch, { recursive: true, force: true });
+    } finally {
+      releaseCertificationImporter();
     }
   }
+  return outcome;
 }

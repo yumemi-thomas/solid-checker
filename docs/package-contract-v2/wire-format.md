@@ -170,6 +170,96 @@ Rules:
 - closure never transfers through a summary reference;
 - normalizer expansion occurs before closure is interpreted.
 
+### A class of members (`members`, ADR 0207)
+
+A callback item's source may name a class of an argument value's own
+members instead of one path:
+
+```json
+{
+  "call": {
+    "callbacks": [
+      {
+        "from": { "arg": 0, "path": [], "members": "event-handler-props" },
+        "operation": "event-handlers"
+      }
+    ],
+    "operations": [
+      {
+        "id": "event-handlers",
+        "kind": "invoke",
+        "guard": { "all": [{ "arg": 0, "path": ["as"], "kind": "plain" }] },
+        "trigger": { "event": "external-event" },
+        "at": { "event": "external-event", "schedule": "external" },
+        "count": { "min": 0, "max": "many", "scope": "call" },
+        "tracking": "ambient-at-execution"
+      }
+    ]
+  }
+}
+```
+
+`event-handler-props` is every key that starts with `on` and contains no `:`,
+the properties the Solid runtime's spread attaches as event listeners. The item
+is **exhaustive for its class**: every invocation of such a member is its
+operation, whatever the domain's closure says. Above, `callbacks` stays open,
+so the document says nothing about any other member.
+
+Rules:
+
+- `members` stands beside `arg` only;
+- the operation is an `invoke` of the call protocol;
+- a consumer that does not model the class reads the `callbacks` domain as
+  open;
+- certification never proves a member class, so only an authored, probed
+  contract states one;
+- a decoder that predates the field refuses the document.
+
+### `proposedClosures`
+
+A `call` may additionally carry `proposedClosures`, naming the closures in its
+own `closed` list that this document **proposes** rather than asserts as
+reviewed knowledge:
+
+```json
+{
+  "call": {
+    "closed": ["creates"],
+    "creates": [],
+    "proposedClosures": ["creates"]
+  }
+}
+```
+
+It means "a generator's implementation walk cleared this domain and offers the
+closure for proof", and it is what a proposal generator emits in place of the
+reviewed negative claim an audit writes. The closure itself is an ordinary
+closure: the certifier withdraws it while planning, derives a
+`DomainExhaustiveness` demand and a mandatory probe veto for it, and either the
+implementation census decides it (ADR 0008) or the row refuses by name. Nothing
+about the label weakens or strengthens what `closed` says — a consumer that
+does not understand the key reads the same closure, and a closure is usable as
+accepted knowledge only through an acceptance receipt either way.
+
+Rules:
+
+- every name must also appear in `closed` — a proposal of a closure the
+  document does not state is refused as a contradiction;
+- a name must be a domain the verifier has a closure proof mode for, which
+  today is `creates` alone; any other name is refused, because a proposed
+  closure nothing can decide refuses the row instead of proving anything;
+- duplicates are invalid, as in `closed`;
+- the label travels with the closure it labels: opening the domain (an opaque
+  closure frontier, a recipe-gated withholding, the certifier's own planning
+  weakening) withdraws both.
+
+Optional and additive to `schemaVersion: 1`. It **does** join normalized
+meaning: a document that labels its closure and one that asserts the same
+closure as reviewed are different documents, so they get digests in different
+families (see § semantic digest families in
+[semantic-model.md](semantic-model.md)) and a receipt for one cannot
+authenticate the other.
+
 ## Operations
 
 ```json
@@ -223,14 +313,60 @@ Rules:
 Operation `kind` is one of `invoke`, `return`, `read`, `write`, `invalidate`,
 `create`, `cleanup`, or `dispose`. `trigger` names either an event, an operation,
 or a resource event. `at.event` is one of `call`, `render`, `flush`, `settle`,
-`transition`, `async-emission`, `cleanup`, `external-event`, `request`, or
-`response-commitment`; `at.schedule` is `same-stack`, `queued`, or `external`.
+`transition`, `async-emission`, `cleanup`, `external-event`, `request`,
+`response-commitment`, or `result-access`; `at.schedule` is `same-stack`,
+`queued`, or `external`. `result-access` (ADR 0139) is valid only as both the
+trigger and the execution point of an `invoke` exactly one `callbacks` item
+names from a bare parameter, scheduled `external`, `ambient-at-execution` for
+tracking and owner, count `trigger` 0..many, unguarded, and puts the document
+in the digest family `solid-checker:semantic-result-access:v1`.
 
 `tracking` is `tracked`, `untracked`, or `ambient-at-execution`. Omission means
 unknown. Owner `source` is `none`, `ambient-at-call`, `ambient-at-execution`,
 `captured`, or `created`; `captured` and `created` require `resource`. Owner
 requirements, child capability, cleanup capability, and lifetime are separate
 keys and may be omitted independently when unknown.
+
+### `composedFrom`
+
+A `read` operation may additionally carry `composedFrom`, naming the export and
+operation *of the same artifact case* the row was composed from:
+
+```json
+{
+  "id": "read-0",
+  "kind": "read",
+  "at": { "event": "call", "schedule": "same-stack" },
+  "count": { "scope": "call", "min": 0, "max": "many" },
+  "tracking": "untracked",
+  "inputs": [{ "kind": "reactive", "role": "accessor" }],
+  "composedFrom": { "export": "createPolled", "operation": "read-0" }
+}
+```
+
+It means "the behaviour this operation describes is that export's own
+operation, performed through this export's call to it". Both keys are required
+when the object is present. `operation` is the target's own **local** operation
+id, the same spelling this export's ids use, so a document cannot name an
+operation outside the artifact case that carries it — the qualification is the
+reader's, not the document's. It is permitted only on `kind: "read"`, and only
+naming another export: an id the composing export also owns is a
+self-composition and is refused.
+
+Optional and additive to `schemaVersion: 1`. An operation that omits it makes
+no provenance claim, and a consumer then requires the composing export's own
+evidence for the row exactly as before the field existed.
+
+**It is a target to prove against, never authority.** Discharging a demand on
+an operation that carries it requires proving both halves: that this export
+really calls the named export — by the callee's resolved declaration identity,
+never by its name — through a reachable, uncaptured call, and that the named
+export's own claim for the named operation is itself discharged from its own
+implementation census, to a bounded depth. A provenance whose export is absent
+from the artifact case, whose composing call is captured or unreachable, whose
+target states a different claim, or whose target's own demand refuses, refuses
+the demand. Omitting it is therefore always the weaker document, never the
+looser one.
 
 `requires` constrains the current owner. `requiresChildren` and
 `requiresCleanup` independently constrain child-owner and cleanup capability.
@@ -330,6 +466,18 @@ by the semantic normalizer. A resource-bound capability may be written as
 `readable` and `writable` capabilities never name a resource. The local
 `closed: ["capabilities"]` convention applies to reactive and store values.
 Projection and snapshot are not nominal wire kinds.
+
+ADR 0145 adds `described-callable`, valid only as the whole `output` of a
+`return` operation: `{ "kind": "described-callable", "reads": [], "returns":
+["plain"] }`. Both lists are required -- an absent one would read as the
+strongest claim it can make -- canonically sorted, and without duplicates.
+`reads` items are drawn from `owned-signal` (ADR 0146) and `owned-memo` (ADR 0162; canonical byte 1, appended, so no earlier document moves), `returns` items from
+`plain` and (ADR 0146, only beside a read) `read-value`, a shorthand whose
+detailed spelling is `{ "kind": "read-value" }` and which is valid nowhere
+else; its canonical tag is 22. It carries no `closed` list: the shape is exact, and states what one
+invocation of the returned value does in `callbacks`, `reads`, `creates` and
+`returns` (see `semantic-model.md` § returns). Its canonical tag is 21, appended;
+no earlier document can carry it, so it needs no digest family.
 
 ## Guarded behavior
 

@@ -1,0 +1,24 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "solid-checker",
+    "version": "0.1.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "accepted dependency solid-checker-wasm has no exact runtime binding for export checkSync"
+    },
+    {
+      "entrypoint": "./eslint",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: TypeFacts session error: Type Facts response is invalid: unsupported Wire table schema 18"
+    }
+  ]
+}

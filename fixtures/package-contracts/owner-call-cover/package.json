@@ -1,0 +1,14 @@
+{
+  "name": "owner-call-cover",
+  "version": "1.0.0",
+  "type": "module",
+  "peerDependencies": {
+    "solid-js": "^2.0.0-rc.9"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

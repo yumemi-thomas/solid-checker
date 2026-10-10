@@ -1,0 +1,68 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/deep",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-PYus+PGfzKxLlumt7x25MvDh3vFrfcoUrus8byeboJEQcD+KTFHwi4Jt4ZmKHDJD+ZjtM3S81z3Ibt50LP5fuA==",
+      "snapshotRoot": "sha256:9bf3552b6bafbd1fedf084b9f3b6140884782ba109ea7b724e8cedc31cb6e382",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "e0902ff968f3775c32ccde1d89ef5cccc43d785b31213841e84f1fa5b88001be",
+                  "path": "./dist/index.js",
+                  "sha256": "928b6b259edd2bd74498c04bd3cab85a0f2f0d268a5caacd1d84c9e8de690bb7"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "040c9d37c13f978bf8e4b4f7c67a33a4843c3e0cf5e1e5afe8bc44cff05d5696"
+                },
+                "exports": {
+                  "captureStoreUpdates": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "deepTrack": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "trackDeep": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "trackStore": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-PYus+PGfzKxLlumt7x25MvDh3vFrfcoUrus8byeboJEQcD+KTFHwi4Jt4ZmKHDJD+ZjtM3S81z3Ibt50LP5fuA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "d8dce665830da982593c5a7ce88177c754f8c4ccbc004aed1b1e16a8b9c9c4e6"
+          },
+          "name": "@solid-primitives/deep",
+          "version": "1.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

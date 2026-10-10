@@ -17,7 +17,10 @@ use typefacts::{ConstantValueKind, EntityFact, ResolvedCallValidity};
 use crate::execution_role::semantic_execution_role;
 use crate::owners::{containing_ast_function, jsx_element_is_loading};
 use crate::pipeline::{AnalysisContext, ProgramDraft};
-use crate::{ExecutionRole, StaticViolation, location, primitive_name};
+use crate::{
+    ExecutionRole, RichArgumentTransport, StaticDefect, StaticDefectKind, StaticViolation,
+    call_primitive_name, location,
+};
 
 /// The directive whose presence turns a function or module into server-build
 /// material (RFC 10: the compiler's only contract).
@@ -46,22 +49,18 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
     for file in &ctx.facts.files {
         let mut allowed = None;
         for call in &file.ast.calls {
-            let Some(kind @ (Primitive::HttpStatus | Primitive::HttpHeader)) = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                ctx.entities,
-                ctx.symbol_names,
-                ctx.dialect,
-            )
-            .as_ref()
-            .and_then(crate::PrimitiveName::primitive) else {
+            let Some(kind @ (Primitive::HttpStatus | Primitive::HttpHeader)) =
+                call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect)
+                    .as_ref()
+                    .and_then(crate::PrimitiveName::primitive)
+            else {
                 continue;
             };
             let server_rendering = *server_rendering.get_or_insert_with(|| {
                 crate::source_discovery::project_server_rendering(
                     ctx.facts,
                     &ctx.rule_options.runtime,
+                    ctx.dialect,
                 )
             });
             // The whole claim is about the SSR shell flush. Where an explicit
@@ -107,26 +106,33 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             if !dominated {
                 continue;
             }
-            let name = match kind {
-                Primitive::HttpStatus => "httpStatus",
-                _ => "httpHeader",
+            // Both spellings come from the dialect rather than from this
+            // module. `static_api.rs` already asks `boundary_name` for the
+            // same boundary two rules away; this one had `<Loading>` written
+            // into three strings and the two primitive names into a `match`,
+            // which is a second copy of the vocabulary and the one that goes
+            // stale. A primitive the dialect cannot name is skipped rather
+            // than given a guessed spelling.
+            let Some(name) = ctx.dialect.name_of(kind) else {
+                continue;
             };
+            let boundary = ctx.dialect.boundary_name(solid_dialect::Boundary::Async);
             draft.static_violations.push(StaticViolation {
                 id: "SC7005".into(),
                 rule: "http-response-after-flush".into(),
                 message: if server_rendering.renders() {
                     format!(
-                        "{name}() is called by content below a <Loading> boundary; under streaming SSR the response head commits at the shell flush, and when this boundary settles after the shell has flushed the call is a committed no-op — the {} is silently dropped, with no queue holding it for later",
+                        "{name}() is called by content below a <{boundary}> boundary; under streaming SSR the response head commits at the shell flush, and when this boundary settles after the shell has flushed the call is a committed no-op — the {} is silently dropped, with no queue holding it for later",
                         if kind == Primitive::HttpStatus { "status" } else { "header" }
                     )
                 } else {
                     format!(
-                        "{name}() is called by content below a <Loading> boundary, but the analyzed project cannot prove whether a server-rendering entry exists; if this application streams SSR and the boundary settles after the shell flush, the {} is silently dropped",
+                        "{name}() is called by content below a <{boundary}> boundary, but the analyzed project cannot prove whether a server-rendering entry exists; if this application streams SSR and the boundary settles after the shell flush, the {} is silently dropped",
                         if kind == Primitive::HttpStatus { "status" } else { "header" }
                     )
                 },
                 hint: format!(
-                    "Decide the response head in shell content — above every <Loading> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. A boundary may settle before or after the flush, so move the decision to make the response certifiable."
+                    "Decide the response head in shell content — above every <{boundary}> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. A boundary may settle before or after the flush, so move the decision to make the response certifiable."
                 ),
                 location: location(file.path.shared(), call.callee),
                 analysis_context: String::new(),
@@ -562,14 +568,14 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     .as_ref()
                     .and_then(|name| declaration_file.source_text(name.span))
                     .unwrap_or("this server function");
-                draft.static_violations.push(StaticViolation {
-                    id: "SC7007".into(),
-                    rule: "server-function-rich-argument".into(),
-                    message: format!(
-                        "server function {name} receives an argument typed {} ({}); server-function arguments travel as plain JSON by default, and a value JSON cannot carry faithfully throws at the transport: \"Server function arguments are sent as JSON by default and these arguments are not JSON-serializable\"",
-                        descriptor, matched.member
-                    ),
-                    hint: "Call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup to send Dates, Maps, Sets, and typed arrays through the codec (~5 KB gz), or convert the argument to a JSON-safe shape at the call site (date.toISOString(), Array.from(set)).".into(),
+                draft.push_defect(StaticDefect {
+                    kind: StaticDefectKind::ServerFunctionRichArgument {
+                        transport: RichArgumentTransport::ResolvedType {
+                            function: name.to_string(),
+                            descriptor: descriptor.to_string(),
+                            member: matched.member.to_string(),
+                        },
+                    },
                     location: location(file.path.shared(), argument.span),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -649,13 +655,12 @@ fn push_nested_rich_argument_violation(
         .as_ref()
         .and_then(|name| declaration_file.source_text(name.span))
         .unwrap_or("this server function");
-    draft.static_violations.push(StaticViolation {
-        id: "SC7007".into(),
-        rule: "server-function-rich-argument".into(),
-        message: format!(
-            "server function {name} receives an object holding a Date, Map, Set, RegExp, or typed array; the default server-function transport is plain JSON, which reaches nested values, so the nested one is silently flattened rather than sent"
-        ),
-        hint: "Convert the nested value to a JSON-safe shape where the object is built (date.toISOString(), Array.from(set)), or call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup.".into(),
+    draft.push_defect(StaticDefect {
+        kind: StaticDefectKind::ServerFunctionRichArgument {
+            transport: RichArgumentTransport::NestedValue {
+                function: name.to_string(),
+            },
+        },
         location: location(file.path.shared(), span),
         analysis_context: "nested-rich-argument".into(),
         fixes: vec![],
@@ -675,13 +680,12 @@ fn push_non_json_primitive_violation(
         .as_ref()
         .and_then(|name| declaration_file.source_text(name.span))
         .unwrap_or("this server function");
-    draft.static_violations.push(StaticViolation {
-        id: "SC7007".into(),
-        rule: "server-function-rich-argument".into(),
-        message: format!(
-            "server function {name} receives a bigint, symbol, or undefined value; the default server-function transport is plain JSON and cannot encode that primitive faithfully"
-        ),
-        hint: "Convert the argument to a JSON value at the call site, or install the rich-argument serializer once at client startup.".into(),
+    draft.push_defect(StaticDefect {
+        kind: StaticDefectKind::ServerFunctionRichArgument {
+            transport: RichArgumentTransport::NonJsonPrimitive {
+                function: name.to_string(),
+            },
+        },
         location: location(file.path.shared(), span),
         analysis_context: String::new(),
         fixes: vec![],
@@ -702,13 +706,12 @@ fn push_rich_argument_uncertainty(
     span: Span,
     reason: &str,
 ) {
-    draft.static_violations.push(StaticViolation {
-        id: "SC7007".into(),
-        rule: "server-function-rich-argument".into(),
-        message: format!(
-            "a client call to a server function has an unresolved rich-argument transport proof: {reason}"
-        ),
-        hint: "Resolve the argument type and configure the serializer through the exact @solidjs/web server-functions API, or pass a JSON-safe value explicitly.".into(),
+    draft.push_defect(StaticDefect {
+        kind: StaticDefectKind::ServerFunctionRichArgument {
+            transport: RichArgumentTransport::Unresolved {
+                reason: reason.to_string(),
+            },
+        },
         location: location(file.path.shared(), span),
         analysis_context: "server-function-rich-argument-unresolved".into(),
         fixes: vec![],

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use solid_reactive_ir::{
     ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, ContractReactiveRead,
     PackageContract,
-    contract_semantics::{ClaimDomain, KnowledgeSet, OperationKind},
+    contract_semantics::{ClaimDomain, KnowledgeSet, KnowledgeState, OperationKind},
 };
 
 use super::*;
@@ -16,7 +16,146 @@ fn sha(byte: char) -> String {
     format!("sha256:{}", byte.to_string().repeat(64))
 }
 
+#[test]
+fn structural_proposals_preserve_known_members_without_promoting_them_to_proof() {
+    let parameter = ValueShape::Parameter {
+        index: 1,
+        path: vec![],
+    };
+    let known = ValueShape::Tuple(KnowledgeSet::Complete(vec![
+        parameter.clone(),
+        ValueShape::Unknown,
+    ]));
+    let literal = ValueShape::Tuple(KnowledgeSet::Complete(vec![ValueShape::Plain; 2]));
+    assert_eq!(
+        supplement_structural_proposal(known.clone(), &literal),
+        ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            parameter.clone(),
+            ValueShape::Plain
+        ]))
+    );
+    assert_eq!(
+        supplement_structural_proposal(
+            known.clone(),
+            &ValueShape::Tuple(KnowledgeSet::Complete(vec![]))
+        ),
+        known
+    );
+    let known = ValueShape::Object(KnowledgeSet::Complete(vec![ObjectProperty {
+        name: "value".into(),
+        value: parameter.clone(),
+    }]));
+    let literal = ValueShape::Object(KnowledgeSet::Complete(vec![
+        ObjectProperty {
+            name: "count".into(),
+            value: ValueShape::Plain,
+        },
+        ObjectProperty {
+            name: "value".into(),
+            value: ValueShape::Plain,
+        },
+    ]));
+    assert_eq!(
+        supplement_structural_proposal(known, &literal),
+        ValueShape::Object(KnowledgeSet::Complete(vec![
+            ObjectProperty {
+                name: "count".into(),
+                value: ValueShape::Plain
+            },
+            ObjectProperty {
+                name: "value".into(),
+                value: parameter
+            },
+        ]))
+    );
+}
+
+#[test]
+fn literal_structures_propose_returns_even_when_async_summary_is_open() {
+    let summary = ContractExport {
+        kind: "function".into(),
+        returns_literal_structures: vec![ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            ValueShape::Plain; 2
+        ]))],
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert!(
+        export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Returns)
+    );
+    assert!(matches!(
+        export.call.claims().returns,
+        KnowledgeSet::Complete(_)
+    ));
+    assert!(export.call.operations.iter().any(|operation| {
+        operation.kind == OperationKind::Return
+            && matches!(
+                operation.output,
+                Some(ValueShape::Tuple(KnowledgeSet::Complete(_)))
+            )
+    }));
+    assert!(normalized.closure_candidates.iter().any(|candidate| {
+        matches!(
+            candidate.path,
+            SemanticClaimPath::Domain(solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                ClaimDomain::Returns
+            ))
+        )
+    }));
+    let round_trip = crate::contract_document::decode(
+        &crate::contract_document::encode(
+            &normalized.contract,
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .unwrap(),
+    )
+    .unwrap()
+    .normalize()
+    .unwrap();
+    let candidates = solid_reactive_ir::contract_semantics::certification::proof_policy_2()
+        .inspect_candidates(&round_trip)
+        .unwrap();
+    assert!(
+        candidates
+            .closure_candidates()
+            .iter()
+            .any(|candidate| matches!(
+                candidate.path,
+                SemanticClaimPath::Domain(ClaimPath::Value {
+                    root: ValueRoot::OperationOutput { .. },
+                    domain: ValueClaimDomain::TupleItems,
+                    ..
+                })
+            )),
+        "the emitted document must preserve the enumeration proposal, not only its sidecar"
+    );
+}
+
 fn resolution(exports: impl IntoIterator<Item = String>) -> ResolvedImport {
+    resolution_for_package("package", exports)
+}
+
+fn resolution_for_package(
+    package_name: &str,
+    exports: impl IntoIterator<Item = String>,
+) -> ResolvedImport {
+    ResolvedImport {
+        specifier: package_name.into(),
+        package_name: package_name.into(),
+        ..resolution_at_default_paths(exports)
+    }
+}
+
+fn resolution_at_default_paths(exports: impl IntoIterator<Item = String>) -> ResolvedImport {
     let manifest = ResolvedFile {
         path: "/project/node_modules/package/package.json".into(),
         real_path: None,
@@ -67,6 +206,10 @@ fn resolution(exports: impl IntoIterator<Item = String>) -> ResolvedImport {
             })
             .collect(),
         declaration_exports: std::collections::BTreeSet::new(),
+        unbound_declaration_exports: std::collections::BTreeSet::new(),
+        foreign_declaration_exports: std::collections::BTreeSet::new(),
+        forwarded_foreign_exports: std::collections::BTreeSet::new(),
+        runtime_withheld_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }
@@ -89,24 +232,87 @@ fn inferred(summary: ContractExport) -> PackageContract {
 }
 
 #[test]
+fn unknown_runtime_kind_normalizes_without_negative_claims() {
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(ContractExport::unknown_runtime_kind()),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert_eq!(export.shape, ValueShape::Unknown);
+    for domain in ClaimDomain::ALL {
+        assert_eq!(export.claim_state(domain), KnowledgeState::Unknown);
+    }
+    assert!(normalized.closure_candidates.is_empty());
+}
+
+#[test]
+fn composing_an_accepted_read_never_invents_call_context_or_a_lower_bound() {
+    let context = solid_reactive_ir::ContractReadContext {
+        count: Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(0),
+            max: Some(UpperBound::Finite(1)),
+        },
+        tracking: Tracking::AmbientAtExecution,
+        at: Some(Event::Call),
+        schedule: Some(Schedule::SameStack),
+        trigger: Some(Trigger::Event(Event::Call)),
+        guarded: false,
+    };
+    let summary = ContractExport {
+        kind: "function".into(),
+        reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+            execution: Some(context),
+            kind: "accessor".into(),
+            label: "dependency-state".into(),
+            parameter: None,
+            path: None,
+            composed_owner: None,
+            composed_from: None,
+        }]),
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution_for_package("package", ["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    let id = &export.call.claims().reads.items()[0];
+    let read = export.operation(&id.0).unwrap();
+    assert_eq!(read.cardinality.min, Some(0));
+    assert_eq!(read.tracking, Tracking::Unknown);
+    assert_eq!(read.at, None);
+    assert_eq!(read.schedule, None);
+}
+
+#[test]
 fn inferred_normalization_keeps_unknowns_local_and_emits_only_open_proposals() {
     let summary = ContractExport {
         kind: "function".into(),
         reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+            execution: None,
             kind: "parameter".into(),
             label: String::new(),
             parameter: Some(0),
             path: None,
+            composed_owner: None,
+            composed_from: None,
         }]),
         returns: ContractClaim::Open,
         ..ContractExport::default()
     };
-    let (proposal, candidates) = normalize_inferred_contract_with_candidates(
+    let normalized = normalize_inferred_contract_with_candidates(
         &inferred(summary),
         &resolution(["read".into()]),
     )
     .unwrap();
-    let export = proposal.artifact_cases()[0].exports.get("read").unwrap();
+    let candidates = normalized.closure_candidates;
+    let export = normalized.contract.artifact_cases()[0]
+        .exports
+        .get("read")
+        .unwrap();
 
     assert!(matches!(
         export.call.claims().returns,
@@ -125,15 +331,1187 @@ fn inferred_normalization_keeps_unknowns_local_and_emits_only_open_proposals() {
     );
 }
 
+/// One export carrying exactly the two domains the path bootstrap fabricates
+/// inside a dialect's own archive: a reactive read and an owner requirement.
+fn bootstrapped_reactive_summary() -> ContractExport {
+    owner_requirement_summary(solid_reactive_ir::OwnerRequirementOperation::Effect)
+}
+
+/// The same summary with the owner requirement's role chosen by the caller.
+fn owner_requirement_summary(
+    operation: solid_reactive_ir::OwnerRequirementOperation,
+) -> ContractExport {
+    ContractExport {
+        kind: "function".into(),
+        reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+            execution: None,
+            kind: "accessor".into(),
+            label: String::new(),
+            parameter: None,
+            path: None,
+            composed_owner: None,
+            composed_from: None,
+        }]),
+        owner_requirements: ContractClaim::Known(vec![
+            solid_reactive_ir::ContractOwnerRequirement {
+                operation,
+                guaranteed: false,
+                guard: None,
+            },
+        ]),
+        ..ContractExport::default()
+    }
+}
+
+/// One normalization of `owner_requirement_summary(role)` for an ordinary
+/// consuming package, which is the only scope that publishes the domain at all.
+fn normalized_owner_requirement(
+    operation: solid_reactive_ir::OwnerRequirementOperation,
+) -> super::NormalizedInference {
+    normalize_inferred_contract_with_candidates(
+        &inferred(owner_requirement_summary(operation)),
+        &resolution(["read".into()]),
+    )
+    .unwrap()
+}
+
+// The generator's scope decision, both directions, at the demand owner. The
+// name is the only input, so the pair differs in nothing else.
+#[test]
+fn a_dialects_own_archive_publishes_neither_bootstrapped_reads_nor_owner_creates() {
+    for package_name in ["solid-js", "@solidjs/signals", "@solidjs/web"] {
+        let proposal = normalize_inferred_contract(
+            &inferred(bootstrapped_reactive_summary()),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = proposal.artifact_cases()[0].exports.get("read").unwrap();
+        // Open, never closed-empty: `KnowledgeSet::Complete(vec![])` would be
+        // the negative claim only the hand audits may assert.
+        assert!(
+            matches!(export.call.claims().reads, KnowledgeSet::Unknown),
+            "{package_name} must leave reads open, never closed-empty"
+        );
+        assert!(
+            matches!(export.call.claims().creates, KnowledgeSet::Unknown),
+            "{package_name} must leave creates open, never closed-empty"
+        );
+        assert!(
+            matches!(export.call.claims().cleanups, KnowledgeSet::Unknown),
+            "{package_name} must leave cleanups open, never closed-empty"
+        );
+        assert!(
+            export.call.operations.iter().all(|operation| !matches!(
+                operation.kind,
+                OperationKind::Read | OperationKind::Create | OperationKind::Cleanup
+            )),
+            "{package_name} must emit no read or owner-requirement operation"
+        );
+    }
+}
+
+#[test]
+fn self_bootstrapped_callbacks_are_unknown_while_consuming_callbacks_survive() {
+    for package_name in [
+        "solid-js",
+        "@solidjs/signals",
+        "@solidjs/web",
+        "@solidjs/router",
+        "package",
+    ] {
+        let summary = ContractExport {
+            kind: "function".into(),
+            callbacks: ContractClaim::Known(vec![solid_reactive_ir::ContractCallback {
+                parameter: 0,
+                execution: "inline".into(),
+                schedule: None,
+                clears_tracking: false,
+                arguments: Vec::new(),
+                owner: None,
+                protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
+                path: Vec::new(),
+            }]),
+            // The row above was written for `cb()` in the export's own body.
+            direct_callback_parameters: BTreeSet::from([0]),
+            ..ContractExport::default()
+        };
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        if solid_dialect::primitive_defining_package(package_name) {
+            assert!(matches!(
+                export.call.claims().callbacks,
+                KnowledgeSet::Unknown
+            ));
+            assert!(export.call.operations.is_empty());
+            assert!(
+                !normalized
+                    .closure_candidates
+                    .iter()
+                    .any(|candidate| matches!(
+                        candidate.path,
+                        SemanticClaimPath::Domain(
+                            solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                                ClaimDomain::Callbacks
+                            )
+                        )
+                    ))
+            );
+        } else {
+            // ADR 0100: an `inline` row — invoked from a bare parameter at the
+            // call event on the same stack — is an enumeration the census can
+            // confirm, so the consuming package proposes it closed and the
+            // certifier receives a `callbacks` candidate carrying the item.
+            assert!(
+                matches!(&export.call.claims().callbacks, KnowledgeSet::Complete(callbacks) if callbacks.len() == 1),
+                "{:?}",
+                export.call.claims().callbacks
+            );
+            assert_eq!(export.call.operations.len(), 1);
+            assert!(
+                export
+                    .call
+                    .proposed_closures()
+                    .contains(&ClaimDomain::Callbacks)
+            );
+            assert!(
+                normalized
+                    .closure_candidates
+                    .iter()
+                    .any(|candidate| matches!(
+                        candidate.path,
+                        SemanticClaimPath::Domain(
+                            solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                                ClaimDomain::Callbacks
+                            )
+                        )
+                    ))
+            );
+        }
+    }
+}
+
+/// Item A of ways-to-improve § 3.3: the generator derives a non-call item for
+/// every parameter its own body reads a property of or coerces, beside the call
+/// rows, and proposes the enumeration closed. `access` is a call of 0 and a get
+/// of 0; `compare` coerces 0 and 1 and calls nothing. Every such item is an
+/// `ambient-at-execution` invoke at the call event on the same stack, counted
+/// per call from zero to many, and the ids continue the `callback-<n>` scheme.
+#[test]
+fn a_parameter_read_or_coercion_is_described_as_a_non_call_callbacks_item() {
+    use solid_reactive_ir::contract_semantics::{InvokeProtocol, Tracking};
+    let call_row = solid_reactive_ir::ContractCallback {
+        parameter: 0,
+        execution: "inline".into(),
+        schedule: None,
+        clears_tracking: false,
+        arguments: Vec::new(),
+        owner: None,
+        protocol: InvokeProtocol::Call,
+        path: Vec::new(),
+    };
+    let normalize = |summary: ContractExport| {
+        normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package("package", ["read".into()]),
+        )
+        .unwrap()
+    };
+    let described = |normalized: &NormalizedInference| {
+        let export = normalized.contract.artifact_cases()[0].exports["read"].clone();
+        assert!(
+            export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Callbacks),
+            "{:?}",
+            export.call.claims().callbacks
+        );
+        let mut items = export
+            .callbacks()
+            .items()
+            .iter()
+            .map(|item| {
+                let operation = export.operation(&item.operation.0).unwrap();
+                if operation.is_protocol_invocation() {
+                    assert_eq!(operation.tracking, Tracking::AmbientAtExecution);
+                    assert_eq!(operation.cardinality.min, Some(0));
+                }
+                let ValueSource::Parameter { index, path } = &item.from else {
+                    panic!("a bare parameter");
+                };
+                assert!(path.is_empty());
+                (
+                    operation.invoke_protocol(),
+                    *index,
+                    item.operation.0.rsplit(':').next().unwrap().to_owned(),
+                )
+            })
+            .collect::<Vec<_>>();
+        items.sort();
+        items
+    };
+
+    let access = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(vec![call_row.clone()]),
+        direct_callback_parameters: BTreeSet::from([0]),
+        direct_accessor_parameters: BTreeSet::from([0]),
+        ..ContractExport::default()
+    });
+    assert_eq!(
+        described(&access),
+        vec![
+            (InvokeProtocol::Call, 0, "callback-0".to_owned()),
+            (InvokeProtocol::Get, 0, "callback-1".to_owned()),
+        ]
+    );
+    let compare = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(Vec::new()),
+        direct_coerced_parameters: BTreeSet::from([0, 1]),
+        ..ContractExport::default()
+    });
+    assert_eq!(
+        described(&compare),
+        vec![
+            (InvokeProtocol::Coerce, 0, "callback-0".to_owned()),
+            (InvokeProtocol::Coerce, 1, "callback-1".to_owned()),
+        ]
+    );
+
+    // Re-emission: the projection of the certified export, normalized again as
+    // an inherited summary, republishes each item with its own protocol and
+    // derives nothing twice.
+    let projected = solid_reactive_ir::project_export_semantics(
+        &access.contract.artifact_cases()[0].exports["read"],
+    );
+    let rows = projected.callbacks.known().expect("closed stays known");
+    assert_eq!(rows.len(), 2);
+    let again = normalize(ContractExport {
+        inherited_from: Some(solid_reactive_ir::InheritedExportOrigin {
+            package_name: "dependency".into(),
+            package_version: "1.0.0".into(),
+            artifact_case: "dependency-case".into(),
+            semantic_digest: sha('b'),
+            entrypoint: ".".into(),
+            export: "read".into(),
+        }),
+        ..projected
+    });
+    assert_eq!(described(&again), described(&access));
+
+    // Beside an iteration of a caller's value -- `const [x, y] = point` -- the
+    // enumeration is one the generator cannot describe whole (it derives no
+    // `iterate` item), so it keeps the items and proposes no closure.
+    let iterates = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(Vec::new()),
+        direct_accessor_parameters: BTreeSet::from([1]),
+        iterated_parameters: BTreeSet::from([0]),
+        ..ContractExport::default()
+    });
+    let export = &iterates.contract.artifact_cases()[0].exports["read"];
+    assert!(
+        !export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Callbacks)
+            && !export.callbacks().is_closed()
+            && export.callbacks().items().len() == 1,
+        "{:?}",
+        export.callbacks()
+    );
+    // An iteration beside no non-call item blocks nothing: the empty
+    // enumeration is proposed exactly as before item A.
+    let iterates_only = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(Vec::new()),
+        iterated_parameters: BTreeSet::from([0]),
+        ..ContractExport::default()
+    });
+    assert!(
+        iterates_only.contract.artifact_cases()[0].exports["read"]
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Callbacks)
+    );
+
+    // With the enumeration open, nothing is derived into it.
+    let open = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Open,
+        direct_accessor_parameters: BTreeSet::from([0]),
+        ..ContractExport::default()
+    });
+    assert!(
+        open.contract.artifact_cases()[0].exports["read"]
+            .callbacks()
+            .items()
+            .is_empty()
+    );
+}
+
+/// Item B of ways-to-improve § 3.3: a call of a literal-keyed member of a
+/// parameter is published as a call item `from` that parameter at that path,
+/// in the same shape as any other same-stack call item, and the enumeration is
+/// proposable exactly when the export's own body makes that call
+/// (`direct_member_callback_parameters`). Re-emission republishes the path, so
+/// a member item never comes back as a call of the argument.
+#[test]
+fn a_member_call_of_a_parameter_is_described_with_its_path() {
+    use solid_reactive_ir::contract_semantics::{InvokeProtocol, Tracking};
+    let row = |path: Vec<String>| solid_reactive_ir::ContractCallback {
+        parameter: 1,
+        execution: "inline".into(),
+        schedule: None,
+        clears_tracking: false,
+        arguments: Vec::new(),
+        owner: None,
+        protocol: InvokeProtocol::Call,
+        path,
+    };
+    let normalize = |summary: ContractExport| {
+        normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package("package", ["read".into()]),
+        )
+        .unwrap()
+    };
+    let items = |normalized: &NormalizedInference| {
+        let export = normalized.contract.artifact_cases()[0].exports["read"].clone();
+        let mut items = export
+            .callbacks()
+            .items()
+            .iter()
+            .map(|item| {
+                let operation = export.operation(&item.operation.0).unwrap();
+                assert_eq!(operation.tracking, Tracking::AmbientAtExecution);
+                assert_eq!(operation.cardinality.min, Some(0));
+                let ValueSource::Parameter { index, path } = &item.from else {
+                    panic!("a parameter");
+                };
+                (operation.invoke_protocol(), *index, path.clone())
+            })
+            .collect::<Vec<_>>();
+        items.sort();
+        (
+            export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Callbacks),
+            items,
+        )
+    };
+    let member = vec!["0".to_owned()];
+    // `callHandler`: `handler(event)`, `handler[0](handler[1], event)`,
+    // `handler[1]` and `event?.defaultPrevented`.
+    let call_handler = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(vec![row(Vec::new()), row(member.clone())]),
+        direct_callback_parameters: BTreeSet::from([1]),
+        direct_member_callback_parameters: BTreeSet::from([(1, member.clone())]),
+        direct_accessor_parameters: BTreeSet::from([0, 1]),
+        ..ContractExport::default()
+    });
+    assert_eq!(
+        items(&call_handler),
+        (
+            true,
+            vec![
+                (InvokeProtocol::Call, 1, vec![]),
+                (InvokeProtocol::Call, 1, member.clone()),
+                (InvokeProtocol::Get, 0, vec![]),
+                (InvokeProtocol::Get, 1, vec![]),
+            ]
+        )
+    );
+    // The same row without the walk's fact is a member call the generator did
+    // not derive: described, and not proposed closed.
+    let underived = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(vec![row(member.clone())]),
+        ..ContractExport::default()
+    });
+    assert_eq!(
+        items(&underived),
+        (false, vec![(InvokeProtocol::Call, 1, member.clone())])
+    );
+    // Nor does a derived member at one path license another.
+    let elsewhere = normalize(ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Known(vec![row(vec!["1".to_owned()])]),
+        direct_member_callback_parameters: BTreeSet::from([(1, member.clone())]),
+        ..ContractExport::default()
+    });
+    assert!(!items(&elsewhere).0);
+
+    // Re-emission: the projection of the certified export, normalized again as
+    // an inherited summary, carries each path unchanged.
+    let projected = solid_reactive_ir::project_export_semantics(
+        &call_handler.contract.artifact_cases()[0].exports["read"],
+    );
+    let rows = projected.callbacks.known().expect("closed stays known");
+    assert!(
+        rows.iter()
+            .any(|row| row.invokes_member() && row.path == member),
+        "{rows:?}"
+    );
+    assert!(
+        rows.iter()
+            .filter(|row| row.invokes_argument())
+            .all(|row| row.parameter == 1 && row.path.is_empty()),
+        "{rows:?}"
+    );
+    let again = normalize(ContractExport {
+        inherited_from: Some(solid_reactive_ir::InheritedExportOrigin {
+            package_name: "dependency".into(),
+            package_version: "1.0.0".into(),
+            artifact_case: "dependency-case".into(),
+            semantic_digest: sha('b'),
+            entrypoint: ".".into(),
+            export: "read".into(),
+        }),
+        ..projected
+    });
+    assert_eq!(items(&again).1, items(&call_handler).1);
+}
+
+/// ADR 0100's boundary: a described invocation the census cannot confirm keeps
+/// the enumeration partial and yields no candidate, exactly as every non-empty
+/// enumeration did before the premise. Two shapes: a `deferred` row, whose
+/// execution point is not the call event; and an `inline` row the pass wrote
+/// for a primitive's inline position (`untrack(cb)`) rather than for a call of
+/// the parameter itself, which the wire spells identically and only the
+/// summary's direct set tells apart.
+#[test]
+fn a_deferred_callback_description_stays_partial_and_proposes_nothing() {
+    for (execution, direct) in [
+        ("deferred", BTreeSet::from([0])),
+        ("inline", BTreeSet::new()),
+    ] {
+        let summary = ContractExport {
+            kind: "function".into(),
+            callbacks: ContractClaim::Known(vec![solid_reactive_ir::ContractCallback {
+                parameter: 0,
+                execution: execution.into(),
+                schedule: None,
+                clears_tracking: false,
+                arguments: Vec::new(),
+                owner: None,
+                protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
+                path: Vec::new(),
+            }]),
+            direct_callback_parameters: direct,
+            ..ContractExport::default()
+        };
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package("package", ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        assert!(
+            matches!(&export.call.claims().callbacks, KnowledgeSet::Partial(callbacks) if callbacks.len() == 1),
+            "{execution}: {:?}",
+            export.call.claims().callbacks
+        );
+        // Not proposed, so the emitted document states no closure for the
+        // certifier to plan. (`closure_candidates` still lists the withdrawn
+        // path — that list is the plan sidecar's measurement of what the walk
+        // cleared, not what the document proposes.)
+        assert!(
+            !export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Callbacks),
+            "{execution}"
+        );
+        assert_eq!(
+            export.claim_state(ClaimDomain::Callbacks),
+            KnowledgeState::PartialPositive,
+            "{execution}"
+        );
+    }
+}
+
+/// ADR 0101: a `reads` enumeration is proposed closed when every item is the
+/// generator's own `parameter-member` row; an owned reactive read, or a row
+/// composed from another export, is a description the census cannot confirm,
+/// so the domain stays partial and no closure is proposed.
+#[test]
+fn only_a_parameter_member_read_description_proposes_a_reads_closure() {
+    let summary = |read: ContractReactiveRead| ContractExport {
+        kind: "function".into(),
+        reactive_reads: ContractClaim::Known(vec![read]),
+        ..ContractExport::default()
+    };
+    let normalize = |summary: ContractExport| {
+        normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package("package", ["read".into()]),
+        )
+        .unwrap()
+    };
+    let member = normalize(summary(ContractReactiveRead {
+        execution: None,
+        kind: "parameter-member".into(),
+        label: String::new(),
+        parameter: Some(0),
+        path: Some(vec!["of".into(), "values".into()]),
+        composed_owner: None,
+        composed_from: None,
+    }));
+    let export = &member.contract.artifact_cases()[0].exports["read"];
+    assert!(
+        export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Reads),
+        "{:?}",
+        export.call.proposed_closures()
+    );
+    assert!(
+        matches!(export.call.claims().reads, KnowledgeSet::Complete(ref items) if items.len() == 1),
+        "{:?}",
+        export.call.claims().reads
+    );
+
+    for (label, read) in [
+        (
+            "owned accessor",
+            ContractReactiveRead {
+                execution: None,
+                kind: "accessor".into(),
+                label: "count".into(),
+                parameter: None,
+                path: None,
+                composed_owner: None,
+                composed_from: None,
+            },
+        ),
+        (
+            "composed from a sibling export",
+            ContractReactiveRead {
+                execution: None,
+                kind: "parameter-member".into(),
+                label: String::new(),
+                parameter: Some(0),
+                path: Some(vec!["of".into()]),
+                composed_owner: None,
+                composed_from: Some(solid_reactive_ir::ComposedReactiveRead {
+                    export: "helper".into(),
+                    read: 0,
+                }),
+            },
+        ),
+    ] {
+        let normalized = normalize(summary(read));
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        assert!(
+            !export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Reads),
+            "{label}: {:?}",
+            export.call.proposed_closures()
+        );
+        assert!(
+            matches!(export.call.claims().reads, KnowledgeSet::Partial(ref items) if items.len() == 1),
+            "{label}: {:?}",
+            export.call.claims().reads
+        );
+        assert_eq!(
+            export.claim_state(ClaimDomain::Reads),
+            KnowledgeState::PartialPositive,
+            "{label}"
+        );
+    }
+}
+
+/// An ordinary consuming package publishes what it derived. The *cleanup* role
+/// is the only owner-requirement role that has a home in schema version 1, so
+/// this pair is a read operation and a `kind: cleanup` operation -- never a
+/// `create`.
+#[test]
+fn an_ordinary_consuming_package_still_publishes_reads_and_owner_cleanups() {
+    for package_name in [
+        "package",
+        "solid-js-signals",
+        "@solidjs/router",
+        "@solid-primitives/utils",
+    ] {
+        let proposal = normalize_inferred_contract(
+            &inferred(owner_requirement_summary(
+                solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+            )),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = proposal.artifact_cases()[0].exports.get("read").unwrap();
+        // The *claims* are reopened for every package by
+        // `ContractProposal::normalize` -- the generator proposes closure and
+        // cannot finalize it. What the scope decision changes is whether the
+        // operations themselves are published at all.
+        assert_eq!(
+            export
+                .call
+                .operations
+                .iter()
+                .filter(|operation| matches!(
+                    operation.kind,
+                    OperationKind::Read | OperationKind::Cleanup
+                ))
+                .count(),
+            2,
+            "{package_name} must emit both operations"
+        );
+        assert!(
+            export
+                .call
+                .operations
+                .iter()
+                .all(|operation| operation.kind != OperationKind::Create),
+            "{package_name} must emit no create for an owner requirement"
+        );
+    }
+}
+
+/// The published cleanup shape, field by field: `kind: cleanup` in the
+/// `cleanups` domain, `source: ambient-at-call` (the caller's owner, not one
+/// this operation made), `requires: required`, `requiresCleanup: required`,
+/// no owner production, and **no resource** -- a resource declaration is a
+/// positive fact (`PositiveFactSubject::Resource`) with no witness on any
+/// axis today, so declaring one would assert what nothing can prove.
+#[test]
+fn a_cleanup_owner_requirement_publishes_a_resourceless_cleanup_operation() {
+    for role in [
+        solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+        solid_reactive_ir::OwnerRequirementOperation::SettledCleanup,
+    ] {
+        let normalized = normalized_owner_requirement(role);
+        assert!(
+            normalized.withheld.is_empty(),
+            "{role:?} is published, so nothing is withheld: {:?}",
+            normalized.withheld
+        );
+        let export = normalized.contract.artifact_cases()[0]
+            .exports
+            .get("read")
+            .unwrap();
+        let cleanups = export.call.claims().cleanups.items().to_vec();
+        assert_eq!(cleanups.len(), 1, "{role:?} must publish one cleanup item");
+        let operation = export.operation(&cleanups[0].0).unwrap();
+        assert_eq!(operation.kind, OperationKind::Cleanup);
+        assert_eq!(
+            operation.owner.source,
+            solid_reactive_ir::contract_semantics::OwnerSource::AmbientAtCall
+        );
+        assert_eq!(
+            operation.owner.requirements.owner,
+            solid_reactive_ir::contract_semantics::Requirement::Required
+        );
+        assert_eq!(
+            operation.owner.requirements.cleanup,
+            solid_reactive_ir::contract_semantics::Requirement::Required
+        );
+        assert!(
+            operation.resources.is_empty(),
+            "{role:?} must name no resource: {:?}",
+            operation.resources
+        );
+        assert!(
+            export.call.resources.is_empty(),
+            "{role:?} must declare no summary resource: {:?}",
+            export.call.resources
+        );
+    }
+}
+
+/// ADR 0114: an `Effect` requirement is a `kind: compute` operation in the
+/// `computations` domain, requiring the caller's ambient owner and child owners
+/// of it, naming no resource, and leaving what it produces unknown -- the
+/// registered computation is itself an owner, and no witness exists for a
+/// resource axis. Nothing is withheld for it any more.
+#[test]
+fn an_effect_owner_requirement_publishes_a_compute_operation() {
+    let normalized =
+        normalized_owner_requirement(solid_reactive_ir::OwnerRequirementOperation::Effect);
+    assert!(normalized.withheld.is_empty(), "{:?}", normalized.withheld);
+    let export = normalized.contract.artifact_cases()[0]
+        .exports
+        .get("read")
+        .unwrap();
+    let computations = export.call.claims().computations.items().to_vec();
+    assert_eq!(computations.len(), 1);
+    assert!(matches!(
+        export.call.claims().cleanups,
+        KnowledgeSet::Unknown
+    ));
+    let operation = export.operation(&computations[0].0).unwrap();
+    assert_eq!(operation.kind, OperationKind::Compute);
+    assert_eq!(
+        operation.owner.source,
+        solid_reactive_ir::contract_semantics::OwnerSource::AmbientAtCall
+    );
+    assert_eq!(
+        (
+            operation.owner.requirements.owner,
+            operation.owner.requirements.child_owners,
+        ),
+        (
+            solid_reactive_ir::contract_semantics::Requirement::Required,
+            solid_reactive_ir::contract_semantics::Requirement::Required,
+        )
+    );
+    assert!(matches!(operation.owner.productions, KnowledgeSet::Unknown));
+    assert!(operation.resources.is_empty());
+    assert!(operation.imposes_owner_requirement());
+}
+
+/// The one role this generation refuses. It leaves no operation, no
+/// `Creates` closure candidate, and a *named* withholding record carrying the
+/// export, the role, and the reason -- which is what makes the refusal
+/// distinguishable from a census that found nothing. The `Effect` role was
+/// the other until ADR 0114.
+#[test]
+fn a_withheld_owner_requirement_publishes_nothing_and_is_named() {
+    let (role, name) = (
+        solid_reactive_ir::OwnerRequirementOperation::Boundary,
+        "boundary",
+    );
+    {
+        let normalized = normalized_owner_requirement(role);
+        let export = normalized.contract.artifact_cases()[0]
+            .exports
+            .get("read")
+            .unwrap();
+        assert!(
+            export.call.operations.iter().all(|operation| !matches!(
+                operation.kind,
+                OperationKind::Create | OperationKind::Cleanup
+            )),
+            "{role:?} must publish no owner-requirement operation"
+        );
+        assert!(
+            matches!(export.call.claims().creates, KnowledgeSet::Unknown),
+            "{role:?} must leave creates open"
+        );
+        assert!(
+            matches!(export.call.claims().cleanups, KnowledgeSet::Unknown),
+            "{role:?} must leave cleanups open"
+        );
+        assert!(
+            !normalized
+                .closure_candidates
+                .iter()
+                .any(|candidate| matches!(
+                    candidate.path,
+                    SemanticClaimPath::Domain(
+                        solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                            ClaimDomain::Creates | ClaimDomain::Cleanups
+                        )
+                    )
+                )),
+            "{role:?} must propose no owner-requirement closure: {:?}",
+            normalized.closure_candidates
+        );
+        assert_eq!(normalized.withheld.len(), 1, "{role:?} must be named once");
+        assert_eq!(normalized.withheld[0].export, "read");
+        assert_eq!(normalized.withheld[0].role.role(), name);
+        assert!(
+            !normalized.withheld[0].role.reason().is_empty(),
+            "{role:?} must carry a reason"
+        );
+    }
+}
+
+/// A `creates` closure is also what a consumer reads as "no owner requirement
+/// beyond the published items", so the walk clearing an export is not enough:
+/// every requirement the export has must be stated. `createTrackedEffect` is the
+/// case that reached this: its `creates` row is audited, so a caller walks
+/// clean, and its call carries the `Effect` requirement this generation
+/// withheld until ADR 0114. `Boundary` is the role still withheld, and an owner
+/// census that did not decide is the same hole. A published requirement --
+/// `cleanup` in `cleanups`, `effect` in `computations` -- is the control: it is
+/// an item, so the closure still states everything.
+#[test]
+fn a_creates_closure_waits_for_every_owner_requirement_to_be_published() {
+    let proposes_creates = |owner_requirements| {
+        let summary = ContractExport {
+            kind: "function".into(),
+            creates_walk_clean: true,
+            owner_requirements,
+            ..ContractExport::default()
+        };
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution(["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        let candidate = normalized.closure_candidates.iter().any(|candidate| {
+            candidate.path
+                == SemanticClaimPath::Domain(
+                    solid_reactive_ir::contract_semantics::ClaimPath::Call(ClaimDomain::Creates),
+                )
+        });
+        assert_eq!(
+            candidate,
+            !export.claim_state(ClaimDomain::Creates).is_open(),
+            "the candidate and the document must agree"
+        );
+        (candidate, normalized.withheld.len())
+    };
+    let requirement = |operation| {
+        ContractClaim::Known(vec![solid_reactive_ir::ContractOwnerRequirement {
+            operation,
+            guaranteed: false,
+            guard: None,
+        }])
+    };
+
+    assert_eq!(
+        proposes_creates(requirement(
+            solid_reactive_ir::OwnerRequirementOperation::Boundary
+        )),
+        (false, 1),
+        "a withheld requirement keeps creates open"
+    );
+    assert_eq!(
+        proposes_creates(ContractClaim::Open),
+        (false, 0),
+        "an undecided owner census must keep creates open"
+    );
+    for role in [
+        solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+        solid_reactive_ir::OwnerRequirementOperation::SettledCleanup,
+        solid_reactive_ir::OwnerRequirementOperation::Effect,
+    ] {
+        assert_eq!(
+            proposes_creates(requirement(role)),
+            (true, 0),
+            "{role:?} is published, so the closure may be proposed"
+        );
+    }
+    assert_eq!(
+        proposes_creates(ContractClaim::Known(Vec::new())),
+        (true, 0)
+    );
+}
+
+/// ADR 0174: an open owner-requirement list publishes the guaranteed items
+/// proven beside it, each as an item with `min: 1`, and never closes
+/// `creates` -- even where the walk cleared the export. The list says another
+/// item may exist, and a closed `creates` would tell a consumer there is none.
+#[test]
+fn an_open_owner_requirement_list_publishes_its_items_and_keeps_creates_open() {
+    let summary = ContractExport {
+        kind: "function".into(),
+        creates_walk_clean: true,
+        owner_requirements: ContractClaim::Open,
+        open_owner_requirements: vec![
+            solid_reactive_ir::ContractOwnerRequirement {
+                operation: solid_reactive_ir::OwnerRequirementOperation::Effect,
+                guaranteed: true,
+                guard: None,
+            },
+            solid_reactive_ir::ContractOwnerRequirement {
+                operation: solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+                guaranteed: true,
+                guard: None,
+            },
+        ],
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert!(export.claim_state(ClaimDomain::Creates).is_open());
+    assert!(!normalized.closure_candidates.iter().any(|candidate| {
+        candidate.path
+            == SemanticClaimPath::Domain(solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                ClaimDomain::Creates,
+            ))
+    }));
+    for (domain, kind) in [
+        (ClaimDomain::Computations, OperationKind::Compute),
+        (ClaimDomain::Cleanups, OperationKind::Cleanup),
+    ] {
+        let claim = export.operation_claim(domain).unwrap();
+        assert!(
+            !claim.is_closed(),
+            "{domain:?} states items, never a closure"
+        );
+        let [id] = claim.items() else {
+            panic!("{domain:?} carries exactly the one guaranteed item");
+        };
+        let operation = export.operation(&id.0).unwrap();
+        assert_eq!(operation.kind, kind);
+        assert_eq!(operation.cardinality.min, Some(1));
+    }
+}
+
+/// ADR 0178: an open `returns` publishes the return the export's body
+/// describes as a positive item, and never closes the domain.
+#[test]
+fn an_open_returns_claim_publishes_its_retained_return_as_an_item() {
+    let summary = ContractExport {
+        kind: "function".into(),
+        returns: ContractClaim::Open,
+        open_return: Some(solid_reactive_ir::ContractReturn {
+            kind: "accessor".into(),
+            label: "memo".into(),
+            prototype: None,
+            ..solid_reactive_ir::ContractReturn::default()
+        }),
+        async_behavior: ContractClaim::Known(String::new()),
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    let claim = export.operation_claim(ClaimDomain::Returns).unwrap();
+    assert!(!claim.is_closed(), "an item, never a closure");
+    let [id] = claim.items() else {
+        panic!("exactly the retained return");
+    };
+    let operation = export.operation(&id.0).unwrap();
+    assert_eq!(operation.kind, OperationKind::Return);
+    assert!(matches!(
+        operation.output,
+        Some(ValueShape::Reactive {
+            role: solid_reactive_ir::contract_semantics::ReactiveRole::Accessor,
+            ..
+        })
+    ));
+}
+
+/// `semantic-model.md` § creates' mechanical separator, asserted over the
+/// generator's own output rather than trusted: a `create` operation names what
+/// it registered. The generator now emits no `create` at all, which is the
+/// strongest form of the same guarantee, so the assertion is written over
+/// every operation of every role.
+#[test]
+fn the_generator_emits_no_resourceless_create() {
+    for role in [
+        solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+        solid_reactive_ir::OwnerRequirementOperation::SettledCleanup,
+        solid_reactive_ir::OwnerRequirementOperation::Effect,
+        solid_reactive_ir::OwnerRequirementOperation::Boundary,
+    ] {
+        let normalized = normalized_owner_requirement(role);
+        for artifact_case in normalized.contract.artifact_cases() {
+            for (name, export) in &artifact_case.exports {
+                for operation in &export.call.operations {
+                    assert!(
+                        operation.kind != OperationKind::Create || !operation.resources.is_empty(),
+                        "{role:?}: {name}'s create {} names no resource",
+                        operation.id.0
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// The domains a normalization *proposes closure for*, which is the list the
+/// certifier turns into demands. Withholding the operations has to withhold
+/// these too: a proposed `Reads`/`Creates` closure with no operation behind it
+/// would ask the certifier to prove a domain the document does not describe.
+fn proposed_closure_domains(
+    package_name: &str,
+) -> Vec<solid_reactive_ir::contract_semantics::ClaimPath> {
+    normalize_inferred_contract_with_candidates(
+        &inferred(bootstrapped_reactive_summary()),
+        &resolution_for_package(package_name, ["read".into()]),
+    )
+    .unwrap()
+    .closure_candidates
+    .into_iter()
+    .map(|candidate| match candidate.path {
+        SemanticClaimPath::Domain(path) => path,
+        other => panic!("unexpected claim path {other:?}"),
+    })
+    .collect()
+}
+
+/// The whole generate-then-certify seam for a `creates` closure candidate, in
+/// one test, because losing it here is what made the census unreachable.
+///
+/// The generator's walk cleared this export, so the normalization proposes a
+/// `creates` closure. Weakening alone dropped the candidacy: the certifier
+/// rebuilds its candidate universe by weakening the emitted document's own
+/// closed claims, and the canonical main its receipt binds is that same
+/// document, so a withdrawn closure reaches no demand, no probe gate and no
+/// census. The document therefore states the closure and labels it proposed —
+/// this generator's inference, not a reviewed claim.
+#[test]
+fn a_cleared_creates_walk_reaches_the_certifiers_candidate_universe_through_the_document() {
+    use solid_reactive_ir::contract_semantics::{
+        ClaimPath, KnowledgeState, SemanticClaimPath, certification::ProofPolicy2,
+    };
+
+    let summary = ContractExport {
+        kind: "function".into(),
+        creates_walk_clean: true,
+        ..ContractExport::default()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let creates = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates));
+    assert!(
+        normalized
+            .closure_candidates
+            .iter()
+            .any(|candidate| candidate.path == creates),
+        "the walk cleared this export, so the plan must carry its candidate: {:?}",
+        normalized.closure_candidates
+    );
+
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert_eq!(
+        export.claim_state(ClaimDomain::Creates),
+        KnowledgeState::CompleteNegative,
+        "the candidate has to state the closure it offers"
+    );
+    // `Reads` joins `Creates` here since 2026-09-10: this fixture's closure
+    // installs no accessor at run time, so the reads census may decide it and
+    // the generator proposes it. A fixture that did install one would carry a
+    // `runtime-accessor-installation` hazard and this set would be `{Creates}`
+    // again — that pair is what `implementation-census-reads` pins.
+    //
+    // `Callbacks` joins them since 2026-09-12, on the same terms: this export
+    // enumerates no invocation, so the callbacks census may decide it by the
+    // call walk dispositioning no caller-supplied invocation. Since ADR 0100 an
+    // export that describes call-time invocations of bare parameters proposes
+    // too; one describing a `deferred` or `tracked` row still stays partial.
+    assert_eq!(
+        export.call.proposed_closures(),
+        &std::collections::BTreeSet::from([
+            ClaimDomain::Creates,
+            ClaimDomain::Reads,
+            ClaimDomain::Callbacks,
+        ]),
+        "labelled as proposed, so it stays distinguishable from a reviewed claim"
+    );
+    // Every other domain the walk cleared stays withdrawn: no census can
+    // decide them, so publishing their closure would refuse the row.
+    for domain in ClaimDomain::ALL {
+        assert!(
+            matches!(
+                domain,
+                ClaimDomain::Creates | ClaimDomain::Reads | ClaimDomain::Callbacks
+            ) || export.claim_state(domain).is_open(),
+            "{domain:?} must stay open"
+        );
+    }
+
+    // Through the encoder and back: the marker is a wire field, so the
+    // candidate has to survive the canonicalization the emit boundary performs
+    // before anything reads the document again.
+    let bytes = crate::contract_document::encode(
+        &normalized.contract,
+        &crate::contract_document::SidecarDigests::default(),
+        false,
+    )
+    .unwrap();
+    let rendered = String::from_utf8_lossy(&bytes);
+    assert!(
+        rendered.contains("\"closed\":[\"callbacks\",\"reads\",\"creates\"]")
+            && rendered.contains("\"creates\":[]"),
+        "the emitted document must state the closure: {rendered}"
+    );
+    assert!(
+        rendered.contains("\"proposedClosures\":[\"callbacks\",\"reads\",\"creates\"]"),
+        "and must label it as proposed: {rendered}"
+    );
+    let decoded = crate::contract_document::decode(&bytes)
+        .unwrap()
+        .normalize()
+        .unwrap();
+
+    let candidates = ProofPolicy2.inspect_candidates(&decoded).unwrap();
+    assert!(
+        candidates
+            .closure_candidates()
+            .iter()
+            .any(|candidate| candidate.path == creates && candidate.export == "read"),
+        "the certifier must rebuild the candidate from the document alone: {:?}",
+        candidates.closure_candidates()
+    );
+    // And having read it, the certifier's own proposal no longer offers it:
+    // one candidate, planned once.
+    let planned = &candidates.proposal().artifact_cases()[0].exports["read"];
+    assert!(planned.call.proposed_closures().is_empty());
+    assert_eq!(
+        planned.claim_state(ClaimDomain::Creates),
+        KnowledgeState::Unknown,
+        "the planning proposal withdraws the closure it is about to demand"
+    );
+}
+
+#[test]
+fn a_dialects_own_archive_proposes_no_read_or_create_closure_candidate() {
+    let carries = |domains: &[solid_reactive_ir::contract_semantics::ClaimPath], domain| {
+        domains.iter().any(|path| {
+            matches!(
+                path,
+                solid_reactive_ir::contract_semantics::ClaimPath::Call(found) if *found == domain
+            )
+        })
+    };
+
+    let withheld = proposed_closure_domains("@solidjs/signals");
+    assert!(
+        !carries(&withheld, ClaimDomain::Reads),
+        "@solidjs/signals must propose no read closure: {withheld:?}"
+    );
+    assert!(
+        !carries(&withheld, ClaimDomain::Creates),
+        "@solidjs/signals must propose no owner-requirement closure: {withheld:?}"
+    );
+
+    // The same bytes under any other name: the *read* census is published, so
+    // its closure is proposed. `Creates` is not, and no longer can be for any
+    // package -- the generator derives no `create` at all, and an owner census
+    // that found no owner requirement is not a census of registrations into an
+    // outside runtime (`semantic-model.md` § creates).
+    let published = proposed_closure_domains("package");
+    assert!(
+        carries(&published, ClaimDomain::Reads),
+        "a consuming package must propose its read closure: {published:?}"
+    );
+    assert!(
+        !carries(&published, ClaimDomain::Creates),
+        "no package may propose a create closure the generator cannot derive: {published:?}"
+    );
+}
+
 #[test]
 fn parameter_indexes_outside_the_normalized_limit_are_refused_not_clamped() {
     let summary = ContractExport {
         kind: "function".into(),
         reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+            execution: None,
             kind: "parameter".into(),
             label: String::new(),
             parameter: Some(usize::MAX),
             path: None,
+            composed_owner: None,
+            composed_from: None,
         }]),
         ..ContractExport::default()
     };
@@ -144,4 +1522,521 @@ fn parameter_indexes_outside_the_normalized_limit_are_refused_not_clamped() {
             .to_string()
             .contains("exceeds the normalized model limit")
     );
+}
+
+/// The exact projection shape `project_accepted_export` writes for a
+/// cross-package re-export whose dependency contract closes `creates`,
+/// `returns` and a described `callbacks`, with every local walk flag left at
+/// its fail-closed default — which is what a re-export always has, because
+/// there is no local symbol for a walk to reach.
+fn inherited_summary() -> ContractExport {
+    ContractExport {
+        kind: "function".into(),
+        reactive_reads: ContractClaim::Open,
+        returns: ContractClaim::Known(None),
+        callbacks: ContractClaim::Known(vec![solid_reactive_ir::ContractCallback {
+            parameter: 0,
+            execution: "inline".into(),
+            schedule: None,
+            clears_tracking: false,
+            arguments: Vec::new(),
+            owner: Some("inherited".into()),
+            protocol: solid_reactive_ir::contract_semantics::InvokeProtocol::Call,
+            path: Vec::new(),
+        }]),
+        owner_requirements: ContractClaim::Known(Vec::new()),
+        async_behavior: ContractClaim::Known(String::new()),
+        // `reads` alone stayed open at the dependency, so it must stay open
+        // here: an inherited premise closes exactly what the dependency closed.
+        open_claims: BTreeMap::from([(ClaimDomain::Reads, ())])
+            .into_keys()
+            .collect(),
+        creates_closed_empty: true,
+        // The dependency's `returns` is `[]`, not a closure over a plain
+        // return: both project to `Known(None)` (ADR 0143).
+        returns_closed_empty: true,
+        returns_restated: Vec::new(),
+        // Silence, and deliberately: no walk reached this export, because this
+        // package contains nothing to walk.
+        creates_walk_clean: false,
+        returns_walk_clean: false,
+        direct_callback_parameters: std::collections::BTreeSet::new(),
+        inherited_from: Some(solid_reactive_ir::InheritedExportOrigin {
+            package_name: "dependency".into(),
+            package_version: "1.2.3".into(),
+            artifact_case: "case".into(),
+            semantic_digest: sha('d'),
+            entrypoint: ".".into(),
+            export: "read".into(),
+        }),
+        ..ContractExport::default()
+    }
+}
+
+#[test]
+fn an_inherited_summary_proposes_the_dependencys_closure_despite_silent_local_walks() {
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(inherited_summary()),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+
+    // Every domain the dependency closed is proposed, and no other.
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([
+            ClaimDomain::Callbacks,
+            ClaimDomain::Creates,
+            ClaimDomain::Returns
+        ]),
+        "the local walks are silent, so nothing here could have been proposed by them"
+    );
+    assert_eq!(
+        export.claim_state(ClaimDomain::Reads),
+        KnowledgeState::Unknown
+    );
+
+    // The record the emit boundary prints, so an auditor can tell an inherited
+    // proposal from a walked one.
+    let mut inherited = normalized
+        .inherited
+        .iter()
+        .map(|record| (record.export.as_str(), record.domain))
+        .collect::<Vec<_>>();
+    inherited.sort_unstable();
+    assert_eq!(
+        inherited,
+        vec![
+            ("read", "callbacks"),
+            ("read", "creates"),
+            ("read", "returns")
+        ]
+    );
+    assert!(
+        normalized
+            .inherited
+            .iter()
+            .all(|record| record.origin.package_name == "dependency"
+                && record.origin.export == "read"),
+        "every record names the accepted dependency export it came from"
+    );
+}
+
+/// ADR 0143: the projection of a dependency whose `returns` closes over a
+/// `plain` return is `Known(None)` with `returns_closed_empty` unset. The
+/// inherited premise used to read `Known(None)` alone and propose `returns: []`
+/// for it -- the claim that the export yields no value, which the certifier's
+/// own re-derivation then matched and the empty-return veto contradicted on
+/// `@tanstack/solid-query`'s `hashKey`. It now proposes nothing for `returns`.
+#[test]
+fn an_inherited_plain_return_is_not_restated_as_returns_empty() {
+    let summary = ContractExport {
+        returns_closed_empty: false,
+        returns_restated: Vec::new(),
+        ..inherited_summary()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([ClaimDomain::Callbacks, ClaimDomain::Creates])
+    );
+    assert_eq!(
+        export.claim_state(ClaimDomain::Returns),
+        KnowledgeState::Unknown
+    );
+}
+
+/// A bare `return` of one output, as the generator writes it.
+fn bare_return(id: &str, output: ValueShape) -> Operation {
+    Operation {
+        output: Some(output),
+        ..operation(
+            OperationId(id.into()),
+            OperationKind::Return,
+            Vec::new(),
+            None,
+        )
+    }
+}
+
+/// ADR 0170: a re-export of a dependency whose `returns` closes over exact
+/// operations states those operations again, under its own names, and proposes
+/// the closure -- where ADR 0143 left the domain unproposed.
+#[test]
+fn an_inherited_plain_return_is_restated_as_the_dependencys_own_operation() {
+    let summary = ContractExport {
+        returns_closed_empty: false,
+        returns_restated: vec![bare_return(
+            "dependency:number:operation:return",
+            ValueShape::Plain,
+        )],
+        ..inherited_summary()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert!(
+        export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Returns)
+    );
+    let claim = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    let [id] = claim.items() else {
+        panic!("one restated return: {:?}", claim.items());
+    };
+    assert!(
+        id.0.ends_with(":read:operation:return"),
+        "the restatement is named under this package's own case and export: {id:?}"
+    );
+    let operation = export.operation(&id.0).expect("the return operation");
+    assert_eq!(operation.output, Some(ValueShape::Plain));
+    assert!(operation.is_bare_return());
+    // Restating the return claims nothing about a domain the dependency left
+    // open.
+    assert_eq!(
+        export.claim_state(ClaimDomain::Reads),
+        KnowledgeState::Unknown
+    );
+}
+
+/// The falsifiers: nothing restated (a dependency whose `returns` was open, or
+/// whose items were not all exact) proposes no `returns` closure, and a local
+/// summary never reads the restatement, whatever it carries.
+#[test]
+fn a_restatement_is_read_only_of_an_inherited_summary_that_carries_one() {
+    let returns_state = |summary: ContractExport| {
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution(["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        (
+            export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Returns),
+            export.claim_state(ClaimDomain::Returns),
+        )
+    };
+    let restated = || {
+        vec![bare_return(
+            "dependency:number:operation:return",
+            ValueShape::Plain,
+        )]
+    };
+    let inherited = ContractExport {
+        returns_closed_empty: false,
+        ..inherited_summary()
+    };
+    // No restatement: ADR 0143's silence stands.
+    assert_eq!(
+        returns_state(inherited.clone()),
+        (false, KnowledgeState::Unknown)
+    );
+    // The restatement without an inherited origin is a local summary's, which
+    // has no dependency to have certified it.
+    assert_eq!(
+        returns_state(ContractExport {
+            inherited_from: None,
+            returns_restated: restated(),
+            ..inherited
+        }),
+        (false, KnowledgeState::Unknown)
+    );
+}
+
+#[test]
+fn a_local_summary_with_the_same_silent_walks_proposes_nothing() {
+    // The falsifier for the test above: the *only* difference is the absent
+    // `inherited_from`. If this one also proposed, the inherited premise would
+    // not be what admitted those closures.
+    let summary = ContractExport {
+        inherited_from: None,
+        ..inherited_summary()
+    };
+    let normalized = normalize_inferred_contract_with_candidates(
+        &inferred(summary),
+        &resolution(["read".into()]),
+    )
+    .unwrap();
+    let export = &normalized.contract.artifact_cases()[0].exports["read"];
+    assert!(export.call.proposed_closures().is_empty());
+    assert!(normalized.inherited.is_empty());
+}
+
+/// ADR 0164: an unresolved call erases the reactive description of an
+/// export's return (`returns` is `Open`), and says nothing about whether the
+/// body hands back a value at all. The valueless-completion walk does, so a
+/// body it cleared proposes ADR 0035's empty closure over an `Open` return
+/// exactly as over an undescribed one; the census proves it either way.
+#[test]
+fn a_valueless_body_proposes_the_empty_closure_over_an_open_return() {
+    let summary = |returns_walk_clean: bool| ContractExport {
+        kind: "function".into(),
+        returns: ContractClaim::Open,
+        async_behavior: ContractClaim::Known(String::new()),
+        returns_walk_clean,
+        ..ContractExport::default()
+    };
+    let proposed = |summary: ContractExport, package_name: &str| {
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        (
+            export
+                .call
+                .proposed_closures()
+                .contains(&ClaimDomain::Returns),
+            export.claim_state(ClaimDomain::Returns),
+        )
+    };
+    assert_eq!(
+        proposed(summary(true), "package"),
+        (true, KnowledgeState::CompleteNegative)
+    );
+    // The falsifiers: the walk did not clear the body, the export is not a
+    // function, or a dialect's own archive publishes no bootstrapped domain.
+    for (summary, package_name) in [
+        (summary(false), "package"),
+        (
+            ContractExport {
+                kind: "component".into(),
+                ..summary(true)
+            },
+            "package",
+        ),
+        (summary(true), "solid-js"),
+    ] {
+        assert_eq!(
+            proposed(summary, package_name),
+            (false, KnowledgeState::Unknown),
+            "{package_name}"
+        );
+    }
+}
+
+/// ADR 0113: the walk's value-completion answer proposes exactly one `plain`
+/// return and labels the closure proposed, so the certifier's census, not this
+/// generator, decides whether the value is a primitive.
+#[test]
+fn a_value_completion_proposes_one_plain_return_for_the_census_to_decide() {
+    let summary = ContractExport {
+        kind: "function".into(),
+        returns: ContractClaim::Known(None),
+        async_behavior: ContractClaim::Known(String::new()),
+        returns_value_completion: true,
+        ..ContractExport::default()
+    };
+    let proposes_plain = |summary: ContractExport, package_name: &str| {
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        let proposed = export
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Returns);
+        let plain = export
+            .operation_claim(ClaimDomain::Returns)
+            .is_some_and(|claim| {
+                matches!(claim.items(), [id] if export.operation(&id.0).is_some_and(|operation| {
+                    operation.kind == OperationKind::Return
+                        && operation.output == Some(ValueShape::Plain)
+                }))
+            });
+        (proposed, plain, export.claim_state(ClaimDomain::Returns))
+    };
+
+    assert_eq!(
+        proposes_plain(summary.clone(), "package"),
+        (true, true, KnowledgeState::CompletePositive),
+        "a value completion proposes one plain return, closed and labelled"
+    );
+
+    // The walk's other answer wins: a body that yields nothing is ADR 0035's
+    // empty closure, never a plain return.
+    let (proposed, plain, state) = proposes_plain(
+        ContractExport {
+            returns_walk_clean: true,
+            ..summary.clone()
+        },
+        "package",
+    );
+    assert!(proposed && !plain);
+    assert_eq!(state, KnowledgeState::CompleteNegative);
+
+    // Every falsifier leaves `returns` open and unproposed: the walk did not
+    // answer, an `async` body hands back a promise, a component hands back
+    // what it renders, and a dialect's own archive publishes no bootstrapped
+    // domain.
+    for (summary, package_name) in [
+        (
+            ContractExport {
+                returns_value_completion: false,
+                ..summary.clone()
+            },
+            "package",
+        ),
+        (
+            ContractExport {
+                async_behavior: ContractClaim::Known("promise".into()),
+                ..summary.clone()
+            },
+            "package",
+        ),
+        (
+            ContractExport {
+                kind: "component".into(),
+                ..summary.clone()
+            },
+            "package",
+        ),
+        (summary.clone(), "solid-js"),
+    ] {
+        assert_eq!(
+            proposes_plain(summary, package_name),
+            (false, false, KnowledgeState::Unknown),
+            "{package_name}"
+        );
+    }
+}
+
+/// ADR 0103, amended 2026-09-23: an export that is a `const` alias of a member
+/// access has no body, so its raised summary leaves `callbacks` open and no walk
+/// cleared its `creates`. The member-alias flag proposes both empty closures
+/// beside the `reads` every such summary already proposes, for the certifier's
+/// default-library alias census to decide, and leaves `returns` open: these
+/// members return values.
+#[test]
+fn a_member_alias_proposes_its_empty_call_domains_for_the_alias_census() {
+    let raised = |member_alias_initializer: bool| ContractExport {
+        kind: "function".into(),
+        callbacks: ContractClaim::Open,
+        member_alias_initializer,
+        ..ContractExport::default()
+    };
+    let proposed = |summary: ContractExport, package_name: &str| {
+        let normalized = normalize_inferred_contract_with_candidates(
+            &inferred(summary),
+            &resolution_for_package(package_name, ["read".into()]),
+        )
+        .unwrap();
+        let export = &normalized.contract.artifact_cases()[0].exports["read"];
+        (
+            export.call.proposed_closures().clone(),
+            export.claim_state(ClaimDomain::Returns),
+        )
+    };
+
+    assert_eq!(
+        proposed(raised(true), "package"),
+        (
+            BTreeSet::from([
+                ClaimDomain::Callbacks,
+                ClaimDomain::Reads,
+                ClaimDomain::Creates
+            ]),
+            KnowledgeState::Unknown
+        ),
+        "the alias census decides all three; returns stays open"
+    );
+    // The falsifier: the same raised summary without the flag proposes `reads`
+    // alone, which is what every value export raised to a function has always
+    // proposed.
+    assert_eq!(
+        proposed(raised(false), "package"),
+        (
+            BTreeSet::from([ClaimDomain::Reads]),
+            KnowledgeState::Unknown
+        )
+    );
+    // A dialect's own archive publishes neither bootstrapped domain.
+    let (dialect, _) = proposed(raised(true), "solid-js");
+    assert!(
+        !dialect.contains(&ClaimDomain::Callbacks) && !dialect.contains(&ClaimDomain::Creates),
+        "{dialect:?}"
+    );
+}
+
+/// Step 7 of ways-to-improve: each execution word states its tracking from the
+/// row's own clearing bit, `deferred` included, and the consumer's read-back
+/// inverts the mapping exactly. `deferred` used to publish `untracked`
+/// unconditionally, so `safe(transform)` -- `(raw) => transform(raw)`, run by
+/// whoever calls the returned closure -- claimed the same clearing a
+/// `setTimeout` callback earns.
+#[test]
+fn every_execution_word_states_tracking_from_the_row_and_reads_back_to_it() {
+    use solid_reactive_ir::contract_semantics::{InvokeProtocol, OperationId, Tracking};
+    let row = |execution: &str, clears_tracking: bool| solid_reactive_ir::ContractCallback {
+        parameter: 0,
+        execution: execution.into(),
+        schedule: None,
+        clears_tracking,
+        arguments: Vec::new(),
+        owner: None,
+        protocol: InvokeProtocol::Call,
+        path: Vec::new(),
+    };
+    for (execution, clears_tracking, expected) in [
+        ("inline", true, Tracking::Untracked),
+        ("inline", false, Tracking::AmbientAtExecution),
+        ("deferred", true, Tracking::Untracked),
+        ("deferred", false, Tracking::AmbientAtExecution),
+        ("tracked", false, Tracking::Tracked),
+    ] {
+        let operation = callback_operation(
+            OperationId("callback-0".into()),
+            &row(execution, clears_tracking),
+            &mut Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            operation.tracking, expected,
+            "{execution} {clears_tracking}"
+        );
+        assert_eq!(
+            solid_reactive_ir::ContractCallback::clears_tracking_from(
+                execution,
+                operation.tracking
+            ),
+            clears_tracking,
+            "{execution} {clears_tracking} round-trips"
+        );
+    }
+    // A `tracked` row's word is its whole claim: a stray bit publishes
+    // nothing, and no tracking word reads back as one.
+    let tracked = callback_operation(
+        OperationId("callback-0".into()),
+        &row("tracked", true),
+        &mut Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(tracked.tracking, Tracking::Tracked);
+    for tracking in [
+        Tracking::Tracked,
+        Tracking::Untracked,
+        Tracking::AmbientAtExecution,
+    ] {
+        assert!(!solid_reactive_ir::ContractCallback::clears_tracking_from(
+            "tracked", tracking
+        ));
+    }
 }

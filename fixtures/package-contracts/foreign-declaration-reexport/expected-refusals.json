@@ -1,0 +1,21 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "foreign-declaration-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "dependency-composition",
+      "applicability": "runtime-module",
+      "reason": "accepted dependency declaring-package has no exact declarations binding for export action"
+    }
+  ],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": []
+}

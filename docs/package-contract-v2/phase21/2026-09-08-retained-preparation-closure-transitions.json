@@ -1,0 +1,28 @@
+{
+  "diagnostic": true,
+  "measurement": "docs/package-contract-v2/phase21/2026-09-08-retained-preparation-full-measurement.json",
+  "unchangedLocalClosureEntriesHazardsAndPackageIdentities": true,
+  "unchangedDependencySpecifierCensus": true,
+  "transitions": [],
+  "added": [
+    {
+      "probeId": "@solidjs/start@2.0.3|solid1|only",
+      "entrypoint": "./serialization",
+      "selection": {
+        "artifact": {
+          "closureSha256": "1c62bd98b3a9b807c6f0d9d52a150c5762439cf542d6716cd2bfc3d3ee247eae",
+          "path": "./dist/fns/plugins.js",
+          "sha256": "47776dc7acd0df4bfe788c357037cac7bacda5ddb66031430cf259d125cb8592"
+        },
+        "declarations": {
+          "path": "./dist/fns/plugins.d.ts",
+          "sha256": "e6b241d601ab3ee9bfcc8486e062f6fd917733daecf0967e68fc80f8ba81677c"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1serialization",
+          "typesBranch": "/exports/.~1serialization"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+[package]
+name = "compiler-rc13-adapter"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT"
+publish = false
+
+[workspace]
+
+[dependencies]
+solidjs-compiler = { path = "../../../../rust/target/compiler-rc13-rebase/packages/compiler", default-features = false }
+solid-facts = { path = "../../../../rust/crates/solid-facts" }
+serde_json = "1"

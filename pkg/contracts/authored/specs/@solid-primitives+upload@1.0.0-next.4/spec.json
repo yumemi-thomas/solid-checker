@@ -1,0 +1,177 @@
+{
+  "package": "@solid-primitives/upload",
+  "version": "1.0.0-next.4",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createDropzone": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/upload-createDropzone-module-scope/node_modules/@solid-primitives/upload/dist/createDropzone.js:29-70; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/upload-createDropzone-module-scope/node_modules/@solid-primitives/drag-drop/dist/droppable.js:199-250 \u2014 createNativeDroppable unconditionally creates an owned effect, even before a ref attaches. No caller callback/creation closure inferred from this. Browser draft; Chrome probes pending, not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "files",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "error",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "isLoading",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "isDragging",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "ref",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "removeFile",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "clearFiles",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "native-drop-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "native-drop-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "computations": [
+          "native-drop-effect"
+        ],
+        "resources": [
+          {
+            "id": "native-drop-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/upload-createDropzone-module-scope/node_modules/@solid-primitives/upload/dist/createDropzone.js:29-70; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/upload-createDropzone-module-scope/node_modules/@solid-primitives/drag-drop/dist/droppable.js:192-259 \u2014 Browser exact seven-member object; files/error/isLoading are direct signals and isDragging is drop.isOver. All three imperative functions remain callable."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "error",
+          "rule": "strict-read-untracked",
+          "why": "The exact returned reactive leaf is read under a component strict-read window versus JSX tracking. OwnedWrite affects writes, never this read check."
+        },
+        {
+          "label": "isLoading",
+          "rule": "strict-read-untracked",
+          "why": "The exact returned reactive leaf is read under a component strict-read window versus JSX tracking. OwnedWrite affects writes, never this read check."
+        },
+        {
+          "label": "isDragging",
+          "rule": "strict-read-untracked",
+          "why": "The exact returned reactive leaf is read under a component strict-read window versus JSX tracking. OwnedWrite affects writes, never this read check."
+        },
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "The direct cleanup or effect runs ownerless versus inside a live root; dispose is queued outside render."
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        }
+      ]
+    }
+  }
+}

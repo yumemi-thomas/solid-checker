@@ -1,0 +1,22 @@
+function clientOnly(fn, options = {},
+_moduleUrl) {
+  const [comp, setComp] = createSignal();
+  let started = !options.lazy;
+  started && loadClientOnly(fn, setComp, options.export);
+  return props => {
+    let Comp;
+    let m;
+    const rest = omit(props, "fallback");
+    if (!started) {
+      started = true;
+      loadClientOnly(fn, setComp, options.export);
+    }
+    if ((Comp = untrack(comp)) && !sharedConfig.hydrating) return Comp(rest);
+    const [mounted, setMounted] = createSignal(!sharedConfig.hydrating);
+    const gate = createMemo(() => (Comp = comp(), m = mounted(), untrack(() => Comp && m ? Comp(rest) : props.fallback)));
+    const onHydrationEnd = sharedConfig.onHydrationEnd;
+    const release = () => setMounted(true);
+    onHydrationEnd ? onHydrationEnd(release) : queueMicrotask(release);
+    return gate;
+  };
+}

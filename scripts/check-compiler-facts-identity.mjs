@@ -6,7 +6,14 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { loadDialectManifests } from "./dialect-manifests.mjs";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/** Escapes a manifest-supplied name before it is spliced into a pattern. */
+function literal(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function read(path) {
   return readFileSync(resolve(root, path), "utf8");
@@ -22,11 +29,11 @@ function requireMatch(text, expression, label) {
   return match[1];
 }
 
-export function cargoCompilerPin(cargo) {
+export function cargoCompilerPin(cargo, cargoPackage) {
   return requireMatch(
     cargo,
-    /solidjs-compiler\s*=\s*\{[^\n]*rev\s*=\s*"([0-9a-f]{40})"/,
-    "solidjs-compiler Cargo pin"
+    new RegExp(`${literal(cargoPackage)}\\s*=\\s*\\{[^\\n]*rev\\s*=\\s*"([0-9a-f]{40})"`),
+    `${cargoPackage} Cargo pin`
   );
 }
 
@@ -38,9 +45,9 @@ export function rustStringConstant(source, name) {
   );
 }
 
-export function compilerSourceManifest(identity) {
+export function compilerSourceManifest(identity, dialect) {
   const canonical =
-    "solid-checker:solid-v2-compiler-source-manifest:v1\n" +
+    `solid-checker:${dialect}-compiler-source-manifest:v1\n` +
     `upstream=${identity.upstreamRevision}\n` +
     `implementation=${identity.implementationRevision}\n` +
     `distribution=${identity.distributionRevision}\n` +
@@ -49,8 +56,30 @@ export function compilerSourceManifest(identity) {
   return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
 }
 
-export function assertIdentityDocuments({ identity, cargo, lock, adapter, conformance, notices, report }) {
-  if (identity.format !== 1 || identity.documentKind !== "solid-checker-solid2-compiler-facts-identity") {
+/**
+ * The identity document's `documentKind`, derived from the dialect id.
+ *
+ * `solid-v2` names itself `solid2` here, and nowhere else -- every other
+ * identity string in this gate splices the id verbatim. Derived rather than
+ * declared in the manifest, because a second spelling of the same fact is one
+ * more thing that can disagree.
+ */
+function documentKind(dialect) {
+  return `solid-checker-${dialect.replace("solid-v", "solid")}-compiler-facts-identity`;
+}
+
+export function assertIdentityDocuments({
+  dialect,
+  cargoPackage,
+  identity,
+  cargo,
+  lock,
+  adapter,
+  conformance,
+  notices,
+  report
+}) {
+  if (identity.format !== 1 || identity.documentKind !== documentKind(dialect)) {
     throw new Error("compiler facts identity: invalid identity document envelope");
   }
   for (const field of ["upstreamRevision", "implementationRevision", "distributionRevision"]) {
@@ -58,7 +87,7 @@ export function assertIdentityDocuments({ identity, cargo, lock, adapter, confor
       throw new Error(`compiler facts identity: ${field} is not a full commit`);
     }
   }
-  if (cargoCompilerPin(cargo) !== identity.distributionRevision) {
+  if (cargoCompilerPin(cargo, cargoPackage) !== identity.distributionRevision) {
     throw new Error("compiler facts identity: Cargo pin disagrees with distribution revision");
   }
   if (!lock.includes(`rev=${identity.distributionRevision}#${identity.distributionRevision}`)) {
@@ -87,10 +116,10 @@ export function assertIdentityDocuments({ identity, cargo, lock, adapter, confor
     /COMPILER_SOURCE_MANIFEST_SHA256:\s*&str\s*=\s*\n?\s*"(sha256:[0-9a-f]{64})"/,
     "COMPILER_SOURCE_MANIFEST_SHA256"
   );
-  if (sourceManifest !== compilerSourceManifest(identity)) {
+  if (sourceManifest !== compilerSourceManifest(identity, dialect)) {
     throw new Error("compiler facts identity: compiler source-manifest digest drifted");
   }
-  if (!adapter.includes(`solid-v2:trace${identity.semanticTraceVersion}:${identity.implementationRevision}`)) {
+  if (!adapter.includes(`${dialect}:trace${identity.semanticTraceVersion}:${identity.implementationRevision}`)) {
     throw new Error("compiler facts identity: adapter cache identity drifted");
   }
   if (conformance.upstream?.revision !== identity.upstreamRevision) {
@@ -109,7 +138,7 @@ export function assertIdentityDocuments({ identity, cargo, lock, adapter, confor
   }
 }
 
-function compilerPackageFromMetadata() {
+function compilerPackageFromMetadata({ cargoPackage, cargoSourcePrefix }) {
   const metadata = JSON.parse(run("cargo", [
     "+1.97",
     "metadata",
@@ -119,11 +148,13 @@ function compilerPackageFromMetadata() {
     "--format-version",
     "1"
   ]));
-  const packages = metadata.packages.filter(pkg =>
-    pkg.name === "solidjs-compiler" && pkg.source?.startsWith("git+https://github.com/yumemi-thomas/solid?")
+  const packages = metadata.packages.filter(
+    pkg => pkg.name === cargoPackage && pkg.source?.startsWith(cargoSourcePrefix)
   );
   if (packages.length !== 1) {
-    throw new Error(`compiler facts identity: expected one Solid 2 compiler package, found ${packages.length}`);
+    throw new Error(
+      `compiler facts identity: expected one ${cargoPackage} package, found ${packages.length}`
+    );
   }
   return packages[0];
 }
@@ -181,21 +212,35 @@ function assertGitIdentity(identity, compilerPackage) {
   }
 }
 
+// Every dialect the build assembles, not the one this gate used to name. The
+// paths and package names come from each `dialect.json`, whose validator
+// requires the block -- so a second dialect is checked here the moment it is
+// assembled, and one that declares nothing fails validation rather than being
+// skipped in silence.
 function main() {
-  const identity = JSON.parse(read("docs/package-contract-v2/phase4/compiler-identity.json"));
-  assertIdentityDocuments({
-    identity,
-    cargo: read("rust/Cargo.toml"),
-    lock: read("rust/Cargo.lock"),
-    adapter: read("rust/dialects/solid-v2/compiler/src/lib.rs"),
-    conformance: JSON.parse(read("docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json")),
-    notices: read("THIRD_PARTY_NOTICES.md"),
-    report: read("docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md")
-  });
-  assertGitIdentity(identity, compilerPackageFromMetadata());
-  console.log(
-    `compiler facts identity: upstream ${identity.upstreamRevision.slice(0, 12)}, implementation ${identity.implementationRevision.slice(0, 12)}, distribution ${identity.distributionRevision.slice(0, 12)} verified`
-  );
+  const manifests = loadDialectManifests();
+  const cargo = read("rust/Cargo.toml");
+  const lock = read("rust/Cargo.lock");
+  const notices = read("THIRD_PARTY_NOTICES.md");
+  for (const manifest of manifests) {
+    const wiring = manifest.compilerIdentity;
+    const identity = JSON.parse(read(wiring.document));
+    assertIdentityDocuments({
+      dialect: manifest.id,
+      cargoPackage: wiring.cargoPackage,
+      identity,
+      cargo,
+      lock,
+      adapter: read(wiring.adapter),
+      conformance: JSON.parse(read(wiring.conformance)),
+      notices,
+      report: read(wiring.report)
+    });
+    assertGitIdentity(identity, compilerPackageFromMetadata(wiring));
+    console.log(
+      `compiler facts identity: ${manifest.id} upstream ${identity.upstreamRevision.slice(0, 12)}, implementation ${identity.implementationRevision.slice(0, 12)}, distribution ${identity.distributionRevision.slice(0, 12)} verified`
+    );
+  }
 }
 
 if (import.meta.main) main();

@@ -1,0 +1,13 @@
+function createOptimistic(e, t) {
+    // Install before the node exists: only engine-installed programs can carry
+    // an _overrideValue slot (same runtime-install pattern as
+    // GlobalQueue._clearOptimisticStore in createOptimisticStore).
+    installOptimisticEngine();
+    if (typeof e === "function") {
+        const n = optimisticComputed(e, t);
+        n.C &= ~CONFIG_AUTO_DISPOSE;
+        return [ accessor(n), setSignal.bind(null, n) ];
+    }
+    const n = optimisticSignal(e, t);
+    return [ accessor(n), setSignal.bind(null, n) ];
+}

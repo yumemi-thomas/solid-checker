@@ -1,0 +1,28 @@
+{
+  "diagnostic": true,
+  "measurement": "docs/package-contract-v2/phase21/2026-09-08-callback-retry-full-measurement.json",
+  "unchangedLocalClosureEntriesHazardsAndPackageIdentities": true,
+  "unchangedDependencySpecifierCensus": true,
+  "transitions": [],
+  "added": [
+    {
+      "probeId": "@solid-primitives/until@0.1.1|solid1|only",
+      "entrypoint": ".",
+      "selection": {
+        "artifact": {
+          "closureSha256": "1a4efa7b3cf8d277846936b542cd328478d74c81fe6c3a08bc23c3bf601f331c",
+          "path": "./dist/index.js",
+          "sha256": "fd523fb08a6c49afd772bc1357d2de22549dac2522b2383e50591406e77bda7b"
+        },
+        "declarations": {
+          "path": "./dist/index.d.ts",
+          "sha256": "9b980d1d3e1b6386768cb8a1094b5461e12f3c9c4b65c9cbcea173758fcaeaf1"
+        },
+        "resolution": {
+          "runtimeBranch": "legacy:module",
+          "typesBranch": "legacy:types"
+        }
+      }
+    }
+  ]
+}

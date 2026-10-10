@@ -66,9 +66,34 @@ const installedVersion = (root, name) => {
   return JSON.parse(readFileSync(manifestPath, "utf8")).version ?? null;
 };
 
-// Absence and version drift are both hard failures, never a skip. A silently
-// skipped oracle is exactly the "green gate that verifies nothing" trap the
-// SOLID_TYPEFACTS_BIN canary exists to prevent.
+/**
+ * Every `name@version` → integrity the install's `bun.lock` resolved, or null
+ * when there is no readable lockfile. Bun writes JSONC with trailing commas;
+ * nothing else in the format needs more than stripping them.
+ */
+const lockedIntegrities = (root) => {
+  const lockPath = join(root, "bun.lock");
+  if (!existsSync(lockPath)) return null;
+  try {
+    const text = readFileSync(lockPath, "utf8").replace(/,(\s*[}\]])/g, "$1");
+    const entries = Object.values(JSON.parse(text).packages ?? {});
+    return entries
+      .filter((entry) => Array.isArray(entry) && typeof entry[0] === "string")
+      .map((entry) => ({ resolved: entry[0], integrity: entry.at(-1) }));
+  } catch {
+    return null;
+  }
+};
+
+// Absence, version drift, and integrity drift are all hard failures, never a
+// skip. A silently skipped oracle is exactly the "green gate that verifies
+// nothing" trap the SOLID_TYPEFACTS_BIN canary exists to prevent.
+//
+// The integrity arm is what makes `expect` mean the *audited bytes* rather
+// than whatever a registry serves under that version string: Bun verified each
+// tarball against the integrity it locked, so a lock that names the pinned
+// integrity for every copy of every audited package is an install of exactly
+// the tarballs the audit record describes.
 const assertProvisioned = (dialect) => {
   const spec = dialectSpec(dialect);
   const root = join(ORACLE_ROOT, dialect);
@@ -76,6 +101,20 @@ const assertProvisioned = (dialect) => {
   for (const [name, expected] of Object.entries(spec.expect)) {
     const actual = installedVersion(root, name);
     if (actual !== expected) wrong.push(`${name}: expected ${expected}, found ${actual ?? "nothing"}`);
+  }
+  if (spec.integrity) {
+    const locked = lockedIntegrities(root);
+    if (!locked) wrong.push(`bun.lock: missing or unreadable, so no installed integrity can be checked`);
+    for (const [name, pinned] of Object.entries(spec.integrity)) {
+      if (!locked) break;
+      const copies = locked.filter(({ resolved }) => resolved.startsWith(`${name}@`));
+      if (!copies.length) wrong.push(`${name}: not in bun.lock`);
+      for (const { resolved, integrity } of copies) {
+        if (resolved !== `${name}@${spec.expect[name]}` || integrity !== pinned) {
+          wrong.push(`${name}: locked ${resolved} ${integrity}, expected ${name}@${spec.expect[name]} ${pinned}`);
+        }
+      }
+    }
   }
   if (wrong.length) {
     const detail = wrong.map((line) => `  ${line}`).join("\n");
@@ -271,7 +310,7 @@ const collect = (program, sources) => {
  * the same tree, behind the same version check, instead of reimplementing it
  * and drifting.
  *
- * @param {"v1"|"v2"} dialect
+ * @param {"v2"} dialect
  * @returns {{root: string, jsxImportSource: string}}
  */
 export const oracleProject = (dialect) => ({
@@ -282,7 +321,7 @@ export const oracleProject = (dialect) => ({
 /**
  * Compile `inputs` against the real typings for `dialect`.
  *
- * @param {"v1"|"v2"} dialect
+ * @param {"v2"} dialect
  * @param {{name: string, code: string}[]} inputs
  * @returns diagnostics from a `strict` and a `loose` pass, plus the versions
  *          they were produced against.
@@ -332,8 +371,8 @@ const usage = () => {
   console.error(
     [
       "usage:",
-      "  bun scripts/tsc-oracle.mjs provision [--dialect v1|v2|all] [--force]",
-      "  bun scripts/tsc-oracle.mjs check --dialect v1|v2 (--file <path>... | --code <snippet>) [--json]",
+      "  bun scripts/tsc-oracle.mjs provision [--dialect v2|all] [--force]",
+      "  bun scripts/tsc-oracle.mjs check --dialect v2 (--file <path>... | --code <snippet>) [--json]",
       "  bun scripts/tsc-oracle.mjs versions [--json]",
     ].join("\n"),
   );

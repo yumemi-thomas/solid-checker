@@ -1,0 +1,489 @@
+{
+  "format": "captured-corvu-context-diagnostic",
+  "authoritative": false,
+  "scope": "producer diagnostic of a copied native graph project; no certification or receipt reuse",
+  "baseline": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-08-retained-graphs-full.json",
+    "digest": "sha256:78d8577fa3023472ad85aa6c46fc50ba3ac19de52401f4497de23b88ac835a95"
+  },
+  "probeId": "@corvu/popover@0.2.0|solid1|only",
+  "native": {
+    "result": "/private/tmp/retained-graph-native-kSeRjf/result.json",
+    "digest": "sha256:29f02f888c8a4f9e2391ebdd6caec2c33bda16560f3bdd5da44f500cd54f9940",
+    "failure": "CertificationRefusal: witness-acquisition refused for demand sha256:72d49e3850325e4760e56981fde6a0be1652a3294f55556ba6dc4a9d54511dba: solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification failed for graph node @corvu/utils@0.4.2 (./dom) during live graph export-value verification: Type Facts demand sha256:72d49e3850325e4760e56981fde6a0be1652a3294f55556ba6dc4a9d54511dba is locally open: recursive-value-shape (artifact-case:f34410e88fd1b098ba717edf6bb3dff50d8733870160d4b80667a5a2a052d3ce:contains): parameter-rooted read lacks positive original-input identity",
+    "cacheMisses": []
+  },
+  "capture": {
+    "diagnostic": true,
+    "nativeExit": 2,
+    "records": [
+      {
+        "source": "/private/tmp/corvu-private-capture-gdi16lg2/tmp/solid-checker-typefacts-project-29925-1",
+        "copy": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1",
+        "configurationDigest": "sha256:511115ef8c1cd719e270f038cc2a0d7eb9b91e9ab5df8357bba667ecdcbe7849",
+        "harnessDigest": "sha256:948b9f7b0fd156b9920d3097a1ef12c4f687962fce50dce74a3746400b1db90f"
+      }
+    ]
+  },
+  "observations": [
+    {
+      "variant": "shared",
+      "log": "/private/tmp/corvu-captured-project.log",
+      "logDigest": "sha256:9e0794a4efbb24bd58a439c2bbc072eed36f618e4545fc66a34dff3f6ac64a4b",
+      "observations": [
+        {
+          "demandedImplementation": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+            "startByte": 714,
+            "endByte": 722
+          },
+          "exportDeclaration": {
+            "symbol": "symbol:h:7b76896d0842d331cab5d5fb",
+            "name": "contains",
+            "kind": "VariableDeclaration",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts",
+              "startByte": 1000,
+              "endByte": 1008
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts"
+          },
+          "implementationDeclaration": {
+            "symbol": "symbol:h:9e00c16a7a117335f27545d2",
+            "name": "contains",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+              "startByte": 725,
+              "endByte": 997
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js"
+          },
+          "implementationOpenReasons": [
+            "controlFlowUnsupported"
+          ],
+          "openReasons": null,
+          "owner": "@corvu/dialog",
+          "query": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/solid-checker-export-values.ts",
+            "startByte": 33064,
+            "endByte": 33089
+          },
+          "unwritten": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 726,
+                "endByte": 733
+              }
+            },
+            {
+              "parameterIndex": 1,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 735,
+                "endByte": 741
+              }
+            }
+          ],
+          "runtimeDigest": "sha256:316b9013e2c0379c67752cea04e0399a30de5b65f91f32bd576614b32fdb50e9",
+          "retainedRuntime": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-W6eigT/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+          "ownImplementation": true
+        },
+        {
+          "demandedImplementation": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+            "startByte": 714,
+            "endByte": 722
+          },
+          "exportDeclaration": {
+            "symbol": "symbol:h:7b76896d0842d331cab5d5fb",
+            "name": "contains",
+            "kind": "VariableDeclaration",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts",
+              "startByte": 1000,
+              "endByte": 1008
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts"
+          },
+          "implementationDeclaration": {
+            "symbol": "symbol:h:9e00c16a7a117335f27545d2",
+            "name": "contains",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+              "startByte": 725,
+              "endByte": 997
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js"
+          },
+          "implementationOpenReasons": [
+            "controlFlowUnsupported"
+          ],
+          "openReasons": null,
+          "owner": "solid-dismissible",
+          "query": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/solid-checker-export-values.ts",
+            "startByte": 34632,
+            "endByte": 34657
+          },
+          "unwritten": null,
+          "runtimeDigest": "sha256:316b9013e2c0379c67752cea04e0399a30de5b65f91f32bd576614b32fdb50e9",
+          "retainedRuntime": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-W6eigT/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+          "ownImplementation": false
+        },
+        {
+          "demandedImplementation": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+            "startByte": 714,
+            "endByte": 722
+          },
+          "exportDeclaration": {
+            "symbol": "symbol:h:7b76896d0842d331cab5d5fb",
+            "name": "contains",
+            "kind": "VariableDeclaration",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts",
+              "startByte": 1000,
+              "endByte": 1008
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts"
+          },
+          "implementationDeclaration": {
+            "symbol": "symbol:h:9e00c16a7a117335f27545d2",
+            "name": "contains",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+              "startByte": 725,
+              "endByte": 997
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js"
+          },
+          "implementationOpenReasons": [
+            "controlFlowUnsupported"
+          ],
+          "openReasons": null,
+          "owner": "solid-focus-trap",
+          "query": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/solid-checker-export-values.ts",
+            "startByte": 35048,
+            "endByte": 35073
+          },
+          "unwritten": null,
+          "runtimeDigest": "sha256:316b9013e2c0379c67752cea04e0399a30de5b65f91f32bd576614b32fdb50e9",
+          "retainedRuntime": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-W6eigT/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+          "ownImplementation": false
+        },
+        {
+          "demandedImplementation": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+            "startByte": 714,
+            "endByte": 722
+          },
+          "exportDeclaration": {
+            "symbol": "symbol:h:7b76896d0842d331cab5d5fb",
+            "name": "contains",
+            "kind": "VariableDeclaration",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts",
+              "startByte": 1000,
+              "endByte": 1008
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts"
+          },
+          "implementationDeclaration": {
+            "symbol": "symbol:h:9e00c16a7a117335f27545d2",
+            "name": "contains",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+              "startByte": 725,
+              "endByte": 997
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js"
+          },
+          "implementationOpenReasons": [
+            "controlFlowUnsupported"
+          ],
+          "openReasons": null,
+          "owner": "solid-prevent-scroll",
+          "query": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/solid-checker-export-values.ts",
+            "startByte": 35560,
+            "endByte": 35585
+          },
+          "unwritten": null,
+          "runtimeDigest": "sha256:316b9013e2c0379c67752cea04e0399a30de5b65f91f32bd576614b32fdb50e9",
+          "retainedRuntime": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-W6eigT/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+          "ownImplementation": false
+        }
+      ]
+    },
+    {
+      "variant": "isolated",
+      "log": "/private/tmp/corvu-captured-project-isolated.log",
+      "logDigest": "sha256:da1688f923dad544236cdd322787a93e617c149cb88a7435935684897551ee93",
+      "observations": [
+        {
+          "demandedImplementation": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+            "startByte": 714,
+            "endByte": 722
+          },
+          "exportDeclaration": {
+            "symbol": "symbol:h:7b76896d0842d331cab5d5fb",
+            "name": "contains",
+            "kind": "VariableDeclaration",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts",
+              "startByte": 1000,
+              "endByte": 1008
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/dom/index.d.ts"
+          },
+          "implementationDeclaration": {
+            "symbol": "symbol:h:9e00c16a7a117335f27545d2",
+            "name": "contains",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+              "startByte": 725,
+              "endByte": 997
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js"
+          },
+          "implementationOpenReasons": [
+            "controlFlowUnsupported"
+          ],
+          "openReasons": null,
+          "owner": "@corvu/dialog",
+          "query": {
+            "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticCapturedCorvuProject1638383332/001/facts.ts",
+            "startByte": 195,
+            "endByte": 203
+          },
+          "unwritten": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 726,
+                "endByte": 733
+              }
+            },
+            {
+              "parameterIndex": 1,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 735,
+                "endByte": 741
+              }
+            }
+          ],
+          "runtimeDigest": "sha256:316b9013e2c0379c67752cea04e0399a30de5b65f91f32bd576614b32fdb50e9",
+          "retainedRuntime": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-W6eigT/node_modules/@corvu/dialog/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+          "ownImplementation": true
+        },
+        {
+          "demandedImplementation": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+            "startByte": 714,
+            "endByte": 722
+          },
+          "exportDeclaration": {
+            "symbol": "symbol:h:4346736a1e8fbfb05054066f",
+            "name": "contains",
+            "kind": "VariableDeclaration",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/dom/index.d.ts",
+              "startByte": 1000,
+              "endByte": 1008
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/dom/index.d.ts"
+          },
+          "implementationDeclaration": {
+            "symbol": "symbol:h:ef1be3758d1cb63ab9c4939c",
+            "name": "contains",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+              "startByte": 725,
+              "endByte": 997
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js"
+          },
+          "implementationOpenReasons": [
+            "controlFlowUnsupported"
+          ],
+          "openReasons": null,
+          "owner": "solid-dismissible",
+          "query": {
+            "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticCapturedCorvuProject1638383332/002/facts.ts",
+            "startByte": 199,
+            "endByte": 207
+          },
+          "unwritten": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 726,
+                "endByte": 733
+              }
+            },
+            {
+              "parameterIndex": 1,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 735,
+                "endByte": 741
+              }
+            }
+          ],
+          "runtimeDigest": "sha256:316b9013e2c0379c67752cea04e0399a30de5b65f91f32bd576614b32fdb50e9",
+          "retainedRuntime": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-W6eigT/node_modules/solid-dismissible/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+          "ownImplementation": true
+        },
+        {
+          "demandedImplementation": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+            "startByte": 714,
+            "endByte": 722
+          },
+          "exportDeclaration": {
+            "symbol": "symbol:h:8b8d02ea4cbf0e6db5e573a4",
+            "name": "contains",
+            "kind": "VariableDeclaration",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/dom/index.d.ts",
+              "startByte": 1000,
+              "endByte": 1008
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/dom/index.d.ts"
+          },
+          "implementationDeclaration": {
+            "symbol": "symbol:h:2f48d7e52900306b0e3902ef",
+            "name": "contains",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+              "startByte": 725,
+              "endByte": 997
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js"
+          },
+          "implementationOpenReasons": [
+            "controlFlowUnsupported"
+          ],
+          "openReasons": null,
+          "owner": "solid-focus-trap",
+          "query": {
+            "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticCapturedCorvuProject1638383332/003/facts.ts",
+            "startByte": 198,
+            "endByte": 206
+          },
+          "unwritten": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 726,
+                "endByte": 733
+              }
+            },
+            {
+              "parameterIndex": 1,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 735,
+                "endByte": 741
+              }
+            }
+          ],
+          "runtimeDigest": "sha256:316b9013e2c0379c67752cea04e0399a30de5b65f91f32bd576614b32fdb50e9",
+          "retainedRuntime": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-W6eigT/node_modules/solid-focus-trap/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+          "ownImplementation": true
+        },
+        {
+          "demandedImplementation": {
+            "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+            "startByte": 714,
+            "endByte": 722
+          },
+          "exportDeclaration": {
+            "symbol": "symbol:h:3d61169d74a03b2ec47e52ed",
+            "name": "contains",
+            "kind": "VariableDeclaration",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/dom/index.d.ts",
+              "startByte": 1000,
+              "endByte": 1008
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/dom/index.d.ts"
+          },
+          "implementationDeclaration": {
+            "symbol": "symbol:h:c31cfc29893dac7572c4a20d",
+            "name": "contains",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+              "startByte": 725,
+              "endByte": 997
+            },
+            "qualifiedName": "contains",
+            "sourceFile": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js"
+          },
+          "implementationOpenReasons": [
+            "controlFlowUnsupported"
+          ],
+          "openReasons": null,
+          "owner": "solid-prevent-scroll",
+          "query": {
+            "path": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticCapturedCorvuProject1638383332/004/facts.ts",
+            "startByte": 202,
+            "endByte": 210
+          },
+          "unwritten": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 726,
+                "endByte": 733
+              }
+            },
+            {
+              "parameterIndex": 1,
+              "declaration": {
+                "path": "/private/tmp/corvu-private-capture-gdi16lg2/copies/solid-checker-typefacts-project-29925-1/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+                "startByte": 735,
+                "endByte": 741
+              }
+            }
+          ],
+          "runtimeDigest": "sha256:316b9013e2c0379c67752cea04e0399a30de5b65f91f32bd576614b32fdb50e9",
+          "retainedRuntime": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-W6eigT/node_modules/solid-prevent-scroll/node_modules/@corvu/utils/dist/chunk/SEUPK2SH.js",
+          "ownImplementation": true
+        }
+      ]
+    }
+  ]
+}

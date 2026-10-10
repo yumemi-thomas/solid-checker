@@ -114,6 +114,8 @@ runtime guards on (runtime-legal; the value still will not update).
 
 ## Related
 
+- [until-in-tracked-scope](until-in-tracked-scope.md) — the same guard on
+  rc.9's `until`
 - [reactive-write-in-owned-scope](reactive-write-in-owned-scope.md) — the
   owner-keyed counterpart for writes; note the inverted `untrack` semantics
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the same

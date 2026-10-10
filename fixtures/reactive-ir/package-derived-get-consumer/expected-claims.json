@@ -1,0 +1,22 @@
+{
+  "status": "observed; findings snapshot is fixtures/findings-snapshots/reactive-ir__package-derived-get-consumer.json",
+  "resultDispatchClean": [
+    "PlainReads"
+  ],
+  "violations": [
+    {
+      "function": "ProducerViolation",
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation"
+    }
+  ],
+  "resultDispatchUncertifiable": [
+    "RefusedShapes",
+    "OpenOrFurtherUses"
+  ],
+  "noNewViolation": [
+    "RefusedShapes",
+    "OpenOrFurtherUses"
+  ]
+}

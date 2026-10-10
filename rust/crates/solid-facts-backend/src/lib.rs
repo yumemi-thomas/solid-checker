@@ -1,12 +1,17 @@
 //! Rust-led orchestration of Oxc AST facts, Solid execution facts, and
 //! TypeScript-Go semantic facts.
 
-#[cfg(not(any(feature = "dialect-v1", feature = "dialect-v2")))]
+#[cfg(not(feature = "dialect-v2"))]
 compile_error!("solid-facts-backend requires at least one dialect feature");
+
+mod artifact_admission;
+mod authored_contracts;
+pub use artifact_admission::AdmissionRefusal;
 
 mod artifact_resolution;
 mod bounded_json;
 mod cache;
+
 mod contract_certification;
 pub use contract_certification::report_certification_timing;
 
@@ -90,36 +95,59 @@ mod diagnostics;
 pub mod dialect;
 mod evidence_sidecars;
 mod first_party_bundles;
+/// Authorizing a fixture-supplied contract, so a corpus can analyze a
+/// consumer against an accepted one. Never reached by an ordinary
+/// analysis: the trust it mints is returned to the caller, not written
+/// into the project.
+pub mod fixture_authorization;
+mod host_config;
+pub mod host_constants;
+mod host_inline;
+mod host_invocation;
+mod host_loadable;
+mod host_plugins;
 mod inferred_contract;
+mod inferred_host;
+mod installed_patches;
+mod package_requirements;
 mod phase16_benchmark;
 mod proposal_generation;
+mod release_scope;
 mod runtime_probe_wire;
 mod runtime_probes;
+pub mod runtime_resolution;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
 pub use contract_certification::{
-    ArtifactSnapshot, ArtifactSnapshotError, AuthenticatedPolicy2Receipt, BuiltInReceiptEntry,
-    CanonicalDependencyNodeIdentity, CertificationPlan, CertificationPlanningError,
-    CertificationPlanningTransaction, CertificationRequest, ConfiguredReceiptIssuer,
-    DependencyCompositionError, DependencyCompositionRequirement, DependencyCompositionSchedule,
+    ArtifactSnapshot, ArtifactSnapshotError, AuthenticatedPolicy2Receipt,
+    BROWSER_EXECUTION_PROFILE, BuiltInReceiptEntry, CanonicalDependencyNodeIdentity,
+    CertificationPlan, CertificationPlanningError, CertificationPlanningTransaction,
+    CertificationRequest, CitedAcceptance, ConfiguredReceiptIssuer, ControlledExecution,
+    ControlledExecutionError, DependencyCompositionError, DependencyCompositionRequirement,
+    DependencyCompositionSchedule, DependencyEnvironmentEdge, DependencyEnvironmentEntry,
     DependencyNodeIdentity, DependencyQueueNode, DependencyReceiptCompositionError,
-    FinalizedGraphNode, FinalizedPolicy2Contract, FinalizedPolicy2Graph, InspectedProbeGateBatch,
-    LocalArtifact, LockPinnedArchive, Policy2FinalizationError, Policy2ReceiptBindings,
-    Policy2ReceiptError, Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry,
-    Policy2TrustStore, ProbeGate, ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind,
-    ProbeGateSchedule, PublishedArchive, PublishedContractGraphPlan,
-    PublishedGraphCertificationError, PublishedGraphLockSelection, PublishedGraphNodeRequest,
-    PublishedGraphPlanningError, PublishedGraphSourceRequest, PublishedPolicy2Catalog,
-    ReceiptIssuerKind, ReceiptPublicationError, SnapshotLimits, SnapshotVerifiedClosure,
-    SnapshotVerifiedExports, SnapshotVerifiedResolution, TypeFactsCertificationError,
+    EnvironmentImporter, EnvironmentPackage, FinalizedGraphNode, FinalizedPolicy2Contract,
+    FinalizedPolicy2Graph, IMPORT_FREE_EXECUTION_PROFILE, INERT_EXECUTION_PROFILE, LocalArtifact,
+    LockPinnedArchive, Policy2FinalizationError, Policy2ReceiptBindings, Policy2ReceiptError,
+    Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore,
+    ProbeGate, ProbeGateError, ProbeGateSchedule, ProbeHarnessConfiguration, ProbeHarnessError,
+    PublishedArchive, PublishedContractGraphPlan, PublishedGraphCertificationError,
+    PublishedGraphLockSelection, PublishedGraphNodeRequest, PublishedGraphPlanningError,
+    PublishedGraphSourceRequest, PublishedPolicy2Catalog, RECEIPT_WITNESS_FAMILIES,
+    RELATIVE_GRAPH_EXECUTION_PROFILE, ReceiptIssuerKind, ReceiptPublicationError, RecipeGatedPlan,
+    RecipeGatingError, SnapshotLimits, SnapshotVerifiedClosure, SnapshotVerifiedExports,
+    SnapshotVerifiedResolution, SourceResolutionEdge, TypeFactsCertificationError,
     TypeFactsCertificationSchedule, TypeFactsProducerPin, UntrustedArtifactEnvelope,
     VerifiedDependencyComposition, VerifiedProbeGateBatch, VerifiedTypeFactsEvidence,
-    WitnessWireError, authenticate_policy2_receipt, canonicalize_policy2_main,
-    certify_published_contract_graph_case_set, certify_value_only_case_set,
-    decode_policy2_trust_configuration, encode_policy2_trust_configuration,
+    WITHHELD_CLOSURE_NO_RECIPE, WithheldClosure, WitnessWireError, authenticate_policy2_receipt,
+    canonicalize_policy2_main, certify_published_contract_graph_case_set,
+    certify_value_only_case_set, decode_policy2_trust_configuration,
+    encode_policy2_trust_configuration, installed_package_snapshot_root,
     issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
-    plan_published_contract_graph, policy2_main_semantic_digest, policy2_policy_digest,
+    plan_published_contract_graph, policy2_artifact_acceptance_root,
+    policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
+    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
     policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 #[cfg(feature = "dialect-v2")]
@@ -131,27 +159,33 @@ pub use contract_certification::{
 pub use contract_document::SidecarDigests;
 pub use contract_interface::{
     AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,
-    ArtifactResolver, ArtifactResolverChain, BundledEvidenceStore, ClosureEntry, ClosureFileRole,
-    ClosureHazard, ClosureHazardKind, ClosureInput, ClosureManifest, ClosurePackageIdentity,
-    ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter,
-    ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
-    ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
-    StandaloneResolutionAdapter, TypeFactsResolutionAdapter, accepted_contract_catalog_members,
+    ArtifactResolver, ArtifactResolverChain, BundledEvidenceStore, CatalogMergeKey, ClosureEntry,
+    ClosureFileRole, ClosureHazard, ClosureHazardKind, ClosureInput, ClosureManifest,
+    ClosurePackageIdentity, ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure,
+    HostResolutionAdapter, ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority,
+    ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget,
+    ResolvedFile, ResolvedImport, StandaloneResolutionAdapter, TypeFactsResolutionAdapter,
+    accepted_contract_catalog_members, catalog_merge_keys, discovered_catalog_paths,
     load_accepted_contract, load_accepted_contract_index, load_authenticated_policy2_contract,
-    load_authenticated_policy2_embedded_contract, read_accepted_contract_catalog,
-    read_accepted_contract_catalog_with_trust, read_policy2_trust_configuration,
+    load_authenticated_policy2_embedded_contract, load_external_contract_index,
+    read_accepted_contract_catalog, read_accepted_contract_catalog_with_trust,
+    read_external_contract_catalog_with_trust, read_policy2_trust_configuration,
     read_proposal_dependency_catalog_for_generation,
 };
 pub use contract_workflow::{
     ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
 };
 pub use diagnostics::{
-    DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
-    PackageSummary, RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding,
-    SnapshotFix, SnapshotTextEdit, SourceLocation, accepted_package_contract_statuses,
-    analysis_metrics, analyze_project_accepted_measured_with_enablement, discovered_contract_paths,
-    discovered_rule_options_path, imported_package_roots, semantic_demand_options_for_enablement,
-    source_location,
+    ArtifactAdmissions, DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics,
+    NestedCatalogs, PackageContractStatus, PackageSummary, ProjectCatalogSelection,
+    RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix,
+    SnapshotTextEdit, SourceLocation, UnauthenticatedCatalog, accepted_package_contract_statuses,
+    admission_input_paths, admission_refusal_details, admitted_project_artifacts, analysis_metrics,
+    analyze_project_accepted_measured_with_enablement, certified_catalog_self_admission,
+    discovered_contract_paths, discovered_rule_options_path, imported_package_roots,
+    importer_admission_inputs, nested_catalog_candidates, project_accepted_contracts,
+    select_project_catalogs, select_project_catalogs_in, semantic_demand_options_for_enablement,
+    source_location, unsupported_runtime_snapshot,
 };
 pub use evidence_sidecars::{
     EVIDENCE_SIDECAR_VERSION, EnvironmentIdentity, EvidenceCatalog, EvidenceSidecarDocuments,
@@ -162,8 +196,14 @@ pub use evidence_sidecars::{
 };
 pub use first_party_bundles::{
     BundleSelector, FirstPartyBundle, FirstPartyBundleError, bundled_first_party_contract_index,
-    solid1_bundles, solid2_rc3_bundles,
+    solid2_rc3_bundles,
 };
+pub use inferred_host::{
+    inferred_host_directory_digest, inferred_host_input_digest, inferred_host_input_paths,
+    inferred_host_input_paths_for_project, inferred_host_input_paths_for_sources,
+    inferred_project_accepted_contracts, inferred_project_accepted_contracts_with_note,
+};
+pub use package_requirements::external_package_contract_requirements;
 pub use phase16_benchmark::phase16_benchmark_report;
 pub use proposal_generation::{
     ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
@@ -192,6 +232,61 @@ pub use wire::{
 pub fn validate_contract_document(bytes: &[u8]) -> Result<(), ContractFailure> {
     contract_document::decode(bytes)?.normalize()?;
     Ok(())
+}
+
+/// Which call domains each export of a stable-v1 document states as closed,
+/// as `(artifact case id, export, domain names)`.
+///
+/// **Diagnostic, and deliberately so.** Nothing decides anything from this;
+/// it exists so a certification run can report what its receipt actually
+/// binds beside what its planner derived. A closure present as a candidate
+/// and absent here, with no withheld record, is one lost outside every
+/// mechanism meant to account for it — see
+/// `docs/precision-backlog.md` § "A certified contract can be weaker than the
+/// proposal it came from".
+pub struct DocumentClosedDomains {
+    pub artifact_case: String,
+    pub export: String,
+    pub closed: Vec<&'static str>,
+}
+
+pub fn document_closed_call_domains(
+    bytes: &[u8],
+) -> Result<Vec<DocumentClosedDomains>, ContractFailure> {
+    let normalized = contract_document::decode(bytes)?.normalize()?;
+    let mut rows = Vec::new();
+    for case in normalized.artifact_cases() {
+        for (name, export) in &case.exports {
+            let closed = solid_reactive_ir::contract_semantics::ClaimDomain::ALL
+                .into_iter()
+                .filter(|domain| !export.claim_state(*domain).is_open())
+                .map(|domain| match domain {
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Callbacks => "callbacks",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Reads => "reads",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Writes => "writes",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Creates => "creates",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Invalidates => {
+                        "invalidates"
+                    }
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Throws => "throws",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Returns => "returns",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Cleanups => "cleanups",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Disposals => "disposals",
+                    solid_reactive_ir::contract_semantics::ClaimDomain::Computations => {
+                        "computations"
+                    }
+                })
+                .collect::<Vec<_>>();
+            if !closed.is_empty() {
+                rows.push(DocumentClosedDomains {
+                    artifact_case: case.id.clone(),
+                    export: name.clone(),
+                    closed,
+                });
+            }
+        }
+    }
+    Ok(rows)
 }
 
 /// Plans policy-2 certification from one stable-v1 open proposal without
@@ -231,9 +326,16 @@ pub fn encode_inferred_contract_workflow(
     resolved: &ResolvedImport,
     pretty: bool,
 ) -> Result<ProposalArtifacts, ContractWorkflowError> {
-    let (proposal, candidates) =
+    let normalized =
         inferred_contract::normalize_inferred_contract_with_candidates(inferred, resolved)?;
-    contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
+    contract_workflow::encode_proposal_artifacts(
+        &normalized.contract,
+        normalized.closure_candidates,
+        normalized.withheld,
+        normalized.declined,
+        normalized.inherited,
+        pretty,
+    )
 }
 
 /// Emits one exact entrypoint's analyzer inference while keeping the resolved
@@ -296,13 +398,50 @@ pub fn encode_inferred_entrypoint_workflow_with_external_targets(
     inferred
         .validate()
         .map_err(|reason| ContractFailure::InvalidSemanticModel { reason })?;
-    let (proposal, candidates) =
+    let normalized =
         inferred_contract::normalize_inferred_contract_with_candidates_and_external_targets(
             &inferred,
             resolved,
             external_targets,
         )?;
-    contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
+    contract_workflow::encode_proposal_artifacts(
+        &normalized.contract,
+        normalized.closure_candidates,
+        normalized.withheld,
+        normalized.declined,
+        normalized.inherited,
+        pretty,
+    )
+}
+
+/// Proposes explicit inert initialization from a byte-bound parser premise.
+/// Certification independently replays the proof and package loading scope.
+pub fn encode_inert_entrypoint_workflow(
+    resolved: &ResolvedImport,
+    proof: &solid_facts::ast::InertJavaScriptModule,
+    pretty: bool,
+) -> Result<ProposalArtifacts, ContractWorkflowError> {
+    if resolved.runtime.digest.trim_start_matches("sha256:") != proof.source_sha256()
+        || !(resolved.runtime.path.ends_with(".mjs") || resolved.runtime.path.ends_with(".js"))
+        || resolved.transform.is_some()
+        || !resolved.exports.is_empty()
+    {
+        return Err(ContractFailure::IdentityMismatch {
+            reason: "inert initialization proposal does not match the exact runtime/export census"
+                .into(),
+        }
+        .into());
+    }
+    let (package, mut case) = artifact_resolution::proposal_identity(resolved)?;
+    case.initialization =
+        Some(solid_reactive_ir::contract_semantics::ModuleInitializationClaim::Inert);
+    let contract =
+        solid_reactive_ir::contract_semantics::ContractProposal::new(package, vec![case])
+            .normalize()
+            .map_err(|error| ContractFailure::InvalidSemanticModel {
+                reason: error.to_string(),
+            })?;
+    contract_workflow::encode_proposal_artifacts(&contract, vec![], vec![], vec![], vec![], pretty)
 }
 
 /// Merges independently analyzed exact artifact cases without exposing compact
@@ -657,50 +796,36 @@ pub struct NativeIncrementalSession {
     semantic_demand_options: SemanticDemandOptions,
 }
 
-/// The importing files whose module specifiers must be attested before a
-/// package contract may be bound to any of them.
+/// The importing files whose module specifiers are attested: every file of
+/// the program.
 ///
-/// A contract is applied by installed identity, which needs the compiler's own
-/// resolution for the specifier
-/// ([`solid_reactive_ir::PackageContract::for_import`]). Asking for that
-/// resolution is an explicit operation on the Type Facts session, and its
-/// import half is proportional to the files asked about — so it is asked only
-/// of the files that could carry a contract-bound specifier at all: the ones
-/// with at least one bare specifier. A relative or `node:` specifier can never
-/// name a package.
+/// Two consumers read the answer:
+/// - A package contract is applied by installed identity, which needs the
+///   compiler's own resolution of the specifier
+///   ([`solid_reactive_ir::PackageContract::for_import`]).
+/// - The IR asks which module each specifier loads before it trusts that no
+///   namespace object, barrel or dynamic import reaches a module (ADR 0219).
+///   That includes relative specifiers, since only the compiler maps
+///   `./x.js` to `x.ts`.
 ///
-/// The scope deliberately does **not** consult contract discovery, though that
-/// would narrow it further. The attestation is computed once per program
-/// generation and a retained session reuses it across checks, while contracts
-/// are re-discovered on every check; a scope keyed on today's contracts would
-/// answer for a contract that appeared afterwards by *silently omitting* its
-/// files, which is name-only binding restored by accident. `export … from`
-/// specifiers count for the same reason contract resolution binds them.
+/// Both questions hold for any file, so the scope is not narrowed to files
+/// with a bare specifier. It is one request per program generation, and its
+/// import half is proportional to the files asked about.
 ///
-/// An empty answer means no specifier in this program could name a package, and
-/// the caller then asks for nothing.
+/// The scope deliberately does **not** consult contract discovery. The
+/// attestation is computed once per program generation and a retained session
+/// reuses it across checks, while contracts are re-discovered on every check.
+/// A scope keyed on today's contracts would answer for a contract that
+/// appeared afterwards by *silently omitting* its files, which is name-only
+/// binding restored by accident.
+///
+/// An empty answer means the program has no files, and the caller then asks
+/// for nothing.
 #[must_use]
 pub fn contract_identity_scope(facts: &ProjectFacts) -> Vec<String> {
     facts
         .files
         .iter()
-        .filter(|file| {
-            file.ast
-                .imports
-                .iter()
-                .map(|import| import.module.as_str())
-                .chain(
-                    file.ast
-                        .exports
-                        .iter()
-                        .filter_map(|export| export.module.as_deref()),
-                )
-                .any(|specifier| {
-                    !specifier.starts_with('.')
-                        && !specifier.starts_with('/')
-                        && !specifier.starts_with("node:")
-                })
-        })
         .map(|file| file.path.as_str().to_owned())
         .collect()
 }
@@ -1321,6 +1446,32 @@ pub fn build_project_native_measured_with_demands(
     typescript: &mut impl TypeFactsProvider,
     semantic_demand_options: SemanticDemandOptions,
 ) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
+    build_project_native_measured_with_program_hashes(
+        dialect,
+        project_id,
+        generation,
+        sources,
+        &HashMap::new(),
+        typescript,
+        semantic_demand_options,
+    )
+}
+
+/// [`build_project_native_measured_with_demands`] for sources some of which are
+/// a span-preserving rewrite of the text the Type Facts program holds (ADR
+/// 0166's host-constant fold): `program_hashes` names, per path, the digest of
+/// the program's text, which the join compares instead of the digest of the
+/// text the facts were extracted from. Every span of a rewrite is the span of
+/// the same position in the original, so a fact keyed by span joins as before.
+pub fn build_project_native_measured_with_program_hashes(
+    dialect: &'static Dialect,
+    project_id: impl Into<String>,
+    generation: u64,
+    sources: Vec<SourceFile>,
+    program_hashes: &HashMap<String, SourceHash>,
+    typescript: &mut impl TypeFactsProvider,
+    semantic_demand_options: SemanticDemandOptions,
+) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
     let project_id = project_id.into();
     let generation = Generation::new(generation).map_err(|_| BackendError::Generation)?;
     let source_files_recomputed = u64::try_from(sources.len()).unwrap_or(u64::MAX);
@@ -1343,10 +1494,12 @@ pub fn build_project_native_measured_with_demands(
                     compiler.analyze(&request)?
                 };
                 execution.validate(&file.source)?;
-                Ok((
-                    start + offset,
-                    FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?,
-                ))
+                let mut facts =
+                    FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
+                if let Some(hash) = program_hashes.get(&file.path) {
+                    facts.source_hash = hash.clone();
+                }
+                Ok((start + offset, facts))
             })
             .collect::<Result<Vec<_>, BackendError>>()
     })?;
@@ -1716,40 +1869,81 @@ fn semantic_demands(
     demand_plan::plan(dialect, files, options)
 }
 
-fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> HashSet<Span> {
-    let vocabulary = dialect.vocabulary;
-    let mut named_imports = HashMap::<&str, solid_dialect::Primitive>::new();
-    let mut namespace_imports = HashMap::<&str, &str>::new();
-    for import in &file.ast.imports {
-        if !vocabulary.owns_module(&import.module) {
-            continue;
-        }
-        for binding in &import.bindings {
-            match binding.kind {
-                solid_facts::ast::ImportKind::Named => {
-                    let Some(local) = file.source_text(binding.local.span) else {
-                        continue;
-                    };
-                    let imported = binding.imported.as_deref().unwrap_or(local);
-                    let Some(primitive) = vocabulary.primitive(imported) else {
-                        continue;
-                    };
-                    if vocabulary
-                        .export_modules(imported, solid_dialect::ExportPosition::Value)
-                        .contains(&import.module.as_str())
-                    {
-                        named_imports.insert(local, primitive);
+/// The dialect primitives a file imports, by the spelling a static callee names
+/// them with: a named import from a module the vocabulary owns and exports the
+/// primitive from, or a member of a namespace import of one.
+///
+/// Syntax only, so it decides *demands* and never what a callee is: a local that
+/// shadows the import answers too, which costs the producer one more question
+/// and proves nothing. What a call's callee actually is stays the semantic
+/// lookup's.
+pub(crate) struct PrimitiveImports<'a> {
+    vocabulary: &'static dyn solid_dialect::Dialect,
+    named: HashMap<&'a str, solid_dialect::Primitive>,
+    namespaces: HashMap<&'a str, &'a str>,
+}
+
+impl<'a> PrimitiveImports<'a> {
+    pub(crate) fn new(dialect: &'static Dialect, file: &'a FileFacts) -> Self {
+        let vocabulary = dialect.vocabulary;
+        let mut named = HashMap::new();
+        let mut namespaces = HashMap::new();
+        for import in &file.ast.imports {
+            if !vocabulary.owns_module(&import.module) {
+                continue;
+            }
+            for binding in &import.bindings {
+                match binding.kind {
+                    solid_facts::ast::ImportKind::Named => {
+                        let Some(local) = file.source_text(binding.local.span) else {
+                            continue;
+                        };
+                        let imported = binding.imported.as_deref().unwrap_or(local);
+                        let Some(primitive) = vocabulary.primitive(imported) else {
+                            continue;
+                        };
+                        if vocabulary
+                            .export_modules(imported, solid_dialect::ExportPosition::Value)
+                            .contains(&import.module.as_str())
+                        {
+                            named.insert(local, primitive);
+                        }
                     }
-                }
-                solid_facts::ast::ImportKind::Namespace => {
-                    if let Some(local) = file.source_text(binding.local.span) {
-                        namespace_imports.insert(local, &import.module);
+                    solid_facts::ast::ImportKind::Namespace => {
+                        if let Some(local) = file.source_text(binding.local.span) {
+                            namespaces.insert(local, import.module.as_str());
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
+        Self {
+            vocabulary,
+            named,
+            namespaces,
+        }
     }
+
+    /// The primitive a static callee's spelling denotes, if it names one.
+    pub(crate) fn primitive(&self, static_callee: &str) -> Option<solid_dialect::Primitive> {
+        if let Some(primitive) = self.named.get(static_callee) {
+            return Some(*primitive);
+        }
+        let (namespace, property) = static_callee.split_once('.')?;
+        let module = self.namespaces.get(namespace)?;
+        let name = property.rsplit('.').next().unwrap_or(property);
+        self.vocabulary
+            .namespace_import_primitives(module)
+            .contains(&name)
+            .then(|| self.vocabulary.primitive(name))
+            .flatten()
+    }
+}
+
+fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> HashSet<Span> {
+    let vocabulary = dialect.vocabulary;
+    let imports = PrimitiveImports::new(dialect, file);
     let mut result = HashSet::new();
     for binding in &file.ast.bindings {
         let Some(initializer) = binding.call_initializer else {
@@ -1761,20 +1955,7 @@ fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> Has
         let Some(static_callee) = call.static_callee(&file.source) else {
             continue;
         };
-        let primitive = if let Some(primitive) = named_imports.get(static_callee) {
-            Some(*primitive)
-        } else if let Some((namespace, property)) = static_callee.split_once('.')
-            && let Some(module) = namespace_imports.get(namespace)
-        {
-            let name = property.rsplit('.').next().unwrap_or(property);
-            vocabulary
-                .namespace_import_primitives(module)
-                .contains(&name)
-                .then(|| vocabulary.primitive(name))
-                .flatten()
-        } else {
-            None
-        };
+        let primitive = imports.primitive(static_callee);
         if !primitive.is_some_and(|primitive| vocabulary.creates_reactive_source(primitive)) {
             continue;
         }
@@ -2147,6 +2328,28 @@ mod tests {
         }
     }
 
+    #[test]
+    fn imported_reference_space_does_not_add_baseline_symbol_observations() {
+        let source = "import { Constructor } from 'package'; const wrapped = new (Constructor as typeof Constructor)();";
+        let file = test_file_facts("src/main.ts", source);
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            &[file],
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let start = source.rfind("Constructor").unwrap() as u64;
+        let row = demands
+            .iter()
+            .find(|demand| {
+                demand.location.start_byte == start && demand.location.end_byte == start + 11
+            })
+            .unwrap();
+        assert!(row.reference_space);
+        assert!(!row.symbol);
+        assert!(!row.runtime_identity);
+    }
+
     fn test_file_facts(path: &str, source: &str) -> FileFacts {
         let ast = solid_facts::ast::extract(path, source).unwrap();
         FileFacts::new(
@@ -2166,6 +2369,44 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn import_use_spaces_are_demanded_at_exact_binder_selected_references() {
+        let file = test_file_facts(
+            "src/main.ts",
+            "import { value } from './helper'; console.log(value); type T = typeof value; function server() { 'use server'; return value; } function shadow(value: number) { return value; }",
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let binding = file.ast.imports[0].bindings[0].local.span;
+        let mut imported = 0;
+        let mut shadowed = 0;
+        for (reference, declaration) in &file.ast.reference_declarations {
+            let location = typefacts_location(file.path.as_str(), *reference);
+            let classified = demands
+                .iter()
+                .any(|demand| demand.location == location && demand.reference_space);
+            if *declaration == binding {
+                imported += 1;
+                assert!(
+                    classified,
+                    "value, type-query, and server uses all need exact classification"
+                );
+            } else {
+                shadowed += 1;
+                assert!(
+                    !classified,
+                    "a shadowed binding cannot become an import use"
+                );
+            }
+        }
+        assert_eq!(imported, 3);
+        assert_eq!(shadowed, 1);
     }
 
     #[test]
@@ -2439,41 +2680,6 @@ mod tests {
     }
 
     #[test]
-    fn structural_accessors_follow_the_selected_vocabulary_and_export_modules() {
-        let file = test_file_facts(
-            "src/sources.ts",
-            r#"
-                import { createResource, createProjection } from "solid-js";
-                import { createStore } from "solid-js/store";
-                const [resource] = createResource(fetcher);
-                const projection = createProjection(() => state);
-                const [store] = createStore({ count: 0 });
-            "#,
-        );
-        let names = |selected| {
-            structural_accessor_spans(selected, &file)
-                .into_iter()
-                .filter_map(|span| file.source_text(span).map(str::to_owned))
-                .collect::<HashSet<_>>()
-        };
-
-        assert_eq!(
-            names(
-                dialect::by_version(solid_dialect::Version::V1)
-                    .expect("default build includes solid-v1"),
-            ),
-            HashSet::from(["resource".to_owned(), "store".to_owned()])
-        );
-        assert_eq!(
-            names(
-                dialect::by_version(solid_dialect::Version::V2)
-                    .expect("default build includes solid-v2"),
-            ),
-            HashSet::from(["projection".to_owned()])
-        );
-    }
-
-    #[test]
     fn returned_member_calls_combine_symbol_and_resolved_call_demands() {
         let file = test_file_facts(
             "src/cleanup.ts",
@@ -2500,6 +2706,245 @@ mod tests {
         assert!(matching[0].symbol);
         assert!(matching[0].resolved_call);
         assert!(matching[0].query_location.is_some());
+    }
+
+    /// A dialect primitive's call is demanded its resolved call with no
+    /// argument too, because the declaration is what names the package the
+    /// `creates` audits are keyed on. An argumentless local call is the
+    /// control, and so is a primitive's name imported from a module the
+    /// vocabulary does not own.
+    #[test]
+    fn an_argumentless_primitive_call_is_demanded_its_resolved_call() {
+        let file = test_file_facts(
+            "src/owner.ts",
+            "import { getOwner, flush as settle } from \"solid-js\";\n\
+             import * as Solid from \"solid-js\";\n\
+             import { getOwner as foreign } from \"./local\";\n\
+             function local() {}\n\
+             export function probe() {\n\
+               const owner = getOwner();\n\
+               settle();\n\
+               const again = Solid.getOwner();\n\
+               foreign();\n\
+               local();\n\
+               return owner === again;\n\
+             }",
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let resolved = |spelling: &str| {
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some(spelling))
+                .expect(spelling);
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            demands
+                .iter()
+                .any(|demand| demand.location == location && demand.resolved_call)
+        };
+        assert!(resolved("getOwner"));
+        assert!(resolved("settle"), "an aliased named import");
+        assert!(resolved("Solid.getOwner"), "a namespace member");
+        assert!(
+            !resolved("foreign"),
+            "a module the vocabulary does not own names no primitive"
+        );
+        assert!(
+            !resolved("local"),
+            "an argumentless local call stays as it was"
+        );
+    }
+
+    #[test]
+    fn argumentless_factory_result_calls_demand_validity_by_exact_binding() {
+        let file = test_file_facts(
+            "src/captured.tsx",
+            r#"declare function factory(): () => void;
+declare function ordinary(): void;
+function Card(parameter: () => void) {
+  const returned = factory();
+  const alias = returned;
+  returned(); alias(); parameter(); ordinary();
+  { const returned = parameter; returned(); }
+  return <p />;
+}"#,
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let returned_declaration = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.call_initializer.is_some())
+            .unwrap()
+            .names[0]
+            .span;
+        let mut checked = 0;
+        for call in file.ast.calls.iter().filter(|call| {
+            matches!(
+                file.source_text(call.callee),
+                Some("returned" | "alias" | "parameter" | "ordinary")
+            )
+        }) {
+            let expected =
+                file.ast.reference_declaration(call.callee) == Some(returned_declaration);
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            assert_eq!(
+                demands
+                    .iter()
+                    .any(|demand| { demand.location == location && demand.resolved_call }),
+                expected,
+                "{}",
+                file.source_text(call.callee).unwrap()
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 5);
+    }
+
+    #[test]
+    fn argumentless_nested_function_calls_demand_validity_by_exact_binding() {
+        let file = test_file_facts(
+            "src/captured.tsx",
+            r#"declare function top(): void;
+function Card(props: { value: string }, parameter: () => string) {
+  const browse = () => props.value;
+  function label() { return props.value; }
+  const alias = browse;
+  const object = { browse };
+  browse(); label(); parameter(); alias(); object.browse(); top();
+  { const browse = parameter; browse(); }
+  return <p />;
+}"#,
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        for call in &file.ast.calls {
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            let planned = demands
+                .iter()
+                .find(|demand| demand.location == location)
+                .unwrap();
+            let declaration = file.ast.reference_declaration(call.callee);
+            let expected = file.source_text(call.callee) == Some("label")
+                || (file.source_text(call.callee) == Some("browse")
+                    && declaration.is_some_and(|span| {
+                        file.ast.bindings.iter().any(|binding| {
+                            binding.names.iter().any(|name| name.span == span)
+                                && binding.initializer_function
+                        })
+                    }));
+            assert_eq!(planned.resolved_call, expected, "{:?}", call.span);
+        }
+    }
+
+    /// ADRs 0190 and 0192: only an argumentless method call's resolved
+    /// declaration says whether the member is a standard-library built-in.
+    /// Unrelated bodies stay outside the leaf demand closure: a resolved
+    /// declaration also enters the symbol index.
+    #[test]
+    fn an_argumentless_method_call_is_demanded_its_resolved_call() {
+        let file = test_file_facts(
+            "src/words.ts",
+            "import { onSettled } from \"solid-js\";\n\
+             declare const dialog: { focus(): void } | undefined;\n\
+             const fixed = \"a b\";\n\
+             function local() {}\n\
+             export function words(message: string) {\n\
+               const head = fixed.trim();\n\
+               local();\n\
+               onSettled(() => { dialog?.focus(); });\n\
+               void head;\n\
+               return message.trim().split(\" \");\n\
+             }\n\
+             export const lower = (value?: string) => value?.toLowerCase().length;",
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let resolved = |spelling: &str| {
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some(spelling))
+                .expect(spelling);
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            demands
+                .iter()
+                .any(|demand| demand.location == location && demand.resolved_call)
+        };
+        assert!(resolved("message.trim"), "inside a chain");
+        assert!(resolved("value?.toLowerCase"), "an optional member call");
+        assert!(
+            resolved("dialog?.focus"),
+            "directly in a leaf-owner callback"
+        );
+        assert!(
+            !resolved("fixed.trim"),
+            "any other method call stays as it was"
+        );
+        assert!(
+            !resolved("local"),
+            "an argumentless plain call stays as it was"
+        );
+    }
+
+    #[test]
+    fn leaf_demands_follow_local_helpers_without_demanding_unrelated_bodies() {
+        let file = test_file_facts(
+            "src/helpers.ts",
+            r#"import { onSettled } from "solid-js";
+const captured = "value";
+function second() { captured.trim(); }
+const first = () => { second(); };
+function unused() { captured.toUpperCase(); }
+function shadowed() { captured.toLowerCase(); }
+function entry(shadowed: () => void) {
+    shadowed();
+    first();
+}
+onSettled(() => { entry(() => {}); });
+"#,
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let resolved = |spelling: &str| {
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some(spelling))
+                .expect(spelling);
+            let location = typefacts_location(file.path.as_str(), call.callee);
+            demands
+                .iter()
+                .any(|demand| demand.location == location && demand.resolved_call)
+        };
+        assert!(resolved("captured.trim"), "transitive local helper");
+        assert!(!resolved("captured.toUpperCase"), "unrelated function");
+        assert!(!resolved("captured.toLowerCase"), "shadowed function");
     }
 
     #[test]

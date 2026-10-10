@@ -14,10 +14,15 @@ use solid_facts_backend::{
     NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession, dialect,
 };
 
-/// The 1.x dialect, chosen explicitly: these fixtures carry no `node_modules`
-/// for detection to read.
-fn solid_v1() -> &'static dialect::Dialect {
-    dialect::by_id("solid-v1").expect("the 1.x dialect is registered")
+/// The dialect, chosen explicitly: these fixtures carry no `node_modules` for
+/// detection to read.
+///
+/// Nothing below is a claim *about* the dialect. These are fragment-digest
+/// invalidation properties that merely need some vocabulary to resolve
+/// primitives through; they ran under 1.x because that is what the fixtures
+/// were written against, not because the property is version-specific.
+fn solid_v2() -> &'static dialect::Dialect {
+    dialect::by_id("solid-v2").expect("the 2.0 dialect is registered")
 }
 
 fn fixture(name: &str) -> PathBuf {
@@ -46,7 +51,7 @@ fn editing_a_module_no_proof_can_read_keeps_the_other_fragments() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    let fixture = fixture("solid-1x-adapter-with-declarations");
+    let fixture = fixture("adapter-with-declarations");
     let project = fixture.join("tsconfig.json").canonicalize().unwrap();
     let project_id = project.to_string_lossy().into_owned();
     let shapes = fixture.join("shapes.ts");
@@ -58,10 +63,10 @@ fn editing_a_module_no_proof_can_read_keeps_the_other_fragments() {
 
     let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
     let mut session =
-        NativeIncrementalSession::open(solid_v1(), project_id, sources, typescript).unwrap();
+        NativeIncrementalSession::open(solid_v2(), project_id, sources, typescript).unwrap();
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    incremental.build(&first, solid_v1().vocabulary).unwrap();
+    incremental.build(&first, solid_v2().vocabulary).unwrap();
 
     // Add a declaration to `shapes.ts`: its own facts change, and no other
     // file's do.
@@ -83,8 +88,8 @@ fn editing_a_module_no_proof_can_read_keeps_the_other_fragments() {
         )
         .unwrap();
 
-    let fresh = solid_reactive_ir::build(&edited, solid_v1().vocabulary).unwrap();
-    let (retained, timings) = incremental.build(&edited, solid_v1().vocabulary).unwrap();
+    let fresh = solid_reactive_ir::build(&edited, solid_v2().vocabulary).unwrap();
+    let (retained, timings) = incremental.build(&edited, solid_v2().vocabulary).unwrap();
 
     // Correct first: a finer digest that dropped a real dependency would show
     // up here.

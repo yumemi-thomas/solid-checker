@@ -1,0 +1,648 @@
+{
+  "schemaVersion": 1,
+  "comment": "Reviewed consumer environments: the exact Solid 2 trees real consumers install. `bun scripts/ecosystem-benchmark/run.mjs --consumer-environment <id>` certifies each listed package, cloned from its solid2 manifest row, in that tree, as a delivery-only run (`make consumer-environment-runs`); the compiled-in tier it fed is retired (ADR 0228), and the coverage census refuses it. Its yield is measured by re-sweeping the consumer named in `source`, never by the census pin. Derive an entry with `derive-consumer-environment.mjs` and review it; run.mjs refuses any package whose version or integrity differs from its manifest row, and any runtime that is not an audited archive or is above AUDITED_SOLID_2 (lib/families.mjs). `unmatched` lists the closure packages that are not certified here, and why.",
+  "environments": [
+    {
+      "id": "kobalte-solid2-e9d426d4",
+      "source": {
+        "repository": "https://github.com/kobaltedev/kobalte",
+        "branch": "solid2",
+        "commit": "e9d426d438b7c9ea0cc81bd1133831a20cd5fcae",
+        "lockfile": "pnpm-lock.yaml",
+        "lockfileDigest": "sha256:5f9af78c3c3a656485a92bf535b5cf77d23a1f9feb951c7575cad0e8794ab6c9",
+        "importers": [
+          "packages/core",
+          "packages/utils"
+        ]
+      },
+      "runtime": {
+        "solid-js": {
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ=="
+        },
+        "@solidjs/web": {
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg=="
+        },
+        "@solidjs/signals": {
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA=="
+        }
+      },
+      "pins": {
+        "@solid-primitives/a11y": {
+          "version": "1.0.0-next.3",
+          "integrity": "sha512-ohvuHYkxTNJtOPlhSHHCiLILE7KOQ3K6hcDrq4Fr69euk1Fnpct3d9VxFbgMPxBG31RJtJoD6Yh5BJNwFz84kw=="
+        },
+        "@solid-primitives/controlled-signal": {
+          "version": "1.0.0-next.3",
+          "integrity": "sha512-vcc3sI+0TFeqD6OWHr65LuH0x6OuRhmWQ9DxqGY53VIfvV5PFfIlBlxPidOyGbiN6VoHHMagZaXUq4ZnuH/KPg=="
+        },
+        "@solid-primitives/drag-drop": {
+          "version": "0.1.0-next.0",
+          "integrity": "sha512-1OOKH+QHItwDmZNdKCqajhuoL8uSmZMPIyCI6qC+qDSafkH0q3NljEvblBQLskcBBZrq6FIbLs6ct1AYUDKbig=="
+        },
+        "@solid-primitives/event-listener": {
+          "version": "3.0.0-next.5",
+          "integrity": "sha512-P8GdbTwt422PHkWeKIEQVMB3Yz2agE49bfN8ChXVNQBD0fzKQF8FfmAh8y33la5k+Ap7oshNJ0Db001dJhCqTw=="
+        },
+        "@solid-primitives/focus": {
+          "version": "1.0.0-next.4",
+          "integrity": "sha512-OPi75QpOJ3L/Ea9oT1MYrpsGz5z0nyeR40MAjAzcP6lKxPSrpN/3UbFL2I/oLKbPM+7fgIBfW0iwyvzSjVxtsg=="
+        },
+        "@solid-primitives/form": {
+          "version": "1.0.0-next.3",
+          "integrity": "sha512-EdR9Vqtdge1V3YoxhvqWNYpDf0eVrK9z5qNnm8laYvMp2DnoCy244VwqKxhSbS2+U0AhhKROX8cDJqXmdGCp+A=="
+        },
+        "@solid-primitives/i18n": {
+          "version": "3.0.0-next.4",
+          "integrity": "sha512-r5ZwXcxsE0NEC4MCs5nphs9gnEdDkvZ5zp3P/I0h0wHHXBQi1fuXkQv857HBgTi2Mwja7vS5D6nePyQQxd9q/A=="
+        },
+        "@solid-primitives/interaction": {
+          "version": "1.0.0-next.4",
+          "integrity": "sha512-V+kos+abAkAJLNAvj3A7iitNcSvbosFsjBoXh7K8GdWoABWEfPEf3DZsN+01UQOAf+4G0XLXPN4Y/IRe2EOBZQ=="
+        },
+        "@solid-primitives/keyboard": {
+          "version": "2.0.0-next.5",
+          "integrity": "sha512-kTdYQNMqVBzsZdSxzxlVPRAfuR3ENmkPw04WIEoIeV5rNDJYFRQQw7LaD4YWum4tLPtquzBWvYG3maPduSCc5g=="
+        },
+        "@solid-primitives/keyed": {
+          "version": "3.0.0-next.2",
+          "integrity": "sha512-FvEYVbX0PpeCTKyL3x7e2wnbb8muIKMgU+cQue+UrkhRkg1HLrBbimymvMuyQgPeBSEdgMYaaMnQI/uCUHS4NQ=="
+        },
+        "@solid-primitives/map": {
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-9TipViAZvtT9sNCJuriC7SbKTDA9THKseAxeGWmtvEcWEupwdCTsb/mA8qoobmo+rTgkkhYLyc2N+jHGH4KykQ=="
+        },
+        "@solid-primitives/media": {
+          "version": "4.0.0-next.2",
+          "integrity": "sha512-jTua+YRSAe2u3z1kZRPIunANI+JSQl0U2pOsDVqCzKgp/nzZC1WsodyFluiSARD9SICgFnzHqlD+EmXzKgp/Mg=="
+        },
+        "@solid-primitives/platform": {
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-LzV2/ZFKU3uMIFMvVhj6iH2Bjf60QnVDCwK3lXbFhZIzBbb002k4ZNhqXVPRMQRkWlpjq1Otxe9p2qBIKfIyXQ=="
+        },
+        "@solid-primitives/presence": {
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-p8uYuwV7JkR7DCa+ytkDz3EyhTaraZgg+KjU4Li/KCFthKA801kp+XUhRF+LctLNc6wY5HAQBwgAQZfMTHYMHA=="
+        },
+        "@solid-primitives/props": {
+          "version": "4.0.0-next.3",
+          "integrity": "sha512-V2Gn96sQLLhwyiAcGogExqP8+5++Itv0/KBQMNiNp/ldNwbQkr8Q11Ku5VXswYFiFmuiHJ/pGANfwzgsla7zpA=="
+        },
+        "@solid-primitives/refs": {
+          "version": "3.0.0-next.2",
+          "integrity": "sha512-lrDQ6cR/FY2cV4OfoyAcrc1TnmcHrQkaWvF1lxcI1S/BkLKTcnOfZG0KAQJ138eo/N4Bq9Eqx9yva/W5Rih9/A=="
+        },
+        "@solid-primitives/resize-observer": {
+          "version": "4.0.0-next.3",
+          "integrity": "sha512-g7aKa5xgXd2wXC2EtJzYdx5k9pZCPRDuG+m5Kndfmi9f6yLhe1g1d0y4L6jE6Zxjwxz7a+wRnjpnTLbsP3JvRw=="
+        },
+        "@solid-primitives/rootless": {
+          "version": "2.0.0-next.2",
+          "integrity": "sha512-QGoy8R+8v+9I8mET50wMwu0uawkQvFFcv67S+vKJ8xP5jPrQXdxuNMckUTKUy2shR3rIRpR0oLzss0Vy0oLkPg=="
+        },
+        "@solid-primitives/scroll": {
+          "version": "3.0.0-next.4",
+          "integrity": "sha512-6Zod2Q2YPnkZhijVMSOhU2e1ip5hzOSQNhZIaKh7Kx7HcocYrzhn1NqYJlaUr464o1hFZweEQVkhALi9EHvt/Q=="
+        },
+        "@solid-primitives/static-store": {
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-cyMzFe39VMVF9zVYgZEck1TESbIB4Tnpp00vNQlaOYuhOr4nstRBSS3zsBqZMuF+a5qWlKqS0RHO48FwLScX9w=="
+        },
+        "@solid-primitives/trigger": {
+          "version": "3.0.0-next.2",
+          "integrity": "sha512-YhTGBKEPP7XI7Bk6/2gWxfZmwMWQEwfZsTiMO2dt9X/AQ9bmLk+xuRbT2QDOPg2IBe0D3uh/uguHUMYOLYGpbQ=="
+        },
+        "@solid-primitives/upload": {
+          "version": "1.0.0-next.4",
+          "integrity": "sha512-txKL0cGGsEsd/WZqga8xxsKEr0YNTLH4sd71wRtJa0/mJIRn8l/MMuVIzV3R8jBNP68WxFm/jUMf8Aef2Rd4Gw=="
+        },
+        "@solid-primitives/utils": {
+          "version": "7.0.0-next.4",
+          "integrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg=="
+        },
+        "csstype": {
+          "version": "3.2.3",
+          "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="
+        },
+        "seroval-plugins": {
+          "version": "1.5.4",
+          "integrity": "sha512-S0xQPhUTefAhNvNWFg0c1J8qJArHt5KdtJ/cFAofo06KD1MVSeFWyl4iiu+ApDIuw0WhjpOfCdgConOfAnLgkw=="
+        },
+        "seroval": {
+          "version": "1.5.4",
+          "integrity": "sha512-46uFvgrXTVxZcUorgSSRZ4y+ieqLLQRMlG4bnCZKW3qI6BZm7Rg4ntMW4p1mILEEBZWrFlcpp0AyIIlM6jD9iw=="
+        }
+      },
+      "packages": [
+        {
+          "package": "@solid-primitives/a11y",
+          "version": "1.0.0-next.3",
+          "integrity": "sha512-ohvuHYkxTNJtOPlhSHHCiLILE7KOQ3K6hcDrq4Fr69euk1Fnpct3d9VxFbgMPxBG31RJtJoD6Yh5BJNwFz84kw=="
+        },
+        {
+          "package": "@solid-primitives/controlled-signal",
+          "version": "1.0.0-next.3",
+          "integrity": "sha512-vcc3sI+0TFeqD6OWHr65LuH0x6OuRhmWQ9DxqGY53VIfvV5PFfIlBlxPidOyGbiN6VoHHMagZaXUq4ZnuH/KPg=="
+        },
+        {
+          "package": "@solid-primitives/drag-drop",
+          "version": "0.1.0-next.0",
+          "integrity": "sha512-1OOKH+QHItwDmZNdKCqajhuoL8uSmZMPIyCI6qC+qDSafkH0q3NljEvblBQLskcBBZrq6FIbLs6ct1AYUDKbig=="
+        },
+        {
+          "package": "@solid-primitives/event-listener",
+          "version": "3.0.0-next.5",
+          "integrity": "sha512-P8GdbTwt422PHkWeKIEQVMB3Yz2agE49bfN8ChXVNQBD0fzKQF8FfmAh8y33la5k+Ap7oshNJ0Db001dJhCqTw=="
+        },
+        {
+          "package": "@solid-primitives/focus",
+          "version": "1.0.0-next.4",
+          "integrity": "sha512-OPi75QpOJ3L/Ea9oT1MYrpsGz5z0nyeR40MAjAzcP6lKxPSrpN/3UbFL2I/oLKbPM+7fgIBfW0iwyvzSjVxtsg=="
+        },
+        {
+          "package": "@solid-primitives/form",
+          "version": "1.0.0-next.3",
+          "integrity": "sha512-EdR9Vqtdge1V3YoxhvqWNYpDf0eVrK9z5qNnm8laYvMp2DnoCy244VwqKxhSbS2+U0AhhKROX8cDJqXmdGCp+A=="
+        },
+        {
+          "package": "@solid-primitives/i18n",
+          "version": "3.0.0-next.4",
+          "integrity": "sha512-r5ZwXcxsE0NEC4MCs5nphs9gnEdDkvZ5zp3P/I0h0wHHXBQi1fuXkQv857HBgTi2Mwja7vS5D6nePyQQxd9q/A=="
+        },
+        {
+          "package": "@solid-primitives/interaction",
+          "version": "1.0.0-next.4",
+          "integrity": "sha512-V+kos+abAkAJLNAvj3A7iitNcSvbosFsjBoXh7K8GdWoABWEfPEf3DZsN+01UQOAf+4G0XLXPN4Y/IRe2EOBZQ=="
+        },
+        {
+          "package": "@solid-primitives/keyboard",
+          "version": "2.0.0-next.5",
+          "integrity": "sha512-kTdYQNMqVBzsZdSxzxlVPRAfuR3ENmkPw04WIEoIeV5rNDJYFRQQw7LaD4YWum4tLPtquzBWvYG3maPduSCc5g=="
+        },
+        {
+          "package": "@solid-primitives/keyed",
+          "version": "3.0.0-next.2",
+          "integrity": "sha512-FvEYVbX0PpeCTKyL3x7e2wnbb8muIKMgU+cQue+UrkhRkg1HLrBbimymvMuyQgPeBSEdgMYaaMnQI/uCUHS4NQ=="
+        },
+        {
+          "package": "@solid-primitives/map",
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-9TipViAZvtT9sNCJuriC7SbKTDA9THKseAxeGWmtvEcWEupwdCTsb/mA8qoobmo+rTgkkhYLyc2N+jHGH4KykQ=="
+        },
+        {
+          "package": "@solid-primitives/media",
+          "version": "4.0.0-next.2",
+          "integrity": "sha512-jTua+YRSAe2u3z1kZRPIunANI+JSQl0U2pOsDVqCzKgp/nzZC1WsodyFluiSARD9SICgFnzHqlD+EmXzKgp/Mg=="
+        },
+        {
+          "package": "@solid-primitives/platform",
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-LzV2/ZFKU3uMIFMvVhj6iH2Bjf60QnVDCwK3lXbFhZIzBbb002k4ZNhqXVPRMQRkWlpjq1Otxe9p2qBIKfIyXQ=="
+        },
+        {
+          "package": "@solid-primitives/presence",
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-p8uYuwV7JkR7DCa+ytkDz3EyhTaraZgg+KjU4Li/KCFthKA801kp+XUhRF+LctLNc6wY5HAQBwgAQZfMTHYMHA=="
+        },
+        {
+          "package": "@solid-primitives/props",
+          "version": "4.0.0-next.3",
+          "integrity": "sha512-V2Gn96sQLLhwyiAcGogExqP8+5++Itv0/KBQMNiNp/ldNwbQkr8Q11Ku5VXswYFiFmuiHJ/pGANfwzgsla7zpA=="
+        },
+        {
+          "package": "@solid-primitives/refs",
+          "version": "3.0.0-next.2",
+          "integrity": "sha512-lrDQ6cR/FY2cV4OfoyAcrc1TnmcHrQkaWvF1lxcI1S/BkLKTcnOfZG0KAQJ138eo/N4Bq9Eqx9yva/W5Rih9/A=="
+        },
+        {
+          "package": "@solid-primitives/resize-observer",
+          "version": "4.0.0-next.3",
+          "integrity": "sha512-g7aKa5xgXd2wXC2EtJzYdx5k9pZCPRDuG+m5Kndfmi9f6yLhe1g1d0y4L6jE6Zxjwxz7a+wRnjpnTLbsP3JvRw=="
+        },
+        {
+          "package": "@solid-primitives/rootless",
+          "version": "2.0.0-next.2",
+          "integrity": "sha512-QGoy8R+8v+9I8mET50wMwu0uawkQvFFcv67S+vKJ8xP5jPrQXdxuNMckUTKUy2shR3rIRpR0oLzss0Vy0oLkPg=="
+        },
+        {
+          "package": "@solid-primitives/scroll",
+          "version": "3.0.0-next.4",
+          "integrity": "sha512-6Zod2Q2YPnkZhijVMSOhU2e1ip5hzOSQNhZIaKh7Kx7HcocYrzhn1NqYJlaUr464o1hFZweEQVkhALi9EHvt/Q=="
+        },
+        {
+          "package": "@solid-primitives/static-store",
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-cyMzFe39VMVF9zVYgZEck1TESbIB4Tnpp00vNQlaOYuhOr4nstRBSS3zsBqZMuF+a5qWlKqS0RHO48FwLScX9w=="
+        },
+        {
+          "package": "@solid-primitives/trigger",
+          "version": "3.0.0-next.2",
+          "integrity": "sha512-YhTGBKEPP7XI7Bk6/2gWxfZmwMWQEwfZsTiMO2dt9X/AQ9bmLk+xuRbT2QDOPg2IBe0D3uh/uguHUMYOLYGpbQ=="
+        },
+        {
+          "package": "@solid-primitives/upload",
+          "version": "1.0.0-next.4",
+          "integrity": "sha512-txKL0cGGsEsd/WZqga8xxsKEr0YNTLH4sd71wRtJa0/mJIRn8l/MMuVIzV3R8jBNP68WxFm/jUMf8Aef2Rd4Gw=="
+        },
+        {
+          "package": "@solid-primitives/utils",
+          "version": "7.0.0-next.4",
+          "integrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg=="
+        }
+      ],
+      "unmatched": []
+    },
+    {
+      "id": "viviana-ui-main-b005c00a",
+      "source": {
+        "repository": "https://github.com/proyecto-viviana/ui",
+        "branch": "main",
+        "commit": "b005c00acb61c07b60612430753d3a2400182bbd",
+        "lockfile": "pnpm-lock.yaml",
+        "lockfileDigest": "sha256:b4458d8b31edaafcfae3c2881a430199624252086d98af9a75209db7070bf6bf",
+        "importers": [
+          "apps/web"
+        ]
+      },
+      "runtime": {
+        "solid-js": {
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g=="
+        },
+        "@solidjs/web": {
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ=="
+        },
+        "@solidjs/signals": {
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw=="
+        }
+      },
+      "pins": {
+        "@nothing-but/utils": {
+          "version": "0.17.0",
+          "integrity": "sha512-TuCHcHLOqDL0SnaAxACfuRHBNRgNJcNn9X0GiH5H3YSDBVquCr3qEIG3FOQAuMyZCbu9w8nk2CHhOsn7IvhIwQ=="
+        },
+        "@solid-devtools/debugger": {
+          "version": "0.28.1",
+          "integrity": "sha512-6qIUI6VYkXoRnL8oF5bvh2KgH71qlJ18hNw/mwSyY6v48eb80ZR48/5PDXufUa3q+MBSuYa1uqTMwLewpay9eg=="
+        },
+        "@solid-devtools/logger": {
+          "version": "0.9.11",
+          "integrity": "sha512-THbiY1iQlieL6vdgJc4FIsLe7V8a57hod/Thm8zdKrTkWL88UPZjkBBfM+mVNGusd4OCnAN20tIFBhNnuT1Dew=="
+        },
+        "@solid-devtools/shared": {
+          "version": "0.20.0",
+          "integrity": "sha512-o5TACmUOQsxpzpOKCjbQqGk8wL8PMi+frXG9WNu4Lh3PQVUB6hs95Kl/S8xc++zwcMguUKZJn8h5URUiMOca6Q=="
+        },
+        "@solid-primitives/bounds": {
+          "version": "0.1.7",
+          "integrity": "sha512-uWE47+MhAGYB3EadHVg79C/6CawVVL7MwTArricxX2GDDJX+7SBnD+WsnMbkLOi7UbCOA3EsepnBr3bix83LLA=="
+        },
+        "@solid-primitives/event-listener": {
+          "version": "2.4.6",
+          "integrity": "sha512-5I0YJcTVYIWoMmgBSROBZGcz+ymhew/pGTg2dHW74BUjFKsV8Li4bOZYl0YAGP4mHw5o4UBd9/BEesqBci3wxw=="
+        },
+        "@solid-primitives/keyboard": {
+          "version": "1.3.7",
+          "integrity": "sha512-558RPNYnXx4nGh537DSqAn4xMrC8iFipl/5+xzgzWoTNFst4RnUN3BOLmtDjJ0UGGoQXVMALYR3bNOHM0xnt1Q=="
+        },
+        "@solid-primitives/media": {
+          "version": "2.3.6",
+          "integrity": "sha512-pk49gPOq/UMRUJ+pTSrOfBiR8xJjRYHXIf1iR/jSnyQ/KroU+ZXhkZzavC7hvfp2vJeOTW5k2/HN0r3Q1VJ7Pw=="
+        },
+        "@solid-primitives/refs": {
+          "version": "1.1.4",
+          "integrity": "sha512-bLjwIs6ZPu8NQnuw04sU3Zc8qKSpbc0umUU/O4SHf6oWOdO4+dHY8vb1T7C4b/Tg103+9WGr6sEE0+NFlbaB/A=="
+        },
+        "@solid-primitives/resize-observer": {
+          "version": "2.2.0",
+          "integrity": "sha512-9Fuu/EWBeGj+atGHRJp70HKhdfalmpjwxY8a32NZixdLNmfCJ45AfhLQNr6uOzETbbiMx4iCKlTrJ8KZCHC2Ww=="
+        },
+        "@solid-primitives/rootless": {
+          "version": "1.5.4",
+          "integrity": "sha512-TOIZa1VUfVJ+9nkCcRajw3U4t9vBOP1HxX1WHNTbXq32mXwlqTvUnC4CRIilohcryBkT9u2ZkhUDSHRTaGp55g=="
+        },
+        "@solid-primitives/scheduled": {
+          "version": "1.5.3",
+          "integrity": "sha512-oNwLE6E6lxJAWrc8QXuwM0k2oU1BnANnkChwMw82aK1j3+mWGJkG1IFe5gCwbV+afYmjI76t9JJV3md/8tLw+g=="
+        },
+        "@solid-primitives/static-store": {
+          "version": "0.1.4",
+          "integrity": "sha512-LgtVaVBtB7EbmS4+M0b8xY5Iq6pUWXBsIC4VgtrFKDGDdyCaDt88sHk0fUlx1Enxm/XZnZyLXJABRoa39RjJqA=="
+        },
+        "@solid-primitives/styles": {
+          "version": "0.1.4",
+          "integrity": "sha512-siDvuK9mBpswjUdJCpr3ZUhBIHghNjHsBhZ9p3mIH1sDgwVr5gQGfFmESIvtb4Ka4Oq6B6hLOqi4QES/i8u4YA=="
+        },
+        "@solid-primitives/utils": {
+          "version": "6.4.1",
+          "integrity": "sha512-ISSB5QX1qP2ynrheIpYwc4oKR5Ny4siNuUyf1qZniy+Il+p/PtDB0QK1Dnle8noiHpwRD3gpPdubOC3qI/Zamg=="
+        },
+        "@solidjs/meta": {
+          "version": "0.29.4",
+          "integrity": "sha512-zdIWBGpR9zGx1p1bzIPqF5Gs+Ks/BH8R6fWhmUa/dcK1L2rUC8BAcZJzNRYBQv74kScf1TSOs0EY//Vd/I0V8g=="
+        },
+        "@tanstack/history": {
+          "version": "1.162.1",
+          "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w=="
+        },
+        "@tanstack/router-core": {
+          "version": "1.171.22",
+          "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw=="
+        },
+        "@tanstack/solid-router": {
+          "version": "2.0.0-rc.8",
+          "integrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA=="
+        },
+        "@tanstack/solid-start-client": {
+          "version": "2.0.0-rc.8",
+          "integrity": "sha512-2Jkv+BMSMfhJ1rf2BA9HA9Xsb2G9Lv37VeDYOagOKmAJFoQ7TERqxorTpQD9w7YKlRxCXRed1EeiyFWVb7i+4Q=="
+        },
+        "@tanstack/solid-start-server": {
+          "version": "2.0.0-rc.8",
+          "integrity": "sha512-GEAOb5R+aw//WyfoRE10aP0cvGwhVrzyDjB88Q/bCFdyJC5txxq5Znk0ps8/iqC+QolGCX2CgT1sO34RSkStgw=="
+        },
+        "@tanstack/start-client-core": {
+          "version": "1.170.22",
+          "integrity": "sha512-18gHvhrVLEmhO0qZVIJaR/y3Mb7tvC9UQnCEiooQG/aIpYg4/kqoQ06E7WUJ/0WFy4NZOkEjk8QkDQNkFED+1g=="
+        },
+        "@tanstack/start-fn-stubs": {
+          "version": "1.162.0",
+          "integrity": "sha512-QWfUZ3Yo923tdQn38LyKMU8rcTw69zc+T4dAvgTWV4O56SqFRsGfS0lSWIMhJRwXIx/bvdi7nTUBDdZtTHtpTQ=="
+        },
+        "@tanstack/start-server-core": {
+          "version": "1.169.26",
+          "integrity": "sha512-57Pvc00i/Y6l8+kqlV/QElVUh5onFUPeMUBDDRNwelAA4eoOmRDmfEWfVfkJNYlcAF4kt/s0mgnD58DlCgC9JA=="
+        },
+        "@tanstack/start-storage-context": {
+          "version": "1.167.24",
+          "integrity": "sha512-HPltgydit1LmLJFX3BhMcXMxkmUgtWJopPUx6Eg0YTC4tVwFvUhSWCrfgtTIiGWcHd1Ah+fi6fK9BAe8Y5KZtw=="
+        },
+        "cookie-es": {
+          "version": "3.1.1",
+          "integrity": "sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg=="
+        },
+        "csstype": {
+          "version": "3.2.3",
+          "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="
+        },
+        "fetchdts": {
+          "version": "0.1.7",
+          "integrity": "sha512-YoZjBdafyLIop9lSxXVI33oLD5kN31q4Td+CasofLLYeLXRFeOsuOw0Uo+XNRi9PZlbfdlN2GmRtm4tCEQ9/KA=="
+        },
+        "h3": {
+          "version": "2.0.1-rc.20",
+          "integrity": "sha512-28ljodXuUp0fZovdiSRq4G9OgrxCztrJe5VdYzXAB7ueRvI7pIUqLU14Xi3XqdYJ/khXjfpUOOD2EQa6CmBgsg=="
+        },
+        "isbot": {
+          "version": "5.2.1",
+          "integrity": "sha512-dJ+LpKyClQZ7NG+j3OensC/mAZkGpukE9YUrgPYvAZj2doVL0edfDgywTUh5CXa0o+nW9a1V9e5+CJTX8+SxRw=="
+        },
+        "rou3": {
+          "version": "0.8.1",
+          "integrity": "sha512-ePa+XGk00/3HuCqrEnK3LxJW7I0SdNg6EFzKUJG73hMAdDcOUC/i/aSz7LSDwLrGr33kal/rqOGydzwl6U7zBA=="
+        },
+        "seroval-plugins": {
+          "version": "1.6.7",
+          "integrity": "sha512-4Nk35ttD3DTDJW4hgw5StsVAPeU6qnDFnULAouw6tQ7oLTV/ICXrWpsXo2EE52eSP2joUMazbVf52mFEcADqRw=="
+        },
+        "seroval": {
+          "version": "1.6.7",
+          "integrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ=="
+        },
+        "srvx": {
+          "version": "0.11.22",
+          "integrity": "sha512-LqZxxBDMKuMAZzFzJnDCkFOrs9MZQZr0LvHiO/SuSZVdQaXD7xQ5UWTUxheJrQPve1qk9MG2B/yttUvJxw8egQ=="
+        }
+      },
+      "packages": [
+        {
+          "package": "@tanstack/solid-router",
+          "version": "2.0.0-rc.8",
+          "integrity": "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA=="
+        },
+        {
+          "package": "@tanstack/solid-start-client",
+          "version": "2.0.0-rc.8",
+          "integrity": "sha512-2Jkv+BMSMfhJ1rf2BA9HA9Xsb2G9Lv37VeDYOagOKmAJFoQ7TERqxorTpQD9w7YKlRxCXRed1EeiyFWVb7i+4Q=="
+        },
+        {
+          "package": "@tanstack/solid-start-server",
+          "version": "2.0.0-rc.8",
+          "integrity": "sha512-GEAOb5R+aw//WyfoRE10aP0cvGwhVrzyDjB88Q/bCFdyJC5txxq5Znk0ps8/iqC+QolGCX2CgT1sO34RSkStgw=="
+        }
+      ],
+      "unmatched": [
+        {
+          "package": "@solid-primitives/bounds",
+          "version": "0.1.7",
+          "integrity": "sha512-uWE47+MhAGYB3EadHVg79C/6CawVVL7MwTArricxX2GDDJX+7SBnD+WsnMbkLOi7UbCOA3EsepnBr3bix83LLA==",
+          "reason": "the solid2 manifest row is 1.0.0-next.2"
+        },
+        {
+          "package": "@solid-primitives/event-listener",
+          "version": "2.4.6",
+          "integrity": "sha512-5I0YJcTVYIWoMmgBSROBZGcz+ymhew/pGTg2dHW74BUjFKsV8Li4bOZYl0YAGP4mHw5o4UBd9/BEesqBci3wxw==",
+          "reason": "the solid2 manifest row is 3.0.0-next.5"
+        },
+        {
+          "package": "@solid-primitives/keyboard",
+          "version": "1.3.7",
+          "integrity": "sha512-558RPNYnXx4nGh537DSqAn4xMrC8iFipl/5+xzgzWoTNFst4RnUN3BOLmtDjJ0UGGoQXVMALYR3bNOHM0xnt1Q==",
+          "reason": "the solid2 manifest row is 2.0.0-next.5"
+        },
+        {
+          "package": "@solid-primitives/media",
+          "version": "2.3.6",
+          "integrity": "sha512-pk49gPOq/UMRUJ+pTSrOfBiR8xJjRYHXIf1iR/jSnyQ/KroU+ZXhkZzavC7hvfp2vJeOTW5k2/HN0r3Q1VJ7Pw==",
+          "reason": "the solid2 manifest row is 4.0.0-next.2"
+        },
+        {
+          "package": "@solid-primitives/refs",
+          "version": "1.1.4",
+          "integrity": "sha512-bLjwIs6ZPu8NQnuw04sU3Zc8qKSpbc0umUU/O4SHf6oWOdO4+dHY8vb1T7C4b/Tg103+9WGr6sEE0+NFlbaB/A==",
+          "reason": "the solid2 manifest row is 3.0.0-next.2"
+        },
+        {
+          "package": "@solid-primitives/resize-observer",
+          "version": "2.2.0",
+          "integrity": "sha512-9Fuu/EWBeGj+atGHRJp70HKhdfalmpjwxY8a32NZixdLNmfCJ45AfhLQNr6uOzETbbiMx4iCKlTrJ8KZCHC2Ww==",
+          "reason": "the solid2 manifest row is 4.0.0-next.3"
+        },
+        {
+          "package": "@solid-primitives/rootless",
+          "version": "1.5.4",
+          "integrity": "sha512-TOIZa1VUfVJ+9nkCcRajw3U4t9vBOP1HxX1WHNTbXq32mXwlqTvUnC4CRIilohcryBkT9u2ZkhUDSHRTaGp55g==",
+          "reason": "the solid2 manifest row is 2.0.0-next.2"
+        },
+        {
+          "package": "@solid-primitives/scheduled",
+          "version": "1.5.3",
+          "integrity": "sha512-oNwLE6E6lxJAWrc8QXuwM0k2oU1BnANnkChwMw82aK1j3+mWGJkG1IFe5gCwbV+afYmjI76t9JJV3md/8tLw+g==",
+          "reason": "the solid2 manifest row is 2.0.0-next.2"
+        },
+        {
+          "package": "@solid-primitives/static-store",
+          "version": "0.1.4",
+          "integrity": "sha512-LgtVaVBtB7EbmS4+M0b8xY5Iq6pUWXBsIC4VgtrFKDGDdyCaDt88sHk0fUlx1Enxm/XZnZyLXJABRoa39RjJqA==",
+          "reason": "the solid2 manifest row is 1.0.0-next.2"
+        },
+        {
+          "package": "@solid-primitives/styles",
+          "version": "0.1.4",
+          "integrity": "sha512-siDvuK9mBpswjUdJCpr3ZUhBIHghNjHsBhZ9p3mIH1sDgwVr5gQGfFmESIvtb4Ka4Oq6B6hLOqi4QES/i8u4YA==",
+          "reason": "the solid2 manifest row is 1.0.0-next.2"
+        },
+        {
+          "package": "@solid-primitives/utils",
+          "version": "6.4.1",
+          "integrity": "sha512-ISSB5QX1qP2ynrheIpYwc4oKR5Ny4siNuUyf1qZniy+Il+p/PtDB0QK1Dnle8noiHpwRD3gpPdubOC3qI/Zamg==",
+          "reason": "the solid2 manifest row is 7.0.0-next.4"
+        },
+        {
+          "package": "@solidjs/meta",
+          "version": "0.29.4",
+          "integrity": "sha512-zdIWBGpR9zGx1p1bzIPqF5Gs+Ks/BH8R6fWhmUa/dcK1L2rUC8BAcZJzNRYBQv74kScf1TSOs0EY//Vd/I0V8g==",
+          "reason": "the solid2 manifest row is 1.0.0-next.2"
+        },
+        {
+          "package": "@tanstack/history",
+          "version": "1.162.1",
+          "integrity": "sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/router-core",
+          "version": "1.171.22",
+          "integrity": "sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/router-generator",
+          "version": "1.167.28",
+          "integrity": "sha512-AxvzdqQoBxrA8hoO1fHYg4cAUVug/xLqQhsGbNG1PelU3RbYRYEtDim7+HbYQCOqJaEuvV8tCvrTPTnT69iIwg==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/router-plugin",
+          "version": "1.168.30",
+          "integrity": "sha512-Z53FeZjSddyn3c+lmUGHOU3bhZPpaFabcynja8/s87CZeyMYS7oNgUMoaYZAhVLk9cAEC/z3fkqISXqktZadDA==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/router-utils",
+          "version": "1.162.2",
+          "integrity": "sha512-hTWqJtqIFFdvuCl8WXNyrodp2L9zo2G37xKRrcVmVRWpAB2h+U1LuRAfS4tsFTiWOIoE/B+WDVFB8JpoEdw6jQ==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/solid-start",
+          "version": "2.0.0-rc.8",
+          "integrity": "sha512-720x0suOH8iqkwox5wbqnsQpnBMdepbHGYWt8Ti5tU6d6Wa72iHyIHQ1dI99jg2Y32vC6twya36AoMkS3F8RCQ==",
+          "reason": "patched by the consumer (pnpm patchedDependencies): the installed bytes are not the published archive"
+        },
+        {
+          "package": "@tanstack/start-client-core",
+          "version": "1.170.22",
+          "integrity": "sha512-18gHvhrVLEmhO0qZVIJaR/y3Mb7tvC9UQnCEiooQG/aIpYg4/kqoQ06E7WUJ/0WFy4NZOkEjk8QkDQNkFED+1g==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/start-fn-stubs",
+          "version": "1.162.0",
+          "integrity": "sha512-QWfUZ3Yo923tdQn38LyKMU8rcTw69zc+T4dAvgTWV4O56SqFRsGfS0lSWIMhJRwXIx/bvdi7nTUBDdZtTHtpTQ==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/start-plugin-core",
+          "version": "1.171.34",
+          "integrity": "sha512-MMp5Mlt8HAtstkVKwHW6dY5w58CP/Vtq+DhXdH4mIPuOeEhFtl/BYErJCzpnq80QqbEpRxCfMZPf9ng2PzApaA==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/start-server-core",
+          "version": "1.169.26",
+          "integrity": "sha512-57Pvc00i/Y6l8+kqlV/QElVUh5onFUPeMUBDDRNwelAA4eoOmRDmfEWfVfkJNYlcAF4kt/s0mgnD58DlCgC9JA==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/start-storage-context",
+          "version": "1.167.24",
+          "integrity": "sha512-HPltgydit1LmLJFX3BhMcXMxkmUgtWJopPUx6Eg0YTC4tVwFvUhSWCrfgtTIiGWcHd1Ah+fi6fK9BAe8Y5KZtw==",
+          "reason": "no solid2 manifest row"
+        },
+        {
+          "package": "@tanstack/virtual-file-routes",
+          "version": "1.162.0",
+          "integrity": "sha512-uhOeFyxLcU41HzvrxsGpiWdcMbScY1EDgbZ5K7DVRMYInbLYWAC0EA/kx9wXAoSM8q82bUG2hRl8+EAjE6XAbA==",
+          "reason": "no solid2 manifest row"
+        }
+      ]
+    },
+    {
+      "id": "oscartbeaumont-website-main-60823453",
+      "source": {
+        "repository": "https://github.com/oscartbeaumont/website",
+        "branch": "main",
+        "commit": "60823453a7e5e3aaa52179746d26abb46c7ff373",
+        "lockfile": "pnpm-lock.yaml",
+        "lockfileDigest": "sha256:dfcd918bea1c15db74e7b16d1e1dd1c5d2c8f780859c45e2ccc458ed1edc331b",
+        "importers": [
+          "."
+        ]
+      },
+      "runtime": {
+        "solid-js": {
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g=="
+        },
+        "@solidjs/web": {
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ=="
+        },
+        "@solidjs/signals": {
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw=="
+        }
+      },
+      "pins": {
+        "@solidjs/meta": {
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA=="
+        },
+        "@solidjs/router": {
+          "version": "2.0.0-next.26",
+          "integrity": "sha512-Zjho0HI095mxSMu8tyfuqoq8vTeYML0mWJj1iQar298MrhtT2itGiEgF2C7ndE2mzKeXRQ/DLf1tr37Gax5bsg=="
+        },
+        "csstype": {
+          "version": "3.2.3",
+          "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="
+        },
+        "seroval-plugins": {
+          "version": "1.6.7",
+          "integrity": "sha512-4Nk35ttD3DTDJW4hgw5StsVAPeU6qnDFnULAouw6tQ7oLTV/ICXrWpsXo2EE52eSP2joUMazbVf52mFEcADqRw=="
+        },
+        "seroval": {
+          "version": "1.6.7",
+          "integrity": "sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ=="
+        }
+      },
+      "packages": [
+        {
+          "package": "@solidjs/meta",
+          "version": "1.0.0-next.2",
+          "integrity": "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA=="
+        },
+        {
+          "package": "@solidjs/router",
+          "version": "2.0.0-next.26",
+          "integrity": "sha512-Zjho0HI095mxSMu8tyfuqoq8vTeYML0mWJj1iQar298MrhtT2itGiEgF2C7ndE2mzKeXRQ/DLf1tr37Gax5bsg=="
+        }
+      ],
+      "unmatched": []
+    }
+  ]
+}

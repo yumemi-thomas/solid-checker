@@ -13,7 +13,7 @@ use solid_facts_backend::SemanticDemandGroup;
 use solid_facts_backend::{
     AcceptedContractSource, BackendError, ResolvedImport, SemanticDemandOptions, SourceFile,
     TypeFactsProvider, analyze_project_accepted_measured_with_enablement,
-    build_project_native_measured_with_demands, load_accepted_contract_index,
+    build_project_native_measured_with_demands, load_external_contract_index,
 };
 
 #[derive(Deserialize)]
@@ -32,6 +32,49 @@ struct CheckRequest {
     /// uncertifiable; this boundary has no name-only compatibility path.
     #[serde(default)]
     accepted_contracts: Vec<HostAcceptedContract>,
+    /// What the host resolved each imported specifier to, in its own installed
+    /// tree. Accepted and unused: only the compiled-in accepted contracts read
+    /// it, and that tier is retired (ADR 0228). The authored tier is not served
+    /// here: it admits on a Solid runtime environment, and this adapter, with
+    /// no filesystem, can show only an empty one.
+    #[serde(default)]
+    #[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
+    installed_packages: Vec<HostInstalledPackage>,
+    /// The export conditions the host resolved under. Accepted and unused, for
+    /// the same reason.
+    #[serde(default)]
+    #[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
+    export_conditions: Vec<String>,
+    /// Whether the contracts compiled into this build may be applied. Accepted
+    /// and without effect: no compiled-in contract reaches this adapter since
+    /// the certified tier retired (ADR 0228).
+    #[serde(default)]
+    #[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
+    bundled_contracts: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
+struct HostInstalledPackage {
+    /// The specifier as written in the source, which is what an import states
+    /// and what admission is keyed by.
+    specifier: String,
+    name: String,
+    version: String,
+    /// The registry tarball's subresource integrity, from the host's lockfile.
+    integrity: String,
+    /// The file this specifier resolves to, relative to the installed package
+    /// root -- `dist/index.js` or `dist/index.d.ts`. It is what selects between
+    /// two acceptances that share a declaration file.
+    resolved_target: String,
+    /// The artifact snapshot root of the installed package's files
+    /// (`installed_package_snapshot_root`), which a bundle's signed
+    /// `snapshotRoot` must equal (ADR 0131): a lockfile keeps the published
+    /// integrity for a patched package, so the integrity alone does not say the
+    /// files are the certified archive's. Absent admits nothing.
+    #[serde(default)]
+    snapshot_root: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -196,7 +239,7 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         })
         .collect::<Vec<_>>();
     let contracts =
-        load_accepted_contract_index(encoded.iter().map(|(document, receipt, import)| {
+        load_external_contract_index(encoded.iter().map(|(document, receipt, import)| {
             AcceptedContractSource {
                 document,
                 receipt,
@@ -212,6 +255,27 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         Default::default(),
     )?;
     Ok(serde_json::to_string(&analysis.snapshot)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CheckRequest;
+
+    /// A request from a host written for the retired compiled-in tier still
+    /// decodes: its fields are accepted and have no effect (ADR 0228).
+    #[test]
+    fn a_request_stating_an_installed_tree_still_decodes() {
+        let stated: Result<CheckRequest, _> = serde_json::from_str(
+            r#"{"projectId":"/p/tsconfig.json","generation":1,"sources":[],
+                "typeFacts":{"schema":2,"generation":1,"projectId":"/p/tsconfig.json",
+                "sources":[],"entities":[],"symbols":[],"files":[]},
+                "exportConditions":["import"],"bundledContracts":true,
+                "installedPackages":[{"specifier":"@scope/pkg","name":"@scope/pkg",
+                "version":"1.0.0","integrity":"sha512-x","resolvedTarget":"dist/index.js",
+                "snapshotRoot":"sha256:00"}]}"#,
+        );
+        assert!(stated.is_ok());
+    }
 }
 
 /// Testable internal seam for the future atomic policy-2 cut. It is not a
@@ -241,10 +305,9 @@ mod policy2_receipt_tests {
 
     use super::authenticate_policy2_contract_for_wasm;
 
-    const MAIN: &[u8] =
-        include_bytes!("../../../../pkg/contracts/bundled/solid-v1/debounce-root-default.json");
+    const MAIN: &[u8] = include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solid-js.json");
     const OTHER: &[u8] =
-        include_bytes!("../../../../pkg/contracts/bundled/solid-v1/solid-root-node.json");
+        include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solidjs-signals.json");
 
     fn root(value: u8) -> String {
         format!("sha256:{value:064x}")
@@ -281,6 +344,7 @@ mod policy2_receipt_tests {
             importer: "/workspace/src/App.tsx".into(),
             specifier: "fixture-package".into(),
             resolved_import_root: root(0),
+            artifact_acceptance_root: root(19),
             semantic_digest: policy2_main_semantic_digest(main).unwrap(),
             artifact_provenance_root: root(1),
             snapshot_root: root(2),
@@ -301,6 +365,8 @@ mod policy2_receipt_tests {
             closed_claims_root: root(17),
             verifier_source_digest: root(18),
             verifier_build_digest: root(19),
+            dependency_environment_root: String::new(),
+            cited_acceptances: Vec::new(),
         }
     }
 

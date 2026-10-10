@@ -1,9 +1,15 @@
 mod attribution;
 mod cache;
+mod callback_return;
 mod cleanup;
 pub mod contract_semantics;
 mod contracts;
+mod creates_walk;
+mod development_feedback;
 mod directives;
+pub use development_feedback::{
+    DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
+};
 mod effect_api;
 mod execution_role;
 mod findings;
@@ -16,7 +22,10 @@ mod pipeline;
 mod projection;
 mod reachability;
 mod reactive_analysis;
+pub mod returns_walk;
+mod runtime_configuration;
 mod runtime_semantics;
+pub use runtime_configuration::RuntimeConfigurationPremise;
 mod server_rules;
 mod source_discovery;
 mod static_api;
@@ -24,12 +33,21 @@ mod static_rules;
 mod symbols;
 mod timings;
 mod upstream_compat;
+mod value_identity;
 
 pub use attribution::ObligationReach;
+pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
+pub use returns_walk::{
+    ArgumentContainer, ReturnsDecline, described_callable_returns, literal_structural_returns,
+    reading_callable_returns, value_completion, valueless_completion,
+};
 
-pub use upstream_compat::solid1x_options::{RuleOptions, RuleOverride, Solid1xRuleOptions};
+pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};
+
+pub mod callback_host;
+pub mod hosts;
 
 pub use findings::{
     DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,
@@ -57,7 +75,7 @@ use contracts::{
 };
 pub use contracts::{
     ExportKindProof, export_kind_proof, export_kind_proof_from_entity, project_accepted_export,
-    raised_function_export,
+    project_export_semantics, raised_function_export,
 };
 use execution_role::{
     NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
@@ -337,17 +355,66 @@ pub struct ReactiveRead {
     /// uncertifiable.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
+    /// The read sits in a callback a host API retains and may invoke on its
+    /// invoker's stack -- an `addEventListener` listener, a `bind` bound
+    /// argument, a `PromiseLike.then` callback, a Geolocation callback
+    /// (`execution_role::host_callback_timing`). The host may invoke it inside
+    /// the component body's strict-read window, or after it, and nothing here
+    /// proves which. A third hole beside the other two, about the execution
+    /// window rather than the reactive backing or the compiler census, and
+    /// worded separately for that reason.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub host_callback_timing: bool,
+    /// The read sits in a function literal handed to a project function or
+    /// through a JSX prop whose consumer is not proven to invoke it during rendering
+    /// (`execution_role::callee_callback_timing`): the literal is written in
+    /// the component body but runs wherever the callee runs it -- during the
+    /// call, from a closure the callee returns or stores, or never -- and the
+    /// lexical position proves none of these. A fourth hole beside the other
+    /// three, about which code invokes the read rather than when a host does,
+    /// and worded separately for that reason.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callee_callback_timing: bool,
+    /// Generation-local closed project-consumer proof, used only by strict-read
+    /// projection. It establishes no execution role, write legality, async-read
+    /// behavior, ownership, or escape permission. Deserialization cannot supply
+    /// this proof; the post-merge analysis recomputes it from current facts.
+    #[serde(skip)]
+    pub project_consumer_non_strict: bool,
+    /// An accepted inline invocation may read an accessor passed by reference,
+    /// but its call-scoped cardinality does not prove an invocation occurs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callback_invocation_unproven: bool,
+    /// The read is the called package export reading reactive state of its
+    /// own while it runs, as its contract's `reads` states. Solid warns about
+    /// it at every use, so it is the package's implementation, not misuse at
+    /// the call site.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub package_internal: bool,
+    /// The read was attributed to this call through another function's
+    /// interprocedural summary: the read runs inside that function's body, and
+    /// whether it runs while the call does (not from a timer, listener,
+    /// getter, returned accessor, effect compute or after an await) is not
+    /// established by the summary. Measured on 48 real projects, these
+    /// attributions were 73 false, 16 benign and 0 user-visible defects.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub summary_attributed: bool,
 }
 
 impl ReactiveRead {
     /// Whether a finding about this read is **uncertifiable** rather than a
     /// proven violation.
     ///
-    /// Two independent holes, either of which is enough: the reactive
+    /// Independent holes, any of which is enough: the reactive
     /// backing cannot be established because the component's callers cannot be
     /// enumerated ([`Self::uncertain`]), the execution context cannot be
     /// established because the compiler reported no census for the JSX region
-    /// ([`Self::missing_jsx_census`]).
+    /// ([`Self::missing_jsx_census`]), the host may run the read's callback
+    /// inside the strict-read window or after it
+    /// ([`Self::host_callback_timing`]), or the read's function literal is
+    /// handed to a project function not proven to invoke it during the call
+    /// ([`Self::callee_callback_timing`]), or an accepted callback invocation
+    /// is possible but not guaranteed ([`Self::callback_invocation_unproven`]).
     ///
     /// This is one predicate on purpose. The projection sets a finding's `kind`
     /// from it and each dialect's wording selects its hint from it; when the two
@@ -355,7 +422,11 @@ impl ReactiveRead {
     /// carrying a proof-obligation hint, or the reverse.
     #[must_use]
     pub fn is_uncertifiable(&self) -> bool {
-        self.uncertain || self.missing_jsx_census
+        self.uncertain
+            || self.missing_jsx_census
+            || self.host_callback_timing
+            || self.callee_callback_timing
+            || self.callback_invocation_unproven
     }
 }
 
@@ -411,6 +482,10 @@ pub struct Fix {
 pub struct LeafOwnerOperation {
     pub kind: LeafOwnerOperationKind,
     pub owner: String,
+    /// ADR 0179: the operation is a registration a package export's accepted
+    /// contract states it makes on every call; [`Self::via`] names the export.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub through_contract: bool,
     pub location: Location,
     pub fix: Option<Fix>,
     /// When set, this leaf owner only materializes if the owner call at this
@@ -425,6 +500,11 @@ pub struct LeafOwnerOperation {
     /// violation.
     #[serde(default)]
     pub uncertain: bool,
+    /// The registration may not happen at this call: the accepted contract
+    /// states it with `min: 0` (an early return the contract cannot express
+    /// as a guard). Projected as uncertifiable, like [`Self::uncertain`].
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub possible: bool,
     /// The exactly-resolved helper the operation is reached through: the
     /// operation sits in the helper's synchronous extent and the helper is
     /// called from this leaf scope, so it executes here. The finding anchors
@@ -437,6 +517,10 @@ pub struct LeafOwnerOperation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind", content = "primitive")]
 pub enum LeafOwnerOperationKind {
+    /// A present observer's per-key tracking either creates a missing signal
+    /// or reaches mandatory cleanup on the retained one. Both paths require
+    /// a children/cleanup-capable owner; this states neither cache state.
+    ObserverCacheTracking,
     Cleanup,
     Flush,
     Primitive(String),
@@ -444,18 +528,6 @@ pub enum LeafOwnerOperationKind {
     /// available. It may contain any of the forbidden operations above, so
     /// the leaf scope is a proof obligation rather than a clean result.
     UnresolvedCallback,
-}
-
-impl LeafOwnerOperationKind {
-    #[must_use]
-    pub fn primitive(&self) -> &str {
-        match self {
-            Self::Cleanup => "onCleanup",
-            Self::Flush => "flush",
-            Self::Primitive(primitive) => primitive,
-            Self::UnresolvedCallback => "unresolved leaf callback",
-        }
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -510,6 +582,22 @@ pub struct StaticDefect {
     pub uncertain: bool,
 }
 
+/// Where a package-contract obligation was raised.
+///
+/// [`ContractDefectSite::Import`] messages name the package, the export and the
+/// open claims and nothing else, so two of them differ only in which file did
+/// the importing -- repetition a reader cannot act on separately.
+/// [`ContractDefectSite::Argument`] messages are about one exact argument of one
+/// exact call, where the site *is* the content: a descriptor absorbed by a rest
+/// parameter and one observed through an `arguments` object are different facts
+/// about different code, and must stay separate findings.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContractDefectSite {
+    Import,
+    Argument,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
@@ -525,6 +613,18 @@ pub enum StaticDefectKind {
         module: String,
         export: String,
         reexported: bool,
+        /// Where this was raised, which is what decides whether two of them are
+        /// interchangeable. The producer knows; the projection must not have to
+        /// infer it, because one `analysis_context` -- `unknown-contract-claims:
+        /// callbacks` -- is emitted from both kinds of site.
+        site: ContractDefectSite,
+        /// The acceptance gate only: why an acceptance that exists for this
+        /// package -- a project catalog entry -- was not admitted, as the
+        /// backend's admission rule states it. Projected as one extra evidence
+        /// step; it never changes the message, the severity or the collapse,
+        /// and it is `None` wherever no such acceptance exists.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        admission_refusal: Option<String>,
     },
     /// A package export has different certified summaries for different
     /// conditional runtime targets. The current project analysis has no
@@ -568,6 +668,16 @@ pub enum StaticDefectKind {
     ReactiveCallbackUnresolved {
         callee: String,
     },
+    /// A callback the dialect says runs when the call's **returned object is
+    /// read** ([`solid_dialect::Dialect::callback_runs_on_result_access`];
+    /// rc.9's `omit(props, hidden)` predicate) is not proven free of reactive
+    /// behaviour. It runs in whatever tracking scope and under whatever owner
+    /// the reader has, which the call site does not decide, so neither a
+    /// violation nor safety is provable. `analysis_context` names which proof
+    /// is missing (see `result_access_callbacks` in `static_rules`).
+    ResultAccessCallbackUnplaced {
+        callee: String,
+    },
     /// An exported structured return contains a shorthand value whose exact
     /// binding cannot be joined to the analyzed project. Omitting the property
     /// would make a possibly-reactive return look inert.
@@ -594,6 +704,55 @@ pub enum StaticDefectKind {
     DirectMutation {
         name: String,
         target: DirectMutationTarget,
+    },
+    /// A value crosses the default server-function transport, which carries
+    /// plain JSON. Which way it fails is proven here; the serializer that
+    /// fixes it, and the module that installs it, are the dialect's to name.
+    ServerFunctionRichArgument {
+        transport: RichArgumentTransport,
+    },
+}
+
+/// The named reasons a [`StaticDefectKind::ResultAccessCallbackUnplaced`]
+/// carries in its `analysis_context`: which proof of an inert predicate is
+/// missing.
+///
+/// The predicate's body performs a reactive operation the engine records (a
+/// read, write, action invocation or async read), or references a reactive
+/// source, setter, action or props binding.
+pub(crate) const RESULT_ACCESS_REACTIVE_OPERATION: &str =
+    "result-access-callback-reactive-operation";
+/// The predicate's body calls something that does not resolve to a
+/// standard-library declaration; whatever it does runs in the reader's scope.
+pub(crate) const RESULT_ACCESS_OPAQUE_CALL: &str = "result-access-callback-opaque-call";
+/// The value at the predicate position is potentially callable, but no body
+/// for it is inspectable at this call: an import, a call result, a member, a
+/// binding that is not a function literal.
+pub(crate) const RESULT_ACCESS_BODY_UNRESOLVED: &str = "result-access-callback-body-unresolved";
+
+/// How a server-function argument fails the default JSON transport.
+///
+/// Four proofs about different things, not one claim with a flag: the
+/// argument's own resolved type, a value held by a closed object literal
+/// reaching the call, a primitive JSON cannot encode, and a transport proof
+/// that is open. A reader acts on the difference, and the last is an
+/// obligation rather than a violation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "transport")]
+pub enum RichArgumentTransport {
+    ResolvedType {
+        function: String,
+        descriptor: String,
+        member: String,
+    },
+    NestedValue {
+        function: String,
+    },
+    NonJsonPrimitive {
+        function: String,
+    },
+    Unresolved {
+        reason: String,
     },
 }
 
@@ -633,6 +792,13 @@ pub enum StaticDefectFamily {
     ExpectedFunctionGotExpression,
     UncalledAccessor,
     DirectMutation,
+    /// A value crossing the default server-function transport. Deliberately
+    /// absent from [`StaticDefectKind::is_unresolved_obligation`]: the open
+    /// transport proof is reported as uncertifiable, but it was never part of
+    /// the `SC9xxx` obligation census the metrics and contract emission read,
+    /// and moving this rule off the static-violation channel did not change
+    /// what it counts.
+    ServerFunctionRichArgument,
 }
 
 impl StaticDefectFamily {
@@ -652,6 +818,7 @@ impl StaticDefectFamily {
             Self::ExpectedFunctionGotExpression => "expected-function-got-expression",
             Self::UncalledAccessor => "uncalled-accessor",
             Self::DirectMutation => "no-direct-mutation",
+            Self::ServerFunctionRichArgument => "server-function-rich-argument",
         }
     }
 }
@@ -679,6 +846,7 @@ impl StaticDefectKind {
             Self::ReactiveSourceUncaptured { .. } => StaticDefectFamily::ReactiveSourceUncaptured,
             Self::ReactiveDispatchUnresolved { .. }
             | Self::ReactiveCallbackUnresolved { .. }
+            | Self::ResultAccessCallbackUnplaced { .. }
             | Self::StructuredReturnUnresolved { .. } => {
                 StaticDefectFamily::ReactiveDispatchUnresolved
             }
@@ -687,6 +855,9 @@ impl StaticDefectKind {
             }
             Self::UncalledAccessor { .. } => StaticDefectFamily::UncalledAccessor,
             Self::DirectMutation { .. } => StaticDefectFamily::DirectMutation,
+            Self::ServerFunctionRichArgument { .. } => {
+                StaticDefectFamily::ServerFunctionRichArgument
+            }
         }
     }
 
@@ -710,11 +881,13 @@ impl StaticDefectKind {
             Self::ReactiveSourceUncaptured { .. } => "ReactiveSourceUncaptured",
             Self::ReactiveDispatchUnresolved { .. } => "ReactiveDispatchUnresolved",
             Self::ReactiveCallbackUnresolved { .. } => "ReactiveCallbackUnresolved",
+            Self::ResultAccessCallbackUnplaced { .. } => "ResultAccessCallbackUnplaced",
             Self::StructuredReturnUnresolved { .. } => "StructuredReturnUnresolved",
             Self::ReactiveHandlerRead { .. } => "ReactiveHandlerRead",
             Self::HandlerValueUnresolved { .. } => "HandlerValueUnresolved",
             Self::UncalledAccessor { .. } => "UncalledAccessor",
             Self::DirectMutation { .. } => "DirectMutation",
+            Self::ServerFunctionRichArgument { .. } => "ServerFunctionRichArgument",
         }
     }
 
@@ -741,6 +914,7 @@ impl StaticDefectKind {
                 | Self::ReactiveSourceUncaptured { .. }
                 | Self::ReactiveDispatchUnresolved { .. }
                 | Self::ReactiveCallbackUnresolved { .. }
+                | Self::ResultAccessCallbackUnplaced { .. }
                 | Self::StructuredReturnUnresolved { .. }
         )
     }
@@ -796,11 +970,23 @@ pub struct OwnerRequirement {
     /// `runWithOwner`, rather than an exported function's unknown callers.
     #[serde(default, skip_serializing_if = "is_false")]
     pub conditional_owner: bool,
+    /// The uncertainty comes from a callback that runs under its caller's
+    /// owner only on its first run, and with no owner on every later run --
+    /// 2.0 `createRenderEffect`'s apply. The first run is owned exactly as the
+    /// call site is; whether a later run happens is a runtime fact.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub later_run_unowned: bool,
     /// The containing Solid 1 function is component-shaped only by a naming
     /// convention; JSX invocation and ordinary invocation imply different
     /// owner contexts.
     #[serde(default, skip_serializing_if = "is_false")]
     pub component_uncertain: bool,
+    /// The operation runs after an `await` on every path through its async
+    /// function's body: a promise continuation on an empty stack, where the
+    /// dialect says no owner is current. Proven unowned whatever context the
+    /// function was entered with.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub after_await: bool,
     /// The operation sits in a source-level JSX region for which the compiler
     /// emitted no execution census. The absence of an owner region is not a
     /// proof that a live operation runs unowned: the compiler may have deleted
@@ -808,6 +994,11 @@ pub struct OwnerRequirement {
     /// reports an uncertifiable proof obligation rather than a violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
+    /// ADR 0161: the requirement stands for a call of an accepted contract's
+    /// export rather than for a dialect primitive the code calls itself. The
+    /// generator never states such a site's registration as guaranteed.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub through_contract: bool,
     pub report: bool,
 }
 
@@ -838,6 +1029,9 @@ const fn is_false(value: &bool) -> bool {
 }
 
 fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static str> {
+    if returned.kind != crate::contracts::PROTOTYPE_INSTANCE && returned.prototype.is_some() {
+        return Err("a prototype recipe requires its own return kind");
+    }
     match returned.kind.as_str() {
         "accessor" | "store-path" => {
             if returned.label.is_empty() || returned.parameter.is_some() {
@@ -859,6 +1053,18 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 validate_contract_return(element)?;
             }
         }
+        crate::contracts::RETURNED_CALLABLE => {
+            if !returned.label.is_empty()
+                || returned.parameter.is_some()
+                || !returned.elements.is_empty()
+                || returned.properties.keys().any(String::is_empty)
+            {
+                return Err("a returned callable admits named members only");
+            }
+            for property in returned.properties.values() {
+                validate_contract_return(property)?;
+            }
+        }
         "object" => {
             if !returned.label.is_empty()
                 || returned.parameter.is_some()
@@ -872,13 +1078,52 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 validate_contract_return(property)?;
             }
         }
-        "argument" | "callback-result" | "callback-result-function" => {
+        // `merged-props` joins the parameter-carrying kinds rather than the
+        // reactive leaves: its whole content is *which* argument it reaches
+        // through to (ADR 0109), and a leaf's label would say nothing.
+        "argument" | "callback-result" | "callback-result-function" | "merged-props" => {
             if returned.parameter.is_none()
                 || !returned.label.is_empty()
                 || !returned.elements.is_empty()
                 || !returned.properties.is_empty()
             {
                 return Err("a relational return requires a parameter only");
+            }
+        }
+        crate::contracts::PROTOTYPE_INSTANCE => {
+            if returned
+                .prototype
+                .as_ref()
+                .is_none_or(|recipe| recipe.members.is_empty())
+                || !returned.label.is_empty()
+                || returned.parameter.is_some()
+                || !returned.elements.is_empty()
+                || !returned.properties.is_empty()
+            {
+                return Err("a prototype instance requires a projected member recipe only");
+            }
+        }
+        crate::contracts::LAZY_GETTER_OBJECT => {
+            if !returned.label.is_empty()
+                || !returned.elements.is_empty()
+                || returned.parameter.is_some() != returned.properties.is_empty()
+            {
+                return Err("lazy getters require exact keys or an argument index only");
+            }
+            if returned.properties.keys().any(|key| {
+                key.is_empty() || crate::contract_semantics::lazy_getter_cache_key_is_reserved(key)
+            }) {
+                return Err("invalid lazy getter cache key");
+            }
+        }
+        // ADR 0234: an opaque member of a returned tuple or object.
+        crate::contracts::OPAQUE_MEMBER => {
+            if !returned.label.is_empty()
+                || returned.parameter.is_some()
+                || !returned.elements.is_empty()
+                || !returned.properties.is_empty()
+            {
+                return Err("an opaque member carries nothing");
             }
         }
         _ => return Err("the return kind is unsupported"),
@@ -928,6 +1173,31 @@ pub struct AsyncRead {
     /// missing server-entry import as proof of CSR.
     #[serde(default)]
     pub server_rendering_unresolved: bool,
+    /// The read sits in a callback a host API may invoke inside the component
+    /// body's strict-read window or after it
+    /// ([`ReactiveRead::host_callback_timing`]). Inside the window a pending
+    /// read throws `PENDING_ASYNC_UNTRACKED_READ` (dev); after it, a plain
+    /// `NotReadyError` (probed on rc.3 and rc.9), so SC5001 is a proof
+    /// obligation rather than a proven throw.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub host_callback_timing: bool,
+    /// The read's callback is handed to a callee whose invocation is not
+    /// proven on the current stack ([`ReactiveRead::callee_callback_timing`]).
+    /// The callee may defer the read or handle pending values, so SC5001 is
+    /// an open obligation rather than a proven pending-read exception.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callee_callback_timing: bool,
+    /// Lexical nesting in a component does not prove this stored or returned
+    /// callback executes during that component's strict-read window.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub invocation_context_unproven: bool,
+    /// The read is rendered by a function whose callers are not all in the
+    /// analyzed project (an exported component, a route handed to a router, a
+    /// lazy page): no `Loading` boundary was found above it, but the boundary
+    /// that decides it may be written where the analysis cannot see. The
+    /// missing-boundary findings are uncertifiable then, not proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mount_unresolved: bool,
 }
 
 fn default_async_provenance() -> bool {
@@ -1004,21 +1274,373 @@ impl<T> ContractClaim<T> {
     }
 }
 
+/// ADR 0207: when an export invokes the `on…` members of one of its argument
+/// values: the projected execution word of the item's operation, and that
+/// operation's guard, kept whole so a consumer proves every atom or reads
+/// nothing.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventHandlerPropsClaim {
+    pub parameter: usize,
+    pub path: Vec<String>,
+    pub execution: String,
+    pub guard: Vec<contract_semantics::GuardAtom>,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ContractExport {
     pub kind: String,
     pub reactive_reads: ContractClaim<Vec<ContractReactiveRead>>,
     pub returns: ContractClaim<Option<ContractReturn>>,
     pub callbacks: ContractClaim<Vec<ContractCallback>>,
+    /// Exact result producers and contextual uses, never ordinary argument
+    /// invocation rows. Local summaries do not infer this authored vocabulary.
+    pub callback_results: Vec<ContractCallbackResult>,
+    pub captured_lookup: Option<contract_semantics::CapturedLookup>,
+    /// Projection only. Virtual callback slots name explicit captures, never
+    /// invocation arguments. No producer may re-emit these as parameter rows.
+    pub capture_sources: BTreeMap<usize, crate::contract_semantics::ValueSource>,
+    /// Captures read through an explicit, exactly linked factory resource.
+    pub captured_resource_slots: BTreeSet<usize>,
+    /// Exact factory-site values, bound separately for each returned instance.
+    pub captured_arguments: BTreeMap<usize, solid_facts::ast::ArgumentFact>,
+    /// Whether this consumer can preserve all capture execution axes.
+    pub capture_context_supported: bool,
+    /// Exact argument slots an accepted ambient invocation may call inline
+    /// during the export call. The value is true only for an unguarded,
+    /// call-scoped lower bound of at least one. Internal projection only;
+    /// callback-domain closure never strengthens a possible invocation.
+    pub inline_accessor_invocations: BTreeMap<usize, bool>,
     pub owner_requirements: ContractClaim<Vec<ContractOwnerRequirement>>,
+    /// ADR 0174: the guaranteed owner requirements still proven while
+    /// [`Self::owner_requirements`] is `Open`. Opening a list says another item
+    /// may exist; it does not disprove one this export's own body makes on
+    /// every normal completion. The generator publishes them as items, and the
+    /// list stays incomplete, so `creates` stays open. Empty whenever the claim
+    /// is `Known`, which carries its own items. Generation only: never decoded
+    /// from or encoded into a package-contract document.
+    pub open_owner_requirements: Vec<ContractOwnerRequirement>,
+    /// ADR 0178: the return this export's own body describes, kept while
+    /// [`Self::returns`] is `Open` because an unresolved call opened it. An
+    /// unknown call can add behavior; it does not replace the value a return
+    /// statement hands back, and the certifier's census proves that value
+    /// from the producer's trace or withdraws it. The generator publishes it
+    /// as a positive item over an open domain. `None` whenever the claim is
+    /// `Known`, which carries its own return. Generation only: never decoded
+    /// from or encoded into a package-contract document.
+    pub open_return: Option<ContractReturn>,
+    /// ADR 0179: the owner registrations this export makes on its caller's
+    /// owner, at the call and on the same stack: `ambient-at-call`,
+    /// call-scoped. Inside a leaf owner each is a forbidden operation the
+    /// runtime throws on. `guaranteed` when it happens on every call
+    /// (`min >= 1`); otherwise it may not happen (`min: 0`) and the leaf
+    /// finding is a proof obligation. A guarded one keeps its guard and
+    /// counts only at a call where the guard holds (ADR 0223).
+    /// Projected from an accepted document only; empty for a local summary.
+    pub leaf_forbidden_operations: Vec<ContractOwnerRequirement>,
+    /// ADR 0207: the accepted contract's `event-handler-props` items, each
+    /// exhaustive for the `on…` members of one argument value. They stay out
+    /// of [`Self::callbacks`], whose claim opens instead, so no consumer that
+    /// reads rows by path mistakes one for a call of the argument itself.
+    /// Projected from an accepted document only.
+    pub event_handler_props: Vec<EventHandlerPropsClaim>,
     pub async_behavior: ContractClaim<String>,
     /// Wire-independent open domains retained when normalized partial
     /// knowledge is projected into the existing analysis indexes. This field
     /// is never decoded from or encoded into a package-contract document.
     pub open_claims: BTreeSet<contract_semantics::ClaimDomain>,
+    /// Whether the *accepted* contract this summary was projected from closes
+    /// `creates` with no item.
+    ///
+    /// Only [`crate::project_accepted_export`] sets it, and only from a
+    /// normalized accepted document. `false` is the fail-closed default a
+    /// locally generated summary keeps: a summary nothing projected states
+    /// nothing about a dependency's `creates`, and the generator's proposal
+    /// walk reads it that way.
+    pub creates_closed_empty: bool,
+    /// Whether the *accepted* contract this summary was projected from closes
+    /// `returns` with no item (ADR 0143).
+    ///
+    /// Read from the accepted document for the same reason as
+    /// [`Self::creates_closed_empty`]: the projection [`Self::returns`] is the
+    /// consumer's single reactive leaf, and it reads a closed claim over exact
+    /// outputs that name no leaf -- a `plain` return, an argument container --
+    /// as `Known(None)`, exactly as it reads `returns: []`. Only the empty
+    /// closure licenses a re-exporting package to state `returns: []` again.
+    /// `false` is the fail-closed default every locally inferred summary keeps.
+    pub returns_closed_empty: bool,
+    /// The operations of the *accepted* contract's closed, non-empty `returns`
+    /// claim, when a re-exporting package can state them again exactly (ADR
+    /// 0170): every item a bare `return` ([`contract_semantics::Operation::is_bare_return`])
+    /// whose output names no resource, operation or callable of the
+    /// dependency's own -- `plain`, `undefined`, an argument, a fresh array of
+    /// arguments, an invocation result, a props merge, an array of plains --
+    /// in the accepted order.
+    ///
+    /// Empty is "nothing to restate", which is what every locally inferred
+    /// summary keeps, what a projection of an open or empty `returns` keeps
+    /// (the empty closure is [`Self::returns_closed_empty`]'s), and what a claim
+    /// with any other item keeps: a partly restated enumeration would be a
+    /// stronger claim than the dependency's.
+    pub returns_restated: Vec<contract_semantics::Operation>,
+    /// Whether the generator's own [`crate::CreatesProposalWalk`] found no call
+    /// inside this export's implementation that a `creates: []` proposal would
+    /// contradict.
+    ///
+    /// `false` is the default and the fail-closed answer: a summary no walk
+    /// reached proposes nothing. This is a *proposal* input — the claim itself
+    /// is proved, or refused, by the certifier's implementation census.
+    pub creates_walk_clean: bool,
+    /// Why that walk declined, when it did: every blocker reachable from this
+    /// export's implementation span, lexically and through the resolved local
+    /// call edges ([`crate::CreatesProposalWalk::declines_for`]).
+    ///
+    /// **Measurement, never evidence.** No claim is decided from it, it is
+    /// never encoded into a package-contract document, and an empty list means
+    /// only "no blocker was named" — for a summary no walk reached that is
+    /// silence, not a clean walk, which is what `creates_walk_clean` says.
+    pub creates_walk_declines: Vec<crate::CreatesDecline>,
+    /// Whether the generator's valueless-completion walk cleared this export's
+    /// implementation (ADR 0035): a block-bodied, non-`async`, non-generator
+    /// function whose own body carries no `return` with an expression. A
+    /// proposal input for `returns: []` and never a proof; `false` is
+    /// "do not propose", including for a summary no walk reached.
+    pub returns_walk_clean: bool,
+    /// Whether that same walk declined *only* because this export's own body
+    /// hands its caller a value, and no such completion is a literal that is an
+    /// object on every run (ADR 0113, `returns_walk::value_completion`): a
+    /// non-`async`, non-generator function with a value-carrying `return` or an
+    /// expression body. It is the shape a `returns` closure over a primitive
+    /// completion can describe, and a proposal input only: syntax cannot tell a
+    /// primitive from an object in general, so the certifier's implementation
+    /// census decides that from the producer's types. `false` is "do not
+    /// propose", including for a summary no walk reached.
+    pub returns_value_completion: bool,
+    /// ADR 0172: literal container proposals; member behavior is census-owned.
+    pub returns_literal_structures: Vec<contract_semantics::ValueShape>,
+    /// ADR 0145's proposal input: when every value-carrying completion of this
+    /// export's own body is a function or arrow literal, the call claims each
+    /// literal's syntax does not already rule out, one per distinct shape
+    /// (`returns_walk::described_callable_returns`). Empty is "do not
+    /// propose", including for a summary no walk reached; the certifier's
+    /// census decides every one of them from the producer's facts.
+    pub returns_described_callables: Vec<contract_semantics::DescribedCall>,
+    /// ADR 0146's proposal input: the described callables this export's
+    /// completions would hand back if they read a signal it created
+    /// (`returns_walk::reading_callable_returns`), which the generator proposes
+    /// where its reactive analysis described the return as an accessor. Empty
+    /// is "do not propose".
+    pub returns_reading_callables: Vec<contract_semantics::DescribedCall>,
+    /// Whether this export is a `const` binding of one identifier whose
+    /// initializer is exactly a non-computed member access --
+    /// `const entries = Object.entries` -- and whose summary no body produced.
+    /// A proposal input only (ADR 0103, amended 2026-09-23): syntax cannot say
+    /// which object the member belongs to, so the generator proposes the call
+    /// domains ADR 0103's default-library alias census decides, `creates` and
+    /// `callbacks` beside the `reads` it already proposes, and that census
+    /// decides them from the producer's identity fact and its reviewed member
+    /// table. `false` is "do not propose".
+    pub member_alias_initializer: bool,
+    /// The member access that initializer spells, `Object.keys`, when
+    /// [`Self::member_alias_initializer`] holds: which reviewed row's return the
+    /// generator proposes (the second 2026-09-24 amendment to ADR 0103). A
+    /// spelling, never an identity -- the certifier's census decides the member
+    /// from the producer's fact.
+    pub member_alias_spelling: Option<String>,
+    /// ADR 0115's proposal input: the argument containers this export's own
+    /// completions hand back, when its syntax is nothing but conditionals over
+    /// its whole parameters and array literals of them, with at least two
+    /// distinct ones. Empty is "do not propose". The certifier decides it from
+    /// the producer's own arms of each return.
+    pub returns_argument_containers: Vec<ArgumentContainer>,
+    /// The parameters this export's own body calls directly -- the callee is
+    /// the parameter itself, a plain undefaulted binding written nowhere, and
+    /// the call is written in the body of the function that declares it,
+    /// outside any nested callable (ADR 0100). The
+    /// interprocedural pass writes an `inline` callback row for exactly that
+    /// shape and for a dialect primitive's inline position alike, and the wire
+    /// does not tell them apart; this set does, so the generator proposes a
+    /// described `callbacks` closure only for rows the implementation census
+    /// can confirm site for site. A proposal input, never evidence: empty is
+    /// "do not propose", and a summary no pass reached is empty.
+    pub direct_callback_parameters: BTreeSet<usize>,
+    /// ADR 0183: the parameters whose callback row is an owned computation
+    /// (`tracked`, same-stack, owner `created`) invoked on every call. For a
+    /// local summary, the generator's proposal input: such a row publishes
+    /// `min: 1`, and the census proves it. For an accepted export, the rows
+    /// the document states that way. Empty is "no lower bound".
+    pub guaranteed_callback_parameters: BTreeSet<usize>,
+    /// The parameters whose own value this export's own body reads a property
+    /// of -- `v.length` with `v` the parameter itself, outside any nested
+    /// callable, not in write position and not the callee of a call -- which
+    /// the generator describes as a `get` item in `callbacks` (item A of
+    /// ways-to-improve § 3.3). A proposal input in the same family as
+    /// [`Self::direct_callback_parameters`]: never encoded, never evidence,
+    /// empty is "describe nothing".
+    pub direct_accessor_parameters: BTreeSet<usize>,
+    /// The same, for a coercing operand (`a < b`, `` `${v}` ``, `+v`) that is
+    /// the parameter's own identifier: a `coerce` item.
+    pub direct_coerced_parameters: BTreeSet<usize>,
+    /// `(parameter, path)` for a call this export's own body makes of a
+    /// literal-keyed member of a parameter's own unwritten binding --
+    /// `handler[0](…)`, `h["run"](…)`, outside any nested callable -- which the
+    /// interprocedural pass writes as an `inline` callback row carrying that
+    /// path (item B of ways-to-improve § 3.3). The member path's call item
+    /// the implementation census can confirm site for site. A proposal input
+    /// in the family of [`Self::direct_callback_parameters`]: never encoded,
+    /// never evidence, empty is "do not propose".
+    pub direct_member_callback_parameters: BTreeSet<(usize, Vec<String>)>,
+    /// The parameters whose value, or a value reached through its members,
+    /// this export iterates anywhere in its body (a `for…of`, a spread, an
+    /// array pattern), and those bound by an array pattern in parameter
+    /// position. The generator derives no `iterate` item, so it declines to
+    /// propose a `callbacks` enumeration with non-call items beside any of
+    /// these: it could not describe the enumeration whole. Never evidence.
+    pub iterated_parameters: BTreeSet<usize>,
+    /// ADR 0139: the parameters a class export's constructor keeps on the
+    /// instance for later member calls, as the generator's byte walk
+    /// ([`solid_facts::ast::retained_constructor_arguments`]) found them --
+    /// each stored once as `this.<key> = p` in the constructor's own frame,
+    /// with every other use a direct call there, and every read of the key a
+    /// member call nothing at construction reaches. The generator describes
+    /// each as a `result-access` item. A proposal input in the family of
+    /// [`Self::direct_callback_parameters`]: never encoded, never evidence,
+    /// empty is "do not propose"; the Type Facts producer's own census of the
+    /// class decides the item.
+    pub result_access_parameters: BTreeSet<usize>,
+    /// ADR 0152: the export's argument slots whose callable the value this
+    /// export returns invokes, on the stack of whoever invokes that value,
+    /// exactly once per invocation -- read from an accepted contract whose
+    /// closed `returns` is described callables every one of which names the
+    /// slot, and whose closed `callbacks` invokes the slot at `result-access`
+    /// and nowhere else. The consumer composes a callback written at such a
+    /// slot with the proven invocations of the returned value
+    /// (`execution_role::contract_returned_invoker_callback_role`). Empty for
+    /// every locally inferred summary: never encoded, and a projection only.
+    pub returned_invocations: BTreeSet<usize>,
+    /// ADR 0235: what one call of each returned member does, by member key
+    /// (a tuple index, or an object property name), for members an accepted
+    /// contract states as `effectful-callable`. A destructured member's call
+    /// is bound to its entry like a call of an export. Projection only.
+    pub returned_member_effects: BTreeMap<String, ContractExport>,
+    /// Projection only: one call of an exactly agreed whole returned function.
+    pub returned_callable_effects: Option<Box<ContractExport>>,
+    /// ADR 0109: the parameter whose reactivity a props merge this export
+    /// returns carries, when the generator's own walk cleared the body
+    /// ([`crate::returns_walk::MergedPropsReturns`]).
+    ///
+    /// A proposal input and never a proof: `None` is "do not propose",
+    /// including for a summary no walk reached. The certifier re-derives every
+    /// premise from the producer's control-flow and call censuses.
+    pub merged_props_return: Option<usize>,
+    /// The accepted dependency export this summary was *projected from*, when
+    /// the public name is a cross-package re-export and nothing in this
+    /// package declares it.
+    ///
+    /// Only [`crate::project_accepted_export`] sets it, from the exact
+    /// accepted contract and export identity the projection resolved. `None`
+    /// is the fail-closed default every locally inferred summary keeps, and it
+    /// is never decoded from or encoded into a package-contract document.
+    ///
+    /// Re-emission reads it to decide *which* proposal filters apply. A
+    /// projected summary has no local implementation, so the generator's own
+    /// walks (`creates_walk_clean`, `returns_walk_clean`,
+    /// `direct_callback_parameters`) are all silent about it — and silence is
+    /// "do not propose". Applying them to an inherited summary therefore
+    /// discards the dependency's certified closure for every domain, which is
+    /// the defect `phase21/2026-09-15-closure-gap-plan.md` § 1 records. What
+    /// replaces them is not a weaker filter but a different premise: the
+    /// closure is the dependency's, and the certifier discharges it by
+    /// composition from the dependency's receipt rather than by a census of
+    /// bytes this artifact does not contain.
+    pub inherited_from: Option<InheritedExportOrigin>,
+    /// ADR 0153 part 3: the package exports whose contexts this export's
+    /// claims assume no value from outside the package for, read from the
+    /// accepted document. A consumer program that provides one of them loses
+    /// every claim of the export at its import (`contracts.rs`,
+    /// `provided_context_premises`). Empty for every summary that states none,
+    /// and for every locally inferred summary.
+    pub context_premises: Vec<String>,
+}
+
+/// The accepted dependency export a re-exported public name was projected
+/// from: enough identity to name the claim in a plan sidecar and to attribute
+/// a proposal to the contract that owns it.
+///
+/// **Measurement and attribution, never authority.** Nothing downstream
+/// discharges a closure from these strings: the certifier rebinds the
+/// re-export independently, from the parent's snapshot-verified runtime
+/// binding and the dependency node's own plan, because a provenance field
+/// travelling through a document is exactly the kind of self-report the
+/// precision contract refuses to read as proof.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InheritedExportOrigin {
+    pub package_name: String,
+    pub package_version: String,
+    pub artifact_case: String,
+    pub semantic_digest: String,
+    pub entrypoint: String,
+    pub export: String,
 }
 
 impl ContractExport {
+    /// An identified export whose runtime kind could not be established.
+    /// This carries no negative or positive behavioral claims (ADR 0011).
+    #[must_use]
+    pub fn unknown_runtime_kind() -> Self {
+        Self {
+            kind: "unknown".into(),
+            reactive_reads: ContractClaim::Open,
+            returns: ContractClaim::Open,
+            callbacks: ContractClaim::Open,
+            owner_requirements: ContractClaim::Open,
+            async_behavior: ContractClaim::Open,
+            ..Self::default()
+        }
+    }
+
+    /// Whether this summary is a projection of an accepted dependency export
+    /// whose `domain` that dependency's contract **closes**.
+    ///
+    /// The consumer-side spelling of "closed" is the one
+    /// [`crate::project_accepted_export`] writes: a `Known` claim whose domain
+    /// is absent from `open_claims`, and for `creates` the domain's own
+    /// closed-and-empty flag, because `project_owner_requirements` keeps only
+    /// the obligation-imposing operations and a `creates` the dependency
+    /// publishes need not survive it.
+    ///
+    /// `false` for every locally inferred summary, and for every domain a
+    /// projection left open. It is the premise re-emission substitutes for the
+    /// local proposal walks, never an addition to them: a summary that is both
+    /// inherited and walked cannot exist, since a cross-package re-export has
+    /// no local symbol for a walk to reach.
+    #[must_use]
+    pub fn inherited_closure(&self, domain: contract_semantics::ClaimDomain) -> bool {
+        use contract_semantics::ClaimDomain;
+        if self.inherited_from.is_none() {
+            return false;
+        }
+        let closed = |claim_is_known: bool, domain: ClaimDomain| {
+            claim_is_known && !self.open_claims.contains(&domain)
+        };
+        match domain {
+            ClaimDomain::Creates => self.creates_closed_empty,
+            // ADR 0143: the empty closure only. `Known(None)` is also the
+            // projection of a closed claim over outputs that name no leaf, and
+            // re-emitting that as `returns: []` states the dependency's export
+            // yields no value -- false for every `plain` return.
+            ClaimDomain::Returns => {
+                self.returns_closed_empty && closed(!self.returns.is_open(), domain)
+            }
+            ClaimDomain::Reads => closed(!self.reactive_reads.is_open(), domain),
+            ClaimDomain::Callbacks => {
+                self.callback_results.is_empty()
+                    && self.capture_sources.is_empty()
+                    && closed(!self.callbacks.is_open(), domain)
+            }
+            _ => false,
+        }
+    }
+
     /// Whether this summary contains any domain that only a runtime function
     /// may carry. A `value` export with one of these domains is internally
     /// inconsistent even when the domain is open: absence of proof is not a
@@ -1032,6 +1654,7 @@ impl ContractExport {
                 .is_some_and(|reads| !reads.is_empty())
             || self.returns.is_open()
             || self.returns.known().is_some_and(Option::is_some)
+            || !self.callback_results.is_empty()
             || self.callbacks.is_open()
             || self
                 .callbacks
@@ -1050,8 +1673,25 @@ impl ContractExport {
     }
 }
 
+/// Where a composed reactive-read row was composed from: the export whose own
+/// read this row is, and the ordinal of that read in *that* export's own list.
+///
+/// The ordinal is what makes the claim addressable: `normalize_export` names a
+/// read operation `read-<ordinal>` over the same list in the same order, so
+/// `ComposedReactiveRead { export: "createPolled", read: 0 }` names exactly
+/// `createPolled:operation:read-0` and nothing else. A name alone would name a
+/// set.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComposedReactiveRead {
+    pub export: String,
+    pub read: usize,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractReactiveRead {
+    /// Accepted operation context. Inferred syntax-only rows carry `None`:
+    /// absence cannot establish cardinality, tracking or execution timing.
+    pub execution: Option<ContractReadContext>,
     pub kind: String,
     pub label: String,
     pub parameter: Option<usize>,
@@ -1067,6 +1707,75 @@ pub struct ContractReactiveRead {
     /// named path can be runtime-probed without guessing which property to
     /// instrument.
     pub path: Option<Vec<String>>,
+    /// The symbol of the summary node this row was composed from, when the
+    /// read was discovered in *another* node and reached this one across a
+    /// call edge. Unresolved provenance: an internal node identity, never
+    /// published.
+    ///
+    /// [`contract_export_summaries`] resolves it to `composed_from` and clears
+    /// it, so an emitted contract never carries it and a consumer can never
+    /// read a provenance the aggregation could not name. It is a field rather
+    /// than a side table because the per-node projection is cached and
+    /// parallel: the node that discovers a read is knowable there, and the
+    /// export it is published under is not.
+    ///
+    /// The symbol's own text rather than the interned identity, because this
+    /// type crosses the crate boundary and the interner does not. It is only
+    /// ever compared for equality against another symbol's text.
+    pub composed_owner: Option<String>,
+    /// The published provenance: this row's read is the named export's own,
+    /// performed through this export's call to it.
+    ///
+    /// `None` is every case the aggregation could not name exactly — an owner
+    /// that is not an export of this project, an owner exported under more
+    /// than one name, an owner whose own read list does not carry a row with
+    /// this row's identity, and a row the export performs itself. A consumer
+    /// reads `None` as "no provenance stated" and falls back to requiring the
+    /// export's own evidence; provenance may only ever *add* a discharge
+    /// route.
+    pub composed_from: Option<ComposedReactiveRead>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ContractReadContext {
+    pub count: contract_semantics::Cardinality,
+    pub tracking: contract_semantics::Tracking,
+    pub at: Option<contract_semantics::Event>,
+    pub schedule: Option<contract_semantics::Schedule>,
+    pub trigger: Option<contract_semantics::Trigger>,
+    pub guarded: bool,
+}
+
+pub(crate) type ContractReadSite = (
+    String,
+    String,
+    Location,
+    String,
+    Option<ContractReadContext>,
+);
+pub(crate) type ContractParameterReadSite =
+    (usize, String, String, Location, Option<ContractReadContext>);
+
+impl ContractReadContext {
+    /// The read runs in the caller's execution role; the contract's count and
+    /// timing decide whether it is a proven read there.
+    pub(crate) fn at_call(&self, caller: ExecutionRole) -> (ExecutionRole, bool) {
+        use contract_semantics::{CardinalityScope, Event, Schedule, Trigger};
+        if caller == ExecutionRole::DiscardedRendering {
+            return (caller, false);
+        }
+        let during_call = self.at == Some(Event::Call)
+            && self.schedule == Some(Schedule::SameStack)
+            && matches!(self.trigger, Some(Trigger::Event(Event::Call)));
+        let guaranteed = self.count.scope == Some(CardinalityScope::Call)
+            && self.count.min.is_some_and(|min| min >= 1)
+            && !self.guarded;
+        // ADR 0254: the read runs in the caller's context, as every contract
+        // read always has; `strictRead: cleared` (ADR 0247) is the explicit
+        // way to say a package cleared it. What the count adds is whether the
+        // read happens at all: an optional or later read is not a proven one.
+        (caller, !during_call || !guaranteed)
+    }
 }
 
 /// When a `tracked` callback row runs, relative to the export returning.
@@ -1093,6 +1802,13 @@ pub enum CallbackSchedule {
     /// honest. The emitted operation carries no execution point at all rather
     /// than a guessed one.
     Unestablished,
+    /// ADR 0139, and only on a `deferred` row: the export keeps the callable
+    /// only in the value it returns (for a construction, the instance), and
+    /// it runs later, on the stack of code that invokes it through that value.
+    /// The row is a deferred invocation in every pass that models one; the
+    /// variant exists so an accepted contract's `result-access` item projects
+    /// back, and is re-emitted, as exactly that item.
+    ResultAccess,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1102,7 +1818,9 @@ pub struct ContractCallback {
     /// The schedule of a `tracked` row, where the producer established one.
     /// `None` is a producer that did not compute a schedule for this row and
     /// leaves the consumer's historical default in place; it is meaningless
-    /// for `inline` and `deferred`, whose word already carries the schedule.
+    /// for `inline` and for `deferred`, whose word already carries the
+    /// schedule -- except [`CallbackSchedule::ResultAccess`], which only a
+    /// `deferred` row carries and which names ADR 0139's retention event.
     pub schedule: Option<CallbackSchedule>,
     /// Runtime arguments supplied when this callback is invoked. `null`
     /// preserves an unmodeled ordinary value at that position; a structured
@@ -1113,11 +1831,144 @@ pub struct ContractCallback {
     /// means the package contract describes timing only; consumers must keep
     /// the existing fail-closed owner behavior for that callback.
     pub owner: Option<String>,
+    /// Whether the callback is proven to run with no listener of the caller's
+    /// current, defined per execution word. `true` publishes
+    /// `tracking: "untracked"`; `false` publishes `ambient-at-execution`, which
+    /// claims nothing about the listener and is the fail-closed answer.
+    ///
+    /// - `inline`: a `Detaching` wrapper (`untrack`, `createRoot`,
+    ///   `runWithOwner`, a package row that states the same) stands between the
+    ///   export and the callback. A bare `fn()` does not clear:
+    ///   `@solid-primitives/utils`' `access` is `typeof v === "function" ? v() : v`
+    ///   and its row once said `untracked` like `untrack`'s did.
+    /// - `deferred`: the deferral is proven to run the callback on a fresh stack
+    ///   or with the listener cleared -- a reviewed host queue
+    ///   (`runtime_semantics::FRESH_STACK_SCHEDULERS`), a dialect deferred slot
+    ///   the dialect states untracked, a clearing wrapper *inside* the deferral,
+    ///   or a dependency's row that states one. "Runs after the export returns"
+    ///   is not that proof: a returned closure (`safe`, `pipe`), a bound
+    ///   function and an event listener all run on their caller's stack, inside
+    ///   whatever computation that caller is in.
+    /// - `tracked`: always `false`. The word is the attribution claim, and a
+    ///   clearing wrapper outside a tracking one cannot undo its subscription.
+    ///
+    /// A bool rather than an enum because the state space is exactly
+    /// (word x proven-or-not): no consumer distinguishes *why* a clearing was
+    /// proven, and the one invalid pair, `tracked` with `true`, is excluded at
+    /// both constructors -- the chain composition and
+    /// [`ContractCallback::clears_tracking_from`].
+    pub clears_tracking: bool,
+    /// Which protocol of the caller's value this row invokes. `Call` is every
+    /// row an analysis pass writes; the others arrive only from an accepted
+    /// contract's non-call `invoke` items (a property read, iteration,
+    /// coercion or `hasInstance` of the argument), and the generator's own
+    /// derivation of them, and they are **not** inline invocations of a
+    /// callable: no consumer pass may read one as a call of the argument. See
+    /// [`ContractCallback::is_invocation`].
+    pub protocol: contract_semantics::InvokeProtocol,
+    /// The member of the argument at [`Self::parameter`] this row invokes,
+    /// outwards from the argument: empty for the argument itself, `["0"]` for
+    /// `handler[0](…)` (item B of ways-to-improve § 3.3). A row with a path is
+    /// a call of *that member*, never of the argument: see
+    /// [`ContractCallback::invokes_argument`] and
+    /// [`ContractCallback::invokes_member`].
+    pub path: Vec<String>,
+}
+
+impl ContractCallback {
+    /// The clearing bit a contract operation's tracking word states for a row
+    /// with this execution word: the exact inverse of the generator's mapping,
+    /// so a row that round-trips through a document keeps its claim and a
+    /// `tracked` row never acquires one. See [`Self::clears_tracking`].
+    #[must_use]
+    pub fn clears_tracking_from(execution: &str, tracking: contract_semantics::Tracking) -> bool {
+        matches!(execution, "inline" | "deferred")
+            && tracking == contract_semantics::Tracking::Untracked
+    }
+
+    /// Whether this row is an invocation of the argument *as a callable* --
+    /// the only kind of row an interprocedural or owner pass models.
+    ///
+    /// A non-call row is kept in [`ContractExport::callbacks`] so a closed
+    /// enumeration stays closed and re-emission republishes it; every pass
+    /// that reads rows to build edges, invoked parameters, wrappers, owner
+    /// edges or accessor arguments filters on this first. A property read or
+    /// coercion of the caller's value runs that value's own traps at the call,
+    /// on the caller's stack, in the caller's tracking context -- what the
+    /// value's author wrote -- and today such a use of a non-callable argument
+    /// raises no obligation at all, so ignoring the row loses nothing the
+    /// consumer modelled.
+    #[must_use]
+    pub fn is_invocation(&self) -> bool {
+        self.protocol == contract_semantics::InvokeProtocol::Call
+    }
+
+    /// Whether this row is ADR 0139's `result-access` item: a `deferred`
+    /// invocation of a callable the export keeps only in the value it
+    /// returns. Every pass that models invocations reads it as the deferred
+    /// row it is; only projection and re-emission ask.
+    #[must_use]
+    pub fn is_result_access(&self) -> bool {
+        self.execution == "deferred" && self.schedule == Some(CallbackSchedule::ResultAccess)
+    }
+
+    /// Whether this row calls the argument at [`Self::parameter`] itself: an
+    /// invocation with an empty path. Every pass that reads a row as "the
+    /// value passed here is called" -- a call-graph edge to the argument, an
+    /// invoked parameter, a wrapper, an owner edge, an execution role for the
+    /// argument -- asks this, not [`Self::is_invocation`]: a member-path row
+    /// calls a member of the argument, and reading it as a call of the
+    /// argument would fold `callHandler(e, handlerProp)` as a call of
+    /// `handlerProp`.
+    #[must_use]
+    pub fn invokes_argument(&self) -> bool {
+        self.is_invocation() && self.path.is_empty()
+    }
+
+    /// Whether this row calls a member of the argument, at [`Self::path`]
+    /// (item B of ways-to-improve § 3.3). A consumer folds such a row only
+    /// when the argument written at the slot resolves that member exactly.
+    #[must_use]
+    pub fn invokes_member(&self) -> bool {
+        self.is_invocation() && !self.path.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractCallbackResult {
+    pub parameter: usize,
+    pub parameter_path: Vec<String>,
+    pub producer: contract_semantics::Operation,
+    pub shape: contract_semantics::ValueShape,
+    pub uses: contract_semantics::KnowledgeSet<ContractCallbackResultUse>,
+    /// Initial consumer proof: a closed return census of explicit undefined
+    /// completions cannot pass this result to the caller. Other return shapes
+    /// need a separate escape proof, even when their census is closed.
+    pub non_escaping: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractCallbackResultUse {
+    pub path: Vec<String>,
+    pub operation: contract_semantics::Operation,
+    pub callable_only: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractOwnerRequirement {
     pub operation: OwnerRequirementOperation,
+    /// ADR 0161: whether every normal completion of one call performs an
+    /// operation of this kind. From an accepted contract, a certified count
+    /// with `min >= 1` on some operation of the kind; from the generator, a
+    /// requirement whose site is a dialect primitive call the export makes on
+    /// every completion. `false` is "may register": calling the export with no
+    /// owner is then a proof obligation, never a proven violation.
+    pub guaranteed: bool,
+    /// The accepted operation's guard, when only some calls register: an
+    /// exact argument literal, property or value-kind guard is evaluated at
+    /// each call (`owners::owner_requirement_at_call`, ADR 0223). Missing
+    /// argument facts and unsupported guard axes retain a possible requirement.
+    pub guard: Option<crate::contract_semantics::Guard>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
@@ -1127,6 +1978,9 @@ pub struct ContractReturn {
     pub parameter: Option<usize>,
     pub elements: Vec<Option<ContractReturn>>,
     pub properties: BTreeMap<String, ContractReturn>,
+    /// Receipt-projected recipe only. Generation never proposes this shape.
+    #[serde(skip)]
+    pub prototype: Option<crate::contract_semantics::PrototypeInstanceRecipe>,
 }
 
 impl PackageContract {
@@ -1163,7 +2017,7 @@ impl PackageContract {
         name: &str,
         summary: &ContractExport,
     ) -> Result<(), String> {
-        if name.is_empty() || !matches!(summary.kind.as_str(), "function" | "value") {
+        if name.is_empty() || !matches!(summary.kind.as_str(), "function" | "value" | "unknown") {
             return Err(format!(
                 "package contract export {entrypoint}:{name} has unsupported kind {:?}",
                 summary.kind
@@ -1311,6 +2165,13 @@ fn empty_contract_exports() -> &'static BTreeMap<String, ContractExport> {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Program {
+    #[serde(
+        default,
+        skip_serializing_if = "RuntimeConfigurationPremise::permits_proof"
+    )]
+    pub runtime_configuration: RuntimeConfigurationPremise,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub development_feedback: Vec<development_feedback::DevelopmentFile>,
     pub reads: Vec<ReactiveRead>,
     pub writes: Vec<ReactiveWrite>,
     pub actions: Vec<ActionInvocation>,
@@ -1335,6 +2196,24 @@ pub struct Program {
     /// the attested resolution then bound or refused.
     #[serde(default)]
     pub contract_binding: ContractBindingCounts,
+    /// Which call sites forbid *proposing* a closed `creates` domain.
+    ///
+    /// Deliberately not on the wire: it is generation-time input, and its
+    /// [`Default`] refuses every span, so a deserialized `Program` proposes
+    /// nothing rather than proposing everything.
+    #[serde(skip)]
+    pub creates_proposal_walk: CreatesProposalWalk,
+    /// ADR 0109's proposal input: which parameter's reactivity a props merge
+    /// returned by each function carries.
+    ///
+    /// Off the wire for the same reason as the walk above, and with the same
+    /// fail-closed [`Default`]: an absent entry is "do not propose", so a
+    /// deserialized `Program` proposes none of these rather than all of them.
+    #[serde(skip)]
+    pub merged_props_returns: returns_walk::MergedPropsReturns,
+    /// ADR 0115's proposal input, off the wire and fail-closed the same way.
+    #[serde(skip)]
+    pub argument_container_returns: returns_walk::ArgumentContainerReturns,
 }
 
 /// How contract binding answered across the program's declarations.
@@ -1452,6 +2331,13 @@ pub struct BuildTimings {
 pub struct IncrementalBuilder {
     retained: Option<RetainedBuild>,
     caches: IncrementalCacheState,
+    /// ADR 0266: one scan per Type Facts snapshot. The snapshot generation
+    /// fixes the entity set the scan reads, so a repeated request for the
+    /// same generation reuses it instead of rescanning every file.
+    runtime_configuration: Option<(
+        (solid_dialect::Version, String, u64),
+        RuntimeConfigurationPremise,
+    )>,
 }
 
 /// How much derived cross-generation state an idle retained session keeps.
@@ -1512,9 +2398,25 @@ impl IncrementalBuilder {
         contracts: &contract_semantics::AcceptedContractIndex,
         rule_options: &RuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
+        let external_contracts = contracts.external_packages();
+        let contracts = external_contracts.as_ref();
         let total_started = Instant::now();
         let lookup_started = Instant::now();
+        let premise_key = (
+            dialect.version(),
+            facts.project_id.clone(),
+            facts.generation.get(),
+        );
+        let premise = match &self.runtime_configuration {
+            Some((key, premise)) if *key == premise_key => premise.clone(),
+            _ => {
+                let premise = runtime_configuration::scan(facts, dialect);
+                self.runtime_configuration = Some((premise_key, premise.clone()));
+                premise
+            }
+        };
         let identity = BuildIdentity {
+            runtime_configuration: premise,
             dialect: dialect.version(),
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
@@ -1547,6 +2449,7 @@ impl IncrementalBuilder {
             contracts,
             rule_options,
             self.caches.for_build(),
+            identity.runtime_configuration.clone(),
         )?;
         let program = Arc::new(program);
         self.retained = Some(RetainedBuild {
@@ -1560,6 +2463,7 @@ impl IncrementalBuilder {
 
     pub fn clear(&mut self) {
         self.retained = None;
+        self.runtime_configuration = None;
         self.caches.clear();
     }
 
@@ -1619,6 +2523,7 @@ fn push_unique_summary_read(reads: &mut Vec<SummaryRead>, read: SummaryRead) {
         existing.display == read.display
             && existing.origin == read.origin
             && existing.declaration == read.declaration
+            && existing.contract_read_context == read.contract_read_context
     }) {
         reads.push(read);
     }
@@ -1828,8 +2733,8 @@ fn location_order(left: &Location, right: &Location) -> std::cmp::Ordering {
 /// give it, which is why this type exists:
 ///
 /// 1. A name the dialect does not export is not an error. `useUser()` is a
-///    call like any other, and the bundled contracts are keyed by *spelling*,
-///    so an unrecognised callee has to keep the one it was written with.
+///    call like any other; an unrecognised callee retains its spelling for
+///    diagnostics without gaining built-in runtime semantics.
 /// 2. Even a recognised primitive is spelled into diagnostics and hints, and
 ///    the spelling is dialect-specific.
 ///
@@ -1866,8 +2771,7 @@ impl PrimitiveName {
         }
     }
 
-    /// The source spelling. For messages and for the spelling-keyed bundled
-    /// contract table -- never for asking what a callee *is*.
+    /// The source spelling for messages, never for asking what a callee is.
     fn as_str(&self) -> &str {
         match self {
             Self::Known(_, spelling) => spelling,
@@ -1929,7 +2833,142 @@ fn primitive_name(
     }
 }
 
+/// The primitive one concrete call denotes: [`primitive_name`] for its callee,
+/// then the dialect's [`solid_dialect::Dialect::call_form`] for its options.
+///
+/// Every classifier that holds a call asks this rather than resolving the
+/// callee alone, so a form the dialect distinguishes (2.0's
+/// `dynamic(source, { static: true })`) is the same form in every pass. The
+/// spelling stays the callee's: a form is a call of the export, not another
+/// name.
+fn call_primitive_name(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    // A callee that is itself a call (`untrack(() => props.ref)?.(fn)`,
+    // `factory()()`) is the *result* of that inner call. The compiler's entity
+    // at its span answers with the inner callee's symbol, which would make the
+    // outer call the primitive and hand its arguments to the primitive's
+    // callback slots.
+    if file
+        .ast
+        .call_at(file.ast.peel_ts_sugar_span(call.callee))
+        .is_some()
+    {
+        return None;
+    }
+    let name = primitive_name(
+        file.path.as_str(),
+        call.callee,
+        call.static_callee(&file.source),
+        entities,
+        symbol_names,
+        dialect,
+    )?;
+    let PrimitiveName::Known(primitive, spelling) = name else {
+        return Some(name);
+    };
+    let form = dialect.call_form(primitive, &|argument, key| {
+        call_option_literal(file, call, argument, key)
+    });
+    Some(PrimitiveName::Known(form, spelling))
+}
+
+/// What `call`'s syntax proves about the boolean option `key` in its
+/// `argument`-th argument. See [`solid_dialect::OptionLiteral`] for the four
+/// answers; everything not proven is `Unknown`.
+fn call_option_literal(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+    key: &str,
+) -> solid_dialect::OptionLiteral {
+    use solid_dialect::OptionLiteral;
+    use solid_facts::ast::{ArgumentValueKind, RuntimeValueKind};
+    // A spread anywhere up to the slot moves arguments into it at runtime.
+    if call
+        .arguments
+        .iter()
+        .take(argument.saturating_add(1))
+        .any(|candidate| candidate.spread)
+    {
+        return OptionLiteral::Unknown;
+    }
+    let Some(options) = call.arguments.get(argument) else {
+        return OptionLiteral::Absent;
+    };
+    if matches!(
+        options.value,
+        ArgumentValueKind::Undefined | ArgumentValueKind::Null
+    ) || options.runtime_value_kind == RuntimeValueKind::Nullish
+    {
+        return OptionLiteral::Absent;
+    }
+    if !options.exact_object_literal {
+        return OptionLiteral::Unknown;
+    }
+    let named = |span: Span| file.source_text(span) == Some(key);
+    // A later duplicate key wins at runtime, so only the last one decides.
+    let Some(last) = options
+        .property_names
+        .iter()
+        .copied()
+        .filter(|span| named(*span))
+        .max_by_key(|span| span.start)
+    else {
+        return OptionLiteral::Absent;
+    };
+    // `boolean_properties` records only unwrapped `key: true|false` literals,
+    // so a key it does not carry has a value the syntax does not prove.
+    match options
+        .boolean_properties
+        .iter()
+        .find(|property| property.name == last)
+    {
+        Some(property) if property.value => OptionLiteral::True,
+        Some(_) => OptionLiteral::False,
+        None => OptionLiteral::Unknown,
+    }
+}
+
 fn jsx_primitive_name(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    exact_jsx_primitive_name(file, element, entities, symbol_names, dialect).or_else(|| {
+        // The spelling of an imported binding, for a tag the entity table does
+        // not resolve. A tag that resolves to another symbol, a local `For`
+        // shadowing the import, is that symbol and names no primitive.
+        let tag = entities.at(file.path.as_str(), element.name.span);
+        file.ast
+            .imports
+            .iter()
+            .filter(|import| dialect.owns_module(&import.module))
+            .flat_map(|import| &import.bindings)
+            .find_map(|binding| {
+                (binding.kind != solid_facts::ast::ImportKind::Namespace
+                    && file.source_text(binding.local.span) == file.source_text(element.name.span)
+                    && tag.is_none_or(|tag| {
+                        entities.at(file.path.as_str(), binding.local.span) == Some(tag)
+                    }))
+                .then_some(binding.imported.as_deref())
+                .flatten()
+            })
+            .map(|name| PrimitiveName::new(name, dialect))
+    })
+}
+
+/// The dialect primitive a JSX tag names by symbol identity: its own resolved
+/// entity, or a member of a dialect namespace import. Unlike
+/// [`jsx_primitive_name`], a local binding that shadows an imported spelling
+/// names nothing here.
+fn exact_jsx_primitive_name(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
     entities: &EntitySymbols,
@@ -1966,24 +3005,28 @@ fn jsx_primitive_name(
                 .map(|name| PrimitiveName::new(name, dialect))
         })?
     })
-    .or_else(|| {
-        file.ast
-            .imports
-            .iter()
-            .filter(|import| dialect.owns_module(&import.module))
-            .flat_map(|import| &import.bindings)
-            .find_map(|binding| {
-                (binding.kind != solid_facts::ast::ImportKind::Namespace
-                    && file.source_text(binding.local.span) == file.source_text(element.name.span))
-                .then_some(binding.imported.as_deref())
-                .flatten()
-            })
-            .map(|name| PrimitiveName::new(name, dialect))
-    })
 }
 
 fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
     span.location(path)
+}
+
+/// Whether `declaration` is reactive state a package contract declares for
+/// one of its exports (`<contract source>#<export>`), rather than a binding in
+/// the project's own source.
+pub(crate) fn contract_declared_state(declaration: &Location) -> bool {
+    let path = declaration.path.as_ref();
+    // ADR 0235: a returned member's effects (`<export location>[<key>]`).
+    // When it runs is the caller's choice -- `start()` in a click handler
+    // reads nothing untracked -- so its read is the call site's, not the
+    // package's implementation.
+    if path.ends_with(']') {
+        return false;
+    }
+    path.starts_with("accepted:")
+        || path
+            .split_once('#')
+            .is_some_and(|(source, _)| source.ends_with(".json"))
 }
 
 #[cfg(test)]
@@ -2050,15 +3093,17 @@ mod tests {
             PrimitiveName::new("projectSpecificHelper", &solid_dialect::Solid2),
             PrimitiveName::Other(_)
         ));
-        // The same spelling can be vocabulary in one dialect and not the
-        // other: `flush` is 2.0-only, `batch` is 1.x-only.
+        // `flush` is 2.0 vocabulary; `batch` is 1.x's and 2.0 does not have
+        // it, so the same spelling resolves in one vocabulary and not another.
+        // This used to be shown against the 1.x dialect directly; with one
+        // vocabulary it is shown the way a consumer would meet it.
         assert!(matches!(
-            PrimitiveName::new("flush", &solid_dialect::Solid1x),
-            PrimitiveName::Other(_)
+            PrimitiveName::new("flush", &solid_dialect::Solid2),
+            PrimitiveName::Known(Primitive::Flush, "flush")
         ));
         assert!(matches!(
-            PrimitiveName::new("batch", &solid_dialect::Solid1x),
-            PrimitiveName::Known(Primitive::Batch, "batch")
+            PrimitiveName::new("batch", &solid_dialect::Solid2),
+            PrimitiveName::Other(_)
         ));
     }
 
@@ -2115,6 +3160,7 @@ mod tests {
         let leaf = ContractReturn {
             kind: "accessor".into(),
             label: "active".into(),
+            prototype: None,
             ..ContractReturn::default()
         };
         let structured = ContractReturn {
@@ -2123,14 +3169,17 @@ mod tests {
                 Some(ContractReturn {
                     kind: "store-path".into(),
                     label: "query".into(),
+                    prototype: None,
                     ..ContractReturn::default()
                 }),
                 Some(ContractReturn {
                     kind: "object".into(),
                     properties: BTreeMap::from([("active".into(), leaf.clone())]),
+                    prototype: None,
                     ..ContractReturn::default()
                 }),
             ],
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&structured).is_ok());
@@ -2138,6 +3187,7 @@ mod tests {
         let argument = ContractReturn {
             kind: "argument".into(),
             parameter: Some(0),
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&argument).is_ok());
@@ -2145,6 +3195,7 @@ mod tests {
         let callback_result = ContractReturn {
             kind: "callback-result".into(),
             parameter: Some(0),
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&callback_result).is_ok());
@@ -2152,6 +3203,7 @@ mod tests {
         let callback_result_function = ContractReturn {
             kind: "callback-result-function".into(),
             parameter: Some(0),
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&callback_result_function).is_ok());
@@ -2160,6 +3212,7 @@ mod tests {
             kind: "object".into(),
             label: "invalid".into(),
             properties: BTreeMap::from([("active".into(), leaf)]),
+            prototype: None,
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&mixed).is_err());
@@ -2181,6 +3234,7 @@ mod tests {
 
     fn summary_read(symbol: &str, display: &str, start: u64) -> SummaryRead {
         SummaryRead {
+            contract_read_context: None,
             symbol: symbol.into(),
             display: display.into(),
             kind: Some("accessor".into()),
@@ -2195,6 +3249,7 @@ mod tests {
                 end_byte: start + 11,
             },
             origin_context: symbol.into(),
+            owner: None,
         }
     }
 
@@ -2234,6 +3289,7 @@ mod tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
         }
     }
@@ -3112,5 +4168,30 @@ mod tests {
             ..missing_view
         };
         assert!(!present_view.dependency_matches(&missing, &dependency));
+
+        let direct_members = vec![vec![crate::interproc::ParameterMemberInvocation {
+            parameter: 0,
+            path: vec!["of".into(), "values".into()],
+            in_owner_body: true,
+            primitive_builtin: false,
+        }]];
+        let direct_view = InterproceduralResultView {
+            invoked_parameter_members: &direct_members,
+            ..present_view
+        };
+        let direct_state = InterproceduralResultDependencyState::Function {
+            name: nodes[0].name.clone(),
+            summary: Vec::new(),
+            invoked_parameters: Vec::new(),
+            invoked_parameter_members: direct_members[0].clone(),
+        };
+        let mut captured_members = direct_members.clone();
+        captured_members[0][0].in_owner_body = false;
+        let captured_view = InterproceduralResultView {
+            invoked_parameter_members: &captured_members,
+            ..direct_view
+        };
+        assert!(direct_view.dependency_matches(&direct_state, &dependency));
+        assert!(!captured_view.dependency_matches(&direct_state, &dependency));
     }
 }

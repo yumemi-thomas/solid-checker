@@ -4,19 +4,533 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 10 because an exported implementation now
-// carries exact per-callable return-carry edges. They let a consumer compose a
-// callable returned by a callable the export returns, while refusing lexical
-// nesting, stored closures, and return sites that are not reachable.
+// TypeFactsHandshakeProtocol is 77 (ADR 0172): fresh literal returns carry an
+// exhaustive construction tree with independent leaf identity evidence, and
+// control-flow censuses state body-end reachability. Absence remains open.
+// A protocol-76 consumer rejects these fields, so both endpoints move together.
 //
-// A protocol-9 client rejects unknown transcript fields outright, and a
-// protocol-9 producer omits a field this protocol requires, so the addition
-// is a break rather than a compatible extension and the number is what says
-// so. The digest and build id still move with it, and the handshake refuses on
-// any mismatch.
+// Protocol 76 (ADR 0162): **a call-result source states
+// which of its written arguments are not functions by grammar, and which is a
+// plain options literal or an undisplaced non-spread slot.**
+// ImplementationValueSource.ArgumentsNonSpreadSyntax rejects spreads that
+// could supply memo options callbacks beside the registered computation.
+// ImplementationValueSource.ArgumentsNotFunctionSyntax
+// (a primitive by grammar, an array literal or an object literal) and
+// ImplementationValueSource.ArgumentsPlainOptionsSyntax (an object literal every
+// member of which is a plain `key: value` of a primitive by grammar) let the
+// inert-accessor row of ADR 0146 be discharged at the creating call: a first
+// argument that cannot be a function never takes `createSignal`'s memo path, and
+// options that carry no function keep no callback. A protocol-75 consumer decodes
+// with `deny_unknown_fields` and would reject the new fields, so the number moves.
+// (Protocol 75, ADR 0166, adds the request field `hostConstants`.)
+//
+// Protocol 74 (ADR 0168): **a call states which of its
+// written arguments are primitives by grammar.** ImplementationCall.
+// ArgumentsPrimitiveSyntax answers, per written argument slot, the question
+// ImplementationValueSource.ArgumentsPrimitiveSyntax answers for a call-result
+// source, for the call itself; a spread and every slot it displaces is false.
+// A protocol-73 consumer decodes with `deny_unknown_fields` and would reject the
+// new field, so the number moves.
+//
+// Protocol 73 (ADR 0153 item C; 72 was reserved for the
+// coercion amendment, which took no number): **an implementation states the run-time accessor
+// installations of its package that can reach it.**
+// ExportImplementationTranscript.AccessorInstallations names every site the
+// closure's `runtime-accessor-installation` hazard names in the
+// implementation's own installed package: whether the installation's target
+// is an allocation its function makes fresh, every operation the package
+// performs on that target, the named functions that may execute one, and
+// whether this implementation is one of them. A protocol-71 consumer decodes
+// with `deny_unknown_fields` and would reject the new field, so the number
+// moves.
+//
+// Protocol 71 (ADR 0152): **a call states the parameter
+// its callee is and whether it runs on every completion.**
+// ImplementationCall.CalleeUnwrittenParameter names the censused
+// implementation's parameter a callee is by binding identity, at any depth of
+// nesting, so a call inside a returned closure names the export's argument it
+// captured; ImplementationCall.Unconditional states that the call runs exactly
+// once on every normal completion of its flow owner, the lower bound the
+// optimistic Reach never gave. A protocol-70 consumer decodes with
+// `deny_unknown_fields` and would reject the new fields, so the number moves.
+//
+// Protocol 70 (ADR 0153): **a member read of a
+// package-owned context value states its provision census.**
+// UncensusedInvokingForm.ContextMember names, for an accessor form in read
+// position whose subject is the value a dialect `useContext` of a module
+// `const` context returns, the chain of local calls that reaches the read, every
+// reference to the context classified (reads, read helpers, `createComponent`
+// providers with the object literals they provide, exports), and every call in
+// the program's runtime source that could turn the member into an accessor. A
+// protocol-69 consumer decodes with `deny_unknown_fields` and would reject the
+// new field, so the number moves.
+//
+// The 2026-09-28 amendment to ADR 0149 narrows, with no field change and so no
+// new number, what the producer leaves unrecorded: a coercion is omitted only
+// when every operand is proved a primitive, never by a JavaScript type alone,
+// and ReturnSite.PrimitiveSyntax reaches a `let` or `var` every value of which
+// is one.
+//
+// Protocol 68 (ADR 0149):
+// **a default-library call states whether it invokes its declaration by
+// identity.** ImplementationCall.StandardLibraryIdentity holds for a callee
+// whose receiver is nothing, an unshadowed default-library global the file
+// never writes, or a fresh built-in value the expression makes; never for a
+// binding whose declared type is all that names the built-in. A protocol-67
+// consumer decodes with `deny_unknown_fields` and would reject the new field,
+// so the number moves.
+//
+// Protocol 67 (the 2026-09-28 amendment to ADR 0113):
+// **a `plain` return rests on evidence no reassignable binding can fake.**
+// ReturnSite.PrimitiveSyntax now also answers a never-written `const` whose
+// initializer is one and the intrinsic `undefined`; ReturnSite.DefaultLibraryCall
+// names the built-in a returned `Receiver.member(...)` call invokes by
+// identity; and ReturnSite.TypeScriptSource states a return in a TypeScript
+// source file, where the checker holds every write to a binding's declared
+// type. A protocol-66 consumer decodes with `deny_unknown_fields` and would
+// reject the new fields, so the number moves.
+//
+// Protocol 66 (ADR 0145): **a returned function or arrow
+// expression states its location.** ReturnSite.Callable and ReturnArm.Callable
+// name the exact function-like node a returned expression is, after
+// identity-preserving wrappers, so a consumer can demand that node's own
+// transcript and census what the returned value runs when it is invoked; and
+// ReturnSite.PrimitiveSyntax states a returned value that is a primitive by
+// its grammar alone, whatever the bindings it reads hold (ADR 0145); and
+// (ADR 0146) ReturnSite.Call names a returned call expression and a
+// call-result ImplementationValueSource states ArgumentsPrimitiveSyntax for
+// the traced call's arguments. A protocol-65 consumer decodes with `deny_unknown_fields` and would reject the
+// new field, so the number moves.
+//
+// Protocol 65 (ADR 0139): **a construction states what it
+// keeps for its members.** ExportImplementationTranscript.RetainedArguments,
+// beside invocation `construct`, names each constructor parameter stored once
+// on the instance under a fixed key, whose every other use is a direct call in
+// the constructor's own frame and whose key only member calls read, none of
+// them in code a construction reaches, in a class nothing extends, augments
+// or leaks. A constructor's completion form is now stated `plain`, which its
+// grammar guarantees, where it was `unclassified`. A protocol-64 consumer
+// decodes with `deny_unknown_fields` and would reject the new field, so the
+// number moves.
+//
+// Protocol 64 (item B round 2 of ways-to-improve § 3.3):
+// **a returned member read of an unchanged parameter states its arms.** A
+// return whose expression, after identity-preserving wrappers, is a non-call
+// property access or literal-keyed element access chain rooted at an
+// unwritten parameter is decomposed as a root: one arm whose Parameter carries
+// the member's path, and, when a link of the chain is optional, a second arm
+// with ReturnArm.Undefined -- `callHandler`'s `event?.defaultPrevented` is
+// parameter 0 at `defaultPrevented`, or undefined. A protocol-63 consumer
+// decodes with `deny_unknown_fields` and would reject the new field, so the
+// number moves.
+//
+// Protocol 63 (item B of ways-to-improve § 3.3): **a
+// literal-keyed element access roots at the parameter it extends.** The walk
+// behind CalleeParameter, ArgumentParameters and CalleeIteratedParameter roots
+// `handler[0]` at the parameter `handler` is, with a tuple segment, and
+// `options["run"]` with a property segment, exactly as it roots `options.run`;
+// a computed non-literal key roots nothing. No field changes, but a
+// protocol-62 consumer reads every rooted callee as a call through `.name`
+// properties only and would take a tuple segment it never saw for one, so the
+// number moves.
+//
+// Protocol 62 (ADR 0116): **a return arm that calls an
+// unchanged whole input binding says so.** ReturnArm.Invoked names the
+// binding a non-optional call arm invokes, and a returned call of one is
+// decomposed as a one-arm root, so a `returns` census can enumerate "what the
+// caller's argument returned" beside the argument itself -- `accessWith`'s
+// `valueOrFn(...args)` and `valueOrFn`. A protocol-61 consumer decodes with
+// `deny_unknown_fields` and would reject the transcript, so the number moves.
+//
+// Protocol 61 (ADR 0115): **a returned conditional or array
+// literal states the values it can evaluate to.** ReturnSite.Arms lists the
+// leaves of a returned conditional tree -- after identity-preserving wrappers,
+// a branch a literal condition excludes left out -- each with its own value
+// fact and unwritten-parameter identity, and an array-literal arm lists its
+// elements the same way. The list is exhaustive when present, because a
+// conditional evaluates to one of its branches, and absent for a tree past the
+// bounds, so a consumer can never read a partial list as a complete one. It is
+// what lets a `returns` census decide `asArray`'s `value`, `[value]` and `[]`
+// without re-parsing the body. A protocol-60 consumer decodes with
+// `deny_unknown_fields` and would reject the transcript, so the number moves.
+//
+// Protocol 60 (ADR 0112): **a default-library alias whose
+// file hands the container to `Container.member.bind(Container)`** states the
+// alias anyway, and names the escape.
+//
+// Protocol 59 refused the whole file's aliases on any escape of the container,
+// which is what `const defaultEquals = Object.is.bind(Object)` is. Measured on
+// `@solid-primitives/utils@7.0.0-next.4`, that one line withdrew the identity
+// of `Object.entries`, `Object.keys`, `Object.values` and `Object.is` from a
+// bundle that re-exports all four, and ADR 0103 closed zero rows of the corpus
+// as a result. `Function.prototype.bind` neither mutates its `thisArg` nor
+// invokes the target, so the container the alias was read from *is* the
+// library's own; whether the bound target can rewrite it when it later runs is
+// the same reviewed question as which members a domain may close on. So this
+// states the qualified member on DefaultLibraryAlias.ContainerEscapes and
+// decides nothing. A consumer must require every entry to be a member it has
+// reviewed and read the fact as not stated otherwise. Four premises gate the
+// shape: the container is argument 0, the callee is a default-library `bind`,
+// its object is a member access on the *same* container, and that member is a
+// default-library member of it. Every other escape still refuses outright.
+//
+// A protocol-59 consumer would drop the new field, and its
+// `deny_unknown_fields` decode would reject the transcript outright, so the
+// number moves.
+//
+// Protocol 57 (ADR 0103): **an export that is a
+// default-library member by identity** states so. A `const` binding whose
+// initializer is a property access on a default-library container, where
+// container and member are both default-library symbols, the member is
+// declared on that container's interface, and neither is written, deleted or
+// allowed to escape anywhere in the file, answers an implementation demand
+// with DefaultLibraryAlias naming the container and member. The fact is stated
+// *beside* the existing open reason, never instead of it: `Object.keys` stays
+// callSignatureNotUnique and `Math.floor` stays implementationUnavailable, so
+// a consumer with no reviewed entry for the named member keeps refusing
+// exactly as protocol 56 did. The positive fact is new and the number moves.
+//
+// Protocol 56 (ADR 0099): **a value export that cannot
+// be invoked** states so. An export whose runtime value type has no call and
+// no construct signature on any constituent, and is not any/unknown/never or
+// instantiable, answers an implementation demand with NotCallableValue beside
+// its declaration and the single open reason valueNotCallable, where protocol
+// 55 answered callSignatureNotUnique. The positive fact is new and the
+// number moves.
+//
+// Protocol 55 (ADR 0095): **a class is a callee**. A
+// local-declaration demand naming a class resolves to the constructor whose
+// body `new C(…)` runs, in both spellings — `class C {…}` and the bundler's
+// `const C = class {…}` — and censuses that body as it would a function's. The
+// transcript's declaration stays the class, because that is what the consumer
+// demanded; what it censuses is the constructor. Everything a construction runs
+// that the constructor body does not contain refuses by name: a heritage
+// clause, a field initializer, a static block, a computed member name, a
+// decorator, a parameter property, and an implicit constructor. The refusals
+// need no number — a consumer refuses on any nonempty openReasons — but the
+// admitting side does, since protocol 54 could only answer for a function.
+// Protocol 54 (ADR 0094): a **numeric-literal element
+// access into an engine-owned indexed container records no form at all**. An
+// index signature declares no property symbol, so `arr[0]` and `match[1]`
+// resolved nothing and were recorded as unknown accessors; where the container
+// is one the engine itself allocated — the reviewed table in
+// engine_indexed_containers.go — the member reached is engine storage and the
+// read invokes nothing. Read position only, exact numeric literal only, and
+// every union constituent must be in the table. This *removes* rows a consumer
+// previously saw, which is why it moves the number.
+// Protocol 53 (ADR 0093): the `parameter-or-own-result`
+// subject derivation and its `subjectLocalLiteralResults` premises. A written
+// parameter whose every value is either the caller's argument at this slot or a
+// value this program's own code allocated and returned — ADR 0091's open shape,
+// `b = stringStyleToObject(b)`. Each arm is excused by a derivation already
+// reviewed, which is ADR 0090's structure, and the spelling is apart from
+// `parameter` because only one arm is the caller's.
+// Protocol 52 (ADR 0092): a `coercion` form whose
+// operands agreed on a caller-provenance derivation also carries
+// `coercionSubjectParameters`, the slots they rooted at — strictly increasing
+// and deduplicated. Protocol 51 stated the agreement as a diagnostic; this
+// protocol makes it a premise, and a premise about the caller's value must say
+// **which** slot, which is the companion-fact invariant ADR 0047 states for
+// `subjectParameter`. A coercion reaches ToPrimitive on every operand, so the
+// claim names every slot they rooted at rather than one receiver. A consumer
+// that reviewed only protocol 51 read the derivation as a diagnostic and must
+// not begin granting it, which is why the number moves although the field is
+// additive.
+// Protocol 51: a `coercion` form carries
+// `coercionSubjectRoot` and `coercionSubjectRootRefusal` — the derivation every
+// one of its ToPrimitive operands agreed on, or why they did not, with
+// `mixed-operand-roots` when each rooted but not at the same derivation. A
+// coercing operator reaches Symbol.toPrimitive, valueOf and toString on every
+// operand, so ADR 0042's argument can only reach a coercion when every operand
+// is the caller's. Diagnostic and never a premise, like protocol 48's
+// refusal, and separate from `subjectRoot` because that is an accessor's
+// receiver and a census admits it.
+// Protocol 50: `subjectRootRefusal`'s binding legs are
+// refined — which of ADR 0044's conditions the binding failed (from a call,
+// uninitialized, a literal that is not data-only, or assigned), separately per
+// scope, plus `nested-parameter` for a parameter of a callable other than the
+// censused one. Diagnostic only, as protocol 48 established; the coarse
+// spellings remain for a shape none of the finer readings names.
+// Protocol 49: the `parameter` derivation widens to a
+// parameter the body **writes**, when every value assigned to it is rooted at
+// that same slot (ADR 0091). ADR 0050 made this argument for a local binding;
+// a parameter is the same question with one source that is the caller's by
+// construction, the slot itself. No flow analysis is involved: if every value
+// the binding can hold is the caller's, whichever one it holds at the read is
+// the caller's. The sources are the right-hand side of every plain assignment
+// within the censused declaration; a self-reference is admitted co-inductively;
+// a compound assignment, an update expression, a destructuring target and a
+// `for…of`/`for…in` head refuse the whole binding rather than being skipped;
+// sources rooted at two different slots refuse because the receipt names one;
+// and a binding the write predicate calls written but for which no source was
+// enumerated refuses, because the two predicates disagreeing is the one way
+// this join could be unsound.
+// Protocol 48: an accessor form that roots no subject may
+// say **why**, in `subjectRootRefusal` over a closed vocabulary whose default
+// is `unclassified-subject`. It is a diagnostic and never a premise — nothing
+// may be admitted on its account — and it is stated only where `subjectRoot`
+// is empty, so the two are mutually exclusive. It exists because a consumer's
+// own refusal cannot tell a written parameter from a module binding, an
+// import or a call result, which made every premise in this family something
+// to size by reading packages rather than by reading a run.
+// Protocol 47: a parameter whose default is a **data-only
+// literal** and which the body never writes may be rooted at its own slot,
+// under the new `parameter-default-literal` derivation (ADR 0090). Such a
+// parameter holds exactly one of two values — the caller's argument, or the
+// object the default expression freshly created — and an accessor read is
+// excused on each by a premise already reviewed: `parameter` on the first,
+// `own-literal` on the second. The arms are exhaustive, because a defaulted
+// parameter is the argument when it is not `undefined` and the default
+// otherwise. It is deliberately **not** spelled `parameter-default`, which is a
+// default *naming another rooted parameter* and is caller-rooted on both arms:
+// a consumer reading this one as that would say the caller installed whatever
+// ran. The producer also refuses to propagate this root through a local
+// binding, because what a property of the default's literal holds is an
+// arbitrary expression of this program's.
+// Protocol 46: original input through one local helper.
+// Protocol 44: runtime export initializer derivations
+// bind exact source chains and object arguments, without a result verdict.
+// Protocol 43: an initial read is also stated for every
+// use this body's own stores cannot precede, marked `conditional` when the
+// control flow may skip it.
+// Protocol 42: firstIterationOnly limits an initial read
+// to the first entry of a supported synchronous for-of body.
+// Protocol 41: initialParameterReads also binds the first
+// receiver evaluated before a plain parameter assignment stores its RHS.
+// Protocol 40: initialParameterReads binds caller roots
+// at specific reads in a write-free opening declaration prefix.
+// Protocol 39: explicit unwritten parameter bindings prove
+// whole-slot identity without asserting a concrete shape. Protocol 38 union premises spell and identify every
+// constituent, including imported aliases and optional primitive arms.
+// Protocol 37: exact anonymous local callable demands
+// bind their own compiler symbol, with no invented enclosing binding.
+// Protocol 36: localLiteralResult states the exact call,
+// callee, local allocation and complete return set for a data-only result.
+// The consumer must still census and bind that callee (ADR 0053).
+// Protocol 35: an explicit never type is a non-object
+// fact even though Distributed returns no constituents (ADR 0051). This
+// changes coercion classification and primitiveCompletion: a never completion
+// states that no normal value is produced, not that the type is unavailable.
+// The caller's argument premise and the helper's echo still bind the fact.
+// Protocol 34: a form's subject may be rooted at a
+// binding the file **writes**, when every value that binding can hold is
+// rooted at one parameter (ADR 0050). The `parameter` derivation widens to
+// cover it, which is why the number moves: a consumer that reviewed
+// "an unwritten binding" now receives one written in a way it has not seen.
+// Protocol 33: a CallArgumentPremise covers the argument
+// slots a call does **not** write as well as those it does (ADR 0049). Such a
+// parameter receives `undefined` at run time, a primitive, which is a stronger
+// premise than the `any` an unannotated parameter carries — and it is what
+// lets a premise chain survive a caller that omits an optional argument. A
+// protocol-32 consumer demanded only the written slots, so the echo it
+// required would now differ.
+// Protocol 32: a form's subject may be rooted at the
+// value a call to a **caller-supplied callee** handed back — SubjectRoot
+// `parameter-result`, with SubjectParameter naming the slot the callee was
+// rooted at (ADR 0048). What the caller's own function returned is the
+// caller's, by the argument ADR 0042 makes about what its iterable yielded.
+// Protocol 31: an `instanceof` form may state whose
+// `Symbol.hasInstance` its operator can reach (ADR 0047), through the same
+// SubjectRoot vocabulary: `parameter`/`parameter-default` for a constructor the
+// caller supplied, `default-library` for the engine's own, and `own-class`,
+// with SubjectDeclaration naming a class this program declares with no
+// heritage clause and no computed member. A protocol-30 producer states none,
+// and an unreviewed spelling refuses on arrival.
+// Protocol 30: a ParameterPremise may state Spelling, a
+// form of its type that resolves from a module which cannot name it directly
+// (ADR 0046). A helper premise is written into a JavaScript module as a JSDoc
+// `@param`, where a bare `Axis` resolves to nothing however precisely the
+// package's declarations define it; the caller's twin is where the spelling
+// can be computed. Type and Identity remain the whole falsifier. The number
+// moves because the established premise echoes the spelling back, and a
+// protocol-29 consumer would demand a premise without it and refuse the echo.
+// Protocol 29: a `coercion` form may state
+// CoercionPremise — that every operand it applies ToPrimitive to is either
+// provably a primitive or the result of a named call into this program's own
+// runtime source — and every implementation transcript states
+// PrimitiveCompletion, whether the value it hands its caller is provably a
+// primitive over the very program its census was classified on (ADR 0045). The
+// two are one fact in two halves: a consumer grants the premise only by asking
+// each named call's callee, under the premise it demanded that callee under.
+// A protocol-28 producer states neither, and reading an absent
+// PrimitiveCompletion as false is right while reading an absent
+// CoercionPremise as "nothing to grant" is right too — but an absent
+// PrimitiveCompletion on a *premised* transcript would silently refuse every
+// caller that could have cleared, so the number moves with the pair.
+// Protocol 28: a form's subject may be rooted at a
+// binding this program initialized from an **object or array literal**, or
+// from an object pattern's rest element — SubjectRoot `own-literal`, with
+// SubjectDeclaration naming the binding and no SubjectParameter at all
+// (ADR 0044). Every own property of such a value is created by
+// CreateDataPropertyOrThrow, so reading any member of it, computed key
+// included, reaches a data property or the engine's own prototype chain. A
+// protocol-27 consumer required a subject parameter beside every derivation
+// and would refuse the shape, so the number moves.
+// Protocol 27: a stated SubjectParameter is accompanied
+// by SubjectRoot, the derivation that rooted the form's subject at that slot
+// (ADR 0043). The root set is closed under the reads the census already
+// dispositions — a name an object binding pattern in parameter position binds,
+// and a name a local declaration binds from an already-rooted initializer,
+// carry `parameter`, because naming an intermediate does not change whose
+// value it is — while a **defaulted** parameter whose default names another
+// rooted parameter carries `parameter-default`, a claim about two branches
+// rather than one. A protocol-26 consumer received a subject with no
+// derivation and would read the second as the first, so the number moves
+// although the field is additive.
+// Protocol 26: an iteration form may state the parameter
+// its iterated value is rooted at, and a call may state
+// CalleeIteratedParameter — the parameter-rooted iterable whose iteration
+// produced the callee (ADR 0042). A rest parameter's array is also no longer
+// recorded as an iteration form at all: the engine builds it, so iterating or
+// spreading it reaches Array.prototype and nothing else.
+// Protocol 25: an object or JSX prop spread's operand and
+// an object binding pattern's source may carry SubjectParameter too, so the
+// forms that read properties of a caller-supplied value all state where that
+// value came from (ADR 0041). A protocol-24 producer roots only a property or
+// element access.
+// Protocol 24: an uncensused accessor form states its
+// subject parameter in **write** position too, with SubjectWrite saying which
+// position it is (ADR 0040). A protocol-23 consumer received a stated subject
+// only for a read, so reading a protocol-24 transcript's subject without the
+// position would treat a write into the caller's object as a read of it.
+// Protocol 23: a premise reaches a local helper. A
+// premised census records the argument types at each call to a runtime-source
+// declaration (CallArgumentPremises), a local-declaration demand may carry
+// them back as ParameterPremises, and the helper's transcript echoes the ones
+// its own twin bound (ADR 0038, helper premises). A protocol-22 consumer
+// refused any premise on a local declaration and never asked for one, so the
+// number moves although every field is additive.
+// Protocol 22: an export's root implementation transcript
+// may state ParameterPremises — that its uncensused-form census was classified
+// with each parameter bound to the type the export's declared call signature
+// gives that position, instead of an unannotated JavaScript parameter's `any`
+// (ADR 0038). An empty form list on such a transcript means "no form under the
+// declared signature", which a protocol-21 consumer would read as "no form at
+// all", so the number moves although the field is additive.
+// Protocol 21 changes what overloadOrdinal and overloadCount range over (see
+// below). Protocol 20: an implementation transcript may state
+// ImplementationOf — the declaration whose body its census walked when its own
+// declaration is a binding that aliases that function by identity
+// (`const defaultScheduler = systemSetTimeoutZero`, followed through a sibling
+// `.d.ts` to the runtime module's export of the imported name). A protocol-19
+// producer refused such a binding as implementationUnavailable; a transcript
+// without the field is a body of its own declaration on either protocol, so the
+// field is additive, and the number moves because a consumer that never read
+// the field must know that a body may now come from a named other declaration.
+// Protocol 19: an implementation transcript states its
+// completion form — plain, async, generator, async generator — so a `returns`
+// census can refuse a callable that hands its caller a promise or an iterator
+// whatever its body does (ADR 0035); an absent form on an older producer must
+// not be read as plain. Protocol 18: an uncensused form and a `.call`/`.apply`
+// row can state the parameter their subject is rooted at (ADR 0034), and an
+// absent fact on an older producer must not be read as "not rooted".
+// Protocol 17: the uncensused-form census states the
+// ECMAScript guarantee that loose equality against an exact null literal does
+// not invoke a coercion hook. An older producer's empty list does not carry
+// that reviewed classifier meaning, so the handshake moves even though the
+// wire shape does not. Protocol 16 added unchanged whole-parameter identity on
+// return sites; protocol 15 stopped answering a jump-region question with
+// silence.
+//
+// Two coordinated changes, and the field is only half of it. The
+// implementation call census used to **drop** every row that lies in a region a
+// `break` or `continue` makes non-universal, so as to keep an over-optimistic
+// `reachable` off the wire. It now emits the row with Reach `unknown` instead —
+// the weakest non-negative value, strictly weaker than the withheld row, and
+// therefore unable to make any positive claim it could not already make. What
+// dropping cost was a claim in the other direction: a dropped call is a
+// `CallExpression`, so it leaves no uncensused-form row either, and
+// `switch (kind) { case "mount": render(App, el); break; }` published nothing
+// whatever about `render`.
+//
+// ControlFlowCensus.Incompleteness then says which of two different things each
+// `unsupported` marker means. ControlFlowReachabilityLowerBound is a construct
+// walked in full — a loop, a `switch`, a `try` — whose enclosed sites are all
+// recorded and none of which is called `unreachable` on its account, so only
+// the *guarantee* is unmodelled and a may-execute enumeration of the callables
+// inside it stands. ControlFlowUnaccounted is a construct whose flow this
+// census cannot account for in either direction, and it is also the
+// classifier's default, so a marker nobody classified refuses on arrival rather
+// than passing as the admissible arm. Unsupported keeps its exact meaning and
+// its consumers.
+//
+// The number moves rather than the field being additive for the same reason as
+// 14: an absent Incompleteness beside a nonempty Unsupported is a producer with
+// no classification at all, a present empty one is the claim that nothing is
+// unmodelled, and no decoder can separate them. A protocol-14 producer's
+// silence would read to a protocol-15 consumer as the admissible arm, which is
+// the unsound direction, so the handshake is the discriminator. In the other
+// direction a protocol-14 consumer rejects a protocol-15 census outright:
+// ControlFlowCensus denies unknown fields.
+//
+// Protocol 14 carried the two facts an implementation census needs and neither
+// the call census nor Complete could carry.
+//
+// UncensusedInvokingForms on ExportImplementationTranscript names, per form,
+// every syntactic position that can invoke user code and that Calls does not
+// record — Calls holds CallExpression and NewExpression only. Its classifier's
+// default is refusal: a node kind that is neither classified nor on the
+// reviewed list of provably non-invoking kinds arrives as
+// unclassified-invoking-form, so a form nobody has thought of refuses rather
+// than passing in silence.
+//
+// That is the whole reason the number moves rather than the field being merely
+// additive. An absent list and a present empty one are different facts — no
+// opinion versus "every form I walked was a call, a construction, or provably
+// non-invoking" — and no decoder can tell them apart, because the field's
+// absence decodes as empty. A protocol-13 producer's silence would therefore
+// read to a protocol-14 consumer as the positive claim, which is the unsound
+// direction. The handshake is the discriminator, so the handshake has to move.
+// In the other direction a protocol-13 consumer rejects a protocol-14
+// transcript outright: its ImplementationCall and transcript types deny
+// unknown fields.
+//
+// LocalDeclarationLocation on ExportValueDemand, answered by LocalDeclaration
+// on ExportValueTranscript, asks for an implementation transcript of the
+// function-like declaration at an exact source range. A census recurses into
+// module-local helpers, and ImplementationLocation cannot reach one: it starts
+// from an identifier and resolves through the export's runtime binding. The
+// field is hashed into the export-value demand digest, so a protocol-13
+// producer would answer a protocol-14 demand under a digest it computes
+// differently.
+//
+// Protocol 13 added calleeSources to the implementation call census: the
+// traced value provenance of the *callee expression*, from the same
+// returnValueSourcesLocked walk and under the same
+// gates that answer argumentSources for an argument. It answers "what created
+// the value being called", which no other field on ImplementationCall answers
+// — Target, TargetName, TargetModule, Declaration and CalleeParameter state the
+// callee's *resolution* and are unchanged. An empty list is the producer's
+// silence, never a negative claim about the callee.
+//
+// It is a break in both directions even though it is only additive:
+// ImplementationCall denies unknown fields, so a protocol-12 consumer rejects a
+// protocol-13 census outright, and a protocol-12 producer's silence on the field
+// is indistinguishable from "traced nothing" for every call, which a
+// protocol-13 consumer would read as "no callee anywhere has provenance". The
+// digest and build id move with the number, and the handshake refuses on any
+// mismatch.
+//
+// Protocol 12 added argumentSources: per written argument slot, the traced value
+// provenance of the expression written there, and narrowed that tracer's
+// identifier arm, which followed a symbol's first declaration and therefore
+// traced a reassignable or redeclared binding to an initializer that need not
+// be the value.
+//
+// Protocol 11 separated the members a value declares from the members it
+// carries only through the compiler's apparent-type augmentation.
+//
+// Protocol 21 changes what overloadOrdinal and overloadCount range over: the
+// declarations that state a call signature — TypeScript's overload set, the
+// bodiless declarations — rather than every declaration of the signature's
+// kind. A protocol-20 producer counted the implementation body of an
+// overloaded function analyzed from source, so its set reported
+// overloadCount == len + 1 and a consumer comparing the count with the type's
+// signatures refused it as incomplete. The selected-signature identity digest
+// includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 10
-	TypeFactsSchemaSHA256             = "sha256:aeb7900e0c359221ef14f0bd705358d516249d50a67db5063a33c00dcbac3c84"
+	TypeFactsHandshakeProtocol uint64 = 77
+	TypeFactsSchemaSHA256             = "sha256:4f847aa5054745ce5a4fe1f2f2c41cc1d6329dceb44c68e14e6d1d90474f149f"
 )
 
 type ServiceHandshake struct {
@@ -77,6 +591,22 @@ type LifecycleRequest struct {
 	ModuleGraph        *ModuleInventoryDemand `cbor:"moduleGraph,omitempty" json:"moduleGraph,omitempty"`
 	InvocationDemands  []InvocationDemand     `cbor:"invocationDemands,omitempty" json:"invocationDemands,omitempty"`
 	ExportValueDemands []ExportValueDemand    `cbor:"exportValueDemands,omitempty" json:"exportValueDemands,omitempty"`
+	// HostConstants (handshake protocol 72, ADR 0166) are imports whose value
+	// the requesting certification's declared host fixes. Read by invocations
+	// and export-values only, for that request.
+	HostConstants []HostConstant `cbor:"hostConstants,omitempty" json:"hostConstants,omitempty"`
+}
+
+// HostConstant says that in the program module Importer, the name Name
+// imported from the bare specifier Specifier is the literal Value (ADR 0166).
+// The Rust client proved it from the runtime bytes the declared host's
+// resolution selects; the producer applies it only to a reference the checker
+// binds to exactly that import specifier.
+type HostConstant struct {
+	Importer  string `cbor:"importer" json:"importer"`
+	Specifier string `cbor:"specifier" json:"specifier"`
+	Name      string `cbor:"name" json:"name"`
+	Value     bool   `cbor:"value" json:"value"`
 }
 
 // SymbolQueryV6 is one row in Rust's batched TSGo oracle request. Alias and

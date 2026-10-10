@@ -1,0 +1,1040 @@
+{
+  "package": "@solid-primitives/signal-builders",
+  "version": "1.0.0-next.4",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "capitalize": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18 — Simple one-input memo; other signal-builders exports are deliberately not generalized from this claim. Mandatory-first correction: Installed @solid-primitives/signal-builders/dist/string.js:15-18 directly calls string() as first compute statement. solid-js browser reexports @solidjs/signals createMemo; @solidjs/signals/dist/dev.js:2356-2357 -> computed(compute, options), dev-shared.js:5651 eagerly recomputes with no lazy option, 4875 sets context=el, 4942 invokes compute. solid-js/dist/server.dev.js:623-625 computes under owner/observer and :663-664 calls update when lazy absent. No caller options or utils access; first input invocation is mandatory on normal construction, in browser and server.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "builder-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "input",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "builder-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "input"
+          }
+        ],
+        "computations": [
+          "builder-memo"
+        ],
+        "resources": [
+          {
+            "id": "builder-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18 — Exactly one memo accessor is returned, with no setter or other result branch.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive string indexing and built-in string methods does not introduce a reactive read under P2.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+        "callbacks": "Installed @solid-primitives/signal-builders/dist/string.js:15-18 directly calls string() as first compute statement. solid-js browser reexports @solidjs/signals createMemo; @solidjs/signals/dist/dev.js:2356-2357 -> computed(compute, options), dev-shared.js:5651 eagerly recomputes with no lazy option, 4875 sets context=el, 4942 invokes compute. solid-js/dist/server.dev.js:623-625 computes under owner/observer and :663-664 calls update when lazy absent. No caller options or utils access; first input invocation is mandatory on normal construction, in browser and server."
+      },
+      "probes": [
+        {
+          "label": "input-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The input callback executes inside the owned memo; both twins read the same input signal.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Optional-owner memo creation still rejects a present leaf."
+        },
+        {
+          "label": "first-run",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "No read of a returned result forces this callback. Plain runs counter asserts that construction invoked it before returning; only misuse writes a reactive sink in compute.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Mandatory-first correction: Installed @solid-primitives/signal-builders/dist/string.js:15-18 directly calls string() as first compute statement. solid-js browser reexports @solidjs/signals createMemo; @solidjs/signals/dist/dev.js:2356-2357 -> computed(compute, options), dev-shared.js:5651 eagerly recomputes with no lazy option, 4875 sets context=el, 4942 invokes compute. solid-js/dist/server.dev.js:623-625 computes under owner/observer and :663-664 calls update when lazy absent. No caller options or utils access; first input invocation is mandatory on normal construction, in browser and server.",
+        "minZero": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18 — Exactly one memo accessor is returned, with no setter or other result branch.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive string indexing and built-in string methods does not introduce a reactive read under P2.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:15-18 — Exactly argument 0. The published input is Accessor<string>, directly invoked. Callback count has no guaranteed lower bound. Mandatory-first correction: Installed @solid-primitives/signal-builders/dist/string.js:15-18 directly calls string() as first compute statement. solid-js browser reexports @solidjs/signals createMemo; @solidjs/signals/dist/dev.js:2356-2357 -> computed(compute, options), dev-shared.js:5651 eagerly recomputes with no lazy option, 4875 sets context=el, 4942 invokes compute. solid-js/dist/server.dev.js:623-625 computes under owner/observer and :663-664 calls update when lazy absent. No caller options or utils access; first input invocation is mandatory on normal construction, in browser and server."
+        }
+      }
+    },
+    "lowercase": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:6 — Simple one-input memo; other signal-builders exports are deliberately not generalized from this claim.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "builder-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "input",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "builder-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "input"
+          }
+        ],
+        "computations": [
+          "builder-memo"
+        ],
+        "resources": [
+          {
+            "id": "builder-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:6 — Exactly one memo accessor is returned, with no setter or other result branch.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:6 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive string indexing and built-in string methods does not introduce a reactive read under P2.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:6 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:6 — Exactly argument 0. The published input is Accessor<string>, directly invoked. Callback count has no guaranteed lower bound."
+      },
+      "probes": [
+        {
+          "label": "input-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The input callback executes inside the owned memo; both twins read the same input signal.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Optional-owner memo creation still rejects a present leaf."
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:6; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:6; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:6 — Exactly one memo accessor is returned, with no setter or other result branch.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:6; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:6 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive string indexing and built-in string methods does not introduce a reactive read under P2.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:6; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:6 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:6; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:6 — Exactly argument 0. The published input is Accessor<string>, directly invoked. Callback count has no guaranteed lower bound."
+        }
+      }
+    },
+    "uppercase": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:8 — Simple one-input memo; other signal-builders exports are deliberately not generalized from this claim.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "builder-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "input",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "builder-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "input"
+          }
+        ],
+        "computations": [
+          "builder-memo"
+        ],
+        "resources": [
+          {
+            "id": "builder-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:8 — Exactly one memo accessor is returned, with no setter or other result branch.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:8 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive string indexing and built-in string methods does not introduce a reactive read under P2.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:8 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:8 — Exactly argument 0. The published input is Accessor<string>, directly invoked. Callback count has no guaranteed lower bound."
+      },
+      "probes": [
+        {
+          "label": "input-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The input callback executes inside the owned memo; both twins read the same input signal.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Optional-owner memo creation still rejects a present leaf."
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:8; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:8; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:8 — Exactly one memo accessor is returned, with no setter or other result branch.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:8; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:8 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive string indexing and built-in string methods does not introduce a reactive read under P2.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:8; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:8 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/string.js:8; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/string.js:8 — Exactly argument 0. The published input is Accessor<string>, directly invoked. Callback count has no guaranteed lower bound."
+        }
+      }
+    },
+    "ceil": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:20 — Simple one-input memo; other signal-builders exports are deliberately not generalized from this claim.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "builder-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "input",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "builder-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "input"
+          }
+        ],
+        "computations": [
+          "builder-memo"
+        ],
+        "resources": [
+          {
+            "id": "builder-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:20 — Exactly one memo accessor is returned, with no setter or other result branch.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:20 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive number rounding does not introduce a reactive read under P2.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:20 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:20; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly argument 0. Callable/zero-arity access is conditional; static numbers do not invoke it. Callback count has no guaranteed lower bound."
+      },
+      "probes": [
+        {
+          "label": "input-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The input callback executes inside the owned memo; both twins read the same input signal.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Optional-owner memo creation still rejects a present leaf."
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:20; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:20; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:20 — Exactly one memo accessor is returned, with no setter or other result branch.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:20; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:20 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive number rounding does not introduce a reactive read under P2.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:20; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:20 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:20; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:20; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly argument 0. Callable/zero-arity access is conditional; static numbers do not invoke it. Callback count has no guaranteed lower bound."
+        }
+      }
+    },
+    "floor": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:22 — Simple one-input memo; other signal-builders exports are deliberately not generalized from this claim.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "builder-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "input",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "builder-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "input"
+          }
+        ],
+        "computations": [
+          "builder-memo"
+        ],
+        "resources": [
+          {
+            "id": "builder-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:22 — Exactly one memo accessor is returned, with no setter or other result branch.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:22 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive number rounding does not introduce a reactive read under P2.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:22 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:22; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly argument 0. Callable/zero-arity access is conditional; static numbers do not invoke it. Callback count has no guaranteed lower bound."
+      },
+      "probes": [
+        {
+          "label": "input-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The input callback executes inside the owned memo; both twins read the same input signal.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Optional-owner memo creation still rejects a present leaf."
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:22; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:22; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:22 — Exactly one memo accessor is returned, with no setter or other result branch.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:22; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:22 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive number rounding does not introduce a reactive read under P2.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:22; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:22 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:22; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:22; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly argument 0. Callable/zero-arity access is conditional; static numbers do not invoke it. Callback count has no guaranteed lower bound."
+        }
+      }
+    },
+    "round": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:18 — Simple one-input memo; other signal-builders exports are deliberately not generalized from this claim.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "builder-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "input",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "builder-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "builder-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "input"
+          }
+        ],
+        "computations": [
+          "builder-memo"
+        ],
+        "resources": [
+          {
+            "id": "builder-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:18 — Exactly one memo accessor is returned, with no setter or other result branch.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:18 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive number rounding does not introduce a reactive read under P2.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:18 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:18; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly argument 0. Callable/zero-arity access is conditional; static numbers do not invoke it. Callback count has no guaranteed lower bound."
+      },
+      "probes": [
+        {
+          "label": "input-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The input callback executes inside the owned memo; both twins read the same input signal.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Optional-owner memo creation still rejects a present leaf."
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:18 — Exactly one memo accessor is returned, with no setter or other result branch.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:18 — No package-owned reactive source. The input callable is tracked as its callback row. Primitive number rounding does not introduce a reactive read under P2.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:18 — Exactly one optional-owner memo, requiring children on a present owner. No required-owner claim; rc.13 dev-shared.js:5633-5651.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/signal-builders/dist/number.js:18; No host branch. Both create one memo, execute the stated input callback under the created tracked memo owner, and return that reactive memo accessor. Number builders use the same exact utils access helper on both builds; no additional package operation appears in a browser-closed domain. Resolved access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/signal-builders/dist/number.js:18; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/signal-builders-capitalize-write-in-tracked-callback/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly argument 0. Callable/zero-arity access is conditional; static numbers do not invoke it. Callback count has no guaranteed lower bound."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,3 @@
+function createTrackedEffect(compute, options) {
+  trackedEffect(compute, { ...options, name: options?.name ?? "trackedEffect" });
+}

@@ -1,0 +1,2495 @@
+{
+  "package": "@solid-primitives/timer",
+  "version": "1.4.5-next.1",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "pairs": "../_pairs/@solid-primitives+timer",
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createTimer": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "numeric-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "accessor-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "accessor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "delay-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "accessor-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "accessor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timer-provider",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          },
+          {
+            "id": "accessor-timer-provider",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "accessor-handler",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            }
+          },
+          {
+            "id": "numeric-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "accessor-reconcile-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "reconcile-timer-provider",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "delay-compute"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "timer-provider"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "accessor-timer-provider"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "accessor-handler"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "numeric-handler"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "accessor-reconcile-handler"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "reconcile-timer-provider"
+          }
+        ],
+        "cleanups": [
+          "numeric-cleanup"
+        ],
+        "computations": [
+          "accessor-effect"
+        ],
+        "resources": [
+          {
+            "id": "accessor-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Numeric-delay cleanup is forbidden in an owned onSettled leaf, index.js:38."
+        },
+        {
+          "label": "callable",
+          "rule": "missing-owner",
+          "why": "Accessor delay enters createEffect, index.js:50; outside an owner it emits NO_OWNER_EFFECT."
+        },
+        {
+          "label": "delay-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The accessor-delay branch computes delay under tracking; use a long host interval to isolate compute. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "numeric-handler",
+          "rule": "missing-owner",
+          "why": "numeric-handler: wait for native timeout dispatch. Only the misuse calls onCleanup without the captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "accessor-handler",
+          "rule": "missing-owner",
+          "why": "accessor-handler: wait for native timeout dispatch. The package's untrack(fn) preserves the execution-time owner, which is absent at host entry. Only the misuse calls onCleanup without the captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "reconcile-handler",
+          "rule": "missing-owner",
+          "why": "Force fractionDone >= 1 while suppressing host ticks. In the installed rc.13 runtime, effect apply executes without an owner; callHandler's untrack(fn) preserves that absent owner. Only the misuse registers an unowned cleanup; the correct twin restores the captured component owner. This witnesses queued reconciliation, not a native host tick.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "provider-phases",
+          "rule": "missing-owner",
+          "why": "Drive 0 < fractionDone < 1 with a long suppressed interval. Only the second provider registration, called by the native reconciliation timeout, attempts onCleanup; the correct twin restores the captured component owner. This diagnostic witnesses the external provider entry, not the first effect-apply entry.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Every normal completion returns undefined.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Package has no own reactive source read. delay is invoked in tracked compute, provider/callHandler bodies are separate explicit caller-code uses; no untracked caller-read attribution is asserted.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Numeric branch registers onCleanup; accessor branch creates exactly one effect owning apply cleanup. Preserve ADR 0223 plain/callable guards and required owner capabilities; provider effects are caller code. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 P1: Numeric fn is the external/ambient numeric-handler; non-native timers count as hosts. Accessor delay executes in the stated tracked compute. Timer registration has numeric same-stack, accessor apply/flush, and later reconcile-provider roles. index.js:46-49 explicitly untracks fn inside callHandler: accessor-handler is external/untracked, while accessor-reconcile-handler executes in queued effect apply (flush), never as a universal host-deferred constructor invocation. dev.js:1723-1740,1876-1892 establishes the user-effect apply boundary; untrack preserves ambient owner (dev-shared.js:5863-5891). These are the complete branch-specific caller uses. /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:1723-1740,1876-1892; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5863-5891."
+      },
+      "hostFree": {
+        "why": "A run that declares no host may run the server build. There @solidjs/web@2.0.0-rc.13 dist/server.js:4278 (isServer = true), dist/web.dev.js:2237 (isServer = false), so createTimer returns undefined at @solid-primitives/timer@1.4.5-next.1 dist/index.js:36 before registering any cleanup or effect: the numeric cleanup and the accessor effect may not run. Every other part of the browser claim is unchanged.",
+        "minZero": [
+          "numeric-cleanup",
+          "accessor-effect"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "@solid-primitives/timer@1.4.5-next.1 dist/index.js:36 (server: returns undefined before any operation; @solidjs/web@2.0.0-rc.13 dist/server.js:4278 (isServer = true), dist/web.dev.js:2237 (isServer = false)); browser: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Every normal completion returns undefined.",
+          "reads": "@solid-primitives/timer@1.4.5-next.1 dist/index.js:36 (server: returns undefined before any operation; @solidjs/web@2.0.0-rc.13 dist/server.js:4278 (isServer = true), dist/web.dev.js:2237 (isServer = false)); browser: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Package has no own reactive source read. delay is invoked in tracked compute, provider/callHandler bodies are separate explicit caller-code uses; no untracked caller-read attribution is asserted.",
+          "creates": "@solid-primitives/timer@1.4.5-next.1 dist/index.js:36 (server: returns undefined before any operation; @solidjs/web@2.0.0-rc.13 dist/server.js:4278 (isServer = true), dist/web.dev.js:2237 (isServer = false)); browser: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Numeric branch registers onCleanup; accessor branch creates exactly one effect owning apply cleanup. Preserve ADR 0223 plain/callable guards and required owner capabilities; provider effects are caller code. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints).",
+          "callbacks": "@solid-primitives/timer@1.4.5-next.1 dist/index.js:36 (server: returns undefined before any operation; @solidjs/web@2.0.0-rc.13 dist/server.js:4278 (isServer = true), dist/web.dev.js:2237 (isServer = false)); browser: P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:35-84; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 P1: Numeric fn is the external/ambient numeric-handler; non-native timers count as hosts. Accessor delay executes in the stated tracked compute. Timer registration has numeric same-stack, accessor apply/flush, and later reconcile-provider roles. index.js:46-49 explicitly untracks fn inside callHandler: accessor-handler is external/untracked, while accessor-reconcile-handler executes in queued effect apply (flush), never as a universal host-deferred constructor invocation. dev.js:1723-1740,1876-1892 establishes the user-effect apply boundary; untrack preserves ambient owner (dev-shared.js:5863-5891). These are the complete branch-specific caller uses. /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:1723-1740,1876-1892; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5863-5891."
+        }
+      }
+    },
+    "makeTimer": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "timer-provider",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "returned-callable",
+              "call": {
+                "closed": [
+                  "callbacks",
+                  "reads",
+                  "creates",
+                  "returns"
+                ],
+                "callbacks": [],
+                "reads": [],
+                "creates": [],
+                "returns": [
+                  "makeTimer-returned-clear-return"
+                ],
+                "operations": [
+                  {
+                    "id": "makeTimer-returned-clear-return",
+                    "kind": "return",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "untracked",
+                    "count": {
+                      "min": 0,
+                      "max": "many",
+                      "scope": "call"
+                    },
+                    "output": "undefined"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "host-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "timer-provider"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "host-handler"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 No own reactive read; timer-provider invokes parameter 2 inline, retaining all caller effects. No primitive delay coercion read.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 No package-defined reactive owner/source/cleanup; the timer provider is an explicit caller-code invocation, not an inertness claim.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/paint-core/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 P1: timer, including non-native structurally compatible providers, has host scheduling behavior. timer-provider records the synchronous registration call; host-handler records caller fn later, external/ambient/0..many. The whole returned clear now carries an independently cited graph; this factory closure confers no authority on future uses.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 One browser normal completion returns a function clearing id via native clearInterval. The server branch returns an inert function; only browser authority is drafted here. Factory callback and timer-provider claims retain their existing P1 premise."
+      },
+      "probes": [
+        {
+          "label": "host-handler",
+          "rule": "missing-owner",
+          "why": "host-handler: wait for native timeout dispatch. Only the misuse calls onCleanup without the captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "returned-clear",
+          "rule": "missing-owner",
+          "why": "Only the misuse leaves the native timer running until its ownerless callback. The correct twin invokes the returned clear before dispatch; fresh graph-bound admission is required.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "returnedClosures": {
+        "return": {
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:22 \u2014 Returned arrow calls native clearInterval with its retained timer handle, without dereferencing or calling the handle. Under P1 there is no caller invocation, reactive read or reactive allocation and normal completion returns undefined. No captured factory argument is required; callbacks/reads/creates/returns are independently enumerated. Writes and cancellation protocols remain open.",
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:22 \u2014 Returned arrow calls native clearInterval with its retained timer handle, without dereferencing or calling the handle. Under P1 there is no caller invocation, reactive read or reactive allocation and normal completion returns undefined. No captured factory argument is required; callbacks/reads/creates/returns are independently enumerated. Writes and cancellation protocols remain open.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:22 \u2014 Returned arrow calls native clearInterval with its retained timer handle, without dereferencing or calling the handle. Under P1 there is no caller invocation, reactive read or reactive allocation and normal completion returns undefined. No captured factory argument is required; callbacks/reads/creates/returns are independently enumerated. Writes and cancellation protocols remain open.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimer-module-scope/node_modules/@solid-primitives/timer/dist/index.js:22 \u2014 Returned arrow calls native clearInterval with its retained timer handle, without dereferencing or calling the handle. Under P1 there is no caller invocation, reactive read or reactive allocation and normal completion returns undefined. No captured factory argument is required; callbacks/reads/creates/returns are independently enumerated. Writes and cancellation protocols remain open."
+        }
+      }
+    },
+    "createTimeoutLoop": {
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "numeric-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-source-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "resources": [
+              "current-timeout"
+            ]
+          },
+          {
+            "id": "timeout-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-initial",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-compute-first",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-compute-flush",
+            "kind": "invoke",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timeout-host",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "initial-timeout-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "strictRead": "cleared",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:99 \u2014 Actual unlabelled untrack(timeout). /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solidjs/signals/dist/dev-shared.js:5863-5887 \u2014 untrack sets strictRead false without discarding ambient owner."
+          },
+          {
+            "id": "current-timeout-first",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "current-timeout"
+              }
+            ],
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "current-timeout-flush",
+            "kind": "read",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "current-timeout"
+              }
+            ],
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "numeric-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "function-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "function-apply-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "timeout-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "timeout-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "timeout-initial"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "timeout-compute-first"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "timeout-compute-flush"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "timeout-host"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "numeric-handler"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "function-handler"
+          }
+        ],
+        "reads": [
+          "initial-timeout-read",
+          "current-timeout-first",
+          "current-timeout-flush"
+        ],
+        "creates": [
+          "timeout-source-production"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "resources": [
+          {
+            "id": "current-timeout",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "timeout-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "cleanups": [
+          "numeric-cleanup",
+          "function-apply-cleanup"
+        ],
+        "computations": [
+          "timeout-effect"
+        ]
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Numeric mandatory cleanup inside onSettled leaf."
+        },
+        {
+          "label": "function-owner",
+          "rule": "missing-owner",
+          "why": "Function branch always creates an owner-requiring effect."
+        },
+        {
+          "label": "initial-clearing",
+          "rule": "strict-read-untracked",
+          "why": "Initial timeout accessor runs under untrack; compare explicit bad component read with tracked JSX. Neither constructor should warn."
+        },
+        {
+          "label": "compute-first",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The mandatory first tracked timeout compute invokes accessor under the created effect. Initial untrack call must remain clean.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "compute-flush",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Drive source change; only a later tracked compute writes.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "numeric-host",
+          "rule": "missing-owner",
+          "why": "Native numeric interval dispatch invokes handler ownerless; correct restores captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "function-host",
+          "rule": "missing-owner",
+          "why": "Function interval dispatch invokes handler ownerless; correct restores captured component owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "timeout-host",
+          "rule": "missing-owner",
+          "why": "After handler, function branch invokes timeout on native interval stack, outside the tracked effect; correct restores captured owner for that later call.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1)."
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1). Draft only. Numeric plain guard is justified by published TimeoutSource = number | Accessor<number | false>, not by arbitrary plain values.",
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none.",
+        "minZero": [
+          "numeric-cleanup",
+          "timeout-source-production",
+          "timeout-effect",
+          "timeout-initial",
+          "timeout-compute-first",
+          "initial-timeout-read",
+          "current-timeout-first"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1).",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:94 \u2014 Server returns undefined before numeric/function work. Browser guarantees are weakened to possible operations on the host-free artifact; this does not prove a browser violation on none. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:93-112 \u2014 Browser numeric timeout calls makeTimer(handler, timeout, setInterval) then mandatory onCleanup. Function branch initializes currentTimeout from untrack(timeout), creates one required-owner split effect, invokes timeout in tracked compute, and reads currentTimeout under its created owner; native interval dispatch invokes handler then timeout again. That last invocation is ordinary ambient host execution, not untrack. Timeout return is number|false by published real typings, so no callable initializer result can be manufactured. Return is void on both branches. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createTimeoutLoop-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:19-23 \u2014 makeTimer uses native setInterval and returns clearInterval cleanup (P1)."
+        }
+      }
+    },
+    "createPolled": {
+      "rule": "missing-owner",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 Browser constructor effect requires an owner. The real dependent accessor read at line 124 is retained. Callable generic poll results are signal initializers. Numeric timeout cleanup guard needs exact consumer guard evidence; callbacks stays open for generic options/delay behavior.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [
+          "initial-dependent-read",
+          "tick-read",
+          "effect-dependent-read"
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-tick",
+          "create-dependent",
+          "create-polled"
+        ],
+        "computations": [
+          "dependent-memo",
+          "result-memo",
+          "effect",
+          "timer-delay-effect"
+        ],
+        "cleanups": [
+          "timer-cleanup"
+        ],
+        "resources": [
+          {
+            "id": "tick",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "dependent",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "polled",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "dependent-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "polled-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "effect-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "delay-owner",
+            "kind": "owner"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create-tick",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "tick"
+            ]
+          },
+          {
+            "id": "create-dependent",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "dependent"
+            ]
+          },
+          {
+            "id": "create-polled",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "polled"
+            ]
+          },
+          {
+            "id": "dependent-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "dependent-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "result-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "polled-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "poll-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "dependent-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "dependent-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "delay-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "delay-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "delay-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timer-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "polled"
+            }
+          },
+          {
+            "id": "initial-dependent-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "dependent"
+              }
+            ]
+          },
+          {
+            "id": "tick-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "dependent-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "dependent-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "tick"
+              }
+            ]
+          },
+          {
+            "id": "effect-dependent-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "dependent"
+              }
+            ]
+          },
+          {
+            "id": "initialize-polled-result",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "polled-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "polled-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timer-delay-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "delay-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "count": {
+              "scope": "call",
+              "min": 0,
+              "max": 1
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "poll-source"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "delay-source"
+          },
+          {
+            "from": {
+              "operation": "poll-source",
+              "path": []
+            },
+            "operation": "initialize-polled-result"
+          }
+        ],
+        "edges": [
+          {
+            "kind": "data",
+            "from": "poll-source",
+            "to": "initialize-polled-result"
+          }
+        ],
+        "callbackResults": [
+          {
+            "producer": "poll-source",
+            "shape": "unknown",
+            "uses": [
+              "initialize-polled-result"
+            ],
+            "closed": [
+              "uses"
+            ],
+            "callableOnly": [
+              "initialize-polled-result"
+            ]
+          }
+        ]
+      },
+      "resultClosures": {
+        "poll-source": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 First result enters createSignal at 124; effect updates use an explicit () => newValue wrapper, preserving a function as data thereafter."
+      },
+      "probes": [
+        {
+          "label": "result-initializer",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Case-file result code distinguishes the result-use context from the producer callback. Fresh runtime probe required; no passed observation is fabricated."
+        }
+      ],
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 Enumerated constructor tick/dependent/polled resources, dependent/result computations, effect and timer cleanup. The callback census remains open.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 Enumerated constructor tick/dependent/polled resources, dependent/result computations, effect and timer cleanup. The callback census remains open.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/timer-createPolled-module-scope-browser/node_modules/@solid-primitives/timer/dist/index.js:114-129 \u2014 Enumerated constructor tick/dependent/polled resources, dependent/result computations, effect and timer cleanup. The callback census remains open."
+      }
+    },
+    "createIntervalCounter": {
+      "rule": "missing-owner",
+      "why": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:138-141,119-129,35-84 \u2014 Browser-only specialization of createPolled with the package-internal numeric poll and -1 seed. Retain the ambient private constructor read and inherited owner requirements; no untrack or strict-read clearing is claimed. Throwing prefixes weaken later counts. Delay/options callbacks remain partial positive. Source-reviewed draft; fresh Chrome rc.13 probes required.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [
+          "initial-dependent-read",
+          "tick-read",
+          "effect-dependent-read"
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-tick",
+          "create-dependent",
+          "create-polled"
+        ],
+        "computations": [
+          "dependent-memo",
+          "effect",
+          "timer-delay-effect"
+        ],
+        "cleanups": [
+          "timer-cleanup"
+        ],
+        "resources": [
+          {
+            "id": "tick",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "dependent",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "polled",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "dependent-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "effect-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "delay-owner",
+            "kind": "owner"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create-tick",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "tick"
+            ]
+          },
+          {
+            "id": "create-dependent",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "dependent"
+            ]
+          },
+          {
+            "id": "create-polled",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "polled"
+            ]
+          },
+          {
+            "id": "dependent-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "dependent-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "delay-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "delay-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "delay-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "timer-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "kind": "plain"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "polled"
+            }
+          },
+          {
+            "id": "initial-dependent-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "dependent"
+              }
+            ]
+          },
+          {
+            "id": "tick-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "dependent-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "dependent-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "tick"
+              }
+            ]
+          },
+          {
+            "id": "effect-dependent-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "dependent"
+              }
+            ]
+          },
+          {
+            "id": "timer-delay-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "delay-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "count": {
+              "scope": "call",
+              "min": 0,
+              "max": 1
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-get",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "protocol": "get"
+          },
+          {
+            "id": "options-equals",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [
+                    "equals"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-unobserved",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "resource",
+              "resource": "polled"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [
+                    "unobserved"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "delay-source"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "options-get"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": [
+                "equals"
+              ]
+            },
+            "operation": "options-equals"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": [
+                "unobserved"
+              ]
+            },
+            "operation": "options-unobserved"
+          }
+        ]
+      },
+      "probes": [
+        {
+          "label": "top-level-read",
+          "rule": "strict-read-untracked",
+          "why": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:124,129,140 \u2014 Exact module-root accessor is read once in the component body only in misuse; mirrors the ledger twins."
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:120-128,140; rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5635-5651 \u2014 Inherited dependent computation rejects a present leaf owner before later registrations."
+        },
+        {
+          "label": "delay-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:128,140,50-83 \u2014 Caller delay executes in the timer effect compute; misuse alone writes in it."
+        },
+        {
+          "label": "options-get",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:124,140; rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5660-5685,6738-6755 \u2014 A legal options.name getter executes on the constructing stack; misuse alone writes under its component owner."
+        },
+        {
+          "label": "equals-owner",
+          "rule": "missing-owner",
+          "why": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:124-127,140; rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5666,6789-6795; rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1736-1740,1814-1922 \u2014 Comparator executes during the queued polled update; only correct restores the captured owner for its cleanup.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "unobserved-owner",
+          "rule": "missing-owner",
+          "why": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:124,140; rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5685,3484-3498 \u2014 Drive last-subscriber unlink from an event handler; correct alone restores the live component owner. This does not close other hook execution contexts.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "closures": {
+        "reads": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:119-125,138-141 \u2014 The own read census is tick() in the dependent computation, the ambient depSignal() constructor read and depSignal() in the split effect compute. Caller delay/option reads remain in their open callback domain. No strict-read-cleared claim.",
+        "creates": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:119-128,35-84,138-141; rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2354; rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5485-5486,4942-4945 \u2014 Tick and polled are plain numeric signals; dependent is the sole signal initializer computation. Fixed -1 seed and numeric prev + 1 exclude the generic callable/async-iterable result branch. Enumerate the dependent memo, required split effect, numeric timer cleanup and callable-delay effect, with zero lower bounds after throwing prefixes.",
+        "returns": "rust/target/primitives-checkpoint/misuse/timer-createIntervalCounter-top-level-read/node_modules/@solid-primitives/timer/dist/index.js:124,129,138-141 \u2014 Every browser normal completion returns exactly polled, the accessor of the numeric polled resource; throws may prevent return (0..1). The server constant accessor at 139 is not a browser return. No host-free row is asserted."
+      }
+    }
+  }
+}

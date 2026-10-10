@@ -1,0 +1,175 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 783,
+      "end": 798,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 928,
+      "end": 943,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 1072,
+      "end": 1087,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 1228,
+      "end": 1243,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 1376,
+      "end": 1391,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 1539,
+      "end": 1554,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 1686,
+      "end": 1698,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 1842,
+      "end": 1854,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 1990,
+      "end": 2002,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 2129,
+      "end": 2136,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 2129,
+      "end": 2136,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 2290,
+      "end": 2302,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 2332,
+      "end": 2345,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 4344,
+      "end": 4358,
+      "fixes": 0
+    },
+    {
+      "rule": "components-return-once",
+      "code": "SC1004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 6892,
+      "end": 6904,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/App.tsx",
+      "start": 7026,
+      "end": 7052,
+      "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-source/hook.ts",
+      "start": 1858,
+      "end": 1863,
+      "fixes": 0
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "rc9-callback-forms",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "hiddenBy",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "omit",
+      "location": "<package-root>/index.ts:1603:1622",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "optionedSource",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "@solidjs/web",
+      "callee": "dynamic",
+      "location": "<package-root>/index.ts:1165:1189",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "staticSource",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "@solidjs/web",
+      "callee": "dynamic",
+      "location": "<package-root>/index.ts:506:539",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "trackedSource",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "@solidjs/web",
+      "callee": "dynamic",
+      "location": "<package-root>/index.ts:874:889",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "untrackedSource",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "untrack",
+      "location": "<package-root>/index.ts:658:673",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "whenReady",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "until",
+      "location": "<package-root>/index.ts:2086:2102",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "withoutA",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "omit",
+      "location": "<package-root>/index.ts:1745:1761",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

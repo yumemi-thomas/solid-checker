@@ -1,0 +1,185 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 350,
+      "end": 359,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 484,
+      "end": 493,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 639,
+      "end": 648,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 694,
+      "end": 706,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 796,
+      "end": 810,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 909,
+      "end": 924,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1032,
+      "end": 1041,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1113,
+      "end": 1122,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1176,
+      "end": 1185,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1237,
+      "end": 1246,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1302,
+      "end": 1311,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1368,
+      "end": 1377,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1436,
+      "end": 1445,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1502,
+      "end": 1511,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1562,
+      "end": 1571,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1624,
+      "end": 1633,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1689,
+      "end": 1698,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-stack-scheduler-owner/App.tsx",
+      "start": 1752,
+      "end": 1761,
+      "fixes": 0
+    }
+  ]
+}

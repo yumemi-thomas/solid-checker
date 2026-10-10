@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "authority": false,
+  "certification": false,
+  "date": "2026-10-03",
+  "checkerBase": "c6d973abb2910340ed72322a95fd055cf13d7860",
+  "compilerDistribution": "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d",
+  "compilerUpstreamBase": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+  "productionCompilerPinsChanged": false,
+  "auditedRuntime": "Solid RC.9",
+  "overlay": {
+    "path": "checker-automatic-integration.patch",
+    "sha256": "sha256:1c9c34fd42a1b5cdf92bfdd3e0be9b8a394b0071184ada54bb325c1b32baa503",
+    "renderedSha256AtRecordedCompilerLocation": "sha256:18c6e44f55f8967d95373a1762c6ba54138a8e9b480bf3ace73b3e2cc2f5e6f9",
+    "files": 48,
+    "check": "Rendered against the exact clean compiler candidate, applied to a temporary index at checkerBase, and compared every resulting file byte-for-byte with the final local integration checkout",
+    "passed": true
+  },
+  "executedCandidateBinarySha256": "sha256:26535140f26307d32c7f8abb29e5b4c94372addfb87c9b6538239cc64010d444",
+  "automaticFeedbackEvidence": "../../reviewed-package-models/development/automatic-feedback-evidence.json",
+  "measurements": {
+    "targets": 21,
+    "targetsWithWarnings": 18,
+    "targetsWithInformation": 1,
+    "targetsStillOpen": 2,
+    "controls": 20,
+    "controlsWithGuidance": 0,
+    "freshLineageTargets": 2,
+    "freshLineageControls": 4,
+    "boundaryChecks": 4
+  },
+  "verification": {
+    "fullMainCheckoutVerifySeconds": 841.21,
+    "fullRunScope": "Passed before final allocation, observer-query and method precision refinements",
+    "finalFollowup": [
+      "301 IR library tests",
+      "Armed native development source-model process test",
+      "330 CLI tests and declaration type checking",
+      "Fresh coverage: 142 fixtures, 746 findings",
+      "Published RC.9 typing checks: zero errors",
+      "Formatting, diff, schema, dialect validation and workspace/all-target Clippy with certification pins",
+      "41 consumers, six fresh lineage cases, four boundaries and independent audit"
+    ],
+    "scopeLimit": "The final complete RC.13 overlay did not receive a new full make verify after the final refinements; the candidate executed the final browser corpus and the main semantic sources passed the recorded follow-up"
+  }
+}

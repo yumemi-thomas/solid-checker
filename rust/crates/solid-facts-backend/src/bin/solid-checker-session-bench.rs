@@ -74,7 +74,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let dialect = match options.dialect.as_deref() {
         Some(id) => solid_facts_backend::dialect::by_id(id)
             .ok_or_else(|| format!("unknown dialect {id:?}"))?,
-        None => solid_facts_backend::dialect::detect(&project),
+        // The benchmark measures a retained session's timings; running it
+        // against a runtime this build has no dialect for would measure the
+        // wrong language rather than fail, so it refuses like the daemon does.
+        None => match solid_facts_backend::dialect::detect_detailed(&project) {
+            solid_facts_backend::dialect::Detection::Installed { dialect, .. } => dialect,
+            solid_facts_backend::dialect::Detection::Unsupported {
+                installed,
+                manifest,
+                ..
+            } => {
+                return Err(format!(
+                    "solid-js {installed} at {} is a runtime this build carries no dialect for [{}]",
+                    manifest.display(),
+                    solid_facts_backend::dialect::UNSUPPORTED_RUNTIME_CODE
+                )
+                .into());
+            }
+            solid_facts_backend::dialect::Detection::Defaulted { .. } => {
+                solid_facts_backend::dialect::default_dialect()
+            }
+        },
     };
     let (mut session, sources) =
         NativeIncrementalSession::open_pipelined(dialect, project_id, typescript)?;

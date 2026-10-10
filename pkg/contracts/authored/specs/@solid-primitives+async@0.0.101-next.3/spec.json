@@ -1,0 +1,492 @@
+{
+  "package": "@solid-primitives/async",
+  "version": "0.0.101-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createAggregated": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:199-207 \u2014 Direct memo return. Source callback tracking is modeled using the existing authored memo pattern; data iteration and toString prevent callbacks closure. Research draft; Chrome attribution/probe gate has not run. Do not ship before every listed pair passes. Result uses are now explicit, under aggregate-owner tracking. callbacks remains open for arbitrary initialValue/prototype toArray behavior and unknown toString dispatch; no generic-array absence is inferred.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "aggregate-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "aggregate-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "aggregate-result-iterate",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "protocol": "iterate"
+          },
+          {
+            "id": "aggregate-result-spread",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "protocol": "get-own-enumerable-values"
+          },
+          {
+            "id": "aggregate-result-coerce",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "protocol": "coerce"
+          },
+          {
+            "id": "aggregate-result-toString",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "aggregate-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "aggregate-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          }
+        ],
+        "computations": [
+          "aggregate-memo"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "aggregate-source"
+          },
+          {
+            "from": {
+              "operation": "aggregate-source",
+              "path": []
+            },
+            "operation": "aggregate-result-iterate"
+          },
+          {
+            "from": {
+              "operation": "aggregate-source",
+              "path": []
+            },
+            "operation": "aggregate-result-spread"
+          },
+          {
+            "from": {
+              "operation": "aggregate-source",
+              "path": []
+            },
+            "operation": "aggregate-result-coerce"
+          },
+          {
+            "from": {
+              "operation": "aggregate-source",
+              "path": [
+                "toString"
+              ]
+            },
+            "operation": "aggregate-result-toString"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "aggregate-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "edges": [
+          {
+            "kind": "data",
+            "from": "aggregate-source",
+            "to": "aggregate-result-iterate"
+          },
+          {
+            "kind": "data",
+            "from": "aggregate-source",
+            "to": "aggregate-result-spread"
+          },
+          {
+            "kind": "data",
+            "from": "aggregate-source",
+            "to": "aggregate-result-coerce"
+          },
+          {
+            "kind": "data",
+            "from": "aggregate-source",
+            "to": "aggregate-result-toString"
+          }
+        ],
+        "callbackResults": [
+          {
+            "producer": "aggregate-source",
+            "shape": "unknown",
+            "uses": [
+              "aggregate-result-iterate",
+              "aggregate-result-spread",
+              "aggregate-result-coerce",
+              "aggregate-result-toString"
+            ],
+            "closed": [
+              "uses"
+            ]
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:178-207 \u2014 No package-owned signal is read at construction; res() is explicit caller execution, and returned data traversal follows P2. Getter/iterator/coercion callbacks of caller data keep callbacks open.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:178-207 \u2014 Exactly one memo/computation is created by 200-206 and no other Solid primitive or cleanup. Optional memoOptions are forwarded; ordinary caller option/data getters follow P2.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:178-207 \u2014 The return is exactly the createMemo accessor; the aggregate value union is not claimed plain. Its computation can suspend or throw; async and throw behavior stays unclaimed."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Memo works ownerless but rejects a present leaf owner; do not claim a missing-owner defect."
+        },
+        {
+          "label": "tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "A case-file source callback writes a separate non-ownedWrite signal while evaluated by the memo.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "result-getter",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Case-file result code distinguishes the result-use context from the producer callback. Fresh runtime probe required; no passed observation is fabricated."
+        }
+      ],
+      "resultClosures": {
+        "aggregate-source": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:199-207 \u2014 Current and retained previous result values are shallow iterated/spread/coerced; toString member is explicitly invoked on the primitive/string branch. No recursive descent into elements."
+      }
+    },
+    "createAbortable": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133. Identical constructor and the same three non-reactive functions on both builds; AbortController construction happens only in the returned signal callable. At construction no package reactive source or caller callback is introduced. Server direct onCleanup registers only with a current owner, so the registration has lower bound zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [
+          "cleanup"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133. Identical constructor and the same three non-reactive functions on both builds; AbortController construction happens only in the returned signal callable. At construction no package reactive source or caller callback is introduced. Server direct onCleanup registers only with a current owner, so the registration has lower bound zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133. Identical constructor and the same three non-reactive functions on both builds; AbortController construction happens only in the returned signal callable. At construction no package reactive source or caller callback is introduced. Server direct onCleanup registers only with a current owner, so the registration has lower bound zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133. Identical constructor and the same three non-reactive functions on both builds; AbortController construction happens only in the returned signal callable. At construction no package reactive source or caller callback is introduced. Server direct onCleanup registers only with a current owner, so the registration has lower bound zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133. Identical constructor and the same three non-reactive functions on both builds; AbortController construction happens only in the returned signal callable. At construction no package reactive source or caller callback is introduced. Server direct onCleanup registers only with a current owner, so the registration has lower bound zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain returns: Every normal completion has the same browser-stated output shape/identity; no server replacement accessor, inert control or returned setter is admitted.",
+          "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133. Identical constructor and the same three non-reactive functions on both builds; AbortController construction happens only in the returned signal callable. At construction no package reactive source or caller callback is introduced. Server direct onCleanup registers only with a current owner, so the registration has lower bound zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain cleanups: The server path has only the listed direct cleanup registration; server onCleanup may skip an absent owner. The lowered lower bound permits that branch without claiming a guaranteed registration."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 \u2014 makeAbortable plus required onCleanup; its stateful returned functions stay opaque. Research draft; Chrome attribution/probe gate has not run. Do not ship before every listed pair passes.",
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 \u2014 No reactive state exists here. AbortController construction happens only later inside the opaque signal member.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 \u2014 No Solid signal, owner, memo or effect is created. Constructor registers exactly the stated cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 \u2014 chainTo is a Map key; no caller callable is invoked during construction.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 \u2014 Exactly three functions are returned, none is a reactive accessor. Their later calls retain ADR 0234 obligations.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/async-createAggregated-top-level-read/node_modules/@solid-primitives/async/dist/index.js:86-133 \u2014 Exactly one onCleanup(abort), unconditionally at 127."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "onCleanup rejects an owner-backed onSettled leaf."
+        }
+      ]
+    }
+  }
+}

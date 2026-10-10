@@ -11,6 +11,17 @@ ordinary async variant is informational. A source that declares
 `ssrSource: "client"` with no first-paint value is an **error** when the project
 server-renders, or uncertifiable when no server entry is visible.
 
+Only a *render* of the pending value is flagged. A read inside a `createMemo`,
+a `createEffect` compute function or a derived signal propagates the pending
+state to whichever render effect consumes it, and the boundary question belongs
+to that consumer (a user-written `createRenderEffect` is a render). The
+boundary may be any number of component call sites above the read. The finding
+is a proven violation only when every render chain was followed to a
+`render()`/`hydrate()` root without meeting a boundary; a chain that ends at a
+function nothing in the project renders (an exported component, a page handed
+to a router) is **uncertifiable**, because the boundary may be written where
+the analysis cannot see.
+
 This is the static counterpart of Solid's dev-mode `ASYNC_OUTSIDE_LOADING_BOUNDARY`
 warning — and like the runtime warning, it is informational rather than halting.
 

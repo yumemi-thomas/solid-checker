@@ -39,6 +39,22 @@ pub enum ContractWorkflowError {
 pub struct ProposalArtifacts {
     pub document: Vec<u8>,
     pub plan: Vec<u8>,
+    /// The claims this generation refused to publish, by name. Not part of
+    /// either encoded artifact: a withheld claim is precisely what the
+    /// document does *not* say, so it travels beside the bytes to the emit
+    /// boundary's machine-readable refusal record.
+    pub withheld: Vec<crate::inferred_contract::WithheldOwnerRequirementRecord>,
+    /// Why no `creates` closure was proposed, per export and per blocking call.
+    /// Travels beside the bytes for the same reason `withheld` does — nothing
+    /// in either encoded artifact records an *unmade* proposal — and is
+    /// measurement, never evidence.
+    pub declined: Vec<crate::inferred_contract::DeclinedClosureRecord>,
+    /// Which proposed closures came from an accepted dependency's contract
+    /// rather than from a walk of this archive. Travels beside the bytes for
+    /// the same reason the two above do: neither encoded artifact distinguishes
+    /// an inherited proposal from a walked one, and the certifier does not read
+    /// this — it rebinds the re-export itself.
+    pub inherited: Vec<crate::inferred_contract::InheritedClosureRecord>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -80,12 +96,18 @@ pub(crate) fn canonicalize_proposal(
 pub(crate) fn encode_proposal_artifacts(
     contract: &NormalizedContract,
     closure_candidates: impl IntoIterator<Item = SemanticClaimSubject>,
+    withheld: Vec<crate::inferred_contract::WithheldOwnerRequirementRecord>,
+    declined: Vec<crate::inferred_contract::DeclinedClosureRecord>,
+    inherited: Vec<crate::inferred_contract::InheritedClosureRecord>,
     pretty: bool,
 ) -> Result<ProposalArtifacts, ContractWorkflowError> {
     let canonical = canonicalize_proposal(contract, closure_candidates, pretty)?;
     Ok(ProposalArtifacts {
         plan: encode_plan(&canonical.contract, canonical.closure_candidates)?,
         document: canonical.document,
+        withheld,
+        declined,
+        inherited,
     })
 }
 

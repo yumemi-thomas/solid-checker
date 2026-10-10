@@ -27,7 +27,7 @@ use crate::contract_semantics::{
     OwnerSource, Requirement, Schedule, Tracking, UncertifiableImportReason, ValueShape,
     ValueSource,
 };
-use crate::identity::symbol_id;
+use crate::interproc::ParameterMemberInvocation;
 use crate::pipeline::parallel_slice_results;
 
 /// Whether a value-kind export's shape leaves open the possibility that it is
@@ -38,7 +38,10 @@ use crate::pipeline::parallel_slice_results;
 /// is proven non-callable, so its vacuous call-path domains may be closed.
 fn shape_may_be_callable(shape: &ValueShape) -> bool {
     match shape {
-        ValueShape::Callable | ValueShape::Component | ValueShape::Unknown => true,
+        ValueShape::Callable
+        | ValueShape::Component
+        | ValueShape::Unknown
+        | ValueShape::ReturnedCallable { .. } => true,
         ValueShape::Choice(members) => {
             !members.is_closed() || members.items().iter().any(shape_may_be_callable)
         }
@@ -52,14 +55,51 @@ fn shape_may_be_callable(shape: &ValueShape) -> bool {
 /// ID, condition label, evidence spelling, or closure-array mechanic is inspected.
 pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractExport {
     let export = accepted.export();
+    ContractExport {
+        // The exact contract and export this projection came from. Re-emission
+        // reads the *presence* of this to know the summary is inherited rather
+        // than inferred; the strings themselves are attribution for the emit
+        // boundary's record. The certifier rebinds the re-export from its own
+        // snapshot-verified evidence and never reads them.
+        inherited_from: Some(crate::InheritedExportOrigin {
+            package_name: accepted.contract().package().name.clone(),
+            package_version: accepted.contract().package().version.clone(),
+            artifact_case: accepted.contract().artifact_case().id.clone(),
+            semantic_digest: accepted
+                .contract()
+                .receipt()
+                .semantic_digest
+                .as_str()
+                .to_owned(),
+            entrypoint: export.identity.entrypoint.clone(),
+            export: export.identity.public_name.clone(),
+        }),
+        ..project_export_semantics(export)
+    }
+}
+
+/// [`project_accepted_export`] without the acceptance identity: the projection
+/// itself, over one normalized export's semantics.
+///
+/// Split out because the certifier has to re-derive exactly this, from the
+/// dependency node's own certified export, to decide whether a parent's
+/// inherited closure *is* the projection of the dependency's or merely
+/// resembles it. Two derivations of "the projection" would be two answers, and
+/// the certifier's is the one that would silently admit a claim the generator
+/// never made.
+#[must_use]
+pub fn project_export_semantics(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> ContractExport {
     let mut open_claims = BTreeSet::new();
-    let kind = if matches!(export.shape, ValueShape::Callable | ValueShape::Component) {
-        "function"
-    } else {
-        "value"
+    let kind = match export.shape {
+        ValueShape::Callable | ValueShape::Component => "function",
+        ValueShape::Unknown => "unknown",
+        _ => "value",
     };
 
     let mut callbacks = project_callbacks(export, &mut open_claims);
+    let callback_results = project_callback_results(export);
     let mut reactive_reads = project_reactive_reads(export, &mut open_claims);
     let mut returns = project_return(export, &mut open_claims);
     let mut owner_requirements = project_owner_requirements(export, &mut open_claims);
@@ -104,15 +144,264 @@ pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractEx
         }
     }
 
+    // Read from the accepted document itself rather than from the projection:
+    // `project_owner_requirements` keeps only the operations that impose an
+    // owner obligation, so a `create` this export publishes need not survive
+    // it. The generator's `creates` proposal walk needs the domain's own
+    // closure — closed *and* empty, which is the only shape that is not a
+    // counterexample to a caller proposing `creates: []`.
+    let creates = export
+        .operation_claim(ClaimDomain::Creates)
+        .expect("creates is an operation domain");
+    let creates_closed_empty = creates.is_closed() && creates.items().is_empty();
+    // ADR 0143: the same reading for `returns`. `project_return` answers
+    // `Known(None)` both for `returns: []` and for a closed claim over outputs
+    // that name no reactive leaf, and only the first is a closure a
+    // re-exporting package may restate as empty.
+    let returns_claim = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    let returns_closed_empty = returns_claim.is_closed() && returns_claim.items().is_empty();
+    let returns_restated = restatable_returns(export);
+
+    let event_handler_props = export
+        .callbacks()
+        .items()
+        .iter()
+        .filter_map(|callback| {
+            let ValueSource::ParameterMembers {
+                index,
+                path,
+                class: crate::contract_semantics::MemberClass::EventHandlerProps,
+            } = &callback.from
+            else {
+                return None;
+            };
+            let operation = export.operation(&callback.operation.0)?;
+            Some(crate::EventHandlerPropsClaim {
+                parameter: usize::from(*index),
+                path: path.clone(),
+                execution: projected_execution(operation)?.into(),
+                guard: operation
+                    .guard
+                    .as_ref()
+                    .map(|guard| guard.0.clone())
+                    .unwrap_or_default(),
+            })
+        })
+        .collect();
+
     ContractExport {
         kind: kind.into(),
+        event_handler_props,
         reactive_reads,
         returns,
         callbacks,
+        callback_results,
+        captured_lookup: export.call.captured_lookup().cloned(),
+        capture_sources: export
+            .call
+            .captures()
+            .iter()
+            .enumerate()
+            .map(|(slot, capture)| (usize::MAX - slot, capture.from.clone()))
+            .collect(),
+        captured_arguments: BTreeMap::new(),
+        captured_resource_slots: BTreeSet::new(),
+        capture_context_supported: capture_context_supported(export),
+        inline_accessor_invocations: export
+            .callbacks()
+            .items()
+            .iter()
+            .filter_map(|callback| {
+                let ValueSource::Parameter { index, path } = &callback.from else {
+                    return None;
+                };
+                let operation = export.operation(&callback.operation.0)?;
+                (path.is_empty()
+                    && operation.kind == OperationKind::Invoke
+                    && operation.invoke_protocol()
+                        == crate::contract_semantics::InvokeProtocol::Call
+                    && operation.at == Some(crate::contract_semantics::Event::Call)
+                    && operation.trigger
+                        == Some(crate::contract_semantics::Trigger::Event(
+                            crate::contract_semantics::Event::Call,
+                        ))
+                    && projected_execution(operation) == Some("inline")
+                    && operation.tracking == Tracking::AmbientAtExecution)
+                    .then_some((
+                        usize::from(*index),
+                        operation.guard.is_none()
+                            && operation.cardinality.scope
+                                == Some(crate::contract_semantics::CardinalityScope::Call)
+                            && operation.cardinality.min.is_some_and(|min| min >= 1),
+                    ))
+            })
+            .fold(BTreeMap::new(), |mut slots, (slot, guaranteed)| {
+                *slots.entry(slot).or_insert(false) |= guaranteed;
+                slots
+            }),
         owner_requirements,
+        open_owner_requirements: Vec::new(),
+        open_return: None,
+        leaf_forbidden_operations: project_leaf_forbidden_operations(export),
         async_behavior,
         open_claims,
+        creates_closed_empty,
+        returns_closed_empty,
+        returns_restated,
+        creates_walk_clean: false,
+        creates_walk_declines: Vec::new(),
+        returns_walk_clean: false,
+        returns_value_completion: false,
+        returns_literal_structures: Vec::new(),
+        returns_described_callables: Vec::new(),
+        returns_reading_callables: Vec::new(),
+        member_alias_initializer: false,
+        member_alias_spelling: None,
+        returns_argument_containers: Vec::new(),
+        direct_callback_parameters: BTreeSet::new(),
+        guaranteed_callback_parameters: project_guaranteed_callback_parameters(export),
+        direct_accessor_parameters: BTreeSet::new(),
+        direct_coerced_parameters: BTreeSet::new(),
+        direct_member_callback_parameters: BTreeSet::new(),
+        iterated_parameters: BTreeSet::new(),
+        result_access_parameters: BTreeSet::new(),
+        returned_invocations: project_returned_invocations(export),
+        returned_member_effects: project_returned_member_effects(export),
+        returned_callable_effects: project_returned_callable_effects(export),
+        // A projected dependency export has no body here to walk.
+        merged_props_return: None,
+        // The projection alone states no acceptance identity;
+        // `project_accepted_export` attaches it.
+        inherited_from: None,
+        context_premises: export
+            .call
+            .context_premises()
+            .iter()
+            .map(|premise| premise.export.clone())
+            .collect(),
     }
+}
+
+/// ADR 0170: the operations of a closed, non-empty `returns` claim that a
+/// re-exporting package states again as they are.
+///
+/// All or nothing. The claim must be closed, every item must be a bare `return`
+/// whose output is one of the exact shapes below, and each output must reach no
+/// resource or operation of its own package: those are the shapes
+/// that mean the same thing in whichever package restates them. One item that
+/// is anything else -- a guarded return, a reactive leaf -- answers nothing
+/// for the whole claim, because the remaining items alone
+/// would state a smaller enumeration than the dependency certified.
+fn restatable_returns(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Vec<crate::contract_semantics::Operation> {
+    let claim = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    if !claim.is_closed() || claim.items().is_empty() {
+        return Vec::new();
+    }
+    let mut restated = Vec::new();
+    for id in claim.items() {
+        let Some(operation) = export.operation(&id.0) else {
+            return Vec::new();
+        };
+        let exact = operation.is_bare_return()
+            && operation
+                .output
+                .as_ref()
+                .is_some_and(|output| match output {
+                    ValueShape::Plain
+                    | ValueShape::Undefined
+                    | ValueShape::Parameter { .. }
+                    | ValueShape::ArgumentArray { .. }
+                    | ValueShape::InvocationResult { .. }
+                    | ValueShape::MergedProps { .. } => true,
+                    ValueShape::Array { element, .. } => **element == ValueShape::Plain,
+                    // ADR 0145's described callable, whose claims name the
+                    // export's arguments by position and no resource of the
+                    // dependency's own.
+                    ValueShape::DescribedCallable(call) => call.callbacks.iter().all(|callback| {
+                        !matches!(
+                            callback.owner.source,
+                            OwnerSource::Captured(_) | OwnerSource::Created(_)
+                        ) && callback.owner.productions.items().is_empty()
+                            && !matches!(
+                                callback.cardinality.scope,
+                                Some(crate::contract_semantics::CardinalityScope::Resource(_))
+                            )
+                    }),
+                    _ => false,
+                });
+        if !exact {
+            return Vec::new();
+        }
+        restated.push(operation.clone());
+    }
+    restated
+}
+
+/// ADR 0152: the export argument slots the returned value invokes on its own
+/// invoker's stack, exactly once per invocation, and that the export invokes
+/// nowhere else.
+///
+/// Three things must hold together, each read from the accepted document: the
+/// `returns` domain is closed and every one of its items is a described
+/// callable naming the slot (a union in which one alternative does not invoke
+/// it says only "may run"); the `callbacks` domain is closed; and every
+/// top-level item from the slot is ADR 0139's `result-access` item, so the
+/// export's own call never runs it and keeps it only in the value it returns.
+/// Anything else answers nothing for the slot, which leaves the consumer's
+/// existing reading -- a callback of unproven timing -- in place.
+fn project_returned_invocations(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> BTreeSet<usize> {
+    let returns = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    if !returns.is_closed() || returns.items().is_empty() || !export.callbacks().is_closed() {
+        return BTreeSet::new();
+    }
+    let mut invoked: Option<BTreeSet<usize>> = None;
+    for id in returns.items() {
+        let Some(ValueShape::DescribedCallable(call)) = export
+            .operation(&id.0)
+            .and_then(|operation| operation.output.as_ref())
+        else {
+            return BTreeSet::new();
+        };
+        let slots = call
+            .callbacks
+            .iter()
+            .filter_map(crate::contract_semantics::DescribedCallback::parameter)
+            .map(usize::from)
+            .collect::<BTreeSet<_>>();
+        invoked = Some(match invoked {
+            None => slots,
+            Some(previous) => previous.intersection(&slots).copied().collect(),
+        });
+    }
+    let mut invoked = invoked.unwrap_or_default();
+    invoked.retain(|slot| {
+        let items = export
+            .callbacks()
+            .items()
+            .iter()
+            .filter(|callback| {
+                matches!(&callback.from, ValueSource::Parameter { index, .. } if usize::from(*index) == *slot)
+            })
+            .collect::<Vec<_>>();
+        !items.is_empty()
+            && items.iter().all(|callback| {
+                matches!(&callback.from, ValueSource::Parameter { path, .. } if path.is_empty())
+                    && export
+                        .operation(&callback.operation.0)
+                        .is_some_and(crate::contract_semantics::Operation::is_result_access)
+            })
+    });
+    invoked
 }
 
 fn project_callbacks(
@@ -125,20 +414,52 @@ fn project_callbacks(
     }
     let mut callbacks = Vec::new();
     for callback in knowledge.items() {
-        let ValueSource::Parameter { index, .. } = callback.from else {
-            open.insert(ClaimDomain::Callbacks);
+        if let ValueSource::OperationOutput { operation, .. } = &callback.from
+            && export.call.callback_results().iter().any(|result| {
+                &result.producer == operation && result.uses.items().contains(&callback.operation)
+            })
+        {
             continue;
+        }
+        let (index, path) = match &callback.from {
+            ValueSource::Parameter { index, path } => (usize::from(*index), path),
+            ValueSource::Capture { capture, path } => {
+                let Some(slot) = export
+                    .call
+                    .captures()
+                    .iter()
+                    .position(|entry| &entry.id == capture)
+                else {
+                    open.insert(ClaimDomain::Callbacks);
+                    continue;
+                };
+                (usize::MAX - slot, path)
+            }
+            _ => {
+                open.insert(ClaimDomain::Callbacks);
+                continue;
+            }
         };
         let Some(operation) = export.operation(&callback.operation.0) else {
             open.insert(ClaimDomain::Callbacks);
             continue;
         };
+        // The initial enumeration consumer supports unpartitioned occurrences
+        // only. A partition must be instantiated at the call before it can
+        // establish the enumeration entry, even when the operation has no
+        // individual guard.
+        if operation.invoke_protocol().is_value_enumeration()
+            && export.call.guards.cases != crate::contract_semantics::KnowledgeSet::Unknown
+        {
+            open.insert(ClaimDomain::Callbacks);
+            continue;
+        }
         let Some(execution) = projected_execution(operation) else {
             open.insert(ClaimDomain::Callbacks);
             continue;
         };
         callbacks.push(ContractCallback {
-            parameter: usize::from(index),
+            parameter: index,
             execution: execution.into(),
             // `projected_execution` collapses a tracked operation onto one
             // attribution word, which has no schedule column. Carry the
@@ -146,12 +467,47 @@ fn project_callbacks(
             // republishes what the contract said rather than a default: a
             // tracked row with no execution point means the producer
             // established none, which is a different fact from `queued`.
-            schedule: (execution == "tracked").then_some(match operation.schedule {
-                Some(Schedule::SameStack) => CallbackSchedule::SameStack,
-                Some(Schedule::Queued) => CallbackSchedule::Queued,
-                Some(Schedule::External) => CallbackSchedule::External,
-                None => CallbackSchedule::Unestablished,
-            }),
+            schedule: if operation.is_result_access() {
+                // ADR 0139: a deferred row, whose one distinguishing fact is
+                // the event it runs at -- kept so re-emission republishes the
+                // item it was read from rather than a queued deferral.
+                Some(CallbackSchedule::ResultAccess)
+            } else {
+                (execution == "tracked").then_some(match operation.schedule {
+                    Some(Schedule::SameStack) => CallbackSchedule::SameStack,
+                    Some(Schedule::Queued) => CallbackSchedule::Queued,
+                    Some(Schedule::External) => CallbackSchedule::External,
+                    None => CallbackSchedule::Unestablished,
+                })
+            },
+            // The inverse of the producer's mapping, word for word
+            // (`ContractCallback::clears_tracking`): `untracked` on an `inline`
+            // row is a proven clearing wrapper, on a `deferred` row a deferral
+            // proven to run with no caller's listener, and neither word reads
+            // back from `ambient-at-execution`, which leaves the listener to
+            // whoever runs the callback. A `tracked` row never carries the bit
+            // -- its word is the claim.
+            clears_tracking: ContractCallback::clears_tracking_from(execution, operation.tracking),
+            // A non-call item (a property read, iteration, coercion or
+            // `hasInstance` of the argument) is projected with its protocol and
+            // kept: the domain's closure is a statement about *every* use of
+            // caller-supplied code, and dropping the item would either reopen
+            // the domain or, re-emitted, silently delete a claim. Every pass
+            // that models invocations filters it out
+            // (`ContractCallback::is_invocation`), which is sound because such
+            // a use runs the caller's own traps, at the call, on the caller's
+            // stack, in the caller's tracking context -- what the value's author
+            // wrote -- and today raises no obligation for a non-callable
+            // argument at all.
+            protocol: operation.invoke_protocol(),
+            // The member of the argument the item invokes (item B of
+            // ways-to-improve § 3.3), carried whole. Dropping it read
+            // `handler[0](…)` as "argument 1 itself is invoked inline": a
+            // consumer would then fold `callHandler(e, handlerProp)` as a call
+            // of `handlerProp`, and re-emission would republish the item as
+            // a call of the argument. Every pass that reads a row as a call of
+            // the argument asks `ContractCallback::invokes_argument`.
+            path: path.clone(),
             arguments: operation.inputs.iter().map(project_return_shape).collect(),
             owner: match operation.owner.source {
                 OwnerSource::None => Some("none".into()),
@@ -187,6 +543,30 @@ fn projected_execution(operation: &crate::contract_semantics::Operation) -> Opti
     }
 }
 
+/// ADR 0226: whether `operation` is stated to run after the call returns:
+/// queued or external, at an event other than the call, or triggered by a
+/// resource. An operation with unstated timing, or one another operation
+/// triggers on the same stack, is not.
+fn operation_runs_after_the_call(operation: &crate::contract_semantics::Operation) -> bool {
+    use crate::contract_semantics::{Event, Schedule, Trigger};
+    matches!(
+        operation.schedule,
+        Some(Schedule::Queued | Schedule::External)
+    ) || operation.at.is_some_and(|event| event != Event::Call)
+        || matches!(operation.trigger, Some(Trigger::Event(event)) if event != Event::Call)
+        || matches!(operation.trigger, Some(Trigger::Resource { .. }))
+}
+
+/// ADR 0239: whether `operation` is stated to run tracked, under an owner
+/// the export itself creates.
+fn operation_reads_under_its_own_computation(
+    operation: &crate::contract_semantics::Operation,
+) -> bool {
+    use crate::contract_semantics::{OwnerSource, Tracking};
+    operation.tracking == Tracking::Tracked
+        && matches!(operation.owner.source, OwnerSource::Created(_))
+}
+
 fn project_reactive_reads(
     export: &crate::contract_semantics::ExportSemantics,
     open: &mut BTreeSet<ClaimDomain>,
@@ -203,27 +583,76 @@ fn project_reactive_reads(
             open.insert(ClaimDomain::Reads);
             continue;
         };
+        // ADR 0226: a read the contract states happens later -- on a native
+        // event, in a queued or deferred callback, at result access -- is not
+        // a read during this call. It stays a known item of the domain, so a
+        // closed `reads` still means nothing else is read, but it is not
+        // attributed to the call. A read with unstated timing still is.
+        if operation_runs_after_the_call(operation) {
+            continue;
+        }
+        // ADR 0239: a read stated `tracked` under an owner the export creates
+        // runs inside the export's own computation, which observes it. It is
+        // not a read in the caller's tracking context, so it is not
+        // attributed to the call either; it stays a known item of `reads`.
+        if operation_reads_under_its_own_computation(operation) {
+            continue;
+        }
+        // An explicit clearing states that this occurrence neither subscribes
+        // nor enters a strict-read window. Keep it in the normalized census,
+        // but seed no caller read or package-internal notice, including through
+        // project wrappers. Untracked alone supplies no such assertion.
+        if operation.strict_read == Some(crate::contract_semantics::StrictRead::Cleared) {
+            continue;
+        }
+        if operation.cardinality.max == Some(crate::contract_semantics::UpperBound::Finite(0)) {
+            continue;
+        }
+        let execution = Some(crate::ContractReadContext {
+            count: operation.cardinality.clone(),
+            tracking: operation.tracking,
+            at: operation.at,
+            schedule: operation.schedule,
+            trigger: operation.trigger.clone(),
+            guarded: operation.guard.is_some(),
+        });
         match operation.inputs.first() {
             // Carry the whole path back. Keeping only `path.last()` would
             // round-trip an accepted `["modifiers", "includes"]` down into a
             // claim about a `includes` property of the parameter itself.
             Some(ValueShape::Parameter { index, path }) => reads.push(ContractReactiveRead {
+                execution: execution.clone(),
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(usize::from(*index)),
                 path: Some(path.clone()),
+                // An *accepted* contract's operation is projected back with no
+                // provenance, deliberately. Composition is intra-package: the
+                // claim it discharges is "this export performs the read
+                // through its call to that export of the same artifact case",
+                // and an accepted dependency's export is in neither this
+                // artifact case nor this census. Carrying it here would make a
+                // cross-package composition the consumer has no premise for.
+                composed_owner: None,
+                composed_from: None,
             }),
             Some(ValueShape::Reactive { .. }) => reads.push(ContractReactiveRead {
+                execution: execution.clone(),
                 kind: "accessor".into(),
                 label: "normalized reactive read".into(),
                 parameter: None,
                 path: None,
+                composed_owner: None,
+                composed_from: None,
             }),
             Some(ValueShape::Store { .. }) => reads.push(ContractReactiveRead {
+                execution,
                 kind: "store-path".into(),
                 label: "normalized store read".into(),
                 parameter: None,
                 path: None,
+                composed_owner: None,
+                composed_from: None,
             }),
             _ => {
                 open.insert(ClaimDomain::Reads);
@@ -234,6 +663,69 @@ fn project_reactive_reads(
         KnowledgeSet::Unknown if reads.is_empty() => ContractClaim::Open,
         _ => ContractClaim::Known(reads),
     }
+}
+
+/// Direct runtime values only: no awaited shape or dropped return branch.
+fn direct_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
+    match shape {
+        ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            ..
+        } => project_return_shape(shape),
+        ValueShape::Plain => Some(ContractReturn {
+            kind: "plain".into(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Tuple(KnowledgeSet::Complete(items)) => Some(ContractReturn {
+            kind: "tuple".into(),
+            elements: items.iter().map(direct_return_shape).collect(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Object(KnowledgeSet::Complete(properties)) => Some(ContractReturn {
+            kind: "object".into(),
+            properties: properties
+                .iter()
+                .filter_map(|property| {
+                    direct_return_shape(&property.value).map(|value| (property.name.clone(), value))
+                })
+                .collect(),
+            ..ContractReturn::default()
+        }),
+        _ => None,
+    }
+}
+
+fn direct_contract_return(
+    accepted: &AcceptedContractIndex,
+    file: &solid_facts::FileFacts,
+    module: &str,
+    imported: &str,
+) -> Option<ContractReturn> {
+    let accepted = accepted
+        .resolve_name(file.path.as_str(), module, imported)
+        .ok()?;
+    let export = accepted.export();
+    let claim = export.operation_claim(ClaimDomain::Returns)?;
+    if !claim.is_closed() || claim.items().is_empty() {
+        return None;
+    }
+    let mut agreed = None;
+    for id in claim.items() {
+        let operation = export.operation(&id.0)?;
+        if operation.kind != OperationKind::Return
+            || operation.guard.is_some()
+            || operation.at != Some(crate::contract_semantics::Event::Call)
+            || operation.schedule != Some(Schedule::SameStack)
+        {
+            return None;
+        }
+        let output = operation.output.as_ref()?;
+        if agreed.is_some_and(|previous| previous != output) {
+            return None;
+        }
+        agreed = Some(output);
+    }
+    direct_return_shape(agreed?)
 }
 
 fn project_return(
@@ -251,12 +743,129 @@ fn project_return(
         .iter()
         .filter_map(|id| export.operation(&id.0))
         .filter_map(|operation| operation.output.as_ref())
-        .filter_map(project_return_shape)
+        .filter_map(project_returned_output)
         .collect::<Vec<_>>();
     returns.sort_by(|left, right| format!("{left:?}").cmp(&format!("{right:?}")));
     returns.dedup();
+    if knowledge
+        .items()
+        .iter()
+        .filter_map(|id| export.operation(&id.0))
+        .any(|operation| matches!(operation.output, Some(ValueShape::ReturnedCallable { .. })))
+        && agreed_returned_callable(export).is_none()
+    {
+        return ContractClaim::Known(Some(ContractReturn {
+            kind: RETURNED_CALLABLE.into(),
+            prototype: None,
+            ..ContractReturn::default()
+        }));
+    }
+    // ADR 0113: a `plain` output carries no reactive capability, which is
+    // exactly what `Known(None)` says of a function whose reactive analysis
+    // described no return. A closed claim whose every return is plain is that
+    // answer, not a shape this projection cannot represent -- reading it as the
+    // latter reopened the domain the contract had closed.
+    let plain_only = !knowledge.items().is_empty()
+        && knowledge.items().iter().all(|id| {
+            export
+                .operation(&id.0)
+                .is_some_and(|operation| matches!(operation.output, Some(ValueShape::Plain)))
+        });
+    // ADR 0115: a closed claim whose every return hands back something exact
+    // -- a plain value, the caller's own argument, or a fresh array of the
+    // caller's arguments -- with no one reactive leaf they all share. The
+    // consumer's return is a single leaf, so it cannot say "the argument, or an
+    // array holding it", and it reads the union as describing no reactive
+    // return, exactly as it reads a local conditional whose branches disagree.
+    // Contract returns are only ever read to *find* a reactive leaf, so this
+    // can hide a finding and never invent one. A return whose output the
+    // projection drops (`[]`) is part of the union too: reading the claim as
+    // its one surviving leaf would say the export always returns that.
+    // ADR 0116: what an invocation of the caller's argument returned is exact
+    // and names no leaf this projection can reach -- the local summary of
+    // `return f()` names none either -- so it is one more dropped return, alone
+    // or in a union.
+    // An array whose every element is plain (`Object.keys`' fresh array of
+    // strings, the second 2026-09-24 amendment to ADR 0103) is exact the same
+    // way: it holds nothing reactive, which is what describing no reactive
+    // return says.
+    // Item B round 2: a member of the caller's argument, and `undefined`, are
+    // exact too, and both are dropped returns (`project_returned_output`), so
+    // `callHandler`'s `event?.defaultPrevented` -- the member, or undefined --
+    // reads as no reactive return, and so does a lone `return p.key`.
+    let exact_only = !knowledge.items().is_empty()
+        && knowledge.items().iter().all(|id| {
+            export.operation(&id.0).is_some_and(|operation| {
+                matches!(
+                    operation.output,
+                    Some(
+                        ValueShape::Plain
+                            | ValueShape::Parameter { .. }
+                            | ValueShape::ArgumentArray { .. }
+                            | ValueShape::InvocationResult { .. }
+                            | ValueShape::Undefined
+                            | ValueShape::DescribedCallable(_)
+                            | ValueShape::ReturnedCallable { .. }
+                    )
+                ) || matches!(
+                    &operation.output,
+                    Some(ValueShape::Array { element, .. }) if **element == ValueShape::Plain
+                ) || operation.output.as_ref().is_some_and(|output| {
+                    matches!(output, ValueShape::Tuple(_) | ValueShape::Object(_))
+                        && exact_structural_return(output)
+                })
+            })
+        });
+    let dropped = knowledge
+        .items()
+        .iter()
+        .filter_map(|id| export.operation(&id.0))
+        .filter(|operation| {
+            operation
+                .output
+                .as_ref()
+                .and_then(project_returned_output)
+                .is_none()
+        })
+        .count();
+    if returns.iter().any(|returned| returned.prototype.is_some())
+        && knowledge.items().iter().any(|id| {
+            export.operation(&id.0).is_none_or(|operation| {
+                operation.kind != OperationKind::Return
+                    || operation.guard.is_some()
+                    || operation.schedule != Some(Schedule::SameStack)
+                    || operation.cardinality.min != Some(1)
+                    || operation.cardinality.max
+                        != Some(crate::contract_semantics::UpperBound::Finite(1))
+            })
+        })
+    {
+        open.insert(ClaimDomain::Returns);
+        return ContractClaim::Open;
+    }
+    let lazy_recipe = |returned: &ContractReturn| {
+        matches!(
+            returned.kind.as_str(),
+            LAZY_GETTER_OBJECT | PROTOTYPE_INSTANCE
+        ) || returned
+            .elements
+            .iter()
+            .flatten()
+            .any(|item| item.kind == LAZY_GETTER_OBJECT)
+    };
+    if returns.iter().any(lazy_recipe)
+        && (!knowledge.is_closed() || dropped > 0 || returns.len() != 1)
+    {
+        open.insert(ClaimDomain::Returns);
+        return ContractClaim::Open;
+    }
     match (knowledge, returns.as_slice()) {
-        (KnowledgeSet::Complete(items), []) if items.is_empty() => ContractClaim::Known(None),
+        (KnowledgeSet::Complete(items), []) if items.is_empty() || plain_only => {
+            ContractClaim::Known(None)
+        }
+        (KnowledgeSet::Complete(_), _) if exact_only && (returns.len() != 1 || dropped > 0) => {
+            ContractClaim::Known(None)
+        }
         (KnowledgeSet::Unknown, []) => ContractClaim::Open,
         (_, [returned]) => ContractClaim::Known(Some(returned.clone())),
         _ => {
@@ -266,44 +875,534 @@ fn project_return(
     }
 }
 
+/// One `return` operation's output as the consumer's return leaf: exactly
+/// [`project_return_shape`], except that a member of the caller's argument
+/// (`parameter i` at a non-empty path, item B round 2 of ways-to-improve
+/// § 3.3) and `undefined` name no leaf.
+///
+/// The member is the value the argument holds at that key **when the return
+/// reads it**, and code the call runs before then may have replaced it: its
+/// own body, or a callback it invokes -- `callHandler`'s handler calls
+/// `preventDefault()` on the very event whose `defaultPrevented` it returns.
+/// The caller's literal at the call site therefore does not determine it, and
+/// nothing the consumer can see does, so it is resolved nowhere. Reading it
+/// as the whole argument -- what [`project_return_shape`] answers for any
+/// `parameter`, path or not -- would invent a return. Contract returns are
+/// only ever read to *find* a reactive leaf, so this can hide one (a store's
+/// member, say) and never invents one.
+fn exact_structural_return(shape: &ValueShape) -> bool {
+    match shape {
+        ValueShape::Plain | ValueShape::Parameter { .. } | ValueShape::Reactive { .. } => true,
+        ValueShape::Tuple(KnowledgeSet::Complete(items)) => {
+            items.iter().all(exact_structural_return)
+        }
+        ValueShape::Object(KnowledgeSet::Complete(properties)) => {
+            properties.iter().all(|p| exact_structural_return(&p.value))
+        }
+        _ => false,
+    }
+}
+
+fn project_returned_output(shape: &ValueShape) -> Option<ContractReturn> {
+    match shape {
+        ValueShape::Parameter { path, .. } if !path.is_empty() => None,
+        ValueShape::Undefined => None,
+        shape => project_return_shape(shape),
+    }
+}
+
+/// ADR 0234: one member of a returned tuple or object. An opaque member --
+/// `callable`, whose invocation the contract does not describe, or `unknown`
+/// -- is kept as an `opaque-callable` leaf, so the consumer can hold every
+/// call or escape of it as a proof obligation. It names no reactive source.
+fn project_member_shape(shape: &ValueShape) -> Option<ContractReturn> {
+    match shape {
+        ValueShape::Callable | ValueShape::Unknown => Some(ContractReturn {
+            kind: OPAQUE_MEMBER.into(),
+            prototype: None,
+            ..ContractReturn::default()
+        }),
+        // ADR 0235: its effects are projected beside the export
+        // ([`project_returned_member_effects`]), keyed by this member.
+        ValueShape::EffectfulCallable(_) => Some(ContractReturn {
+            kind: EFFECTFUL_MEMBER.into(),
+            prototype: None,
+            ..ContractReturn::default()
+        }),
+        _ => project_return_shape(shape),
+    }
+}
+
+/// The [`ContractReturn::kind`] of a returned member with described effects
+/// (ADR 0235).
+pub(crate) const EFFECTFUL_MEMBER: &str = "effectful-callable";
+
+/// ADR 0235: each `effectful-callable` member of a returned tuple or object,
+/// projected as the export one call of it would be, with the export's
+/// resources in scope. Keyed by tuple index or property name; a member two
+/// return operations disagree about is left out, so its calls stay
+/// obligations.
+fn project_returned_member_effects(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> BTreeMap<String, ContractExport> {
+    let mut effects = BTreeMap::<String, Option<ContractExport>>::new();
+    let Some(returns) = export.operation_claim(ClaimDomain::Returns) else {
+        return BTreeMap::new();
+    };
+    let mut record = |key: String, call: &crate::contract_semantics::CallSemantics| {
+        let mut call = call.clone();
+        call.resources.extend(export.call.resources.iter().cloned());
+        let member = crate::contract_semantics::ExportSemantics {
+            identity: export.identity.clone(),
+            shape: ValueShape::Callable,
+            stability: export.stability,
+            call,
+        };
+        let projected = project_export_semantics(&member);
+        effects
+            .entry(key)
+            .and_modify(|existing| {
+                if existing.as_ref() != Some(&projected) {
+                    *existing = None;
+                }
+            })
+            .or_insert(Some(projected));
+    };
+    if let Some(ValueShape::ReturnedCallable { members, .. }) = agreed_returned_callable(export) {
+        for member in members {
+            if let ValueShape::EffectfulCallable(call) = &member.value {
+                record(member.name.clone(), call);
+            }
+        }
+    }
+    for operation in returns
+        .items()
+        .iter()
+        .filter_map(|id| export.operation(&id.0))
+    {
+        match &operation.output {
+            Some(ValueShape::Tuple(items)) => {
+                for (index, item) in items.items().iter().enumerate() {
+                    if let ValueShape::EffectfulCallable(call) = item {
+                        record(index.to_string(), call);
+                    }
+                }
+            }
+            Some(ValueShape::Object(properties)) => {
+                for property in properties.items() {
+                    if let ValueShape::EffectfulCallable(call) = &property.value {
+                        record(property.name.clone(), call);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    effects
+        .into_iter()
+        .filter_map(|(key, effect)| effect.map(|effect| (key, effect)))
+        .collect()
+}
+
+fn project_returned_callable_member_shape(shape: &ValueShape) -> Option<ContractReturn> {
+    if matches!(
+        shape,
+        ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Setter,
+            ..
+        }
+    ) {
+        return Some(ContractReturn {
+            kind: OPAQUE_MEMBER.into(),
+            prototype: None,
+            ..ContractReturn::default()
+        });
+    }
+    project_member_shape(shape)
+}
+
+pub(crate) const RETURNED_CALLABLE: &str = "returned-callable";
+
+/// A graph binds only when every closed factory return states the same whole
+/// value. No union/guard selection, partial enumeration or dropped branch is
+/// treated as proof of the returned function's identity.
+fn agreed_returned_callable(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Option<&ValueShape> {
+    let returns = export.operation_claim(ClaimDomain::Returns)?;
+    if !returns.is_closed() || returns.items().is_empty() {
+        return None;
+    }
+    let mut agreed = None;
+    for id in returns.items() {
+        let operation = export.operation(&id.0)?;
+        let output = operation.output.as_ref()?;
+        if !matches!(output, ValueShape::ReturnedCallable { .. }) {
+            return None;
+        }
+        if agreed.is_some_and(|previous| previous != output) {
+            return None;
+        }
+        agreed = Some(output);
+    }
+    agreed
+}
+
+fn project_returned_callable_effects(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Option<Box<ContractExport>> {
+    let ValueShape::ReturnedCallable {
+        call: Some(call), ..
+    } = agreed_returned_callable(export)?
+    else {
+        return None;
+    };
+    let mut call = (**call).clone();
+    call.resources.extend(export.call.resources.iter().cloned());
+    let mut projected = project_export_semantics(&crate::contract_semantics::ExportSemantics {
+        identity: export.identity.clone(),
+        shape: ValueShape::Callable,
+        stability: export.stability,
+        call,
+    });
+    projected.captured_resource_slots = project_capture_resource_slots(export);
+    for callback in projected.callbacks.known().into_iter().flatten() {
+        if projected.capture_sources.contains_key(&callback.parameter)
+            && callback.execution == "inline"
+            && callback.invokes_argument()
+        {
+            let guaranteed = call_capture_is_guaranteed(export, callback.parameter);
+            projected
+                .inline_accessor_invocations
+                .insert(callback.parameter, guaranteed);
+        }
+    }
+    Some(Box::new(projected))
+}
+
+fn call_capture_is_guaranteed(
+    export: &crate::contract_semantics::ExportSemantics,
+    slot: usize,
+) -> bool {
+    let Some(ValueShape::ReturnedCallable {
+        call: Some(call), ..
+    }) = agreed_returned_callable(export)
+    else {
+        return false;
+    };
+    let Some(capture) = call.captures().get(usize::MAX - slot) else {
+        return false;
+    };
+    call.claims().callbacks.items().iter().filter(|row| {
+        matches!(&row.from, ValueSource::Capture { capture: id, path } if id == &capture.id && path.is_empty())
+    }).any(|row| {
+        call.operations.iter().find(|operation| operation.id == row.operation).is_some_and(|operation| {
+            operation.guard.is_none()
+                && operation.schedule == Some(Schedule::SameStack)
+                && operation.at == Some(crate::contract_semantics::Event::Call)
+                && operation.cardinality.scope == Some(crate::contract_semantics::CardinalityScope::Call)
+                && operation.cardinality.min.is_some_and(|min| min >= 1)
+        })
+    })
+}
+
+/// Existing explicit reactive inputs already name factory resources. Retain
+/// that identity for a catalogue entry, including an exactly stated accessor
+/// operation result. No resource kind alone proves a callable or a read.
+fn project_capture_resource_slots(
+    factory: &crate::contract_semantics::ExportSemantics,
+) -> BTreeSet<usize> {
+    let Some(ValueShape::ReturnedCallable {
+        call: Some(graph), ..
+    }) = agreed_returned_callable(factory)
+    else {
+        return BTreeSet::new();
+    };
+    graph
+        .captures()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, capture)| {
+            let resource = match &capture.from {
+                ValueSource::Resource { resource, path } if path.is_empty() => resource,
+                ValueSource::OperationOutput { operation, path } if path.is_empty() => {
+                    let producer = factory.operation(&operation.0)?;
+                    if producer.guard.is_some()
+                        || producer.trigger
+                            != Some(crate::contract_semantics::Trigger::Event(
+                                crate::contract_semantics::Event::Call,
+                            ))
+                        || producer.at != Some(crate::contract_semantics::Event::Call)
+                        || producer.schedule != Some(Schedule::SameStack)
+                        || producer.cardinality.scope
+                            != Some(crate::contract_semantics::CardinalityScope::Call)
+                        || !producer.cardinality.min.is_some_and(|min| min >= 1)
+                    {
+                        return None;
+                    }
+                    let Some(ValueShape::Reactive {
+                        role: crate::contract_semantics::ReactiveRole::Accessor,
+                        resource: Some(resource),
+                        ..
+                    }) = &producer.output
+                    else {
+                        return None;
+                    };
+                    resource
+                }
+                _ => return None,
+            };
+            if graph.claims().callbacks.items().iter().any(|row| {
+            matches!(&row.from, ValueSource::Capture { capture: id, .. } if id == &capture.id)
+        }) { return None }
+            let reads = graph
+                .operations
+                .iter()
+                .filter(|operation| {
+                    graph.claims().reads.items().contains(&operation.id)
+                        && operation.inputs.iter().any(|input| {
+                            matches!(input,
+                    ValueShape::Reactive {
+                        role: crate::contract_semantics::ReactiveRole::Accessor,
+                        resource: Some(input), ..
+                    } if input == resource)
+                        })
+                })
+                .collect::<Vec<_>>();
+            (!reads.is_empty()
+                && reads.iter().all(|operation| {
+                    operation.guard.is_none()
+                        && operation.trigger
+                            == Some(crate::contract_semantics::Trigger::Event(
+                                crate::contract_semantics::Event::Call,
+                            ))
+                        && operation.at == Some(crate::contract_semantics::Event::Call)
+                        && operation.schedule == Some(Schedule::SameStack)
+                        && operation.tracking == Tracking::AmbientAtExecution
+                        && operation.owner.source == OwnerSource::AmbientAtExecution
+                        && operation.cardinality.scope
+                            == Some(crate::contract_semantics::CardinalityScope::Call)
+                        && operation.cardinality.min.is_some_and(|min| min >= 1)
+                }))
+            .then_some(usize::MAX - index)
+        })
+        .collect()
+}
+
+fn capture_context_supported(export: &crate::contract_semantics::ExportSemantics) -> bool {
+    let reads_supported = export
+        .operation_claim(ClaimDomain::Reads)
+        .is_some_and(|reads| {
+            reads.is_closed()
+                && reads.items().iter().all(|id| {
+                    export.operation(&id.0).is_some_and(|operation| {
+                        operation_runs_after_the_call(operation)
+                            || operation_reads_under_its_own_computation(operation)
+                            || operation.strict_read
+                                == Some(crate::contract_semantics::StrictRead::Cleared)
+                            || (operation.guard.is_none()
+                                && operation.trigger
+                                    == Some(crate::contract_semantics::Trigger::Event(
+                                        crate::contract_semantics::Event::Call,
+                                    ))
+                                && operation.at == Some(crate::contract_semantics::Event::Call)
+                                && operation.schedule == Some(Schedule::SameStack)
+                                && operation.tracking == Tracking::AmbientAtExecution
+                                && operation.owner.source == OwnerSource::AmbientAtExecution
+                                && operation.cardinality.scope
+                                    == Some(crate::contract_semantics::CardinalityScope::Call)
+                                && operation.cardinality.min.is_some_and(|min| min >= 1))
+                    })
+                })
+        });
+    reads_supported
+        && export
+            .callbacks()
+            .items()
+            .iter()
+            .filter(|row| matches!(row.from, ValueSource::Capture { .. }))
+            .all(|row| {
+                export.operation(&row.operation.0).is_some_and(|operation| {
+                    operation.guard.is_none()
+                        && operation.invoke_protocol()
+                            == crate::contract_semantics::InvokeProtocol::Call
+                        && match operation.schedule {
+                            Some(Schedule::SameStack) => {
+                                operation.at == Some(crate::contract_semantics::Event::Call)
+                                    && operation.trigger
+                                        == Some(crate::contract_semantics::Trigger::Event(
+                                            crate::contract_semantics::Event::Call,
+                                        ))
+                                    && operation.tracking == Tracking::AmbientAtExecution
+                                    && operation.owner.source == OwnerSource::AmbientAtExecution
+                            }
+                            Some(Schedule::Queued | Schedule::External) => {
+                                matches!(
+                                    operation.tracking,
+                                    Tracking::AmbientAtExecution | Tracking::Untracked
+                                ) && matches!(
+                                    operation.owner.source,
+                                    OwnerSource::None | OwnerSource::AmbientAtExecution
+                                )
+                            }
+                            None => false,
+                        }
+                })
+            })
+}
+
+/// The [`ContractReturn::kind`] of an opaque returned member (ADR 0234).
+pub(crate) const OPAQUE_MEMBER: &str = "opaque-callable";
+pub(crate) const PROTOTYPE_INSTANCE: &str = "prototype-instance";
+pub(crate) const LAZY_GETTER_OBJECT: &str = "lazy-getter-object";
+
 fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
     match shape {
+        // ADR 0235: valid only as a member, projected there.
+        ValueShape::EffectfulCallable(_) => None,
+        ValueShape::ReturnedCallable { members, .. } => Some(ContractReturn {
+            kind: RETURNED_CALLABLE.into(),
+            properties: members
+                .iter()
+                .filter_map(|member| {
+                    project_returned_callable_member_shape(&member.value)
+                        .map(|value| (member.name.clone(), value))
+                })
+                .collect(),
+            prototype: None,
+            ..ContractReturn::default()
+        }),
         ValueShape::Reactive { .. } => Some(ContractReturn {
             kind: "accessor".into(),
             label: "normalized reactive result".into(),
+            prototype: None,
             ..ContractReturn::default()
         }),
         ValueShape::Store { .. } => Some(ContractReturn {
             kind: "store-path".into(),
             label: "normalized store result".into(),
+            prototype: None,
+            ..ContractReturn::default()
+        }),
+        // ADR 0109. Carries the caller's argument index and *no* label: this is
+        // not a reactive leaf, it is a conditional one, and reading it as a
+        // `store-path` would assert reactivity of a merge of plain objects.
+        ValueShape::MergedProps { from } => Some(ContractReturn {
+            kind: "merged-props".into(),
+            parameter: Some(usize::from(*from)),
+            prototype: None,
             ..ContractReturn::default()
         }),
         ValueShape::Parameter { index, .. } => Some(ContractReturn {
             kind: "argument".into(),
             parameter: Some(usize::from(*index)),
+            prototype: None,
             ..ContractReturn::default()
         }),
-        ValueShape::Tuple(KnowledgeSet::Complete(items)) => Some(ContractReturn {
+        // ADR 0115: a fresh array of the caller's arguments is a tuple of
+        // argument leaves; `[]` holds nothing to name.
+        ValueShape::ArgumentArray { items } if !items.is_empty() => Some(ContractReturn {
             kind: "tuple".into(),
-            elements: items.iter().map(project_return_shape).collect(),
-            ..ContractReturn::default()
-        }),
-        ValueShape::Object(KnowledgeSet::Complete(properties)) => Some(ContractReturn {
-            kind: "object".into(),
-            properties: properties
+            elements: items
                 .iter()
-                .filter_map(|property| {
-                    project_return_shape(&property.value)
-                        .map(|value| (property.name.clone(), value))
+                .map(|index| {
+                    Some(ContractReturn {
+                        kind: "argument".into(),
+                        parameter: Some(usize::from(*index)),
+                        prototype: None,
+                        ..ContractReturn::default()
+                    })
                 })
                 .collect(),
+            prototype: None,
             ..ContractReturn::default()
         }),
+        // ADR 0177: a tuple or object whose member enumeration is not closed
+        // still proves each member it lists, at its position or key; "partial"
+        // only says more members may exist. The projection keeps reactive
+        // leaves, never the enumeration, so a listed member is as good here as
+        // in a closed container, and an unlisted position names no leaf.
+        ValueShape::Tuple(KnowledgeSet::Complete(items) | KnowledgeSet::Partial(items)) => {
+            Some(ContractReturn {
+                kind: "tuple".into(),
+                elements: items.iter().map(project_member_shape).collect(),
+                prototype: None,
+                ..ContractReturn::default()
+            })
+        }
+        ValueShape::Object(
+            KnowledgeSet::Complete(properties) | KnowledgeSet::Partial(properties),
+        ) => {
+            let properties = properties
+                .iter()
+                .filter_map(|property| {
+                    project_member_shape(&property.value)
+                        .map(|value| (property.name.clone(), value))
+                })
+                .collect::<BTreeMap<_, _>>();
+            // This projection retains reactive leaves, not the certified
+            // container's full enumeration. No retained leaf means no local
+            // return summary; an empty object is not a valid ContractReturn.
+            (!properties.is_empty()).then_some(ContractReturn {
+                kind: "object".into(),
+                properties,
+                prototype: None,
+                ..ContractReturn::default()
+            })
+        }
         ValueShape::Promise(value) | ValueShape::AsyncIterable(value) => {
             project_return_shape(value)
         }
+        // ADR 0145/0146: a callable whose every call claim is stated. One that
+        // reads a signal when invoked is what the consumer calls an accessor
+        // -- calling it is a reactive read, in whatever scope calls it -- so it
+        // stays one. One that reads nothing names no leaf: calling it
+        // observes nothing reactive, invokes nothing the caller handed over and
+        // creates nothing, which is what describing no reactive return says.
+        ValueShape::DescribedCallable(call) if !call.reads.is_empty() => Some(ContractReturn {
+            kind: "accessor".into(),
+            label: "described callable read".into(),
+            prototype: None,
+            ..ContractReturn::default()
+        }),
+        ValueShape::DescribedCallable(_) => None,
+        // ADR 0146: only ever an item of a described callable's returns.
+        ValueShape::ReadValue => None,
+        ValueShape::PrototypeInstance {
+            members,
+            population,
+        } => Some(ContractReturn {
+            kind: PROTOTYPE_INSTANCE.into(),
+            prototype: Some(crate::contract_semantics::PrototypeInstanceRecipe {
+                members: members.clone(),
+                population: *population,
+            }),
+            ..ContractReturn::default()
+        }),
+        ValueShape::LazyGetterObject { keys, from } => Some(ContractReturn {
+            kind: LAZY_GETTER_OBJECT.into(),
+            parameter: from.map(usize::from),
+            properties: keys
+                .iter()
+                .map(|key| {
+                    (
+                        key.clone(),
+                        ContractReturn {
+                            kind: OPAQUE_MEMBER.into(),
+                            prototype: None,
+                            ..ContractReturn::default()
+                        },
+                    )
+                })
+                .collect(),
+            prototype: None,
+            ..ContractReturn::default()
+        }),
         ValueShape::Unknown
         | ValueShape::Plain
+        | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
+        | ValueShape::Undefined
         | ValueShape::Tuple(_)
         | ValueShape::Array { .. }
         | ValueShape::Object(_)
@@ -327,27 +1426,2067 @@ fn project_owner_requirements(
     if !knowledge.is_closed() {
         open.insert(ClaimDomain::Creates);
     }
+    // `cleanups` is read for its *items* only, deliberately: a cleanup owner
+    // requirement is published as a `kind: cleanup` operation in that domain
+    // (`inferred_contract.rs`'s `owner_requirement_operation`), so the
+    // projection has to look there. That shape has **no audited precedent** --
+    // every `kind: cleanup` operation in the bundled corpus is
+    // `requires: forbidden`, `source: none`, because each describes a cleanup
+    // the runtime runs rather than one the export installs on its caller's
+    // owner -- so the filter below decides membership from the operation's own
+    // `Requirement` triple and never from its kind.
+    //
+    // Inserting `ClaimDomain::Cleanups` into `open` would open the domain for
+    // every Solid 1.x contract -- all of them omit `cleanups` entirely -- and
+    // `contract_document`'s proven-non-callable assertion expects no call-path
+    // domain left open. See
+    // `docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`
+    // § 2.2 item 5, which forbids taking the other option incidentally.
+    let cleanups = export
+        .operation_claim(ClaimDomain::Cleanups)
+        .expect("cleanups is an operation domain");
+    // `computations` (ADR 0114) is read the same way and for the same reason:
+    // for its items only. Version 1 never closes it, so it could only ever
+    // open; the completeness of the list is `creates`' closure above.
+    let computations = export
+        .operation_claim(ClaimDomain::Computations)
+        .expect("computations is an operation domain");
     let mut requirements = Vec::new();
     for operation in knowledge
         .items()
         .iter()
+        .chain(cleanups.items())
+        .chain(computations.items())
         .filter_map(|id| export.operation(&id.0))
     {
-        if operation.owner.requirements.owner == Requirement::Required {
+        // A requirement projects when the operation requires an owner it does
+        // not itself supply (`Operation::imposes_owner_requirement`, which the
+        // withdrawal of an operation asks too).
+        if operation.imposes_owner_requirement() {
+            // ADR 0161: the lower bound decides the finding kind. Only a count
+            // whose minimum is at least one says every call registers. A
+            // guard says which calls do (`createTimer`'s cleanup runs for a
+            // numeric delay, its effect for an accessor one); it travels with
+            // the requirement and is evaluated at each call (ADR 0223).
+            let guaranteed = operation.cardinality.min.is_some_and(|min| min >= 1);
+            let guard = operation.guard.clone();
             let operation = match operation.kind {
+                OperationKind::Cleanup | OperationKind::Dispose => {
+                    OwnerRequirementOperation::Cleanup
+                }
+                // A `compute`, and the frozen 1.x authority documents'
+                // `ambient-at-call` `create`.
+                _ => OwnerRequirementOperation::Effect,
+            };
+            match requirements
+                .iter_mut()
+                .find(|existing: &&mut ContractOwnerRequirement| {
+                    existing.operation == operation && existing.guard == guard
+                }) {
+                Some(existing) => existing.guaranteed |= guaranteed,
+                None => requirements.push(ContractOwnerRequirement {
+                    operation,
+                    guaranteed,
+                    guard,
+                }),
+            }
+        }
+    }
+    requirements
+        .sort_by_key(|requirement| format!("{:?} {:?}", requirement.operation, requirement.guard));
+    match knowledge {
+        KnowledgeSet::Unknown if requirements.is_empty() => ContractClaim::Open,
+        _ => ContractClaim::Known(requirements),
+    }
+}
+
+/// ADR 0183: the parameters an accepted export invokes as an owned
+/// computation on every call: a `callbacks` item from the whole parameter
+/// whose `invoke` operation is tracked, at the call on the same stack, under a
+/// children-capable owner the operation creates, unguarded and counted per call
+/// with `min >= 1`. A created leaf owner (`createTrackedEffect`'s) exempts
+/// writes, so it is not one.
+fn project_guaranteed_callback_parameters(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> BTreeSet<usize> {
+    use crate::contract_semantics::{
+        CapabilityKnowledge, CardinalityScope, Event, Schedule, Trigger,
+    };
+    export
+        .callbacks()
+        .items()
+        .iter()
+        .filter_map(|callback| {
+            let ValueSource::Parameter { index, path } = &callback.from else {
+                return None;
+            };
+            let operation = export.operation(&callback.operation.0)?;
+            (path.is_empty()
+                && operation.kind == OperationKind::Invoke
+                && operation.guard.is_none()
+                && operation.tracking == Tracking::Tracked
+                && operation.trigger == Some(Trigger::Event(Event::Call))
+                && operation.at == Some(Event::Call)
+                && operation.schedule == Some(Schedule::SameStack)
+                && matches!(operation.owner.source, OwnerSource::Created(_))
+                && operation.owner.capabilities.child_owners == CapabilityKnowledge::Allowed
+                && operation.cardinality.scope == Some(CardinalityScope::Call)
+                && operation.cardinality.min.is_some_and(|min| min >= 1))
+            .then_some(usize::from(*index))
+        })
+        .collect()
+}
+
+/// ADR 0179: the owner registrations an accepted export makes on its
+/// caller's owner, synchronously at the call: each operation in `creates`,
+/// `cleanups` or `computations` that imposes an owner requirement
+/// ([`Operation::imposes_owner_requirement`]), takes the owner current at the
+/// call (`ambient-at-call`), is triggered by and runs at the call on the same
+/// stack, and is counted per call. `guaranteed` when `min >= 1`; a `min: 0`
+/// registration may not happen (ADR 0231) and is kept unguaranteed, unless a
+/// guaranteed one of the same kind and guard already covers it.
+///
+/// Stricter than [`project_owner_requirements`]' `guaranteed`, which answers
+/// the missing-owner question and reads the count alone: a leaf owner forbids
+/// a registration *while it is current*, so the registration must happen in
+/// the call's own synchronous extent, against the owner the caller has.
+/// ADR 0179 and 0226: whether a leaf owner forbids `operation` at its call.
+/// A leaf accepts neither child owners nor cleanups, so an operation that
+/// needs either from the owner present at the call is forbidden there,
+/// whether or not it also requires an owner to exist.
+fn leaf_forbids(operation: &crate::contract_semantics::Operation) -> bool {
+    use crate::contract_semantics::{OwnerSource, Requirement};
+    if matches!(operation.owner.source, OwnerSource::Created(_)) {
+        return false;
+    }
+    let requirements = &operation.owner.requirements;
+    operation.imposes_owner_requirement()
+        || requirements.child_owners == Requirement::Required
+        || requirements.cleanup == Requirement::Required
+}
+
+fn project_leaf_forbidden_operations(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Vec<ContractOwnerRequirement> {
+    use crate::contract_semantics::{CardinalityScope, Event, OwnerSource, Schedule, Trigger};
+    let mut operations = Vec::new();
+    for domain in [
+        ClaimDomain::Creates,
+        ClaimDomain::Cleanups,
+        ClaimDomain::Computations,
+    ] {
+        let Some(claim) = export.operation_claim(domain) else {
+            continue;
+        };
+        for operation in claim
+            .items()
+            .iter()
+            .filter_map(|id| export.operation(&id.0))
+        {
+            // ADR 0223: a guarded registration travels with its guard; the
+            // leaf rule reports it only where the guard holds at the call.
+            // ADR 0226: an operation that tolerates no owner but needs a
+            // present one to accept children or cleanups (`createMemo` with
+            // an optional owner, `tryOnCleanup`) is forbidden in a leaf too.
+            if !(leaf_forbids(operation)
+                && operation.owner.source == OwnerSource::AmbientAtCall
+                && operation.trigger == Some(Trigger::Event(Event::Call))
+                && operation.at == Some(Event::Call)
+                && operation.schedule == Some(Schedule::SameStack)
+                && operation.cardinality.scope == Some(CardinalityScope::Call)
+                && operation.cardinality.min.is_some())
+            {
+                continue;
+            }
+            let kind = match operation.kind {
                 OperationKind::Cleanup | OperationKind::Dispose => {
                     OwnerRequirementOperation::Cleanup
                 }
                 _ => OwnerRequirementOperation::Effect,
             };
-            requirements.push(ContractOwnerRequirement { operation });
+            let registration = ContractOwnerRequirement {
+                operation: kind,
+                guaranteed: operation.cardinality.min.is_some_and(|min| min >= 1),
+                guard: operation.guard.clone(),
+            };
+            if !operations.contains(&registration) {
+                operations.push(registration);
+            }
         }
     }
-    requirements.sort_by_key(|requirement| format!("{:?}", requirement.operation));
-    requirements.dedup_by_key(|requirement| requirement.operation);
-    match knowledge {
-        KnowledgeSet::Unknown if requirements.is_empty() => ContractClaim::Open,
-        _ => ContractClaim::Known(requirements),
+    // A guaranteed registration of the same kind and guard already says
+    // everything the unguaranteed one could.
+    let covered = operations
+        .iter()
+        .filter(|registration| registration.guaranteed)
+        .map(|registration| (registration.operation, registration.guard.clone()))
+        .collect::<Vec<_>>();
+    operations.retain(|registration| {
+        registration.guaranteed
+            || !covered.contains(&(registration.operation, registration.guard.clone()))
+    });
+    operations.sort_by_key(|registration| {
+        format!("{:?} {:?}", registration.operation, registration.guard)
+    });
+    operations
+}
+
+fn bind_capture_arguments(
+    file: &solid_facts::FileFacts,
+    entities: &EntitySymbols,
+    factory: &solid_facts::ast::CallFact,
+    summary: &ContractExport,
+) -> Option<ContractExport> {
+    let mut bound = summary.clone();
+    if !summary.capture_sources.is_empty() && !summary.capture_context_supported {
+        return None;
+    }
+    if !summary.capture_sources.is_empty()
+        && (summary.callbacks.is_open() || summary.open_claims.contains(&ClaimDomain::Callbacks))
+    {
+        return None;
+    }
+    for (slot, source) in &summary.capture_sources {
+        if summary.captured_resource_slots.contains(slot) {
+            continue;
+        }
+        // Resource/output captures have identities in the normalized graph,
+        // but no caller value is established by this consumer slice.
+        let ValueSource::Parameter { index, path } = source else {
+            return None;
+        };
+        if !path.is_empty() {
+            return None;
+        }
+        let argument = factory.arguments.get(usize::from(*index))?;
+        if argument.spread
+            || !capture_argument_escapes(file, entities, factory, argument).is_empty()
+        {
+            return None;
+        }
+        for callback in summary
+            .callbacks
+            .known()?
+            .iter()
+            .filter(|row| row.parameter == *slot)
+        {
+            if !callback.invokes_argument()
+                || (callback.execution == "inline"
+                    && summary.inline_accessor_invocations.get(slot) != Some(&true))
+            {
+                return None;
+            }
+        }
+        bound.captured_arguments.insert(*slot, argument.clone());
+    }
+    Some(bound)
+}
+
+/// All non-call uses of a captured identifier remain obligations. A spelling
+/// fallback can only add an obligation when Type Facts did not bind a use.
+pub(crate) fn capture_argument_escapes(
+    file: &solid_facts::FileFacts,
+    entities: &EntitySymbols,
+    factory: &solid_facts::ast::CallFact,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> Vec<solid_facts::core::Span> {
+    let span = argument.span;
+    if argument.spread || file.ast.peel_ts_sugar_span(span) != span {
+        return vec![span];
+    }
+    let input_free = |function: &solid_facts::ast::FunctionFact| {
+        function.kind == solid_facts::ast::FunctionKind::Arrow
+            && function.parameters.is_empty()
+            && !function.rest_parameter
+            && !function.r#async
+            && !function.generator
+    };
+    if let Some(function) = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == span)
+    {
+        return if input_free(function) {
+            vec![]
+        } else {
+            vec![span]
+        };
+    }
+    if !file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == span)
+    {
+        return vec![span];
+    }
+    let Some(root) = entities.get(&crate::location(file.path.shared(), span)) else {
+        return vec![span];
+    };
+    let Some(binding) = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.names.iter().any(|name| {
+                entities.get(&crate::location(file.path.shared(), name.span)) == Some(root)
+            })
+    }) else {
+        return vec![span];
+    };
+    if crate::value_identity::binding_has_write(file, entities, root) {
+        return vec![span];
+    }
+    if binding.shape == solid_facts::ast::BindingShape::Identifier {
+        let Some(initializer) = binding.initializer else {
+            return vec![span];
+        };
+        if file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == initializer)
+            .is_some_and(|function| !input_free(function))
+        {
+            return vec![span];
+        }
+        if file.ast.peel_ts_sugar_span(initializer) != initializer
+            || (!file
+                .ast
+                .functions
+                .iter()
+                .any(|function| function.span == initializer)
+                && !file.ast.calls.iter().any(|call| call.span == initializer))
+        {
+            return vec![span];
+        }
+    }
+    let declaration = binding
+        .names
+        .iter()
+        .find(|name| entities.get(&crate::location(file.path.shared(), name.span)) == Some(root))
+        .expect("the exact binding was found")
+        .span;
+    let scope = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| function.body.contains(declaration))
+        .min_by_key(|function| function.body.end - function.body.start)
+        .map(|function| function.body);
+    let name = file.source_text(span).unwrap_or_default();
+    let mut escapes = Vec::new();
+    for identifier in file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == solid_facts::ast::IdentifierRole::Reference && id.span != span)
+    {
+        let exact = entities.get(&crate::location(file.path.shared(), identifier.span));
+        let possible = exact == Some(root)
+            || (exact.is_none()
+                && !name.is_empty()
+                && file.source_text(identifier.span) == Some(name)
+                && scope.is_none_or(|scope| scope.contains(identifier.span)));
+        if possible
+            && !(exact == Some(root)
+                && file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| call.callee == identifier.span && !call.construct))
+        {
+            escapes.push(identifier.span);
+        }
+    }
+    for property in &file.ast.object_properties {
+        if property.shorthand_binding == Some(declaration) {
+            escapes.push(property.span);
+        }
+    }
+    for exported in file
+        .ast
+        .exports
+        .iter()
+        .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+    {
+        if !exported.type_only
+            && entities.get(&crate::location(file.path.shared(), exported.local.span)) == Some(root)
+        {
+            escapes.push(exported.local.span);
+        }
+    }
+    // Other arguments of this very call are escapes too, even if their spans
+    // were not emitted as identifier references.
+    for other in &factory.arguments {
+        if other.span != span
+            && entities.get(&crate::location(file.path.shared(), other.span)) == Some(root)
+        {
+            escapes.push(other.span);
+        }
+    }
+    escapes.sort();
+    escapes.dedup();
+    escapes
+}
+
+/// Which published operation imposes an owner obligation on the *caller*.
+///
+/// The four shapes here are the ones a consumer can actually meet today: the
+/// `ambient-at-call` `create` the two frozen Solid 1.x authority documents
+/// still carry (`debounce-root-default.json` and `rootless-root-default.json`,
+/// each one `owner-requirement-0`), audited `render`'s `source: created`
+/// `create`, and the `kind: cleanup` and `kind: compute` (ADR 0114)
+/// requirements the generator publishes. The distinction between the first
+/// two is the whole content of the filter: both say `requires: required`, and
+/// only one of them is the caller's problem. The last two prove the filter
+/// reads the `Requirement` triple rather than the operation's kind.
+///
+/// A findings fixture can pin this since a fixture can hold an accepted
+/// contract (`fixture_authorization.rs`):
+/// `fixtures/reactive-ir/package-computation-consumer` reports `SC4001` for an
+/// unowned call to an export stating a `compute`, and nothing for the same call
+/// inside a component or for the same export stating none. `@solidjs/web`'s
+/// audited `render` still reaches no analyzer — `EMBEDDED_SOLID1_BUNDLES` is
+/// `&[]` and both first-party bundle producers validate their inputs and return
+/// an empty vector.
+#[cfg(test)]
+mod owner_requirement_projection_tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use super::{
+        exact_structural_return, project_export_semantics, project_owner_requirements,
+        project_return,
+    };
+    use crate::contract_semantics::{
+        ArtifactIdentity, CallClaims, CallSemantics, Cardinality, CardinalityScope, ClaimDomain,
+        Digest, Event, ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition,
+        KnowledgeSet, Lifetime, Operation, OperationId, OperationKind, OwnerCapabilities,
+        OwnerProduction, OwnerRelation, OwnerRequirements, OwnerSource, Requirement, Resource,
+        ResourceId, ResourceKind, ResourceState, Schedule, StabilityKnowledge, Tracking, Trigger,
+        UpperBound, ValueShape,
+    };
+    use crate::{
+        ContractClaim, ContractOwnerRequirement, ContractReturn, OwnerRequirementOperation,
+    };
+
+    #[test]
+    fn callback_result_identity_does_not_unwrap_async_or_partial_shapes() {
+        let accessor = ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Complete(Vec::new()),
+        };
+        assert_eq!(
+            super::direct_return_shape(&accessor).unwrap().kind,
+            "accessor"
+        );
+        for shape in [
+            ValueShape::Promise(Box::new(accessor.clone())),
+            ValueShape::AsyncIterable(Box::new(accessor.clone())),
+            ValueShape::Tuple(KnowledgeSet::Partial(vec![accessor.clone()])),
+            ValueShape::Choice(KnowledgeSet::Complete(vec![
+                accessor.clone(),
+                ValueShape::Plain,
+            ])),
+            ValueShape::Reactive {
+                role: crate::contract_semantics::ReactiveRole::Setter,
+                resource: None,
+                capabilities: KnowledgeSet::Complete(Vec::new()),
+            },
+        ] {
+            assert!(super::direct_return_shape(&shape).is_none());
+        }
+        let tuple = super::direct_return_shape(&ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            accessor,
+            ValueShape::Callable,
+        ])))
+        .unwrap();
+        assert_eq!(tuple.elements[0].as_ref().unwrap().kind, "accessor");
+        assert!(
+            tuple.elements[1].is_none(),
+            "an opaque slot is never an accessor"
+        );
+    }
+
+    fn digest() -> Digest {
+        Digest::parse(format!("sha256:{}", "a".repeat(64))).unwrap()
+    }
+
+    fn owner_resource(id: &str) -> Resource {
+        Resource {
+            id: ResourceId(id.into()),
+            kind: ResourceKind::Owner,
+            states: KnowledgeSet::Complete(vec![
+                ResourceState::OwnerActive,
+                ResourceState::OwnerDisposed,
+            ]),
+            capabilities: KnowledgeSet::Complete(Vec::new()),
+            lifetime: Some(Lifetime::Owner(ResourceId(id.into()))),
+        }
+    }
+
+    fn operation(id: &str, kind: OperationKind, resources: &[&str]) -> Operation {
+        Operation {
+            id: OperationId(id.into()),
+            kind,
+            guard: None,
+            trigger: Some(Trigger::Event(Event::Call)),
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            tracking: Tracking::Untracked,
+            strict_read: None,
+            owner: OwnerRelation::default(),
+            cardinality: Cardinality {
+                scope: Some(CardinalityScope::Call),
+                min: Some(0),
+                max: Some(UpperBound::Many),
+            },
+            inputs: Vec::new(),
+            output: None,
+            resources: resources
+                .iter()
+                .map(|resource| ResourceId((*resource).into()))
+                .collect(),
+            composed_from: None,
+            protocol: None,
+        }
+    }
+
+    fn export(
+        claims: CallClaims,
+        operations: Vec<Operation>,
+        resources: Vec<Resource>,
+    ) -> ExportSemantics {
+        let module = ArtifactIdentity {
+            path: "./index.js".into(),
+            digest: digest(),
+        };
+        let target = ExportTargetIdentity {
+            module,
+            export_name: "subject".into(),
+        };
+        ExportSemantics {
+            identity: ExportIdentity {
+                entrypoint: ".".into(),
+                public_name: "subject".into(),
+                runtime: target.clone(),
+                declarations: target,
+            },
+            shape: ValueShape::Callable,
+            stability: StabilityKnowledge::Unknown,
+            call: CallSemantics::new(
+                claims,
+                operations,
+                Vec::new(),
+                resources,
+                GuardPartition::default(),
+            ),
+        }
+    }
+
+    fn claims() -> CallClaims {
+        CallClaims {
+            callbacks: KnowledgeSet::Complete(Vec::new()),
+            reads: KnowledgeSet::Complete(Vec::new()),
+            writes: KnowledgeSet::Unknown,
+            creates: KnowledgeSet::Complete(Vec::new()),
+            invalidates: KnowledgeSet::Unknown,
+            throws: KnowledgeSet::Unknown,
+            returns: KnowledgeSet::Complete(Vec::new()),
+            cleanups: KnowledgeSet::Unknown,
+            disposals: KnowledgeSet::Unknown,
+            computations: KnowledgeSet::Unknown,
+        }
+    }
+
+    #[test]
+    fn callback_result_rows_never_become_calls_of_the_original_argument() {
+        use crate::contract_semantics::{
+            CallbackInvocation, CallbackResult, EdgeKind, OperationEdge, ValueSource,
+        };
+        let producer = operation("producer", OperationKind::Invoke, &[]);
+        let mut use_ = operation("use", OperationKind::Invoke, &[]);
+        use_.tracking = Tracking::AmbientAtExecution;
+        use_.owner.source = OwnerSource::AmbientAtExecution;
+        let mut claims = claims();
+        claims.callbacks = KnowledgeSet::Complete(vec![
+            CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 0,
+                    path: vec![],
+                },
+                operation: producer.id.clone(),
+            },
+            CallbackInvocation {
+                from: ValueSource::OperationOutput {
+                    operation: producer.id.clone(),
+                    path: vec!["0".into()],
+                },
+                operation: use_.id.clone(),
+            },
+        ]);
+        let mut subject = export(claims, vec![producer.clone(), use_.clone()], vec![]);
+        subject.call.edges.push(OperationEdge {
+            kind: EdgeKind::Data,
+            from: producer.id.clone(),
+            to: use_.id.clone(),
+        });
+        subject.call = subject.call.with_callback_results(vec![CallbackResult {
+            producer: producer.id,
+            shape: ValueShape::Unknown,
+            uses: KnowledgeSet::Complete(vec![use_.id]),
+            callable_only: BTreeSet::new(),
+        }]);
+        let projected = project_export_semantics(&subject);
+        assert!(!projected.open_claims.contains(&ClaimDomain::Callbacks));
+        assert_eq!(projected.callbacks.known().unwrap().len(), 1);
+        assert_eq!(projected.callback_results[0].uses.items()[0].path, ["0"]);
+        assert_eq!(
+            projected.callback_results[0].uses.items()[0]
+                .operation
+                .schedule,
+            Some(Schedule::SameStack)
+        );
+        // A dependency's result graph is not silently re-emitted as ordinary callbacks.
+        let mut inherited = projected;
+        inherited.inherited_from = Some(crate::InheritedExportOrigin {
+            package_name: "package".into(),
+            package_version: "1.0.0".into(),
+            artifact_case: "case".into(),
+            semantic_digest: digest().as_str().into(),
+            entrypoint: ".".into(),
+            export: "subject".into(),
+        });
+        assert!(!inherited.inherited_closure(ClaimDomain::Callbacks));
+    }
+
+    #[test]
+    fn whole_return_graph_and_members_project_only_with_closed_agreement() {
+        let graph = CallSemantics::new(claims(), vec![], vec![], vec![], GuardPartition::default());
+        let mut returned = operation("return", OperationKind::Return, &[]);
+        returned.output = Some(ValueShape::ReturnedCallable {
+            call: Some(Box::new(graph.clone())),
+            members: vec![crate::contract_semantics::ObjectProperty {
+                name: "clear".into(),
+                value: ValueShape::EffectfulCallable(Box::new(graph)),
+            }],
+        });
+        let mut claims = claims();
+        claims.returns = KnowledgeSet::Complete(vec![returned.id.clone()]);
+        let factory = export(claims.clone(), vec![returned.clone()], vec![]);
+        let projected = project_export_semantics(&factory);
+        assert!(projected.returned_callable_effects.is_some());
+        assert!(projected.returned_member_effects.contains_key("clear"));
+        assert!(
+            projected
+                .returns
+                .known()
+                .and_then(Option::as_ref)
+                .is_some_and(|value| value.kind == super::RETURNED_CALLABLE)
+        );
+        let setter = ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Setter,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        };
+        assert_eq!(
+            super::project_returned_callable_member_shape(&setter)
+                .unwrap()
+                .kind,
+            super::OPAQUE_MEMBER,
+            "a setter member must never invent a read"
+        );
+        assert!(!projected.open_claims.contains(&ClaimDomain::Returns));
+
+        let mut other = returned.clone();
+        other.id = OperationId("other-return".into());
+        other.output = Some(ValueShape::ReturnedCallable {
+            call: None,
+            members: vec![],
+        });
+        claims.returns = KnowledgeSet::Complete(vec![returned.id.clone(), other.id.clone()]);
+        let ambiguous = project_export_semantics(&export(
+            claims.clone(),
+            vec![returned.clone(), other],
+            vec![],
+        ));
+        assert!(ambiguous.returned_callable_effects.is_none());
+        assert!(ambiguous.returned_member_effects.is_empty());
+        assert!(
+            ambiguous
+                .returns
+                .known()
+                .and_then(Option::as_ref)
+                .is_some_and(|value| value.kind == super::RETURNED_CALLABLE)
+        );
+
+        claims.returns = KnowledgeSet::Partial(vec![returned.id.clone()]);
+        let partial = project_export_semantics(&export(claims, vec![returned], vec![]));
+        assert!(partial.returned_callable_effects.is_none());
+        assert!(partial.returned_member_effects.is_empty());
+        assert!(partial.open_claims.contains(&ClaimDomain::Returns));
+    }
+
+    #[test]
+    fn captures_project_separately_from_returned_invocation_arguments() {
+        use crate::contract_semantics::{CallbackInvocation, CapturedValue, ValueSource};
+        let mut invocation = operation("invoke-captured", OperationKind::Invoke, &[]);
+        invocation.tracking = Tracking::AmbientAtExecution;
+        invocation.owner.source = OwnerSource::AmbientAtExecution;
+        let mut graph_claims = claims();
+        graph_claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+            from: ValueSource::Capture {
+                capture: "callback".into(),
+                path: vec![],
+            },
+            operation: invocation.id.clone(),
+        }]);
+        let graph = CallSemantics::new(
+            graph_claims,
+            vec![invocation],
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        )
+        .with_captures(vec![CapturedValue {
+            id: "callback".into(),
+            from: ValueSource::Parameter {
+                index: 1,
+                path: vec![],
+            },
+        }]);
+        let mut returned = operation("return", OperationKind::Return, &[]);
+        returned.output = Some(ValueShape::ReturnedCallable {
+            call: Some(Box::new(graph)),
+            members: vec![],
+        });
+        let mut factory_claims = claims();
+        factory_claims.returns = KnowledgeSet::Complete(vec![returned.id.clone()]);
+        let projected = project_export_semantics(&export(factory_claims, vec![returned], vec![]));
+        let graph = projected.returned_callable_effects.unwrap();
+        assert!(
+            graph.captured_arguments.is_empty(),
+            "projection alone binds no caller value"
+        );
+        assert_eq!(
+            graph.capture_sources[&usize::MAX],
+            ValueSource::Parameter {
+                index: 1,
+                path: vec![]
+            }
+        );
+        assert_eq!(graph.callbacks.known().unwrap()[0].parameter, usize::MAX);
+        assert!(
+            !graph
+                .callbacks
+                .known()
+                .unwrap()
+                .iter()
+                .any(|row| row.parameter == 0 || row.parameter == 1)
+        );
+    }
+
+    #[test]
+    fn captures_link_explicit_resource_reads_and_exact_accessor_results_only() {
+        use crate::contract_semantics::{CapturedValue, ReactiveRole, ValueSource};
+        let mut read = operation("read-capture", OperationKind::Read, &[]);
+        read.tracking = Tracking::AmbientAtExecution;
+        read.owner.source = OwnerSource::AmbientAtExecution;
+        read.cardinality.min = Some(1);
+        read.inputs = vec![ValueShape::Reactive {
+            role: ReactiveRole::Accessor,
+            resource: Some(ResourceId("source".into())),
+            capabilities: KnowledgeSet::Unknown,
+        }];
+        let mut graph_claims = claims();
+        graph_claims.reads = KnowledgeSet::Complete(vec![read.id.clone()]);
+        let mut producer = operation("create-source", OperationKind::Create, &["source"]);
+        producer.cardinality.min = Some(1);
+        producer.output = Some(read.inputs[0].clone());
+        let project = |source: ValueSource, read: Operation, producer: Operation| {
+            let graph = CallSemantics::new(
+                graph_claims.clone(),
+                vec![read],
+                vec![],
+                vec![],
+                GuardPartition::default(),
+            )
+            .with_captures(vec![CapturedValue {
+                id: "source".into(),
+                from: source,
+            }]);
+            let mut returned = operation("return", OperationKind::Return, &[]);
+            returned.output = Some(ValueShape::ReturnedCallable {
+                call: Some(Box::new(graph)),
+                members: vec![],
+            });
+            let mut factory_claims = claims();
+            factory_claims.returns = KnowledgeSet::Complete(vec![returned.id.clone()]);
+            factory_claims.creates = KnowledgeSet::Complete(vec![producer.id.clone()]);
+            project_export_semantics(&export(
+                factory_claims,
+                vec![producer, returned],
+                vec![Resource {
+                    id: ResourceId("source".into()),
+                    kind: ResourceKind::ReactiveSource,
+                    states: KnowledgeSet::Unknown,
+                    capabilities: KnowledgeSet::Unknown,
+                    lifetime: None,
+                }],
+            ))
+            .returned_callable_effects
+            .unwrap()
+        };
+        let resource = ValueSource::Resource {
+            resource: ResourceId("source".into()),
+            path: vec![],
+        };
+        let result = ValueSource::OperationOutput {
+            operation: OperationId("create-source".into()),
+            path: vec![],
+        };
+        for source in [resource, result.clone()] {
+            let projected = project(source, read.clone(), producer.clone());
+            assert!(projected.captured_resource_slots.contains(&usize::MAX));
+            assert_eq!(projected.reactive_reads.known().unwrap().len(), 1);
+        }
+        let mut unknown = producer.clone();
+        unknown.output = Some(ValueShape::Unknown);
+        assert!(
+            project(result.clone(), read.clone(), unknown)
+                .captured_resource_slots
+                .is_empty()
+        );
+        let mut optional = read;
+        optional.cardinality.min = Some(0);
+        assert!(
+            project(result, optional, producer)
+                .captured_resource_slots
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn only_an_explicit_strict_read_clearing_excludes_a_call_read() {
+        use crate::contract_semantics::{ReactiveRole, StrictRead};
+        let mut read = operation("read", OperationKind::Read, &[]);
+        read.inputs = vec![ValueShape::Reactive {
+            role: ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        }];
+        let mut known = claims();
+        known.reads = KnowledgeSet::Complete(vec![read.id.clone()]);
+        let mut subject = export(known, vec![read], Vec::new());
+        let mut open = BTreeSet::new();
+        let projected = super::project_reactive_reads(&subject, &mut open);
+        assert!(matches!(projected, ContractClaim::Known(reads) if reads.len() == 1));
+        assert!(!open.contains(&ClaimDomain::Reads));
+        subject.call.operations[0].strict_read = Some(StrictRead::Cleared);
+        assert!(matches!(super::project_reactive_reads(&subject, &mut open),
+            ContractClaim::Known(reads) if reads.is_empty()));
+        assert_eq!(
+            subject.call.claims().reads.items().len(),
+            1,
+            "the real occurrence stays known"
+        );
+        assert!(!open.contains(&ClaimDomain::Reads));
+        let mut partial = claims();
+        partial.reads = KnowledgeSet::Partial(vec![subject.call.operations[0].id.clone()]);
+        let partial = export(partial, subject.call.operations.clone(), Vec::new());
+        assert!(matches!(super::project_reactive_reads(&partial, &mut open),
+            ContractClaim::Known(reads) if reads.is_empty()));
+        assert!(
+            open.contains(&ClaimDomain::Reads),
+            "clearing does not close an open census"
+        );
+    }
+
+    #[test]
+    fn read_projection_preserves_optional_count_and_execution() {
+        let mut read = operation("read", OperationKind::Read, &[]);
+        read.inputs = vec![ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        }];
+        read.tracking = Tracking::AmbientAtExecution;
+        read.cardinality.max = Some(UpperBound::Finite(1));
+        let mut census = claims();
+        census.reads = KnowledgeSet::Complete(vec![read.id.clone()]);
+        let project = |read: Operation| {
+            let subject = export(census.clone(), vec![read], vec![]);
+            super::project_reactive_reads(&subject, &mut BTreeSet::new())
+                .known()
+                .unwrap()
+                .clone()
+        };
+        let rows = project(read.clone());
+        let context = rows[0].execution.as_ref().unwrap();
+        assert_eq!(context.count, read.cardinality);
+        assert_eq!(context.at, read.at);
+        assert_eq!(context.schedule, read.schedule);
+        assert_eq!(context.tracking, read.tracking);
+        assert_eq!(
+            context.at_call(crate::ExecutionRole::UntrackedRendering),
+            (crate::ExecutionRole::UntrackedRendering, true)
+        );
+        assert_eq!(
+            context.at_call(crate::ExecutionRole::TrackedJsx),
+            (crate::ExecutionRole::TrackedJsx, true)
+        );
+        read.cardinality.min = Some(1);
+        assert_eq!(
+            project(read.clone())[0]
+                .execution
+                .as_ref()
+                .unwrap()
+                .at_call(crate::ExecutionRole::UntrackedRendering),
+            (crate::ExecutionRole::UntrackedRendering, false)
+        );
+        read.schedule = None;
+        assert!(
+            project(read.clone())[0]
+                .execution
+                .as_ref()
+                .unwrap()
+                .at_call(crate::ExecutionRole::UntrackedRendering)
+                .1
+        );
+        // ADR 0254: the read keeps the caller's role; missing timing only
+        // makes it unproven.
+        assert_eq!(
+            project(read.clone())[0]
+                .execution
+                .as_ref()
+                .unwrap()
+                .at_call(crate::ExecutionRole::TrackedJsx),
+            (crate::ExecutionRole::TrackedJsx, true)
+        );
+        read.cardinality.min = Some(0);
+        read.cardinality.max = Some(UpperBound::Finite(0));
+        assert!(project(read).is_empty());
+    }
+
+    #[test]
+    fn read_tracking_and_missing_timing_are_independent_of_count() {
+        let mut context = crate::ContractReadContext {
+            count: Cardinality {
+                scope: Some(CardinalityScope::Call),
+                min: Some(0),
+                max: Some(UpperBound::Finite(1)),
+            },
+            tracking: Tracking::AmbientAtExecution,
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            trigger: Some(Trigger::Event(Event::Call)),
+            guarded: false,
+        };
+        // ADR 0254: tracking does not move the read out of the caller's
+        // role (`strictRead: cleared` is the explicit clearing); an optional
+        // count makes it unproven whatever the tracking.
+        for tracking in [Tracking::Untracked, Tracking::Unknown, Tracking::Tracked] {
+            context.tracking = tracking;
+            assert_eq!(
+                context.at_call(crate::ExecutionRole::TrackedJsx),
+                (crate::ExecutionRole::TrackedJsx, true)
+            );
+            assert_eq!(
+                context.at_call(crate::ExecutionRole::UntrackedRendering),
+                (crate::ExecutionRole::UntrackedRendering, true)
+            );
+        }
+        assert_eq!(
+            context.at_call(crate::ExecutionRole::DiscardedRendering),
+            (crate::ExecutionRole::DiscardedRendering, false)
+        );
+        context.tracking = Tracking::AmbientAtExecution;
+        context.count.min = Some(1);
+        context.count.scope = Some(CardinalityScope::Trigger);
+        assert!(context.at_call(crate::ExecutionRole::UntrackedRendering).1);
+        context.count.scope = Some(CardinalityScope::Call);
+        context.guarded = true;
+        assert!(context.at_call(crate::ExecutionRole::UntrackedRendering).1);
+        context.guarded = false;
+        context.at = None;
+        assert_eq!(
+            context.at_call(crate::ExecutionRole::TrackedJsx),
+            (crate::ExecutionRole::TrackedJsx, true)
+        );
+    }
+
+    /// ADR 0179: only an unguarded, `ambient-at-call`, synchronous,
+    /// call-scoped registration counted `min >= 1` is leaf-forbidden.
+    #[test]
+    fn a_leaf_forbidden_registration_is_one_made_at_the_call_on_every_call() {
+        let requiring = |id: &str, kind: OperationKind, min: u32| {
+            let mut operation = operation(id, kind, &[]);
+            operation.owner = OwnerRelation {
+                source: OwnerSource::AmbientAtCall,
+                requirements: OwnerRequirements {
+                    owner: Requirement::Required,
+                    ..OwnerRelation::default().requirements
+                },
+                ..OwnerRelation::default()
+            };
+            operation.cardinality.min = Some(min);
+            operation
+        };
+        let project = |operations: Vec<Operation>| {
+            let mut claims = claims();
+            claims.cleanups = KnowledgeSet::Partial(
+                operations
+                    .iter()
+                    .filter(|operation| operation.kind == OperationKind::Cleanup)
+                    .map(|operation| operation.id.clone())
+                    .collect(),
+            );
+            claims.computations = KnowledgeSet::Partial(
+                operations
+                    .iter()
+                    .filter(|operation| operation.kind == OperationKind::Compute)
+                    .map(|operation| operation.id.clone())
+                    .collect(),
+            );
+            super::project_leaf_forbidden_operations(&export(claims, operations, Vec::new()))
+                .into_iter()
+                .map(|registration| registration.operation)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            project(vec![
+                requiring("cleanup", OperationKind::Cleanup, 1),
+                requiring("compute", OperationKind::Compute, 1),
+            ]),
+            vec![
+                OwnerRequirementOperation::Cleanup,
+                OwnerRequirementOperation::Effect
+            ]
+        );
+        // ADR 0231: one that may not happen is kept, unguaranteed.
+        let possible = |operations: Vec<Operation>| {
+            let mut claims = claims();
+            claims.cleanups = KnowledgeSet::Partial(
+                operations
+                    .iter()
+                    .map(|operation| operation.id.clone())
+                    .collect(),
+            );
+            super::project_leaf_forbidden_operations(&export(claims, operations, Vec::new()))
+                .into_iter()
+                .map(|registration| (registration.operation, registration.guaranteed))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            possible(vec![requiring("cleanup", OperationKind::Cleanup, 0)]),
+            vec![(OwnerRequirementOperation::Cleanup, false)],
+            "a registration that may not happen"
+        );
+        assert_eq!(
+            possible(vec![
+                requiring("always", OperationKind::Cleanup, 1),
+                requiring("maybe", OperationKind::Cleanup, 0),
+            ]),
+            vec![(OwnerRequirementOperation::Cleanup, true)],
+            "a guaranteed one covers the possible one"
+        );
+        let mut later = requiring("cleanup", OperationKind::Cleanup, 1);
+        later.owner.source = OwnerSource::AmbientAtExecution;
+        assert!(project(vec![later]).is_empty(), "the owner current later");
+        let mut deferred = requiring("cleanup", OperationKind::Cleanup, 1);
+        deferred.schedule = Some(Schedule::Queued);
+        assert!(
+            project(vec![deferred]).is_empty(),
+            "not on the call's stack"
+        );
+        // ADR 0226: no owner needed, but a present one must accept children
+        // (`createMemo` with an optional owner): a leaf forbids it.
+        let mut optional = requiring("compute", OperationKind::Compute, 1);
+        optional.owner.requirements.owner = Requirement::Unconstrained;
+        optional.owner.requirements.child_owners = Requirement::Required;
+        assert_eq!(
+            project(vec![optional.clone()]),
+            vec![OwnerRequirementOperation::Effect]
+        );
+        // Neither children nor cleanups needed, and no owner required.
+        optional.owner.requirements.child_owners = Requirement::Unconstrained;
+        assert!(project(vec![optional]).is_empty(), "nothing a leaf forbids");
+    }
+
+    #[test]
+    fn an_inline_accessor_invocation_needs_its_own_call_scoped_lower_bound() {
+        use crate::contract_semantics::{CallbackInvocation, InvokeProtocol, ValueSource};
+
+        let mut invoke = operation("invoke", OperationKind::Invoke, &[]);
+        invoke.tracking = Tracking::AmbientAtExecution;
+        invoke.cardinality.min = Some(1);
+        let project = |invoke: Operation, closed: bool| {
+            let callback = CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 0,
+                    path: Vec::new(),
+                },
+                operation: invoke.id.clone(),
+            };
+            project_export_semantics(&export(
+                CallClaims {
+                    callbacks: if closed {
+                        KnowledgeSet::Complete(vec![callback])
+                    } else {
+                        KnowledgeSet::Partial(vec![callback])
+                    },
+                    ..claims()
+                },
+                vec![invoke],
+                Vec::new(),
+            ))
+            .inline_accessor_invocations
+        };
+        assert_eq!(project(invoke.clone(), true), BTreeMap::from([(0, true)]));
+        // A verified positive fact need not close its sibling enumeration.
+        assert_eq!(project(invoke.clone(), false), BTreeMap::from([(0, true)]));
+        let mut optional = invoke.clone();
+        optional.cardinality.min = Some(0);
+        assert_eq!(project(optional, true), BTreeMap::from([(0, false)]));
+        let mut unknown = invoke.clone();
+        unknown.cardinality.min = None;
+        assert_eq!(project(unknown, true), BTreeMap::from([(0, false)]));
+        let mut per_trigger = invoke.clone();
+        per_trigger.cardinality.scope = Some(CardinalityScope::Trigger);
+        assert_eq!(project(per_trigger, true), BTreeMap::from([(0, false)]));
+        let mut property_get = invoke.clone();
+        property_get.protocol = Some(InvokeProtocol::Get);
+        assert!(project(property_get, true).is_empty());
+        let mut guarded = invoke.clone();
+        guarded.guard = Some(crate::contract_semantics::Guard(vec![
+            crate::contract_semantics::GuardAtom::ArgumentCount {
+                min: 1,
+                max: Some(1),
+            },
+        ]));
+        assert_eq!(project(guarded, true), BTreeMap::from([(0, false)]));
+        let mut later_event = invoke.clone();
+        later_event.at = Some(Event::Settle);
+        later_event.trigger = Some(crate::contract_semantics::Trigger::Event(Event::Settle));
+        assert!(project(later_event, true).is_empty());
+        let mut unknown_event = invoke.clone();
+        unknown_event.at = None;
+        assert!(project(unknown_event, true).is_empty());
+        let mut deferred = invoke;
+        deferred.schedule = Some(Schedule::Queued);
+        assert!(project(deferred, true).is_empty());
+    }
+
+    /// ADR 0145/0146: a closed claim over one described callable projects to
+    /// no reactive return when invoking it reads nothing, and to an accessor
+    /// when it reads a signal -- a returned accessor stays one. Neither is a
+    /// closed-empty claim, and an open one opens the domain.
+    #[test]
+    fn a_described_callable_projects_as_no_return_or_as_an_accessor() {
+        use crate::contract_semantics::{DescribedCall, DescribedRead};
+        let project = |reads: Vec<DescribedRead>, returns: KnowledgeSet<OperationId>| {
+            let mut returned = operation("return", OperationKind::Return, &[]);
+            returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
+                reads,
+                returns: vec![ValueShape::Plain],
+                callbacks: Vec::new(),
+            })));
+            project_export_semantics(&export(
+                CallClaims {
+                    returns,
+                    ..claims()
+                },
+                vec![returned],
+                Vec::new(),
+            ))
+        };
+        let closed = || KnowledgeSet::Complete(vec![OperationId("return".into())]);
+        let inert = project(Vec::new(), closed());
+        assert_eq!(inert.returns, ContractClaim::Known(None));
+        assert!(!inert.open_claims.contains(&ClaimDomain::Returns));
+        assert!(!inert.returns_closed_empty);
+
+        let reading = project(vec![DescribedRead::OwnedSignal], closed());
+        let ContractClaim::Known(Some(returned)) = &reading.returns else {
+            panic!("a described read projects to a leaf: {:?}", reading.returns);
+        };
+        assert_eq!(returned.kind, "accessor");
+        assert!(!reading.open_claims.contains(&ClaimDomain::Returns));
+
+        // ADR 0162: a memo's read is a tracked read too, so calling what
+        // `createMemo` handed back is the same reactive read in whatever scope
+        // calls it -- an accessor leaf, not a value.
+        let memo = project(vec![DescribedRead::OwnedMemo], closed());
+        let ContractClaim::Known(Some(returned)) = &memo.returns else {
+            panic!(
+                "a described memo read projects to a leaf: {:?}",
+                memo.returns
+            );
+        };
+        assert_eq!(returned.kind, "accessor");
+        assert!(!memo.open_claims.contains(&ClaimDomain::Returns));
+
+        let open = project(
+            Vec::new(),
+            KnowledgeSet::Partial(vec![OperationId("return".into())]),
+        );
+        assert!(open.open_claims.contains(&ClaimDomain::Returns));
+    }
+
+    /// ADR 0143: `returns: []` and a closed claim over one `plain` return both
+    /// project to `Known(None)` -- the consumer's single leaf names neither --
+    /// and only the empty one sets `returns_closed_empty`, which is what the
+    /// inherited premise reads. Before it, a re-exporting package restated a
+    /// dependency's plain return as `returns: []`.
+    #[test]
+    fn only_the_empty_returns_closure_projects_as_closed_empty() {
+        let empty = project_export_semantics(&export(claims(), Vec::new(), Vec::new()));
+        assert_eq!(empty.returns, ContractClaim::Known(None));
+        assert!(empty.returns_closed_empty);
+
+        let mut plain = operation("return", OperationKind::Return, &[]);
+        plain.output = Some(ValueShape::Plain);
+        let projected = project_export_semantics(&export(
+            CallClaims {
+                returns: KnowledgeSet::Complete(vec![OperationId("return".into())]),
+                ..claims()
+            },
+            vec![plain],
+            Vec::new(),
+        ));
+        assert_eq!(projected.returns, ContractClaim::Known(None));
+        assert!(
+            !projected.returns_closed_empty,
+            "a plain return is a value; restating it as `returns: []` is false"
+        );
+
+        let open = project_export_semantics(&export(
+            CallClaims {
+                returns: KnowledgeSet::Unknown,
+                ..claims()
+            },
+            Vec::new(),
+            Vec::new(),
+        ));
+        assert!(!open.returns_closed_empty);
+    }
+
+    /// ADR 0170: the projection carries a closed, non-empty `returns` claim's
+    /// operations for a re-export to state again, and only when every item is a
+    /// bare `return` with an exact output that means the same in any package.
+    #[test]
+    fn only_an_exact_closed_returns_claim_projects_as_restatable() {
+        let returning = |id: &str, output: ValueShape| {
+            let mut operation = operation(id, OperationKind::Return, &[]);
+            operation.output = Some(output);
+            operation
+        };
+        let project = |returns: KnowledgeSet<OperationId>, operations: Vec<Operation>| {
+            project_export_semantics(&export(
+                CallClaims {
+                    returns,
+                    ..claims()
+                },
+                operations,
+                Vec::new(),
+            ))
+        };
+        let one = || KnowledgeSet::Complete(vec![OperationId("return".into())]);
+
+        // A plain return is restated as it is.
+        let plain = project(one(), vec![returning("return", ValueShape::Plain)]);
+        assert_eq!(plain.returns_restated.len(), 1);
+        assert_eq!(plain.returns_restated[0].output, Some(ValueShape::Plain));
+        assert!(!plain.returns_closed_empty);
+
+        // So is a union of exact outputs, in the accepted order.
+        let union = project(
+            KnowledgeSet::Complete(vec![
+                OperationId("return-0".into()),
+                OperationId("return-1".into()),
+            ]),
+            vec![
+                returning(
+                    "return-0",
+                    ValueShape::Parameter {
+                        index: 0,
+                        path: Vec::new(),
+                    },
+                ),
+                returning("return-1", ValueShape::Plain),
+            ],
+        );
+        assert_eq!(union.returns_restated.len(), 2);
+
+        // The empty closure has nothing to restate; ADR 0143's flag owns it.
+        let empty = project(KnowledgeSet::Complete(Vec::new()), Vec::new());
+        assert!(empty.returns_restated.is_empty());
+        assert!(empty.returns_closed_empty);
+
+        // An open or partial claim states nothing complete.
+        let partial = project(
+            KnowledgeSet::Partial(vec![OperationId("return".into())]),
+            vec![returning("return", ValueShape::Plain)],
+        );
+        assert!(partial.returns_restated.is_empty());
+        assert!(
+            project(KnowledgeSet::Unknown, Vec::new())
+                .returns_restated
+                .is_empty()
+        );
+
+        // A return that states more than its output is not restated by output
+        // alone: a guard, a resource.
+        let mut guarded = returning("return", ValueShape::Plain);
+        guarded.cardinality.min = Some(1);
+        assert!(project(one(), vec![guarded]).returns_restated.is_empty());
+        let mut resourced = returning("return", ValueShape::Plain);
+        resourced.resources.insert(ResourceId("resource".into()));
+        assert!(project(one(), vec![resourced]).returns_restated.is_empty());
+
+        // An output that names a resource of the dependency's own, or a
+        // callable it defines, means something else in another package.
+        let reactive = ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        };
+        assert!(
+            project(one(), vec![returning("return", reactive.clone())])
+                .returns_restated
+                .is_empty()
+        );
+        // A described callable names the export's arguments by position only,
+        // so it is restated as it is.
+        use crate::contract_semantics::{DescribedCall, DescribedCallback};
+        let described = |call: DescribedCall| {
+            project(
+                one(),
+                vec![returning(
+                    "return",
+                    ValueShape::DescribedCallable(Box::new(call)),
+                )],
+            )
+        };
+        let invoking = DescribedCall {
+            reads: Vec::new(),
+            returns: vec![ValueShape::InvocationResult { parameter: 0 }],
+            callbacks: vec![DescribedCallback::same_stack_once(0)],
+        };
+        assert_eq!(described(invoking.clone()).returns_restated.len(), 1);
+        // ... unless a callback of it names a resource of the dependency's own.
+        let mut owned = invoking;
+        owned.callbacks[0].owner.source = OwnerSource::Created(ResourceId("resource".into()));
+        assert!(described(owned).returns_restated.is_empty());
+        // All or nothing: one exact item beside one that is not restates none.
+        let mixed = project(
+            KnowledgeSet::Complete(vec![
+                OperationId("return-0".into()),
+                OperationId("return-1".into()),
+            ]),
+            vec![
+                returning("return-0", ValueShape::Plain),
+                returning("return-1", reactive),
+            ],
+        );
+        assert!(mixed.returns_restated.is_empty());
+    }
+
+    /// Item A of ways-to-improve § 3.3: a closed `callbacks` whose items include
+    /// non-call uses of an argument stays closed, and each row carries its
+    /// protocol so re-emission republishes it; only the call row is an
+    /// invocation any consumer pass models.
+    #[test]
+    fn a_closed_callbacks_with_protocol_items_projects_closed_with_each_protocol() {
+        use crate::contract_semantics::{CallbackInvocation, InvokeProtocol, ValueSource};
+        let invoke = |id: &str, protocol: Option<InvokeProtocol>| {
+            let mut invoke = operation(id, OperationKind::Invoke, &[]);
+            invoke.tracking = Tracking::AmbientAtExecution;
+            invoke.protocol = protocol;
+            invoke
+        };
+        let item = |index: u16, id: &str| CallbackInvocation {
+            from: ValueSource::Parameter {
+                index,
+                path: Vec::new(),
+            },
+            operation: OperationId(id.into()),
+        };
+        let projected = project_export_semantics(&export(
+            CallClaims {
+                callbacks: KnowledgeSet::Complete(vec![
+                    item(0, "callback-0"),
+                    item(0, "callback-1"),
+                    item(1, "callback-2"),
+                ]),
+                ..claims()
+            },
+            vec![
+                invoke("callback-0", None),
+                invoke("callback-1", Some(InvokeProtocol::Get)),
+                invoke("callback-2", Some(InvokeProtocol::Coerce)),
+            ],
+            Vec::new(),
+        ));
+        assert!(
+            !projected.open_claims.contains(&ClaimDomain::Callbacks),
+            "{:?}",
+            projected.open_claims
+        );
+        let rows = projected.callbacks.known().expect("the domain stays known");
+        let protocols = rows
+            .iter()
+            .map(|row| (row.parameter, row.protocol, row.is_invocation()))
+            .collect::<Vec<_>>();
+        assert_eq!(protocols.len(), 3);
+        for expected in [
+            (0, InvokeProtocol::Call, true),
+            (0, InvokeProtocol::Get, false),
+            (1, InvokeProtocol::Coerce, false),
+        ] {
+            assert!(protocols.contains(&expected), "{protocols:?}");
+        }
+        assert!(
+            rows.iter().all(|row| !row.clears_tracking),
+            "an ambient row never claims to clear the caller's listener"
+        );
+    }
+
+    /// The read-back is the generator's per-word mapping inverted: a document's
+    /// `untracked` is a clearing on an `inline` or `deferred` row and nothing on
+    /// a `tracked` one, and `ambient-at-execution` is never a clearing. This is
+    /// the bit the wrapper fold reads to call a package row `Detaching`.
+    #[test]
+    fn a_projected_row_clears_tracking_exactly_where_its_word_says_so() {
+        use crate::contract_semantics::{CallbackInvocation, ValueSource};
+        let invoke = |id: &str, schedule: Schedule, tracking: Tracking| {
+            let mut invoke = operation(id, OperationKind::Invoke, &[]);
+            invoke.schedule = Some(schedule);
+            invoke.tracking = tracking;
+            invoke
+        };
+        let item = |index: u16, id: &str| CallbackInvocation {
+            from: ValueSource::Parameter {
+                index,
+                path: Vec::new(),
+            },
+            operation: OperationId(id.into()),
+        };
+        let cases = [
+            (Schedule::SameStack, Tracking::Untracked, "inline", true),
+            (
+                Schedule::SameStack,
+                Tracking::AmbientAtExecution,
+                "inline",
+                false,
+            ),
+            (Schedule::Queued, Tracking::Untracked, "deferred", true),
+            (
+                Schedule::Queued,
+                Tracking::AmbientAtExecution,
+                "deferred",
+                false,
+            ),
+            (Schedule::SameStack, Tracking::Tracked, "tracked", false),
+        ];
+        let ids = (0..cases.len())
+            .map(|index| format!("callback-{index}"))
+            .collect::<Vec<_>>();
+        let projected = project_export_semantics(&export(
+            CallClaims {
+                callbacks: KnowledgeSet::Complete(
+                    (0..cases.len())
+                        .map(|index| item(u16::try_from(index).unwrap(), &ids[index]))
+                        .collect(),
+                ),
+                ..claims()
+            },
+            cases
+                .iter()
+                .zip(&ids)
+                .map(|((schedule, tracking, _, _), id)| invoke(id, *schedule, *tracking))
+                .collect(),
+            Vec::new(),
+        ));
+        let rows = projected.callbacks.known().expect("the domain stays known");
+        for (index, (_, _, execution, clears)) in cases.iter().enumerate() {
+            let row = rows
+                .iter()
+                .find(|row| row.parameter == index)
+                .expect("one row per parameter");
+            assert_eq!(
+                (row.execution.as_str(), row.clears_tracking),
+                (*execution, *clears),
+                "{index}"
+            );
+        }
+    }
+
+    /// ADR 0139: a `result-access` item projects as the deferred row it is --
+    /// an ambient deferral under an inherited owner, never a clearing -- that
+    /// carries the event, and the domain stays closed.
+    #[test]
+    fn a_result_access_item_projects_as_a_deferred_row_that_keeps_its_event() {
+        use crate::CallbackSchedule;
+        use crate::contract_semantics::{
+            CallbackInvocation, OwnerRelation, OwnerSource, ValueSource,
+        };
+        let mut kept = operation("callback-1", OperationKind::Invoke, &[]);
+        kept.trigger = Some(Trigger::Event(Event::ResultAccess));
+        kept.at = Some(Event::ResultAccess);
+        kept.schedule = Some(Schedule::External);
+        kept.tracking = Tracking::AmbientAtExecution;
+        kept.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtExecution,
+            ..OwnerRelation::default()
+        };
+        kept.cardinality.scope = Some(CardinalityScope::Trigger);
+        let projected = project_export_semantics(&export(
+            CallClaims {
+                callbacks: KnowledgeSet::Complete(vec![CallbackInvocation {
+                    from: ValueSource::Parameter {
+                        index: 1,
+                        path: Vec::new(),
+                    },
+                    operation: OperationId("callback-1".into()),
+                }]),
+                ..claims()
+            },
+            vec![kept],
+            Vec::new(),
+        ));
+        assert!(
+            !projected.open_claims.contains(&ClaimDomain::Callbacks),
+            "{:?}",
+            projected.open_claims
+        );
+        let rows = projected.callbacks.known().expect("the domain stays known");
+        let [row] = rows.as_slice() else {
+            panic!("one row: {rows:?}");
+        };
+        assert_eq!(row.parameter, 1);
+        assert_eq!(row.execution, "deferred");
+        assert_eq!(row.schedule, Some(CallbackSchedule::ResultAccess));
+        assert!(row.is_result_access());
+        assert!(row.invokes_argument());
+        assert!(!row.clears_tracking);
+        assert_eq!(row.owner.as_deref(), Some("inherited"));
+    }
+
+    /// ADR 0152: a slot is a returned invocation exactly when the closed
+    /// `returns` is described callables every one of which invokes it and the
+    /// closed `callbacks` keeps it at `result-access` and nowhere else.
+    #[test]
+    fn a_returned_invocation_needs_both_closures_and_every_alternative() {
+        use crate::contract_semantics::{
+            CallbackInvocation, DescribedCall, DescribedCallback, OwnerRelation, OwnerSource,
+            ValueSource,
+        };
+        let kept = |slot: u16| {
+            let mut kept = operation(&format!("callback-{slot}"), OperationKind::Invoke, &[]);
+            kept.trigger = Some(Trigger::Event(Event::ResultAccess));
+            kept.at = Some(Event::ResultAccess);
+            kept.schedule = Some(Schedule::External);
+            kept.tracking = Tracking::AmbientAtExecution;
+            kept.owner = OwnerRelation {
+                source: OwnerSource::AmbientAtExecution,
+                ..OwnerRelation::default()
+            };
+            kept.cardinality.scope = Some(CardinalityScope::Trigger);
+            kept
+        };
+        let returned = |id: &str, slots: &[u16]| {
+            let mut returned = operation(id, OperationKind::Return, &[]);
+            returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
+                reads: Vec::new(),
+                returns: Vec::new(),
+                callbacks: slots
+                    .iter()
+                    .copied()
+                    .map(DescribedCallback::same_stack_once)
+                    .collect(),
+            })));
+            returned
+        };
+        let project = |callbacks: KnowledgeSet<CallbackInvocation>,
+                       returns: Vec<Operation>,
+                       mut operations: Vec<Operation>| {
+            let ids = returns
+                .iter()
+                .map(|operation| operation.id.clone())
+                .collect();
+            operations.extend(returns);
+            project_export_semantics(&export(
+                CallClaims {
+                    callbacks,
+                    returns: KnowledgeSet::Complete(ids),
+                    ..claims()
+                },
+                operations,
+                Vec::new(),
+            ))
+            .returned_invocations
+        };
+        let item = |slot: u16| CallbackInvocation {
+            from: ValueSource::Parameter {
+                index: slot,
+                path: Vec::new(),
+            },
+            operation: OperationId(format!("callback-{slot}")),
+        };
+        let both = || KnowledgeSet::Complete(vec![item(0), item(1)]);
+        assert_eq!(
+            project(
+                both(),
+                vec![returned("return", &[0, 1])],
+                vec![kept(0), kept(1)]
+            ),
+            BTreeSet::from([0, 1])
+        );
+        // One alternative that does not invoke slot 1 leaves it "may run".
+        assert_eq!(
+            project(
+                both(),
+                vec![returned("return-0", &[0, 1]), returned("return-1", &[0])],
+                vec![kept(0), kept(1)]
+            ),
+            BTreeSet::from([0])
+        );
+        // An open `callbacks`, or a slot the export also invokes inline.
+        assert!(
+            project(
+                KnowledgeSet::Partial(vec![item(0), item(1)]),
+                vec![returned("return", &[0, 1])],
+                vec![kept(0), kept(1)]
+            )
+            .is_empty()
+        );
+        let mut inline = operation("callback-1", OperationKind::Invoke, &[]);
+        inline.at = Some(Event::Call);
+        inline.schedule = Some(Schedule::SameStack);
+        assert_eq!(
+            project(
+                both(),
+                vec![returned("return", &[0, 1])],
+                vec![kept(0), inline]
+            ),
+            BTreeSet::from([0])
+        );
+    }
+
+    /// ADR 0113: a closed `returns` whose every operation hands back a `plain`
+    /// value is the consumer's own "no reactive return described", and leaves
+    /// nothing open. The claim has to be closed, and the output plain: an open
+    /// claim, or a closed one over an output this projection cannot represent,
+    /// still opens the domain.
+    #[test]
+    fn a_closed_plain_return_projects_as_no_reactive_return() {
+        let mut returned = operation("return", OperationKind::Return, &[]);
+        returned.output = Some(ValueShape::Plain);
+        let with_returns = |returns: KnowledgeSet<OperationId>, operation: &Operation| {
+            let mut claims = claims();
+            claims.returns = returns;
+            export(claims, vec![operation.clone()], Vec::new())
+        };
+
+        let mut open = BTreeSet::new();
+        let closed = with_returns(KnowledgeSet::Complete(vec![returned.id.clone()]), &returned);
+        assert_eq!(
+            project_return(&closed, &mut open),
+            ContractClaim::Known(None)
+        );
+        assert!(open.is_empty(), "{open:?}");
+
+        let mut open = BTreeSet::new();
+        let partial = with_returns(KnowledgeSet::Partial(vec![returned.id.clone()]), &returned);
+        assert_eq!(project_return(&partial, &mut open), ContractClaim::Open);
+        assert!(open.contains(&ClaimDomain::Returns));
+
+        let mut unknown = returned.clone();
+        unknown.output = Some(ValueShape::Unknown);
+        let mut open = BTreeSet::new();
+        let unrepresented =
+            with_returns(KnowledgeSet::Complete(vec![unknown.id.clone()]), &unknown);
+        assert_eq!(
+            project_return(&unrepresented, &mut open),
+            ContractClaim::Open
+        );
+        assert!(open.contains(&ClaimDomain::Returns));
+    }
+
+    /// ADR 0115: returns of argument containers. A union with no one reactive
+    /// leaf reads as no reactive return, including one whose `[]` the
+    /// projection drops, which must not read as its one surviving leaf; a lone
+    /// fresh array is a tuple of its argument leaves; and an open claim over
+    /// the same returns stays open.
+    #[test]
+    fn argument_containers_project_as_their_one_leaf_or_as_no_reactive_return() {
+        let returned = |id: &str, output: ValueShape| {
+            let mut operation = operation(id, OperationKind::Return, &[]);
+            operation.output = Some(output);
+            operation
+        };
+        let parameter = |index| ValueShape::Parameter {
+            index,
+            path: Vec::new(),
+        };
+        let array = |items: &[u16]| ValueShape::ArgumentArray {
+            items: items.to_vec(),
+        };
+        let with_returns = |closed: bool, operations: Vec<Operation>| {
+            let ids = operations
+                .iter()
+                .map(|operation| operation.id.clone())
+                .collect::<Vec<_>>();
+            let mut claims = claims();
+            claims.returns = if closed {
+                KnowledgeSet::Complete(ids)
+            } else {
+                KnowledgeSet::Partial(ids)
+            };
+            export(claims, operations, Vec::new())
+        };
+        let project = |closed, operations| {
+            let mut open = BTreeSet::new();
+            let projected = project_return(&with_returns(closed, operations), &mut open);
+            (projected, open.contains(&ClaimDomain::Returns))
+        };
+
+        let as_array = || {
+            vec![
+                returned("return-0", parameter(0)),
+                returned("return-1", array(&[])),
+                returned("return-2", array(&[0])),
+            ]
+        };
+        assert_eq!(
+            project(true, as_array()),
+            (ContractClaim::Known(None), false)
+        );
+        assert_eq!(
+            project(
+                true,
+                vec![
+                    returned("return-0", parameter(0)),
+                    returned("return-1", array(&[]))
+                ]
+            ),
+            (ContractClaim::Known(None), false),
+            "the argument, or an empty array, is not the argument"
+        );
+        assert_eq!(
+            project(true, vec![returned("return-0", array(&[1]))]),
+            (
+                ContractClaim::Known(Some(ContractReturn {
+                    kind: "tuple".into(),
+                    elements: vec![Some(ContractReturn {
+                        kind: "argument".into(),
+                        parameter: Some(1),
+                        prototype: None,
+                        ..ContractReturn::default()
+                    })],
+                    prototype: None,
+                    ..ContractReturn::default()
+                })),
+                false
+            )
+        );
+        assert_eq!(project(false, as_array()), (ContractClaim::Open, true));
+
+        // ADR 0116: `accessWith`'s two returns, and a lone invocation result.
+        let invoked = |parameter| ValueShape::InvocationResult { parameter };
+        assert_eq!(
+            project(
+                true,
+                vec![
+                    returned("return-0", invoked(0)),
+                    returned("return-1", parameter(0))
+                ]
+            ),
+            (ContractClaim::Known(None), false),
+            "the argument, or what calling it returned, names no one leaf"
+        );
+        assert_eq!(
+            project(true, vec![returned("return-0", invoked(1))]),
+            (ContractClaim::Known(None), false)
+        );
+        assert_eq!(
+            project(false, vec![returned("return-0", invoked(0))]),
+            (ContractClaim::Open, true)
+        );
+
+        // `Object.keys`: a fresh array of primitives holds no reactive leaf.
+        let strings = || ValueShape::Array {
+            element: Box::new(ValueShape::Plain),
+            length: crate::contract_semantics::ArrayLength::default(),
+        };
+        assert_eq!(
+            project(true, vec![returned("return", strings())]),
+            (ContractClaim::Known(None), false)
+        );
+
+        // Item B round 2: `callHandler`'s `event?.defaultPrevented` -- the
+        // member of the caller's argument, or undefined -- and a lone
+        // `return p.key`. The member is what the argument holds when the
+        // return reads it, which nothing at the call site determines, so it
+        // names no leaf: never the whole argument, which is what reading its
+        // `parameter` alone would say. This is the hiding direction, and it is
+        // deliberate: a store passed there, whose member is itself a store
+        // path, is read as no reactive return.
+        let member = |index, key: &str| ValueShape::Parameter {
+            index,
+            path: vec![key.into()],
+        };
+        assert_eq!(
+            project(
+                true,
+                vec![
+                    returned("return-0", member(0, "defaultPrevented")),
+                    returned("return-1", ValueShape::Undefined)
+                ]
+            ),
+            (ContractClaim::Known(None), false),
+            "a member of the argument, or undefined, names no one leaf"
+        );
+        assert_eq!(
+            project(true, vec![returned("return-0", member(0, "key"))]),
+            (ContractClaim::Known(None), false),
+            "a member of the argument is not the argument"
+        );
+        assert_eq!(
+            project(true, vec![returned("return-0", ValueShape::Undefined)]),
+            (ContractClaim::Known(None), false)
+        );
+        assert_eq!(
+            project(false, vec![returned("return-0", member(0, "key"))]),
+            (ContractClaim::Open, true)
+        );
+    }
+
+    #[test]
+    fn structural_returns_do_not_project_one_reactive_arm_over_a_plain_alternative() {
+        let reactive = ValueShape::Reactive {
+            role: crate::contract_semantics::ReactiveRole::Accessor,
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        };
+        let tuple = ValueShape::Tuple(KnowledgeSet::Complete(vec![reactive]));
+        let mut first = operation("a", OperationKind::Return, &[]);
+        first.output = Some(tuple.clone());
+        let mut second = operation("b", OperationKind::Return, &[]);
+        second.output = Some(ValueShape::Plain);
+        let mut claims = claims();
+        claims.returns = KnowledgeSet::Complete(vec![first.id.clone(), second.id.clone()]);
+        let projected = project_export_semantics(&export(claims, vec![first, second], vec![]));
+        assert_eq!(projected.returns, ContractClaim::Known(None));
+        assert!(exact_structural_return(&tuple));
+        assert!(!exact_structural_return(&ValueShape::Tuple(
+            KnowledgeSet::Partial(vec![ValueShape::Plain])
+        )));
+        assert!(!exact_structural_return(&ValueShape::Object(
+            KnowledgeSet::Complete(vec![crate::contract_semantics::ObjectProperty {
+                name: "open".into(),
+                value: ValueShape::Unknown,
+            }])
+        )));
+    }
+
+    #[test]
+    fn a_plain_structural_object_projects_no_empty_reactive_summary() {
+        let mut returned = operation("plain-object", OperationKind::Return, &[]);
+        returned.output = Some(ValueShape::Object(KnowledgeSet::Complete(vec![
+            crate::contract_semantics::ObjectProperty {
+                name: "fieldProps".into(),
+                value: ValueShape::Plain,
+            },
+        ])));
+        let mut claims = claims();
+        claims.returns = KnowledgeSet::Complete(vec![returned.id.clone()]);
+        let projected = project_export_semantics(&export(claims, vec![returned], vec![]));
+        assert_eq!(projected.returns, ContractClaim::Known(None));
+    }
+
+    /// The shape the two frozen Solid 1.x authority documents still carry, and
+    /// the only `ambient-at-call` `create` a consumer can meet: it needs an
+    /// ambient owner it did not make. This is the obligation `SC4001` reports
+    /// at an unowned call.
+    ///
+    /// The generator no longer produces it. A `create` naming a child owner
+    /// resource would contradict `semantic-model.md` § creates -- a `create`
+    /// registers a resource into a runtime *outside* the invocation -- so an
+    /// `Effect` owner requirement was withheld by name instead, and since
+    /// ADR 0114 is a `compute` in `computations` (the test after the cleanup
+    /// one). This test pins how a consumer reads the frozen documents until
+    /// their re-capture lands.
+    #[test]
+    fn an_ambient_at_call_requirement_projects_as_a_consumer_obligation() {
+        let mut created = operation("register-effect", OperationKind::Create, &["child-owner"]);
+        created.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtCall,
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Required,
+                cleanup: Requirement::Unconstrained,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: None,
+            productions: KnowledgeSet::Complete(vec![OwnerProduction {
+                resource: ResourceId("child-owner".into()),
+                capabilities: OwnerCapabilities::default(),
+                lifetime: Some(Lifetime::Owner(ResourceId("child-owner".into()))),
+            }]),
+        };
+        let mut claims = claims();
+        claims.creates = KnowledgeSet::Complete(vec![created.id.clone()]);
+        let export = export(claims, vec![created], vec![owner_resource("child-owner")]);
+
+        let mut open = BTreeSet::new();
+        assert_eq!(
+            project_owner_requirements(&export, &mut open),
+            ContractClaim::Known(vec![ContractOwnerRequirement {
+                operation: OwnerRequirementOperation::Effect,
+                guaranteed: false,
+                guard: None,
+            }])
+        );
+        assert!(open.is_empty());
+    }
+
+    /// Audited `@solidjs/web` `render`'s `register-delegation`: `requires:
+    /// required` *and* `source: created`. It runs under the root it made, so a
+    /// top-level `render(() => <App/>, el)` owes its caller nothing.
+    #[test]
+    fn an_operation_that_created_its_own_owner_imposes_nothing_on_the_caller() {
+        let mut created = operation(
+            "register-delegation",
+            OperationKind::Create,
+            &["browser-root"],
+        );
+        created.owner = OwnerRelation {
+            source: OwnerSource::Created(ResourceId("browser-root".into())),
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Unconstrained,
+                cleanup: Requirement::Unconstrained,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: Some(Lifetime::Owner(ResourceId("browser-root".into()))),
+            productions: KnowledgeSet::Complete(vec![OwnerProduction {
+                resource: ResourceId("browser-root".into()),
+                capabilities: OwnerCapabilities::default(),
+                lifetime: Some(Lifetime::Owner(ResourceId("browser-root".into()))),
+            }]),
+        };
+        let mut claims = claims();
+        claims.creates = KnowledgeSet::Complete(vec![created.id.clone()]);
+        let export = export(claims, vec![created], vec![owner_resource("browser-root")]);
+
+        let mut open = BTreeSet::new();
+        assert_eq!(
+            project_owner_requirements(&export, &mut open),
+            ContractClaim::Known(Vec::new())
+        );
+        assert!(open.is_empty());
+    }
+
+    /// The generated cleanup shape: `kind: cleanup` in the `cleanups` domain,
+    /// `source: ambient-at-call`, `requires: required`,
+    /// `requiresCleanup: required`, and **no resource**. No audited document
+    /// carries it -- every bundled `kind: cleanup` operation is
+    /// `requires: forbidden`, `source: none` -- so the projection has to read
+    /// the domain for its items while leaving it out of `open`, because every
+    /// 1.x contract omits `cleanups` entirely.
+    ///
+    /// The role in the result is the user-visible half: this requirement now
+    /// round-trips as `OwnerRequirementOperation::Cleanup`, so `SC4001`'s
+    /// remedy names `onCleanup` rather than an owner for an effect.
+    #[test]
+    fn a_cleanup_requirement_projects_from_the_cleanups_domain_without_opening_it() {
+        let mut cleanup = operation("replace-cleanup", OperationKind::Cleanup, &[]);
+        cleanup.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtCall,
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Unconstrained,
+                cleanup: Requirement::Required,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: None,
+            productions: KnowledgeSet::Complete(Vec::new()),
+        };
+        let mut claims = claims();
+        claims.cleanups = KnowledgeSet::Partial(vec![cleanup.id.clone()]);
+        let export = export(claims, vec![cleanup], Vec::new());
+
+        let mut open = BTreeSet::new();
+        assert_eq!(
+            project_owner_requirements(&export, &mut open),
+            ContractClaim::Known(vec![ContractOwnerRequirement {
+                operation: OwnerRequirementOperation::Cleanup,
+                guaranteed: false,
+                guard: None,
+            }])
+        );
+        // `creates` is closed and empty here, and the *cleanups* read must not
+        // add a domain of its own.
+        assert!(open.is_empty());
+    }
+
+    /// ADR 0114's shape for an `Effect` requirement: `kind: compute` in the
+    /// `computations` domain, requiring the ambient owner and child owners of
+    /// it. It projects as the obligation the 1.x `ambient-at-call` `create`
+    /// did, read for its items only, and with `creates` open instead the list
+    /// it states is partial, so the domain that says "complete" is the one
+    /// that opens.
+    #[test]
+    fn a_compute_requirement_projects_as_an_effect_from_the_computations_domain() {
+        let mut compute = operation("owner-requirement-0", OperationKind::Compute, &[]);
+        compute.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtCall,
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Required,
+                cleanup: Requirement::Unconstrained,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: None,
+            productions: KnowledgeSet::Unknown,
+        };
+        let mut claims = claims();
+        claims.computations = KnowledgeSet::Partial(vec![compute.id.clone()]);
+        let effect = ContractClaim::Known(vec![ContractOwnerRequirement {
+            operation: OwnerRequirementOperation::Effect,
+            guaranteed: false,
+            guard: None,
+        }]);
+
+        let closed = export(claims.clone(), vec![compute.clone()], Vec::new());
+        let mut open = BTreeSet::new();
+        assert_eq!(project_owner_requirements(&closed, &mut open), effect);
+
+        // ADR 0161: the count decides whether the requirement is guaranteed.
+        // `min: 0` may register; `min: 1` registers on every call, and one
+        // such operation of the kind is enough.
+        let mut every_call = compute.clone();
+        every_call.id = OperationId("owner-requirement-1".into());
+        every_call.cardinality.min = Some(1);
+        let mut both = claims.clone();
+        both.computations = KnowledgeSet::Partial(vec![compute.id.clone(), every_call.id.clone()]);
+        let guaranteed = export(both, vec![compute.clone(), every_call], Vec::new());
+        assert_eq!(
+            project_owner_requirements(&guaranteed, &mut BTreeSet::new()),
+            ContractClaim::Known(vec![ContractOwnerRequirement {
+                operation: OwnerRequirementOperation::Effect,
+                guaranteed: true,
+                guard: None,
+            }])
+        );
+        assert!(open.is_empty(), "computations adds no domain of its own");
+
+        claims.creates = KnowledgeSet::Unknown;
+        let partial = export(claims, vec![compute], Vec::new());
+        let mut open = BTreeSet::new();
+        assert_eq!(project_owner_requirements(&partial, &mut open), effect);
+        assert_eq!(open, BTreeSet::from([ClaimDomain::Creates]));
     }
 }
 
@@ -388,6 +3527,14 @@ pub(super) struct ResolvedContractBinding {
 pub(super) struct ResolvedContracts {
     pub(super) bindings: Vec<ResolvedContractBinding>,
     pub(super) by_symbol: HashMap<SymbolId, ResolvedContractBinding>,
+    /// Closed, agreed direct runtime returns for callback-result identity.
+    pub(super) direct_returns: HashMap<SymbolId, ContractReturn>,
+    /// Exact receiver-bound calls. Never attach a graph to a shared structural
+    /// member declaration or infer dispatch from a property spelling alone.
+    pub(super) callee_bindings: HashMap<Location, SymbolId>,
+    /// Successfully installed whole-function graphs; independent of names
+    /// and of ADR 0235's caller-controlled location suffix.
+    pub(super) returned_callable_bindings: HashSet<SymbolId>,
     pub(super) missing_exports: Vec<StaticDefect>,
     /// How binding answered per declaration, so a refusal is countable rather
     /// than merely silent. See [`crate::ContractBindingCounts`].
@@ -435,6 +3582,8 @@ fn push_runtime_identity_conflict(
             module: "<runtime-identity-conflict>".into(),
             export: "<conflicting-contract-summaries>".into(),
             reexported: true,
+            site: crate::ContractDefectSite::Argument,
+            admission_refusal: None,
         },
         location: location.clone(),
         analysis_context:
@@ -529,21 +3678,9 @@ fn join_runtime_identity_aliases(
     }
 }
 
-/// Whether the dialect's own vocabulary outranks a package contract for a name
-/// imported from `module`.
-///
-/// Solid's built-ins have richer native semantics than any cross-package
-/// contract summary can express: ownership, async provenance, writes, and
-/// cleanup phases. The reviewed contract stays as evidence and for export
-/// completeness, but its coarse callbacks/returns must not be layered over
-/// native facts.
-///
-/// The gate is the dialect's module-ownership answer, not the literal package
-/// name `solid-js`. 1.x reaches `createStore` only through `solid-js/store` and
-/// `Portal` only through `solid-js/web`; 2.0 moved the whole DOM surface to the
-/// separate `@solidjs/web` package. Comparing package names gave the package
-/// root native precedence and every other entrypoint the contract's coarse
-/// answer, for the same primitives.
+/// A missing external-contract obligation must not invent a receipt
+/// requirement for a primitive already modeled by the selected dialect.
+/// Core contracts themselves are excluded at the analysis boundary.
 fn native_vocabulary_outranks_contract(
     dialect: &dyn Dialect,
     module: &str,
@@ -560,24 +3697,95 @@ fn missing_accepted_export_needs_obligation(
     !native_vocabulary_outranks_contract(dialect, module, imported)
 }
 
-/// Keep exact, artifact-selected callback timing from an accepted package
-/// contract even when the dialect owns the rest of the primitive. Ownership,
-/// returns, reads, and async behavior remain native.
-fn native_callback_overlay(summary: &ContractExport) -> Option<ContractExport> {
-    let callbacks = summary.callbacks.known()?.clone();
-    (!callbacks.is_empty()).then(|| ContractExport {
-        kind: summary.kind.clone(),
-        callbacks: ContractClaim::Known(callbacks),
-        ..ContractExport::default()
-    })
-}
-
 /// Keep the known parts of a partial export usable while opening the existing
 /// per-export contract obligation for every non-callback claim that cannot yet
 /// be consumed demand-sensitively. Unknown callbacks are handled separately:
 /// omitting their symbol from the callback map preserves the existing
 /// callable-argument obligation and stays quiet for calls with no callable
 /// argument.
+/// The bound symbols whose `returns` **no consumer in this project can
+/// reach**, so its openness discharges no proof obligation.
+///
+/// Demand read off every consumer in
+/// `docs/package-contract-v2/phase21/2026-09-10-sc9005-demand-scoping-design.md`
+/// § 8: `returns` is consulted where a call's result goes somewhere
+/// (`source_discovery` 225/621/918/1011, `static_rules` 248) and where the
+/// binding is a computation's argument (`owners` 1886, through
+/// `asyncBehavior`). Both reduce to the same question about a *reference*: is
+/// it the callee of a call that throws its result away, or is it anything
+/// else?
+///
+/// Sound in one direction only, and that is the direction that matters. A
+/// symbol sheds only when it has references and **every** one of them is a
+/// discarded call's callee; a reference this cannot classify — an argument, a
+/// member base, a re-export, one that resolves to no symbol — keeps the
+/// obligation. Shedding wrongly drops a fail-closed answer silently, so the
+/// predicate is written to fail toward reporting.
+///
+/// References are counted per file because an import's binding symbol is
+/// file-local: every reference to it is in the file that imported it, which
+/// is what makes "every one of them" decidable here at all.
+fn returns_shed_symbols(facts: &ProjectFacts, entities: &EntitySymbols) -> HashSet<SymbolId> {
+    let mut references = HashMap::<SymbolId, (usize, usize)>::new();
+    for file in &facts.files {
+        let discarded: HashSet<(u32, u32)> = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| call.result_discarded)
+            .map(|call| (call.callee.start, call.callee.end))
+            .collect();
+        for identifier in &file.ast.identifiers {
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference {
+                continue;
+            }
+            let Some(symbol) = entities.get(&location(file.path.shared(), identifier.span)) else {
+                continue;
+            };
+            let counts = references.entry(symbol.clone()).or_default();
+            counts.0 += 1;
+            if discarded.contains(&(identifier.span.start, identifier.span.end)) {
+                counts.1 += 1;
+            }
+        }
+    }
+    references
+        .into_iter()
+        .filter(|(_, (total, discarded))| *total > 0 && total == discarded)
+        .map(|(symbol, _)| symbol)
+        .collect()
+}
+
+/// Whether this binding's `reads` **completeness** is demanded here.
+///
+/// Always true, and now believed to be the right answer rather than a
+/// placeholder for one.
+///
+/// The seam was cut expecting a narrowing. `reads` completeness proves an
+/// export reads nothing beyond what it enumerates; rules consume `reads`
+/// *items*, which arrive whether or not the domain is closed, and **only
+/// SC9005 consumes the completeness**
+/// (`docs/package-contract-v2/phase21/2026-09-10-reads-demand-population.md`
+/// § 6). The narrowing that suggested itself was "demand it only where the
+/// call site is tracked".
+///
+/// That predicate is wrong, and not merely unavailable here. A contract read
+/// is consumed in six of the ten [`crate::ExecutionRole`]s — every stale-read
+/// role in `reports_untracked_read`, `TrackedJsx` through the async boundary
+/// rules, and `DeferredCallback` through the leaf-owner clause. Of the three
+/// left, two are consumed nowhere only because no rule reports a pending read
+/// in an event handler *yet*, so shedding them would freeze a rules gap into
+/// the trust boundary. What remains is `DiscardedRendering`: a call site the
+/// compiler deleted, which performs no reads at all and produces no finding
+/// to shed. See `2026-09-10-sc9005-demand-scoping-design.md` § 13.
+///
+/// Kept as a named function rather than folded back into the conjunction: it
+/// is where a future narrowing goes, and where the reason it has not happened
+/// is written down.
+const fn reads_completeness_demanded() -> bool {
+    true
+}
+
 fn push_unknown_contract_claims(
     missing_exports: &mut Vec<StaticDefect>,
     summary: &ContractExport,
@@ -585,19 +3793,30 @@ fn push_unknown_contract_claims(
     export: &str,
     reexported: bool,
     location: Location,
+    returns_demanded: bool,
 ) {
     let mut claims = Vec::new();
-    if summary.reactive_reads.is_open()
-        || summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Reads)
+    if reads_completeness_demanded()
+        && (summary.reactive_reads.is_open()
+            || summary
+                .open_claims
+                .contains(&crate::contract_semantics::ClaimDomain::Reads))
     {
         claims.push("reactiveReads");
     }
-    if summary.returns.is_open()
-        || summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Returns)
+    // Scoped by demand (`returns_shed_symbols`): an open domain no consumer
+    // can reach discharges no obligation, so reporting it is noise rather than
+    // a fail-closed answer.
+    //
+    // `creates` is still unconditional because its demand really is "the
+    // binding is called". `reads` is unconditional for a different reason —
+    // see `reads_completeness_demanded` — and design § 9's claim that the two
+    // are alike is corrected in § 12.
+    if returns_demanded
+        && (summary.returns.is_open()
+            || summary
+                .open_claims
+                .contains(&crate::contract_semantics::ClaimDomain::Returns))
     {
         claims.push("returns");
     }
@@ -608,11 +3827,15 @@ fn push_unknown_contract_claims(
     {
         claims.push("ownerRequirements");
     }
-    if summary.async_behavior.is_open()
-        || summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Throws)
-    {
+    // No `open_claims` disjunct here, deliberately. `project_async_behavior`
+    // derives this field from the **returns** domain and inserts
+    // `ClaimDomain::Returns`; it never inserts `Throws`, and no other consumer
+    // path does either, so the `Throws` disjunct this check used to carry was
+    // both unreachable and a claim about the wrong domain. Returns is already
+    // the conjunct above. The `is_open()` guard stays: it is the fail-closed
+    // answer for any summary that arrives with the field genuinely open, which
+    // `ContractExport::unknown_runtime_kind` still constructs.
+    if summary.async_behavior.is_open() {
         claims.push("asyncBehavior");
     }
     if claims.is_empty() {
@@ -623,6 +3846,8 @@ fn push_unknown_contract_claims(
             module: module.to_owned(),
             export: export.to_owned(),
             reexported,
+            site: crate::ContractDefectSite::Import,
+            admission_refusal: None,
         },
         location,
         analysis_context: format!("unknown-contract-claims:{}", claims.join(",")),
@@ -631,50 +3856,364 @@ fn push_unknown_contract_claims(
     });
 }
 
+/// ADR 0153 part 3: the `(package, export)` contexts this project provides,
+/// or may provide, itself.
+///
+/// An accepted summary may state its claims under a context premise: they hold
+/// only where the context the package exports under that name receives no
+/// value from outside the package. This is the consumer's half of that
+/// premise, and it fails toward "provided". A premise export is provided when
+/// any reference to a binding of it that this project imports from the package
+/// is anything but the one argument of the dialect's `useContext`:
+///
+/// - a JSX element `<RouterContext value={…}>` or `createComponent(RouterContext, …)`,
+///   which is how a value is provided;
+/// - a member access (`RouterContext.Provider`), an alias, an argument of any
+///   other call, a re-export, a return: anything a value could be provided
+///   through, from here or from code this analysis does not follow.
+///
+/// A namespace import of the package counts every premise export of it as
+/// provided unless each reference is a member access naming another export or
+/// a `useContext(ns.Context)` argument. A re-export of a premise export, an
+/// `export * from` the package, `import … = require`, a dynamic `import()` and
+/// a `require` of it all count as provided. Absence of a reference is the only
+/// way a premise holds; nothing here is read as proof that one does not.
+///
+/// Packages other than the one certified may provide the context too, and the
+/// analysis does not see their code. That half is the backend's: it names every
+/// package whose installed tree holds another package depending on it
+/// ([`AcceptedContractIndex::context_provided_packages`]), and every premise
+/// of such a package is provided.
+fn provided_context_premises(
+    facts: &ProjectFacts,
+    exact: &HashMap<(String, String), PackageContract>,
+    accepted: &AcceptedContractIndex,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> BTreeSet<(String, String)> {
+    // Every premise any bound summary states, by package.
+    let mut premises = HashMap::<String, BTreeSet<String>>::new();
+    for contract in exact.values() {
+        for entrypoint in contract.entrypoints.values() {
+            for summary in entrypoint.exports.values() {
+                if !summary.context_premises.is_empty() {
+                    premises
+                        .entry(contract.package.name.clone())
+                        .or_default()
+                        .extend(summary.context_premises.iter().cloned());
+                }
+            }
+        }
+    }
+    let mut provided = BTreeSet::new();
+    if premises.is_empty() {
+        return provided;
+    }
+    for (package, names) in &premises {
+        if accepted.context_provided_package(package) {
+            provided.extend(names.iter().map(|name| (package.clone(), name.clone())));
+        }
+    }
+    let package_of = |file: &solid_facts::FileFacts, module: &str| -> Option<String> {
+        exact
+            .get(&(file.path.to_string(), module.to_owned()))
+            .map(|contract| contract.package.name.clone())
+            .or_else(|| {
+                // Fails toward "provided": a specifier naming the package by
+                // its own name, or one of its subpaths, is the package here.
+                premises
+                    .keys()
+                    .find(|package| {
+                        module == package.as_str()
+                            || module
+                                .strip_prefix(package.as_str())
+                                .is_some_and(|rest| rest.starts_with('/'))
+                    })
+                    .cloned()
+            })
+    };
+    for file in &facts.files {
+        // The allowed reference: the one argument of a dialect `useContext`.
+        let read_arguments: HashSet<(u32, u32)> = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| {
+                call.arguments.len() == 1
+                    && !call.arguments[0].spread
+                    && crate::known_primitive(&crate::call_primitive_name(
+                        file,
+                        call,
+                        entities,
+                        symbol_names,
+                        dialect,
+                    )) == Some(solid_dialect::Primitive::UseContext)
+            })
+            .map(|call| {
+                let span = file.ast.peel_ts_sugar_span(call.arguments[0].span);
+                (span.start, span.end)
+            })
+            .collect();
+        let references_of = |symbol: &SymbolId| {
+            file.ast
+                .identifiers
+                .iter()
+                .filter(|identifier| identifier.role == solid_facts::ast::IdentifierRole::Reference)
+                .filter(|identifier| {
+                    entities.get(&location(file.path.shared(), identifier.span)) == Some(symbol)
+                })
+                .map(|identifier| identifier.span)
+                .collect::<Vec<_>>()
+        };
+        // A tag naming the binding, or a dotted tag whose object is it
+        // (`<Ctx.Provider>`, a type error in Solid 2 but still a use).
+        let jsx_names_of = |symbol: &SymbolId| {
+            file.ast.jsx_elements.iter().any(|element| {
+                entities.get(&location(file.path.shared(), element.name.span)) == Some(symbol)
+                    || element.member_object.is_some_and(|object| {
+                        entities.get(&location(file.path.shared(), object)) == Some(symbol)
+                    })
+            })
+        };
+        for import in &file.ast.imports {
+            if import.type_only {
+                continue;
+            }
+            let Some(package) = package_of(file, &import.module) else {
+                continue;
+            };
+            let Some(names) = premises.get(&package) else {
+                continue;
+            };
+            for binding in &import.bindings {
+                if binding.type_only {
+                    continue;
+                }
+                let binding_location = location(file.path.shared(), binding.local.span);
+                let Some(symbol) = entities.get(&binding_location) else {
+                    // A binding this analysis cannot name has references it
+                    // cannot classify.
+                    if binding.kind == solid_facts::ast::ImportKind::Namespace
+                        || binding
+                            .imported
+                            .as_deref()
+                            .is_some_and(|name| names.contains(name))
+                    {
+                        provided.extend(names.iter().map(|name| (package.clone(), name.clone())));
+                    }
+                    continue;
+                };
+                if binding.kind == solid_facts::ast::ImportKind::Namespace {
+                    let members: Vec<&solid_facts::ast::MemberFact> = file
+                        .ast
+                        .members
+                        .iter()
+                        .filter(|member| {
+                            entities.get(&location(file.path.shared(), member.object))
+                                == Some(symbol)
+                        })
+                        .collect();
+                    // A dotted tag through the namespace. Its object is matched
+                    // by symbol when the tag is `<ns.Name>`; any deeper or
+                    // unresolved dotted tag spelled from the namespace's local
+                    // name provides every premise, since the name alone cannot
+                    // say which export it reaches.
+                    let local = file.source_text(binding.local.span).unwrap_or_default();
+                    for element in &file.ast.jsx_elements {
+                        let direct = element.member_object.is_some_and(|object| {
+                            entities.get(&location(file.path.shared(), object)) == Some(symbol)
+                        });
+                        let spelled = !local.is_empty()
+                            && file.source_text(element.name.span).is_some_and(|name| {
+                                name.strip_prefix(local)
+                                    .is_some_and(|rest| rest.starts_with('.'))
+                            });
+                        if direct
+                            && let Some(property) = element
+                                .member_property
+                                .and_then(|property| file.source_text(property))
+                        {
+                            if names.contains(property) {
+                                provided.insert((package.clone(), property.to_owned()));
+                            }
+                        } else if direct || spelled {
+                            provided
+                                .extend(names.iter().map(|name| (package.clone(), name.clone())));
+                        }
+                    }
+                    for reference in references_of(symbol) {
+                        let Some(member) = members.iter().find(|member| member.object == reference)
+                        else {
+                            // The namespace object itself escapes.
+                            provided
+                                .extend(names.iter().map(|name| (package.clone(), name.clone())));
+                            continue;
+                        };
+                        let computed = file
+                            .ast
+                            .computed_members
+                            .binary_search(&member.span)
+                            .is_ok();
+                        let property = file.source_text(member.property).unwrap_or_default();
+                        if computed {
+                            provided
+                                .extend(names.iter().map(|name| (package.clone(), name.clone())));
+                        } else if names.contains(property)
+                            && !read_arguments.contains(&(member.span.start, member.span.end))
+                        {
+                            provided.insert((package.clone(), property.to_owned()));
+                        }
+                    }
+                    continue;
+                }
+                let imported = binding.imported.as_deref().or_else(|| {
+                    (binding.kind == solid_facts::ast::ImportKind::Default).then_some("default")
+                });
+                let Some(imported) = imported.filter(|name| names.contains(*name)) else {
+                    continue;
+                };
+                let escapes = jsx_names_of(symbol)
+                    || references_of(symbol)
+                        .into_iter()
+                        .any(|span| !read_arguments.contains(&(span.start, span.end)));
+                if escapes {
+                    provided.insert((package.clone(), imported.to_owned()));
+                }
+            }
+        }
+        // Re-exports, CommonJS and dynamic loads of the package.
+        for export in &file.ast.exports {
+            let Some(module) = export.module.as_deref() else {
+                continue;
+            };
+            let Some(package) = package_of(file, module) else {
+                continue;
+            };
+            let Some(names) = premises.get(&package) else {
+                continue;
+            };
+            let star = export.specifiers.is_empty() || export.namespace.is_some();
+            for name in names {
+                if star
+                    || export.specifiers.iter().any(|specifier| {
+                        file.source_text(specifier.local.span) == Some(name.as_str())
+                    })
+                {
+                    provided.insert((package.clone(), name.clone()));
+                }
+            }
+        }
+        let loaded = file
+            .ast
+            .import_equals
+            .iter()
+            .map(|fact| fact.module.as_str())
+            .chain(
+                file.ast
+                    .module_loads
+                    .iter()
+                    .filter_map(|fact| fact.specifier.as_deref()),
+            )
+            .collect::<Vec<_>>();
+        for module in loaded {
+            if let Some(package) = package_of(file, module)
+                && let Some(names) = premises.get(&package)
+            {
+                provided.extend(names.iter().map(|name| (package.clone(), name.clone())));
+            }
+        }
+    }
+    provided
+}
+
+/// The premises of `summary` this project provides, in order, or none.
+fn unmet_context_premises(
+    summary: &ContractExport,
+    package: &str,
+    provided: &BTreeSet<(String, String)>,
+) -> Vec<String> {
+    summary
+        .context_premises
+        .iter()
+        .filter(|name| provided.contains(&(package.to_owned(), (*name).clone())))
+        .cloned()
+        .collect()
+}
+
+/// `summary` with every claim it states withdrawn: the reading a consumer
+/// gives an export whose context premise this project does not meet.
+fn premise_unmet_summary(summary: &ContractExport) -> ContractExport {
+    ContractExport {
+        inline_accessor_invocations: BTreeMap::new(),
+        reactive_reads: ContractClaim::Open,
+        returns: ContractClaim::Open,
+        callbacks: ContractClaim::Open,
+        owner_requirements: ContractClaim::Open,
+        async_behavior: ContractClaim::Open,
+        open_claims: [
+            ClaimDomain::Callbacks,
+            ClaimDomain::Reads,
+            ClaimDomain::Returns,
+            ClaimDomain::Creates,
+        ]
+        .into_iter()
+        .collect(),
+        creates_closed_empty: false,
+        returns_closed_empty: false,
+        returns_restated: Vec::new(),
+        ..summary.clone()
+    }
+}
+
+/// The finding for an import whose premise is unmet: uncertifiable, and an
+/// error rather than ADR 0119's open-claims warning, because the contract's
+/// claims are not partial here, they are unusable.
+fn push_unmet_context_premise(
+    missing_exports: &mut Vec<StaticDefect>,
+    module: &str,
+    export: &str,
+    reexported: bool,
+    location: Location,
+    unmet: &[String],
+) {
+    missing_exports.push(StaticDefect {
+        kind: StaticDefectKind::PackageContractExportMissing {
+            module: module.to_owned(),
+            export: export.to_owned(),
+            reexported,
+            site: crate::ContractDefectSite::Import,
+            admission_refusal: None,
+        },
+        location,
+        analysis_context: format!("{CONTEXT_PREMISE_UNMET_CONTEXT}{}", unmet.join(",")),
+        fixes: vec![],
+        uncertain: false,
+    });
+}
+
+/// The analysis context of [`push_unmet_context_premise`], followed by the
+/// premise exports the project provides.
+pub(crate) const CONTEXT_PREMISE_UNMET_CONTEXT: &str = "context-premise-unmet:";
+
 pub(super) fn resolve_accepted_contract_imports(
     facts: &ProjectFacts,
     contracts: &AcceptedContractIndex,
     entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
+    runtime_configuration: &crate::RuntimeConfigurationPremise,
 ) -> ResolvedContracts {
     let projected = project_accepted_contracts(facts, contracts);
-    resolve_contract_imports_inner(facts, &projected, contracts, entities, dialect)
-}
-
-pub(super) fn accepted_bundled_returns(
-    facts: &ProjectFacts,
-    contracts: &AcceptedContractIndex,
-) -> HashMap<SymbolId, ContractReturn> {
-    let mut returned = HashMap::new();
-    for file in &facts.files {
-        if !file
-            .ast
-            .imports
-            .iter()
-            .any(|import| !import.type_only && import.module.as_str() == "solid-js")
-        {
-            continue;
-        }
-        let Ok(contract) = contracts.contract(file.path.as_str(), "solid-js") else {
-            continue;
-        };
-        if contract.artifact_case().entrypoint != "." {
-            continue;
-        }
-        for name in contract.artifact_case().exports.keys() {
-            let Ok(accepted) = contracts.resolve_name(file.path.as_str(), "solid-js", name) else {
-                continue;
-            };
-            if let Some(value) = project_accepted_export(&accepted)
-                .returns
-                .known()
-                .and_then(Clone::clone)
-            {
-                returned.entry(symbol_id(name)).or_insert(value);
-            }
-        }
-    }
-    returned
+    resolve_contract_imports_inner(
+        facts,
+        &projected,
+        contracts,
+        entities,
+        symbol_names,
+        dialect,
+        runtime_configuration,
+    )
 }
 
 fn project_accepted_contracts(
@@ -740,12 +4279,18 @@ fn resolve_contract_imports_inner(
     exact: &HashMap<(String, String), PackageContract>,
     accepted: &AcceptedContractIndex,
     entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
+    runtime_configuration: &crate::RuntimeConfigurationPremise,
 ) -> ResolvedContracts {
     let mut bindings = Vec::new();
     let mut by_symbol = HashMap::new();
+    let mut direct_returns = HashMap::new();
     let mut missing_exports = Vec::new();
     let mut counts = crate::ContractBindingCounts::default();
+    let returns_shed = returns_shed_symbols(facts, entities);
+    let provided_contexts =
+        provided_context_premises(facts, exact, accepted, entities, symbol_names, dialect);
     for file in &facts.files {
         for import in &file.ast.imports {
             if import.type_only {
@@ -756,6 +4301,11 @@ fn resolve_contract_imports_inner(
                 if let Some(reason) =
                     accepted.uncertifiable_reason(file.path.as_str(), &import.module)
                 {
+                    // Only the acceptance gate carries the note: an obsolete
+                    // policy-1 receipt is its own, already specific answer.
+                    let refusal = (reason == UncertifiableImportReason::Unspecified)
+                        .then(|| accepted.admission_refusal_at(file.path.as_str(), &import.module))
+                        .flatten();
                     push_missing_accepted_import(
                         &mut missing_exports,
                         file,
@@ -763,6 +4313,7 @@ fn resolve_contract_imports_inner(
                         entities,
                         dialect,
                         reason,
+                        refusal,
                     );
                 }
                 continue;
@@ -804,6 +4355,8 @@ fn resolve_contract_imports_inner(
                                         module: import.module.to_string(),
                                         export: imported,
                                         reexported: false,
+                                        site: crate::ContractDefectSite::Import,
+                                        admission_refusal: None,
                                     },
                                     location: location(file.path.shared(), member.property),
                                     analysis_context: String::new(),
@@ -817,16 +4370,25 @@ fn resolve_contract_imports_inner(
                         let Some(symbol) = entities.get(&member_location).cloned() else {
                             continue;
                         };
-                        let native =
-                            native_vocabulary_outranks_contract(dialect, &import.module, &imported);
-                        let mut summary = summary;
-                        if native {
-                            let Some(overlay) = native_callback_overlay(&summary) else {
-                                continue;
-                            };
-                            summary = overlay;
-                        }
-                        if !summary.open_claims.is_empty() {
+                        let unmet = unmet_context_premises(
+                            &summary,
+                            &contract.package.name,
+                            &provided_contexts,
+                        );
+                        let summary = if unmet.is_empty() {
+                            summary
+                        } else {
+                            push_unmet_context_premise(
+                                &mut missing_exports,
+                                &import.module,
+                                &imported,
+                                false,
+                                member_location.clone(),
+                                &unmet,
+                            );
+                            premise_unmet_summary(&summary)
+                        };
+                        if unmet.is_empty() && !summary.open_claims.is_empty() {
                             push_unknown_contract_claims(
                                 &mut missing_exports,
                                 &summary,
@@ -834,6 +4396,7 @@ fn resolve_contract_imports_inner(
                                 &imported,
                                 false,
                                 member_location.clone(),
+                                !returns_shed.contains(&symbol),
                             );
                         }
                         let resolved = ResolvedContractBinding {
@@ -849,11 +4412,14 @@ fn resolve_contract_imports_inner(
                             },
                             summary,
                         };
-                        // Native dialect facts are richer than the package
-                        // schema, but the reviewed package contract remains
-                        // the only semantic evidence for public Solid exports
-                        // outside that native vocabulary. Apply the same
-                        // precedence to namespace and named imports.
+                        // External namespace bindings use the same exact
+                        // accepted semantics as named imports.
+                        if unmet.is_empty()
+                            && let Some(returned) =
+                                direct_contract_return(accepted, file, &import.module, &imported)
+                        {
+                            direct_returns.insert(symbol.clone(), returned);
+                        }
                         bindings.push(resolved.clone());
                         by_symbol.insert(symbol, resolved);
                     }
@@ -896,6 +4462,8 @@ fn resolve_contract_imports_inner(
                                 module: import.module.to_string(),
                                 export: imported.to_owned(),
                                 reexported: false,
+                                site: crate::ContractDefectSite::Import,
+                                admission_refusal: None,
                             },
                             location: binding_location,
                             analysis_context: String::new(),
@@ -905,15 +4473,22 @@ fn resolve_contract_imports_inner(
                     }
                     continue;
                 };
-                let native = native_vocabulary_outranks_contract(dialect, &import.module, imported);
-                let mut summary = summary;
-                if native {
-                    let Some(overlay) = native_callback_overlay(&summary) else {
-                        continue;
-                    };
-                    summary = overlay;
-                }
-                if !summary.open_claims.is_empty() {
+                let unmet =
+                    unmet_context_premises(&summary, &contract.package.name, &provided_contexts);
+                let summary = if unmet.is_empty() {
+                    summary
+                } else {
+                    push_unmet_context_premise(
+                        &mut missing_exports,
+                        &import.module,
+                        imported,
+                        false,
+                        binding_location.clone(),
+                        &unmet,
+                    );
+                    premise_unmet_summary(&summary)
+                };
+                if unmet.is_empty() && !summary.open_claims.is_empty() {
                     push_unknown_contract_claims(
                         &mut missing_exports,
                         &summary,
@@ -921,6 +4496,7 @@ fn resolve_contract_imports_inner(
                         imported,
                         false,
                         binding_location.clone(),
+                        !returns_shed.contains(&symbol),
                     );
                 }
                 let resolved = ResolvedContractBinding {
@@ -939,11 +4515,13 @@ fn resolve_contract_imports_inner(
                     },
                     summary,
                 };
-                // Solid's built-ins have richer native semantics than their
-                // cross-package contract summary (ownership, async
-                // provenance, writes, and cleanup phases). Keep the bundled
-                // contract as evidence and for export completeness, but do
-                // not layer its coarse callbacks/returns over native facts.
+                // Only external package bindings enter this projection.
+                if unmet.is_empty()
+                    && let Some(returned) =
+                        direct_contract_return(accepted, file, &import.module, imported)
+                {
+                    direct_returns.insert(symbol.clone(), returned);
+                }
                 bindings.push(resolved.clone());
                 by_symbol.insert(symbol, resolved);
             }
@@ -979,6 +4557,8 @@ fn resolve_contract_imports_inner(
                                 module: module.to_owned(),
                                 export: imported.to_owned(),
                                 reexported: true,
+                                site: crate::ContractDefectSite::Import,
+                                admission_refusal: None,
                             },
                             location: specifier_location,
                             analysis_context: String::new(),
@@ -988,15 +4568,22 @@ fn resolve_contract_imports_inner(
                     }
                     continue;
                 };
-                let native = native_vocabulary_outranks_contract(dialect, module, imported);
-                let mut summary = summary;
-                if native {
-                    let Some(overlay) = native_callback_overlay(&summary) else {
-                        continue;
-                    };
-                    summary = overlay;
-                }
-                if !summary.open_claims.is_empty() {
+                let unmet =
+                    unmet_context_premises(&summary, &contract.package.name, &provided_contexts);
+                let summary = if unmet.is_empty() {
+                    summary
+                } else {
+                    push_unmet_context_premise(
+                        &mut missing_exports,
+                        module,
+                        imported,
+                        true,
+                        specifier_location.clone(),
+                        &unmet,
+                    );
+                    premise_unmet_summary(&summary)
+                };
+                if unmet.is_empty() && !summary.open_claims.is_empty() {
                     push_unknown_contract_claims(
                         &mut missing_exports,
                         &summary,
@@ -1004,6 +4591,7 @@ fn resolve_contract_imports_inner(
                         imported,
                         true,
                         specifier_location.clone(),
+                        !returns_shed.contains(&symbol),
                     );
                 }
                 let resolved = ResolvedContractBinding {
@@ -1019,6 +4607,11 @@ fn resolve_contract_imports_inner(
                     },
                     summary,
                 };
+                if unmet.is_empty()
+                    && let Some(returned) = direct_contract_return(accepted, file, module, imported)
+                {
+                    direct_returns.insert(symbol.clone(), returned);
+                }
                 bindings.push(resolved.clone());
                 by_symbol.insert(symbol, resolved);
             }
@@ -1031,9 +4624,43 @@ fn resolve_contract_imports_inner(
         &mut by_symbol,
         &mut missing_exports,
     );
+    let mut callee_bindings = HashMap::new();
+    bind_returned_member_effects(
+        facts,
+        entities,
+        &mut bindings,
+        &mut by_symbol,
+        &mut callee_bindings,
+    );
+    let visible_lookup_hazard = by_symbol.values().any(|binding| {
+        binding
+            .summary
+            .returned_callable_effects
+            .as_ref()
+            .is_some_and(|summary| summary.captured_lookup.is_some())
+    })
+        && crate::runtime_configuration::captured_lookup_has_visible_runtime_hazard(facts, dialect);
+    let mut returned_callable_bindings = HashSet::new();
+    bind_returned_callable_effects(
+        facts,
+        entities,
+        &mut bindings,
+        &mut by_symbol,
+        &mut callee_bindings,
+        &mut returned_callable_bindings,
+        (
+            symbol_names,
+            dialect,
+            runtime_configuration,
+            visible_lookup_hazard,
+        ),
+    );
     ResolvedContracts {
         bindings,
         by_symbol,
+        direct_returns,
+        callee_bindings,
+        returned_callable_bindings,
         missing_exports,
         counts,
     }
@@ -1046,6 +4673,7 @@ fn push_missing_accepted_import(
     entities: &EntitySymbols,
     dialect: &dyn Dialect,
     reason: UncertifiableImportReason,
+    refusal: Option<&str>,
 ) {
     for binding in &import.bindings {
         if binding.type_only || !binding.runtime_referenced {
@@ -1072,6 +4700,7 @@ fn push_missing_accepted_import(
                         export,
                         location(file.path.shared(), member.property),
                         reason,
+                        refusal,
                     );
                 }
             }
@@ -1089,10 +4718,23 @@ fn push_missing_accepted_import(
                 export,
                 location(file.path.shared(), import.span),
                 reason,
+                refusal,
             );
         }
     }
 }
+
+/// The analysis context of the **acceptance** gate: this project accepted no
+/// contract for the import at all, so nothing export-specific has been read
+/// yet.
+///
+/// Named rather than spelled twice because three places have to agree on it —
+/// the producer below, the evidence wording, and the per-package collapse in
+/// `projection` — and two of them are deciding whether a finding is about the
+/// package or about one of its exports. A drift between them would silently
+/// re-scatter the collapse or mislabel the evidence.
+pub(crate) const UNACCEPTED_IMPORT_CONTEXT: &str =
+    "no receipt-accepted contract matches this exact import";
 
 fn push_missing_accepted_export(
     missing: &mut Vec<StaticDefect>,
@@ -1100,18 +4742,19 @@ fn push_missing_accepted_export(
     export: &str,
     location: Location,
     reason: UncertifiableImportReason,
+    refusal: Option<&str>,
 ) {
     missing.push(StaticDefect {
         kind: StaticDefectKind::PackageContractExportMissing {
             module: module.into(),
             export: export.into(),
             reexported: false,
+            site: crate::ContractDefectSite::Import,
+            admission_refusal: refusal.map(str::to_owned),
         },
         location,
         analysis_context: match reason {
-            UncertifiableImportReason::Unspecified => {
-                "no receipt-accepted contract matches this exact import"
-            }
+            UncertifiableImportReason::Unspecified => UNACCEPTED_IMPORT_CONTEXT,
             UncertifiableImportReason::ObsoletePolicy1 => {
                 "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
             }
@@ -1123,9 +4766,7 @@ fn push_missing_accepted_export(
 }
 
 pub(super) struct ContractSemantics<'a> {
-    pub(super) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(super) source_primitives: &'a HashMap<SymbolId, SymbolId>,
 }
 
 pub(super) struct ContractGraph<'a> {
@@ -1140,12 +4781,24 @@ pub(super) struct ContractAnalysis<'a> {
     pub(super) returned: &'a [SummaryReads],
     pub(super) structured_returns: &'a [Option<ContractReturn>],
     pub(super) callbacks: &'a [Vec<ContractCallback>],
+    /// Per node, the parameters the node calls itself, directly, in its own
+    /// body (ADR 0100) -- see `InterproceduralGraphContribution`.
+    pub(super) direct_callback_parameters: &'a [Vec<usize>],
+    /// Per node, ADR 0183's guaranteed owned-computation callback parameters.
+    pub(super) guaranteed_callback_parameters: &'a [Vec<usize>],
+    /// Per node, the parameters it reads a property of or coerces directly in
+    /// its own body (`interproc::direct_protocol_parameters`).
+    pub(super) direct_protocol_parameters:
+        &'a [Vec<(crate::contract_semantics::InvokeProtocol, usize)>],
+    /// Per node, the literal-keyed members of its own parameters it calls
+    /// directly in its own body (item B of ways-to-improve § 3.3).
+    pub(super) direct_member_callback_parameters: &'a [Vec<(usize, Vec<String>)>],
     /// Per node, the parameters whose caller-supplied value the analysis never
     /// accounted for. Any one of them makes this export's `callbacks` domain
     /// its callback domain open — see
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(super) escaped_parameters: &'a [Vec<usize>],
-    pub(super) invoked_parameter_members: &'a [Vec<(usize, Vec<String>)>],
+    pub(super) invoked_parameter_members: &'a [Vec<ParameterMemberInvocation>],
     pub(super) semantics: ContractSemantics<'a>,
 }
 
@@ -1157,8 +4810,12 @@ struct ContractExportNode<'a> {
     returned_summary: &'a SummaryReads,
     structured_return: Option<&'a ContractReturn>,
     callbacks: &'a [ContractCallback],
+    direct_callback_parameters: &'a [usize],
+    guaranteed_callback_parameters: &'a [usize],
+    direct_protocol_parameters: &'a [(crate::contract_semantics::InvokeProtocol, usize)],
+    direct_member_callback_parameters: &'a [(usize, Vec<String>)],
     escaped_parameters: &'a [usize],
-    invoked_parameter_members: &'a [(usize, Vec<String>)],
+    invoked_parameter_members: &'a [ParameterMemberInvocation],
 }
 
 impl<'a> ContractExportNode<'a> {
@@ -1169,6 +4826,10 @@ impl<'a> ContractExportNode<'a> {
             returned_summary: &analysis.returned[index],
             structured_return: analysis.structured_returns[index].as_ref(),
             callbacks: &analysis.callbacks[index],
+            direct_callback_parameters: &analysis.direct_callback_parameters[index],
+            guaranteed_callback_parameters: &analysis.guaranteed_callback_parameters[index],
+            direct_protocol_parameters: &analysis.direct_protocol_parameters[index],
+            direct_member_callback_parameters: &analysis.direct_member_callback_parameters[index],
             escaped_parameters: &analysis.escaped_parameters[index],
             invoked_parameter_members: &analysis.invoked_parameter_members[index],
         }
@@ -1185,28 +4846,48 @@ fn contract_export_function(
         returned_summary,
         structured_return,
         callbacks,
+        direct_callback_parameters,
+        guaranteed_callback_parameters,
+        direct_protocol_parameters,
+        direct_member_callback_parameters,
         escaped_parameters,
         invoked_parameter_members,
     } = inputs;
-    let mut seen_reactive_reads = HashSet::new();
+    let mut seen_reactive_reads = BTreeSet::new();
     let mut reactive_reads = summary
         .iter()
         .filter_map(|read| {
             let reactive_read = ContractReactiveRead {
+                execution: read.contract_read_context.clone(),
                 kind: read.kind.clone().unwrap_or_else(|| "accessor".into()),
-                label: semantics
-                    .source_primitives
-                    .get(&read.symbol)
-                    .and_then(|primitive| semantics.bundled_returns.get(primitive))
-                    .map_or_else(
-                        || read.display.to_string(),
-                        |returned| returned.label.clone(),
-                    ),
+                label: read.display.to_string(),
                 parameter: None,
                 path: None,
+                // Provenance is stated exactly when the read was discovered in
+                // a *different* node and travelled here across a call edge.
+                // A read the export performs itself carries none, and neither
+                // does a row whose discovering node the summary could not
+                // identify — `None` is the fail-closed value at both ends.
+                composed_owner: read
+                    .owner
+                    .as_ref()
+                    .filter(|owner| node.symbol.as_ref() != Some(*owner))
+                    .map(|owner| owner.as_str().to_owned()),
+                composed_from: None,
             };
+            // The dedup key carries the provenance, so a read the export
+            // performs itself and a read of the same `(kind, label)` it
+            // performs through a call stay two rows. Collapsing them onto one
+            // would publish a single claim that the export's own census has to
+            // witness *and* a composed claim it cannot, and the stronger of
+            // the two demands would silently disappear.
             seen_reactive_reads
-                .insert((reactive_read.kind.clone(), reactive_read.label.clone()))
+                .insert((
+                    reactive_read.kind.clone(),
+                    reactive_read.label.clone(),
+                    reactive_read.composed_owner.clone(),
+                    reactive_read.execution.clone(),
+                ))
                 .then_some(reactive_read)
         })
         .collect::<Vec<_>>();
@@ -1216,19 +4897,33 @@ fn contract_export_function(
     // accesses that a last-segment comparison would have collapsed into one
     // claim about `values`.
     let mut paths_by_parameter = BTreeMap::<usize, HashSet<&[String]>>::new();
-    for (parameter, path) in invoked_parameter_members {
+    for ParameterMemberInvocation {
+        parameter, path, ..
+    } in invoked_parameter_members
+    {
         paths_by_parameter
             .entry(*parameter)
             .or_default()
             .insert(path.as_slice());
     }
     for (parameter, paths) in paths_by_parameter {
-        if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string())) {
+        if seen_reactive_reads.insert((
+            "parameter-member".into(),
+            parameter.to_string(),
+            None,
+            None,
+        )) {
             reactive_reads.push(ContractReactiveRead {
+                execution: None,
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(parameter),
                 path: (paths.len() == 1).then(|| paths.into_iter().next().unwrap().to_vec()),
+                // A parameter-member read is rooted at *this* export's own
+                // parameter, so it is never composed from another export's
+                // row.
+                composed_owner: None,
+                composed_from: None,
             });
         }
     }
@@ -1249,17 +4944,11 @@ fn contract_export_function(
             } else {
                 "accessor".into()
             },
-            label: semantics
-                .source_primitives
-                .get(&read.symbol)
-                .and_then(|primitive| semantics.bundled_returns.get(primitive))
-                .map_or_else(
-                    || read.display.to_string(),
-                    |returned| returned.label.clone(),
-                ),
+            label: read.display.to_string(),
             parameter: None,
             elements: Vec::new(),
             properties: BTreeMap::new(),
+            prototype: None,
         })
     });
     let mut callback_summary = callbacks.to_vec();
@@ -1275,10 +4964,31 @@ fn contract_export_function(
         ContractClaim::Open
     };
     ContractExport {
+        callback_results: Vec::new(),
+        captured_lookup: None,
+        capture_sources: BTreeMap::new(),
+        captured_arguments: BTreeMap::new(),
+        captured_resource_slots: BTreeSet::new(),
+        capture_context_supported: false,
         kind: "function".into(),
-        reactive_reads: reactive_reads.into(),
+        // ADR 0013: an access path alone does not establish the execution of
+        // a nested callable. The compact model cannot express this uncertainty
+        // beside known reads, so keep the whole domain open, never empty.
+        reactive_reads: if invoked_parameter_members
+            .iter()
+            .all(|read| read.in_owner_body)
+        {
+            reactive_reads.into()
+        } else {
+            ContractClaim::Open
+        },
         callbacks,
         owner_requirements: Vec::new().into(),
+        open_owner_requirements: Vec::new(),
+        open_return: None,
+        leaf_forbidden_operations: Vec::new(),
+        event_handler_props: Vec::new(),
+        inline_accessor_invocations: BTreeMap::new(),
         returns: returns.into(),
         async_behavior: if node.r#async {
             String::from("promise").into()
@@ -1286,6 +4996,61 @@ fn contract_export_function(
             String::new().into()
         },
         open_claims: BTreeSet::new(),
+        // Neither field is decided here. `creates_closed_empty` describes an
+        // *accepted dependency's* domain and only `project_accepted_export`
+        // sets it; `creates_walk_clean` is attached at the emit boundary from
+        // `Program::creates_proposal_walk`. Both defaults refuse.
+        creates_closed_empty: false,
+        returns_closed_empty: false,
+        returns_restated: Vec::new(),
+        creates_walk_clean: false,
+        // This summary *is* the local inference, so it is never inherited.
+        inherited_from: None,
+        // A locally inferred summary is stated unconditionally.
+        context_premises: Vec::new(),
+        // Attached at the emit boundary from `Program::merged_props_returns`,
+        // beside the other two walk verdicts.
+        merged_props_return: None,
+        creates_walk_declines: Vec::new(),
+        returns_walk_clean: false,
+        returns_value_completion: false,
+        returns_literal_structures: Vec::new(),
+        returns_described_callables: Vec::new(),
+        returns_reading_callables: Vec::new(),
+        member_alias_initializer: false,
+        member_alias_spelling: None,
+        returns_argument_containers: Vec::new(),
+        // ADR 0100: a proposal input read beside the rows. Kept whether or not
+        // the callbacks domain above stayed known -- the generator's filter
+        // reads both, and an open domain proposes nothing either way.
+        direct_callback_parameters: direct_callback_parameters.iter().copied().collect(),
+        guaranteed_callback_parameters: guaranteed_callback_parameters.iter().copied().collect(),
+        direct_member_callback_parameters: direct_member_callback_parameters
+            .iter()
+            .cloned()
+            .collect(),
+        direct_accessor_parameters: direct_protocol_parameters
+            .iter()
+            .filter(|(protocol, _)| *protocol == crate::contract_semantics::InvokeProtocol::Get)
+            .map(|(_, parameter)| *parameter)
+            .collect(),
+        direct_coerced_parameters: direct_protocol_parameters
+            .iter()
+            .filter(|(protocol, _)| *protocol == crate::contract_semantics::InvokeProtocol::Coerce)
+            .map(|(_, parameter)| *parameter)
+            .collect(),
+        iterated_parameters: direct_protocol_parameters
+            .iter()
+            .filter(|(protocol, _)| *protocol == crate::contract_semantics::InvokeProtocol::Iterate)
+            .map(|(_, parameter)| *parameter)
+            .collect(),
+        // A function node is not a construction; ADR 0139's walk is attached
+        // to a class export at the emit boundary.
+        result_access_parameters: BTreeSet::new(),
+        // ADR 0152: a projection of an accepted contract only.
+        returned_invocations: BTreeSet::new(),
+        returned_member_effects: BTreeMap::new(),
+        returned_callable_effects: None,
     }
 }
 
@@ -1318,8 +5083,17 @@ fn contract_export_function(
 ///
 /// `callbacks` must already be sorted by parameter.
 fn callbacks_contradict_on_a_parameter(callbacks: &[ContractCallback]) -> bool {
-    callbacks.windows(2).any(|pair| {
-        pair[0].parameter == pair[1].parameter && pair[0].execution != pair[1].execution
+    // Per invoked value: the argument itself, or one member path of it (item
+    // B of ways-to-improve § 3.3). A row for `handler` and a row for
+    // `handler[0]` describe two different invocations and cannot contradict
+    // each other. With no member row this is exactly the adjacent-pair check
+    // over rows sorted by parameter it replaces.
+    let mut executions = HashMap::<(usize, &[String]), &str>::new();
+    callbacks.iter().any(|callback| {
+        let execution = executions
+            .entry((callback.parameter, callback.path.as_slice()))
+            .or_insert(callback.execution.as_str());
+        *execution != callback.execution.as_str()
     })
 }
 
@@ -1569,6 +5343,7 @@ fn contract_export_fragment(
         {
             fragment.dependencies.insert(node_keys[target].clone());
             fragment.direct.push((name.clone(), summary.clone()));
+            fragment.owners.push((name.clone(), symbol.clone()));
         }
     }
     // `module_level_exports`, not `exports`: an `export` inside a `namespace`
@@ -1624,8 +5399,17 @@ fn contract_export_fragment(
                         node_contracts.get(&node_keys[index]).cloned()
                     })
                 })
-                .unwrap_or_else(value_contract_export);
+                .unwrap_or_else(|| fallback_value_export(file, graph, specifier.local.span));
             let summary = promote_callable_export(facts, file, specifier.local.span, summary);
+            if let Some(symbol) = graph
+                .entities
+                .get(&location(file.path.shared(), specifier.local.span))
+                .filter(|symbol| graph.by_symbol.contains_key(*symbol))
+            {
+                fragment
+                    .owners
+                    .push((specifier.exported.to_string(), symbol.clone()));
+            }
             fragment
                 .syntax
                 .push((specifier.exported.to_string(), summary, true));
@@ -1649,13 +5433,17 @@ fn contract_export_fragment(
                                 summary
                             })
                     })
-                    .unwrap_or_else(value_contract_export);
+                    .unwrap_or_else(|| fallback_value_export(file, graph, name.span));
                 let summary = promote_callable_export(facts, file, name.span, summary);
-                fragment.syntax.push((
-                    file.source_text(name.span).unwrap_or_default().to_owned(),
-                    summary,
-                    false,
-                ));
+                let exported = file.source_text(name.span).unwrap_or_default().to_owned();
+                if let Some(symbol) = graph
+                    .entities
+                    .get(&location(file.path.shared(), name.span))
+                    .filter(|symbol| graph.by_symbol.contains_key(*symbol))
+                {
+                    fragment.owners.push((exported.clone(), symbol.clone()));
+                }
+                fragment.syntax.push((exported, summary, false));
             }
         }
     }
@@ -1888,7 +5676,107 @@ fn aggregate_contract_fragments(
             }
         }
     }
+    resolve_composed_reactive_reads(facts, fragments, &mut aggregate);
     aggregate
+}
+
+/// Resolve every row's unpublished `composed_owner` into a published
+/// `composed_from`, and clear the unpublished half.
+///
+/// This is the only place in the pipeline that knows both halves of the
+/// question: the per-node projection knows *which node* discovered a read but
+/// not the name it is exported under, and each file's fragment knows its own
+/// export bindings but not another file's. Aggregation has all of them.
+///
+/// Every step publishes nothing rather than approximating:
+///
+/// * an owner symbol no export of this project names — a private helper, a
+///   node reached only through an unnameable re-export — stays unresolved,
+///   because "some node in this package performs the read" is exactly the
+///   claim the scoping study forbids;
+/// * an owner exported under **more than one** name stays unresolved: the two
+///   names are two claims, and picking one would name a target a call site may
+///   not resolve to;
+/// * an owner whose own read list carries no row with this row's identity
+///   stays unresolved. The identity is `(kind, label)`, the same key the
+///   projection deduplicates by, so at most one row can match — the ordinal it
+///   is found at is what `normalize_export` names `read-<ordinal>`;
+/// * a row whose owner is the export publishing it is not a composition at
+///   all.
+///
+/// The resolution is a *nomination*, never authority. The certifier proves the
+/// composing call's callee resolves to the named export through the compiler's
+/// own authenticated export table, and proves the named export's own demand
+/// for the named operation separately, so a provenance this pass got wrong
+/// refuses rather than discharges.
+fn resolve_composed_reactive_reads(
+    facts: &ProjectFacts,
+    fragments: &HashMap<String, ContractExportFragment>,
+    aggregate: &mut BTreeMap<String, ContractExport>,
+) {
+    let mut names_by_owner = BTreeMap::<&str, BTreeSet<&str>>::new();
+    for file in &facts.files {
+        if let Some(fragment) = fragments.get(file.path.as_str()) {
+            for (name, symbol) in &fragment.owners {
+                names_by_owner
+                    .entry(symbol.as_str())
+                    .or_default()
+                    .insert(name.as_str());
+            }
+        }
+    }
+    // The read identities of every export, snapshotted before anything is
+    // rewritten: an ordinal has to be read off the list as published, and the
+    // rewrite below never reorders one.
+    let identities = aggregate
+        .iter()
+        .filter_map(|(name, summary)| {
+            summary.reactive_reads.known().map(|reads| {
+                (
+                    name.clone(),
+                    reads
+                        .iter()
+                        .map(|read| (read.kind.clone(), read.label.clone()))
+                        .collect::<Vec<_>>(),
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (name, summary) in aggregate.iter_mut() {
+        let ContractClaim::Known(reads) = &mut summary.reactive_reads else {
+            continue;
+        };
+        for read in reads.iter_mut() {
+            let Some(owner) = read.composed_owner.take() else {
+                continue;
+            };
+            let Some(exports) = names_by_owner.get(owner.as_str()) else {
+                continue;
+            };
+            let [export] = exports.iter().copied().collect::<Vec<_>>()[..] else {
+                continue;
+            };
+            if export == name.as_str() {
+                continue;
+            }
+            let Some(rows) = identities.get(export) else {
+                continue;
+            };
+            let matched = rows
+                .iter()
+                .enumerate()
+                .filter(|(_, (kind, label))| *kind == read.kind && *label == read.label)
+                .map(|(ordinal, _)| ordinal)
+                .collect::<Vec<_>>();
+            let [ordinal] = matched[..] else {
+                continue;
+            };
+            read.composed_from = Some(crate::ComposedReactiveRead {
+                export: export.to_owned(),
+                read: ordinal,
+            });
+        }
+    }
 }
 
 fn path_within_project(path: &Path, directory: &Path) -> bool {
@@ -1905,6 +5793,49 @@ fn value_contract_export() -> ContractExport {
         kind: "value".into(),
         ..ContractExport::default()
     }
+}
+
+/// [`value_contract_export`] for the export at `local`, which no body and no
+/// resolved binding summarized, marking it a member alias when its binding is
+/// one (see [`ContractExport::member_alias_initializer`]): a `const` of one
+/// identifier -- matched by the same symbol identity
+/// `resolve_local_binding_initializer` uses, so `export { entries }` finds the
+/// declaration it names -- initialized by exactly a non-computed member access.
+/// A destructuring pattern names a property *of* the member's value, not the
+/// value, and is never one.
+fn fallback_value_export(
+    file: &solid_facts::FileFacts,
+    graph: &ContractGraph<'_>,
+    local: solid_facts::core::Span,
+) -> ContractExport {
+    let mut summary = value_contract_export();
+    let local_symbol = graph.entities.get(&location(file.path.shared(), local));
+    let alias = file.ast.bindings.iter().find_map(|binding| {
+        let initializer = binding.initializer?;
+        (binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.iter().any(|name| {
+                name.span == local
+                    || local_symbol.is_some_and(|symbol| {
+                        graph.entities.get(&location(file.path.shared(), name.span)) == Some(symbol)
+                    })
+            })
+            && file
+                .ast
+                .members
+                .iter()
+                .any(|member| member.span == initializer)
+            && file
+                .ast
+                .computed_members
+                .binary_search(&initializer)
+                .is_err())
+        .then_some(initializer)
+    });
+    summary.member_alias_initializer = alias.is_some();
+    summary.member_alias_spelling =
+        alias.and_then(|initializer| file.source_text(initializer).map(str::to_owned));
+    summary
 }
 
 fn entity_at<'a>(facts: &'a ProjectFacts, target: &Location) -> Option<&'a typefacts::EntityFact> {
@@ -2153,37 +6084,9 @@ fn promote_callable_export(
 }
 
 #[cfg(test)]
-mod native_overlay_tests {
-    use super::{
-        ContractExport, missing_accepted_export_needs_obligation, native_callback_overlay,
-    };
-    use crate::{ContractCallback, ContractClaim, ContractReturn};
+mod native_obligation_tests {
+    use super::missing_accepted_export_needs_obligation;
     use solid_dialect::Solid2;
-
-    #[test]
-    fn native_overlay_keeps_only_exact_callback_timing() {
-        let summary = ContractExport {
-            kind: "function".into(),
-            callbacks: ContractClaim::Known(vec![ContractCallback {
-                parameter: 1,
-                execution: "inline".into(),
-                schedule: None,
-                arguments: Vec::new(),
-                owner: None,
-            }]),
-            returns: ContractClaim::Known(Some(ContractReturn {
-                kind: "accessor".into(),
-                label: "package return".into(),
-                ..ContractReturn::default()
-            })),
-            async_behavior: ContractClaim::Open,
-            ..ContractExport::default()
-        };
-        let overlay = native_callback_overlay(&summary).expect("known callback row");
-        assert_eq!(overlay.callbacks, summary.callbacks);
-        assert_eq!(overlay.returns, ContractClaim::Known(None));
-        assert_eq!(overlay.async_behavior, ContractClaim::Known(String::new()));
-    }
 
     #[test]
     fn partial_accepted_contract_does_not_reopen_dialect_owned_primitives() {
@@ -2219,8 +6122,11 @@ mod callback_contradiction_tests {
             parameter,
             execution: execution.into(),
             schedule: None,
+            clears_tracking: false,
             arguments: Vec::new(),
             owner: None,
+            protocol: crate::contract_semantics::InvokeProtocol::Call,
+            path: Vec::new(),
         }
     }
 
@@ -2375,6 +6281,7 @@ mod export_kind_proof_tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: Default::default(),
         };
         export_kind_proof(&facts, &location)
@@ -2808,5 +6715,978 @@ mod export_kind_proof_tests {
                 ValueShape::Object(KnowledgeSet::Unknown),
             ])
         )));
+    }
+}
+
+/// ADR 0235: a destructured `effectful-callable` member of a contracted
+/// call's return is a callee with its own summary, so every rule reads a call
+/// of it as it reads a call of an export. Only `const` destructuring of the
+/// call itself binds; anything else keeps ADR 0234's obligations.
+/// Whole functions bind by exact immutable value identity. Function-object
+/// member calls get a distinct synthetic symbol per callee location, so two
+/// factory results never share a structural TypeScript member's summary.
+fn bind_returned_callable_effects(
+    facts: &ProjectFacts,
+    entities: &EntitySymbols,
+    bindings: &mut Vec<ResolvedContractBinding>,
+    by_symbol: &mut HashMap<SymbolId, ResolvedContractBinding>,
+    callees: &mut HashMap<Location, SymbolId>,
+    whole_bindings: &mut HashSet<SymbolId>,
+    core: (
+        &HashMap<SymbolId, SymbolId>,
+        &dyn Dialect,
+        &crate::RuntimeConfigurationPremise,
+        bool,
+    ),
+) {
+    let mut additions = Vec::new();
+    for file in &facts.files {
+        for binding in file.ast.bindings.iter().filter(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+        }) {
+            let Some(initializer) = binding.initializer else {
+                continue;
+            };
+            let initializer = file.ast.peel_ts_sugar_span(initializer);
+            let Some(factory) = file.ast.calls.iter().find(|call| call.span == initializer) else {
+                continue;
+            };
+            let Some(contracted) = entities
+                .get(&location(
+                    file.path.shared(),
+                    file.ast.peel_ts_sugar_span(factory.callee),
+                ))
+                .and_then(|symbol| by_symbol.get(symbol))
+            else {
+                continue;
+            };
+            let Some(Some(returned)) = contracted.summary.returns.known() else {
+                continue;
+            };
+            if returned.kind != RETURNED_CALLABLE {
+                continue;
+            }
+            if binding.initializer != Some(initializer)
+                && contracted
+                    .summary
+                    .returned_callable_effects
+                    .as_ref()
+                    .is_some_and(|graph| !graph.capture_sources.is_empty())
+            {
+                // A wrapped factory result is a retained function value use,
+                // not the exact instance binding required by captures.
+                continue;
+            }
+            let Some(root) = entities.get(&location(file.path.shared(), binding.names[0].span))
+            else {
+                continue;
+            };
+            if crate::value_identity::binding_has_write(file, entities, root) {
+                continue;
+            }
+            let instance = format!(
+                "{}@{}:{}",
+                contracted.contract_location.path, file.path, factory.span.start
+            );
+            let resolved =
+                |symbol: SymbolId, summary: ContractExport, suffix: &str| ResolvedContractBinding {
+                    local_name: file
+                        .source_text(binding.names[0].span)
+                        .unwrap_or_default()
+                        .to_owned(),
+                    imported_name: format!("{}[{suffix}]", contracted.imported_name),
+                    package_name: contracted.package_name.clone(),
+                    symbol,
+                    runtime_identity: contracted.runtime_identity.clone(),
+                    contract_location: Location {
+                        path: format!("{instance}[{suffix}]").into(),
+                        ..contracted.contract_location.clone()
+                    },
+                    summary,
+                };
+            if let Some(summary) = &contracted.summary.returned_callable_effects
+                && !by_symbol.contains_key(root)
+                && let Some(summary) = if summary.captured_lookup.is_some() {
+                    bind_captured_lookup(file, entities, core, factory, root, summary)
+                } else {
+                    bind_capture_arguments(file, entities, factory, summary)
+                }
+            {
+                whole_bindings.insert(root.clone());
+                additions.push(resolved(root.clone(), summary, "returned"));
+            }
+            // Members can be overwritten even when the function binding is
+            // const. Withhold all member graphs after mutation or an escape.
+            if !returned_callable_members_are_stable(file, entities, root) {
+                continue;
+            }
+            for call in &file.ast.calls {
+                let callee = file.ast.peel_ts_sugar_span(call.callee);
+                let Some(member) = file.ast.members.iter().find(|member| member.span == callee)
+                else {
+                    continue;
+                };
+                if file.ast.computed_members.contains(&member.span)
+                    || entities.get(&location(
+                        file.path.shared(),
+                        file.ast.peel_ts_sugar_span(member.object),
+                    )) != Some(root)
+                    || !file
+                        .ast
+                        .identifiers
+                        .iter()
+                        .any(|id| id.span == file.ast.peel_ts_sugar_span(member.object))
+                {
+                    continue;
+                }
+                let Some(key) = file.source_text(member.property) else {
+                    continue;
+                };
+                let summary = contracted
+                    .summary
+                    .returned_member_effects
+                    .get(key)
+                    .cloned()
+                    .or_else(|| {
+                        let member = returned.properties.get(key)?;
+                        if member.kind != "accessor" {
+                            return None;
+                        }
+                        Some(ContractExport {
+                            kind: "function".into(),
+                            reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+                                execution: None,
+                                kind: "accessor".into(),
+                                label: member.label.clone(),
+                                parameter: None,
+                                path: None,
+                                composed_from: None,
+                                composed_owner: None,
+                            }]),
+                            callbacks: ContractClaim::Known(vec![]),
+                            owner_requirements: ContractClaim::Known(vec![]),
+                            returns: ContractClaim::Known(None),
+                            ..ContractExport::default()
+                        })
+                    });
+                let Some(summary) = summary else { continue };
+                let site = location(file.path.shared(), callee);
+                let symbol = SymbolId::from(format!(
+                    "returned-member:{}:{}:{}",
+                    file.path, callee.start, callee.end
+                ));
+                callees.insert(site, symbol.clone());
+                additions.push(resolved(symbol, summary, key));
+            }
+        }
+    }
+    for addition in additions {
+        if !by_symbol.contains_key(&addition.symbol) {
+            bindings.push(addition.clone());
+            by_symbol.insert(addition.symbol.clone(), addition);
+        }
+    }
+}
+
+pub(crate) fn returned_callable_members_are_stable(
+    file: &solid_facts::FileFacts,
+    entities: &EntitySymbols,
+    root: &SymbolId,
+) -> bool {
+    let is_root = |span| entities.get(&location(file.path.shared(), span)) == Some(root);
+    if file
+        .ast
+        .exports
+        .iter()
+        .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+        .any(|export| !export.type_only && is_root(export.local.span))
+    {
+        return false;
+    }
+    file.ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == solid_facts::ast::IdentifierRole::Reference)
+        .filter(|id| is_root(id.span))
+        .all(|id| {
+            let direct_call = file
+                .ast
+                .calls
+                .iter()
+                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == id.span);
+            let receiver = file
+                .ast
+                .members
+                .iter()
+                .any(|member| file.ast.peel_ts_sugar_span(member.object) == id.span);
+            (direct_call || receiver)
+                && !file
+                    .ast
+                    .assignments
+                    .iter()
+                    .any(|assignment| assignment.target.contains(id.span))
+                && !file
+                    .ast
+                    .deleted_targets
+                    .iter()
+                    .any(|target| target.contains(id.span))
+        })
+}
+
+fn bind_returned_member_effects(
+    facts: &ProjectFacts,
+    entities: &EntitySymbols,
+    bindings: &mut Vec<ResolvedContractBinding>,
+    by_symbol: &mut HashMap<SymbolId, ResolvedContractBinding>,
+    callees: &mut HashMap<Location, SymbolId>,
+) {
+    let mut members = Vec::new();
+    for file in &facts.files {
+        for binding in file.ast.bindings.iter().filter(|binding| binding.immutable) {
+            let Some(initializer) = binding.initializer else {
+                continue;
+            };
+            let initializer = file.ast.peel_ts_sugar_span(initializer);
+            let Some(call) = file.ast.calls.iter().find(|call| call.span == initializer) else {
+                continue;
+            };
+            let Some(contracted) = entities
+                .get(&location(
+                    file.path.shared(),
+                    file.ast.peel_ts_sugar_span(call.callee),
+                ))
+                .and_then(|symbol| by_symbol.get(symbol))
+            else {
+                continue;
+            };
+            let effects = &contracted.summary.returned_member_effects;
+            if effects.is_empty() {
+                continue;
+            }
+            // The receiver is selected by its binder declaration, never by
+            // a demand-dependent Type Facts entity or structural property.
+            // Each accepted direct call gets a distinct synthetic identity.
+            if binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.initializer == Some(call.span)
+                && !call.construct
+                && call.callee == file.ast.peel_ts_sugar_span(call.callee)
+                && contracted.summary.returns.known().is_some_and(|returned| {
+                    returned
+                        .as_ref()
+                        .is_some_and(|returned| returned.kind == "object")
+                })
+                && contracted
+                    .summary
+                    .returns
+                    .known()
+                    .and_then(Option::as_ref)
+                    .is_some_and(|returned| {
+                        returned_object_members_are_stable(file, binding.names[0].span, returned)
+                    })
+            {
+                for member_call in &file.ast.calls {
+                    let Some(member) = file.ast.members.iter().find(|member| {
+                        member.span == member_call.callee
+                            && file.ast.reference_declaration(member.object)
+                                == Some(binding.names[0].span)
+                    }) else {
+                        continue;
+                    };
+                    if member_call.construct
+                        || file.ast.computed_members.contains(&member.span)
+                        || file.ast.optional_members.contains(&member.span)
+                    {
+                        continue;
+                    }
+                    let Some(key) = file.source_text(member.property) else {
+                        continue;
+                    };
+                    let Some(summary) = effects.get(key) else {
+                        continue;
+                    };
+                    let site = crate::location(file.path.shared(), member_call.callee);
+                    let symbol = SymbolId::from(format!(
+                        "returned-object-member:{}:{}:{}",
+                        file.path, member_call.callee.start, member_call.callee.end
+                    ));
+                    callees.insert(site, symbol.clone());
+                    members.push(ResolvedContractBinding {
+                        local_name: file
+                            .source_text(member_call.callee)
+                            .unwrap_or_default()
+                            .to_owned(),
+                        imported_name: format!("{}[{key}]", contracted.imported_name),
+                        package_name: contracted.package_name.clone(),
+                        symbol,
+                        runtime_identity: String::new(),
+                        contract_location: Location {
+                            path: format!(
+                                "{}@{}:{}[{key}]",
+                                contracted.contract_location.path, file.path, call.span.start
+                            )
+                            .into(),
+                            ..contracted.contract_location.clone()
+                        },
+                        summary: summary.clone(),
+                    });
+                }
+                continue;
+            }
+            let slots = match binding.shape {
+                solid_facts::ast::BindingShape::Array => binding
+                    .array_slots
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, slot)| {
+                        slot.as_ref().map(|slot| (index.to_string(), slot.span))
+                    })
+                    .collect::<Vec<_>>(),
+                solid_facts::ast::BindingShape::Object => binding
+                    .object_slots
+                    .iter()
+                    .map(|slot| (slot.property.to_string(), slot.local.span))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            for (key, span) in slots {
+                let Some(summary) = effects.get(&key) else {
+                    continue;
+                };
+                let slot_location = location(file.path.shared(), span);
+                let Some(symbol) = entities.get(&slot_location).cloned() else {
+                    continue;
+                };
+                members.push(ResolvedContractBinding {
+                    local_name: file.source_text(span).unwrap_or_default().to_owned(),
+                    imported_name: format!("{}[{key}]", contracted.imported_name),
+                    package_name: contracted.package_name.clone(),
+                    symbol: symbol.clone(),
+                    runtime_identity: contracted.runtime_identity.clone(),
+                    // `contract_declared_state` reads the `[key]` suffix: a
+                    // member's reads are the caller's, not the package's.
+                    contract_location: Location {
+                        path: format!("{}[{key}]", contracted.contract_location.path).into(),
+                        ..contracted.contract_location.clone()
+                    },
+                    summary: summary.clone(),
+                });
+            }
+        }
+    }
+    for member in members {
+        if !by_symbol.contains_key(&member.symbol) {
+            bindings.push(member.clone());
+            by_symbol.insert(member.symbol.clone(), member);
+        }
+    }
+}
+
+/// A const binding is not a frozen object. Reject writes, deletion, iteration
+/// targets, exports and every receiver escape. Wrappers are deliberately not
+/// peeled: `(obj as T).member()` is not a direct receiver. The binder records
+/// array elements and shorthand references even when Type Facts does not.
+pub(crate) fn returned_object_members_are_stable(
+    file: &solid_facts::FileFacts,
+    root: solid_facts::core::Span,
+    returned: &ContractReturn,
+) -> bool {
+    let refers_to_root = |span| file.ast.reference_declaration(span) == Some(root);
+    if file
+        .ast
+        .exports
+        .iter()
+        .filter(|export| !export.type_only)
+        .any(|export| {
+            export
+                .declarations
+                .iter()
+                .chain(&export.specifiers)
+                .any(|export| {
+                    !export.type_only
+                        && (export.local.span == root || refers_to_root(export.local.span))
+                })
+        })
+    {
+        return false;
+    }
+    file.ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == solid_facts::ast::IdentifierRole::Reference)
+        .filter(|id| refers_to_root(id.span))
+        .all(|id| {
+            file.ast.members.iter().any(|member| {
+                member.object == id.span
+                    && !file.ast.computed_members.contains(&member.span)
+                    && !file.ast.optional_members.contains(&member.span)
+                    && file.source_text(member.property).is_some_and(|key| {
+                        returned.properties.get(key).is_some_and(|selected| {
+                            // An opaque method may replace another member.
+                            // Its unknown call cannot prove receiver stability.
+                            selected.kind != OPAQUE_MEMBER
+                                || !file.ast.calls.iter().any(|call| {
+                                    file.ast.peel_ts_sugar_span(call.callee) == member.span
+                                })
+                        })
+                    })
+            }) && !file
+                .ast
+                .assignments
+                .iter()
+                .map(|assignment| assignment.target)
+                .chain(file.ast.deleted_targets.iter().copied())
+                .chain(file.ast.iteration_targets.iter().copied())
+                .any(|target| target.contains(id.span))
+        })
+}
+
+fn project_callback_results(
+    export: &crate::contract_semantics::ExportSemantics,
+) -> Vec<crate::ContractCallbackResult> {
+    export
+        .call
+        .callback_results()
+        .iter()
+        .filter_map(|result| {
+            let row = export
+                .callbacks()
+                .items()
+                .iter()
+                .find(|row| row.operation == result.producer)?;
+            let ValueSource::Parameter { index, path } = &row.from else {
+                return None;
+            };
+            let project = |id: &crate::contract_semantics::OperationId| {
+                let row = export
+                    .callbacks()
+                    .items()
+                    .iter()
+                    .find(|row| &row.operation == id)
+                    .expect("normalized result use has one source");
+                let ValueSource::OperationOutput { path, .. } = &row.from else {
+                    unreachable!("normalized result use names its producer output")
+                };
+                crate::ContractCallbackResultUse {
+                    path: path.clone(),
+                    callable_only: result.callable_only.contains(id),
+                    operation: export
+                        .operation(&id.0)
+                        .expect("normalized result operation")
+                        .clone(),
+                }
+            };
+            let uses = match &result.uses {
+                KnowledgeSet::Unknown => KnowledgeSet::Unknown,
+                KnowledgeSet::Partial(ids) => {
+                    KnowledgeSet::Partial(ids.iter().map(project).collect())
+                }
+                KnowledgeSet::Complete(ids) => {
+                    KnowledgeSet::Complete(ids.iter().map(project).collect())
+                }
+            };
+            Some(crate::ContractCallbackResult {
+                parameter: usize::from(*index),
+                parameter_path: path.clone(),
+                producer: export
+                    .operation(&result.producer.0)
+                    .expect("normalized result producer")
+                    .clone(),
+                shape: result.shape.clone(),
+                uses,
+                non_escaping: export
+                    .operation_claim(ClaimDomain::Returns)
+                    .is_some_and(|returns| {
+                        returns.is_closed()
+                            && returns.items().iter().all(|id| {
+                                export.operation(&id.0).is_some_and(|operation| {
+                                    operation.output == Some(ValueShape::Undefined)
+                                })
+                            })
+                    }),
+            })
+        })
+        .collect()
+}
+
+/// Admit a conditional slice, never strengthen the generic graph's minimum.
+/// Entire-file identity checks deliberately refuse every alias and escape.
+fn bind_captured_lookup(
+    file: &solid_facts::FileFacts,
+    entities: &EntitySymbols,
+    core: (
+        &HashMap<SymbolId, SymbolId>,
+        &dyn Dialect,
+        &crate::RuntimeConfigurationPremise,
+        bool,
+    ),
+    factory: &solid_facts::ast::CallFact,
+    result_root: &SymbolId,
+    summary: &ContractExport,
+) -> Option<ContractExport> {
+    use solid_facts::ast::{ArgumentLiteralFact, BindingShape, IdentifierRole};
+    let (symbol_names, dialect, runtime_configuration, visible_runtime_hazard) = core;
+    // ADR 0266 is an explicit conditional premise, not a complete census.
+    // Projection also demotes violations on a veto; do not close this instance's
+    // open domains under a veto, or after a positively identified mode/exposure
+    // API outside that premise. No normal-completion/no-throw fact is inferred.
+    if !runtime_configuration.permits_proof() || visible_runtime_hazard {
+        return None;
+    }
+    let recipe = summary.captured_lookup.as_ref()?;
+    if recipe.key != 0
+        || factory.construct
+        || factory.arguments.iter().any(|argument| argument.spread)
+        || recipe
+            .default_arguments
+            .iter()
+            .any(|index| factory.arguments.get(usize::from(*index)).is_some())
+    {
+        return None;
+    }
+    if summary.capture_sources.len() != 1 {
+        return None;
+    }
+    let (slot, source) = summary.capture_sources.iter().next()?;
+    let slot = *slot;
+    let ValueSource::Parameter { index, path } = source else {
+        return None;
+    };
+    if !path.is_empty() {
+        return None;
+    }
+    let argument = factory.arguments.get(usize::from(*index))?;
+    let root = entities.get(&location(file.path.shared(), argument.span))?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == BindingShape::Array
+            && binding.names.len() == 1
+            && binding.array_slots.len() == 1
+            && binding
+                .array_slots
+                .first()
+                .and_then(Option::as_ref)
+                .is_some_and(|name| {
+                    entities.get(&location(file.path.shared(), name.span)) == Some(root)
+                })
+            && binding.array_slots.iter().skip(1).all(Option::is_none)
+    })?;
+    if crate::value_identity::binding_has_write(file, entities, root) {
+        return None;
+    }
+    let creation = file
+        .ast
+        .calls
+        .iter()
+        .find(|call| Some(call.span) == binding.initializer)?;
+    if creation.construct || creation.arguments.len() != 1 || creation.arguments[0].spread {
+        return None;
+    }
+    let primitive = crate::known_primitive(&crate::call_primitive_name(
+        file,
+        creation,
+        entities,
+        symbol_names,
+        dialect,
+    ))?;
+    if !dialect
+        .tuple_accessor_preserves_initial_value(primitive, solid_dialect::ResultSlot::TupleItem(0))
+        || !dialect.inert_accessor_read(primitive, solid_dialect::ResultSlot::TupleItem(0))
+    {
+        return None;
+    }
+    let ArgumentLiteralFact::Object(properties) = &creation.arguments[0].literal_value else {
+        return None;
+    };
+    let scope = captured_lookup_scope(file, creation.span);
+    if captured_lookup_scope(file, factory.span) != scope
+        || scope.is_some_and(|scope| {
+            file.ast
+                .functions
+                .iter()
+                .any(|function| function.span == scope && (function.r#async || function.generator))
+                || file.ast.calls.iter().any(|call| {
+                    call.arguments
+                        .iter()
+                        .any(|argument| argument.span.contains(scope))
+                })
+        })
+    {
+        // A callback supplied to a mode/opaque helper may enter under a probe,
+        // latest companion, hydration wrapper or changed execution context.
+        return None;
+    }
+    // No dictionary read can escape through another use, including shorthand
+    // or exports (declaration-selected, independent of Type Facts demand).
+    let declaration = binding.names[0].span;
+    if file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == IdentifierRole::Reference)
+        .any(|id| {
+            (file.ast.reference_declaration(id.span) == Some(declaration)
+                || entities.get(&location(file.path.shared(), id.span)) == Some(root))
+                && id.span != argument.span
+        })
+        || file
+            .ast
+            .object_properties
+            .iter()
+            .any(|property| property.shorthand_binding == Some(declaration))
+        || file
+            .ast
+            .exports
+            .iter()
+            .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+            .any(|export| {
+                !export.type_only
+                    && entities.get(&location(file.path.shared(), export.local.span)) == Some(root)
+            })
+    {
+        return None;
+    }
+    let result_declaration = file
+        .ast
+        .bindings
+        .iter()
+        .flat_map(|binding| &binding.names)
+        .find(|name| entities.get(&location(file.path.shared(), name.span)) == Some(result_root))?
+        .span;
+    if file
+        .ast
+        .object_properties
+        .iter()
+        .any(|property| property.shorthand_binding == Some(result_declaration))
+        || file
+            .ast
+            .exports
+            .iter()
+            .flat_map(|export| export.declarations.iter().chain(&export.specifiers))
+            .any(|export| {
+                !export.type_only
+                    && entities.get(&location(file.path.shared(), export.local.span))
+                        == Some(result_root)
+            })
+    {
+        return None;
+    }
+    for id in file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|id| id.role == IdentifierRole::Reference)
+        .filter(|id| {
+            file.ast.reference_declaration(id.span) == Some(result_declaration)
+                || entities.get(&location(file.path.shared(), id.span)) == Some(result_root)
+        })
+    {
+        let call = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| call.callee == id.span && !call.construct)?;
+        if captured_lookup_scope(file, call.span) != scope
+            || call.arguments.len() != 1
+            || call.arguments.iter().any(|argument| argument.spread)
+        {
+            // No later closure lifetime or caller-controlled argument evaluation.
+            return None;
+        }
+        let key = &call.arguments.get(usize::from(recipe.key))?.literal_value;
+        if !captured_lookup_key_is_own_string(properties, key, recipe.strip_leading_dot) {
+            return None;
+        }
+    }
+    let callbacks = summary.callbacks.known()?;
+    let [callback] = callbacks.as_slice() else {
+        return None;
+    };
+    if callback.parameter != slot || !callback.invokes_argument() || callback.execution != "inline"
+    {
+        return None;
+    }
+    let mut bound = summary.clone();
+    bound.captured_arguments.insert(slot, argument.clone());
+    bound.inline_accessor_invocations.insert(slot, true);
+    bound.open_claims.remove(&ClaimDomain::Callbacks);
+    bound.open_claims.remove(&ClaimDomain::Returns);
+    bound.returns = ContractClaim::Known(None); // The proved own property is a string.
+    bound.captured_lookup = None; // Conditional metadata never becomes a local inference claim.
+    Some(bound)
+}
+
+fn captured_lookup_scope(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> Option<solid_facts::core::Span> {
+    file.ast
+        .functions
+        .iter()
+        .filter(|function| function.body.contains(span))
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map(|function| function.span)
+}
+
+fn captured_lookup_key_is_own_string(
+    properties: &[solid_facts::ast::ArgumentLiteralPropertyFact],
+    key: &solid_facts::ast::ArgumentLiteralFact,
+    strip_leading_dot: bool,
+) -> bool {
+    use solid_facts::ast::ArgumentLiteralFact;
+    let ArgumentLiteralFact::String(key) = key else {
+        return false;
+    };
+    let key: &str = key.as_str();
+    let key = if strip_leading_dot {
+        key.strip_prefix('.').unwrap_or(key)
+    } else {
+        key
+    };
+    properties
+        .iter()
+        .find(|property| property.name == key)
+        .is_some_and(|property| matches!(property.value, ArgumentLiteralFact::String(_)))
+}
+
+#[cfg(test)]
+mod captured_lookup_tests {
+    use super::captured_lookup_key_is_own_string;
+    use solid_facts::ast::{ArgumentLiteralFact as V, ArgumentLiteralPropertyFact as P};
+    fn bind(source: &str, with_import_identity: bool) -> Option<crate::ContractExport> {
+        bind_under(
+            source,
+            with_import_identity,
+            &crate::RuntimeConfigurationPremise::Assumed,
+            false,
+        )
+    }
+
+    fn bind_under(
+        source: &str,
+        with_import_identity: bool,
+        premise: &crate::RuntimeConfigurationPremise,
+        hazard: bool,
+    ) -> Option<crate::ContractExport> {
+        use crate::contract_semantics::{CapturedLookup, ClaimDomain, InvokeProtocol, ValueSource};
+        use crate::{ContractCallback, ContractClaim, ContractExport, EntitySymbols, SymbolId};
+        use solid_facts::{
+            FileFacts, ast,
+            compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
+            core::Generation,
+        };
+        use std::collections::{BTreeMap, BTreeSet, HashMap};
+        let ast = ast::extract("case.tsx", source).unwrap();
+        let compiler = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: ast.source.hash.clone(),
+            semantic_model: Default::default(),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            discarded_regions: vec![],
+            ownership_regions: vec![],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        };
+        let file = FileFacts::new(Generation::new(1).unwrap(), source, ast, compiler).unwrap();
+        let symbol =
+            |span: solid_facts::core::Span| SymbolId::from(format!("declaration:{}", span.start));
+        let mut by_span = HashMap::new();
+        for name in file
+            .ast
+            .bindings
+            .iter()
+            .flat_map(|binding| &binding.names)
+            .chain(
+                file.ast
+                    .imports
+                    .iter()
+                    .flat_map(|import| &import.bindings)
+                    .map(|binding| &binding.local),
+            )
+        {
+            by_span.insert(
+                (u64::from(name.span.start), u64::from(name.span.end)),
+                symbol(name.span),
+            );
+        }
+        for (reference, declaration) in &file.ast.reference_declarations {
+            by_span.insert(
+                (u64::from(reference.start), u64::from(reference.end)),
+                symbol(*declaration),
+            );
+        }
+        let entities = EntitySymbols {
+            by_path: HashMap::from([(file.path.to_string(), by_span)]),
+        };
+        let mut names = HashMap::new();
+        if with_import_identity {
+            let imported = &file.ast.imports[0].bindings[0];
+            names.insert(symbol(imported.local.span), SymbolId::from("createSignal"));
+        }
+        let factory = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| file.source_text(call.callee) == Some("lookup"))?;
+        let returned = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.initializer == Some(factory.span))?;
+        let root = symbol(returned.names[0].span);
+        let summary = ContractExport {
+            captured_lookup: Some(CapturedLookup {
+                dictionary: "dict".into(),
+                key: 0,
+                default_arguments: vec![1, 2],
+                strip_leading_dot: true,
+            }),
+            capture_sources: BTreeMap::from([(
+                usize::MAX,
+                ValueSource::Parameter {
+                    index: 0,
+                    path: vec![],
+                },
+            )]),
+            callbacks: ContractClaim::Known(vec![ContractCallback {
+                parameter: usize::MAX,
+                execution: "inline".into(),
+                schedule: None,
+                arguments: vec![],
+                owner: Some("inherited".into()),
+                clears_tracking: false,
+                protocol: InvokeProtocol::Call,
+                path: vec![],
+            }]),
+            open_claims: BTreeSet::from([ClaimDomain::Callbacks, ClaimDomain::Returns]),
+            ..ContractExport::default()
+        };
+        super::bind_captured_lookup(
+            &file,
+            &entities,
+            (&names, &solid_dialect::Solid2, premise, hazard),
+            factory,
+            &root,
+            &summary,
+        )
+    }
+
+    #[test]
+    fn instance_proof_requires_exact_signal_discarded_setter_and_every_use() {
+        let initial = "import { createSignal } from 'solid-js'; const [dict] = createSignal({ hello:'hello' }); const t = lookup(dict); t('hello');";
+        let bound = bind(initial, true).expect("exact immutable instance");
+        assert!(bound.inline_accessor_invocations[&usize::MAX]);
+        assert!(bound.captured_arguments.contains_key(&usize::MAX));
+        assert!(
+            !bound
+                .open_claims
+                .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
+        );
+        assert!(bound.captured_lookup.is_none());
+        let component = initial.replace("const [dict]", "function App() { const [dict]") + " }";
+        assert!(
+            bind(&component, true).is_some(),
+            "ordinary synchronous component scope"
+        );
+        let veto = crate::RuntimeConfigurationPremise::Vetoed {
+            location: typefacts::Location {
+                path: "setup.ts".into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        };
+        assert!(bind_under(initial, true, &veto, false).is_none());
+        assert!(
+            bind_under(
+                initial,
+                true,
+                &crate::RuntimeConfigurationPremise::Assumed,
+                true
+            )
+            .is_none()
+        );
+        assert!(
+            bind(initial, false).is_none(),
+            "unresolved import is never a native source"
+        );
+        for source in [
+            initial.replace("[dict]", "[dict, setDict]"),
+            initial.replace("t('hello')", "t('hello', mutate())"),
+            initial.replace("t('hello')", "const read = () => t('hello'); read()"),
+            initial.replace("const [dict]", "isPending(() => { const [dict]") + " });",
+            initial.replace("const [dict]", "latest(() => { const [dict]") + " });",
+            initial.replace("const [dict]", "async function App() { const [dict]") + " }",
+            initial.replace(
+                "createSignal({ hello:'hello' })",
+                "createSignal({ hello:'hello' }, {})",
+            ),
+            initial.replace("lookup(dict)", "lookup(dict, value => value)"),
+            initial.replace("t('hello')", "t('toString')"),
+            initial.replace("t('hello')", "t(key)"),
+            initial.replace("t('hello')", "t(...keys)"),
+            initial.replace("t('hello')", "const alias = t; alias('hello')"),
+            initial.replace("t('hello')", "const result = dict(); t('hello')"),
+            initial.replace("{ hello:'hello' }", "{ get hello() { return 'hello'; } }"),
+            initial.replace("{ hello:'hello' }", "{ ...other, hello:'hello' }"),
+            initial.replace("t('hello')", "t('hello'); export { t }"),
+            initial.replace("t('hello')", "const keep = { t }; t('hello')"),
+        ] {
+            assert!(bind(&source, true).is_none(), "{source}");
+        }
+        let paired = format!("{initial} const other = lookup(dict); other('hello');");
+        assert!(
+            bind(&paired, true).is_none(),
+            "a second factory is an unproved dictionary exposure"
+        );
+    }
+
+    #[test]
+    fn own_string_lookup_strips_one_dot_and_never_guesses_inherited_keys() {
+        let properties = vec![
+            P {
+                name: "hello".into(),
+                value: V::String("hello".into()),
+            },
+            P {
+                name: ".hello".into(),
+                value: V::String("dot".into()),
+            },
+        ];
+        for key in ["hello", ".hello", "..hello"] {
+            assert!(captured_lookup_key_is_own_string(
+                &properties,
+                &V::String(key.into()),
+                true
+            ));
+        }
+        for key in ["missing", "toString", "constructor", "...hello"] {
+            assert!(!captured_lookup_key_is_own_string(
+                &properties,
+                &V::String(key.into()),
+                true
+            ));
+        }
+        assert!(!captured_lookup_key_is_own_string(
+            &properties,
+            &V::Unknown,
+            true
+        ));
+        assert!(!captured_lookup_key_is_own_string(
+            &properties,
+            &V::Integer(0),
+            true
+        ));
+        let function = vec![P {
+            name: "hello".into(),
+            value: V::Function,
+        }];
+        assert!(!captured_lookup_key_is_own_string(
+            &function,
+            &V::String("hello".into()),
+            true
+        ));
     }
 }

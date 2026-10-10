@@ -1,0 +1,333 @@
+{
+  "package": "@solid-primitives/i18n",
+  "version": "3.0.0-next.4",
+  "identity": "identity.json",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "template": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain returns: Every normal completion has the same browser-stated output shape/identity; no server replacement accessor, inert control or returned setter is admitted."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:84 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup."
+      }
+    },
+    "identityResolveTemplate": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain returns: Every normal completion has the same browser-stated output shape/identity; no server replacement accessor, inert control or returned setter is admitted."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:101 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup."
+      }
+    },
+    "missingKeyAsPath": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194. Literal identity function on both builds, with no Solid runtime call or host branch. The browser-declared plain value output and empty reads/creates/callbacks are unchanged under the original declaration/P2 premise. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain returns: Every normal completion has the same browser-stated output shape/identity; no server replacement accessor, inert control or returned setter is admitted."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:194 \u2014 Exact identity return of a declared string input (template's brand is type-only). P1/P2: typed primitive input and platform built-ins; no caller callable, reactive source, owner or cleanup."
+      }
+    },
+    "translator": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "returned-callable",
+              "call": {
+                "capturedLookup": {
+                  "dictionary": "dict",
+                  "key": 0,
+                  "defaultArguments": [
+                    1,
+                    2
+                  ],
+                  "stripLeadingDot": true
+                },
+                "captures": [
+                  {
+                    "id": "dict",
+                    "from": {
+                      "arg": 0
+                    }
+                  }
+                ],
+                "closed": [
+                  "reads",
+                  "creates"
+                ],
+                "reads": [],
+                "creates": [],
+                "callbacks": [
+                  {
+                    "from": {
+                      "capture": "dict"
+                    },
+                    "operation": "dict-read"
+                  }
+                ],
+                "operations": [
+                  {
+                    "id": "dict-read",
+                    "kind": "invoke",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "ambient-at-execution",
+                    "count": {
+                      "min": 0,
+                      "max": 1,
+                      "scope": "call"
+                    },
+                    "owner": {
+                      "source": "ambient-at-execution"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+      },
+      "captureClosures": {
+        "return.dict": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+      },
+      "returnedClosures": {
+        "return": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+        }
+      },
+      "lookupClosures": {
+        "return": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+      },
+      "probes": [
+        {
+          "label": "own-string",
+          "rule": "strict-read-untracked",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+        },
+        {
+          "label": "prefix-own-string",
+          "rule": "strict-read-untracked",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/i18n-translator-argument-read/node_modules/@solid-primitives/i18n/dist/index.js:195-207; identity resolver :101. Construction captures only. String input prefix is normalized before dict; own string value with omitted resolver uses identity and returns unchanged. Other values/custom callbacks retain open dispatch."
+        }
+      ]
+    }
+  }
+}

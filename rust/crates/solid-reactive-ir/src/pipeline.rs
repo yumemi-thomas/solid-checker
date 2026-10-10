@@ -10,9 +10,7 @@ use std::{
 
 use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
 use crate::contract_semantics::AcceptedContractIndex;
-use crate::contracts::{
-    ResolvedContractBinding, accepted_bundled_returns, resolve_accepted_contract_imports,
-};
+use crate::contracts::{ResolvedContractBinding, resolve_accepted_contract_imports};
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
 use crate::reachability::{ReachabilityInputs, reachability_stage};
@@ -23,7 +21,7 @@ use crate::{
     ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
     ContractGenerationObligation, LeafOwnerOperation, ObligationCounts, ObligationReach,
     OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
-    RuleOptions, Solid1xRuleOptions, StaticDefect, StaticViolation, location_order,
+    RuleOptions, StaticDefect, StaticViolation, location_order,
 };
 use crate::{
     cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
@@ -38,6 +36,7 @@ use typefacts::Location;
 /// of its signature rather than ambient mutation of a shared function body.
 #[derive(Default)]
 pub(crate) struct ProgramDraft {
+    pub(crate) development_feedback: Vec<crate::development_feedback::DevelopmentFile>,
     pub(crate) reads: Vec<ReactiveRead>,
     pub(crate) writes: Vec<ReactiveWrite>,
     pub(crate) action_invocations: Vec<ActionInvocation>,
@@ -47,6 +46,9 @@ pub(crate) struct ProgramDraft {
     pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
     pub(crate) directive_creations: Vec<PrimitiveCreation>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
+    pub(crate) creates_proposal_walk: crate::CreatesProposalWalk,
+    pub(crate) merged_props_returns: crate::returns_walk::MergedPropsReturns,
+    pub(crate) argument_container_returns: crate::returns_walk::ArgumentContainerReturns,
     pub(crate) contract_exports: Arc<BTreeMap<String, ContractExport>>,
     pub(crate) contract_generation_obligations: Vec<ContractGenerationObligation>,
     pub(crate) strict_read_obligations: usize,
@@ -140,6 +142,8 @@ impl ProgramDraft {
         self.contract_generation_obligations
             .sort_by(|left, right| location_order(&left.location, &right.location));
         Program {
+            runtime_configuration: crate::RuntimeConfigurationPremise::Assumed,
+            development_feedback: self.development_feedback,
             reads: self.reads,
             writes: self.writes,
             actions: self.action_invocations,
@@ -158,6 +162,9 @@ impl ProgramDraft {
                 factory_instances,
             },
             contract_binding: self.contract_binding,
+            creates_proposal_walk: self.creates_proposal_walk,
+            merged_props_returns: self.merged_props_returns,
+            argument_container_returns: self.argument_container_returns,
         }
     }
 }
@@ -187,7 +194,6 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
     pub(crate) rule_options: &'a RuleOptions,
-    pub(crate) solid1x_rule_options: &'a Solid1xRuleOptions,
 }
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
@@ -228,6 +234,7 @@ pub fn build_with_accepted_contracts_measured(
         contracts,
         rule_options,
         BuildCaches::default(),
+        crate::runtime_configuration::scan(facts, dialect),
     )
 }
 
@@ -237,6 +244,7 @@ pub(crate) fn build_with_accepted_contracts_measured_incremental(
     contracts: &AcceptedContractIndex,
     rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
+    runtime_configuration: crate::RuntimeConfigurationPremise,
 ) -> Result<(Program, BuildTimings), BuildError> {
     build_with_accepted_contract_inputs_measured_incremental(
         facts,
@@ -244,6 +252,7 @@ pub(crate) fn build_with_accepted_contracts_measured_incremental(
         contracts,
         rule_options,
         caches,
+        runtime_configuration,
     )
 }
 
@@ -253,7 +262,10 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     contracts: &AcceptedContractIndex,
     rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
+    runtime_configuration: crate::RuntimeConfigurationPremise,
 ) -> Result<(Program, BuildTimings), BuildError> {
+    let external_contracts = contracts.external_packages();
+    let contracts = external_contracts.as_ref();
     let BuildCaches {
         ast_indexes: ast_indexes_cache,
         source_discovery: source_discovery_cache,
@@ -366,9 +378,14 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     add_solid_import_names(facts, entities, dialect, &mut symbol_names);
     build_timings.symbol_name_indexes = substage_started.elapsed();
     let substage_started = Instant::now();
-    let mut resolved_contracts =
-        resolve_accepted_contract_imports(facts, contracts, entities, dialect);
-    let bundled_returns = accepted_bundled_returns(facts, contracts);
+    let mut resolved_contracts = resolve_accepted_contract_imports(
+        facts,
+        contracts,
+        entities,
+        &symbol_names,
+        dialect,
+        &runtime_configuration,
+    );
     build_timings.contract_resolution = substage_started.elapsed();
     let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
     let semantic_lookup = SemanticLookup::new(
@@ -389,6 +406,11 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
+        development_feedback: if rule_options.development_feedback {
+            crate::development_feedback::models(facts, semantic_lookup, dialect)
+        } else {
+            Vec::new()
+        },
         static_defects: missing_contract_exports,
         contract_binding: resolved_contracts.counts,
         ..ProgramDraft::default()
@@ -406,7 +428,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         symbol_names: &symbol_names,
         semantic_lookup,
         resolved_contracts: &resolved_contracts,
-        bundled_returns: &bundled_returns,
         runtime: &rule_options.runtime,
     };
     let discover = move || {
@@ -501,7 +522,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         symbols_by_root: &typescript_indexes.symbols_by_root,
         contracted: &resolved_contracts.by_symbol,
         rule_options,
-        solid1x_rule_options: &rule_options.solid1x,
     };
     static_rules::static_prepass(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);
@@ -541,11 +561,28 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
+    // The generator's own `creates` proposal walk. It reads the same callee
+    // resolution, primitive vocabulary, and accepted-contract bindings every
+    // stage above reads, and it decides only whether a `creates: []` *proposal*
+    // may be made; the claim is proved or refused by the certifier's
+    // implementation census. See `crate::CreatesProposalWalk`.
+    draft.creates_proposal_walk = crate::creates_walk::collect_project(&analysis);
+    draft.merged_props_returns = crate::returns_walk::collect_merged_props_returns(&analysis);
+    draft.argument_container_returns =
+        crate::returns_walk::collect_argument_container_returns(&analysis);
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
     // after every producer has run and before unresolved obligations are
     // attributed to exported surfaces.
     draft.discard_deleted_static_diagnostics(facts);
+    crate::attribution::discharge_closed_program_export_dispatch(
+        facts,
+        semantic_lookup,
+        entities,
+        aliases,
+        &typescript_indexes.symbols_by_root,
+        &mut draft.static_defects,
+    );
     // Every stage that can file an unresolved obligation has run, so the
     // attribution question is answerable exactly once, over the final defect
     // list, rather than per stage over a partial one.
@@ -557,7 +594,8 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         &typescript_indexes.symbols_by_root,
         &draft.static_defects,
     );
-    let program = draft.into_program(factory_instances, obligation_reach);
+    let mut program = draft.into_program(factory_instances, obligation_reach);
+    program.runtime_configuration = runtime_configuration;
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
     build_timings.total = total_started.elapsed();
     Ok((program, build_timings))

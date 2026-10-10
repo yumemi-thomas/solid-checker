@@ -1,5 +1,9 @@
 RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
+# This producer/certification label is not checker implementation identity.
+# Daemon sockets and response handshakes bind the immutable loaded-image build
+# identity (Mach-O UUID / Linux executing-inode digest), so same-path rebuilds
+# with `dev` select a new actor without reading a replaceable executable path.
 RUST_MANIFEST := rust/Cargo.toml
 BUN ?= bun
 # nextest is an optional local accelerator. Keep the built-in runner as the
@@ -10,7 +14,80 @@ TYPEFACTS_CERTIFICATION_ENV = \
 	SOLID_TYPEFACTS_CERTIFICATION_SHA256="sha256:$$(shasum -a 256 bin/solid-typefacts | awk '{print $$1}')" \
 	SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256="sha256:$$(node scripts/typefacts-source-identity.mjs --build-id "$(SOLID_CHECKER_BUILD_ID)" --digest)"
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
+# The runtime-probe harness image and the Node runtime it is launched with.
+# Both are compiled into the verifier; a build without them refuses probe
+# authority, so a nonempty probe-gate schedule cannot certify at all rather
+# than certifying an unvetoed closure.
+#
+# PROBE_NODE must name the *real path* of the Node executable, because the
+# adapter refuses a symlink: a symlink is a name that can be repointed at other
+# bytes after the pin was taken. Override it to pin a different interpreter
+# (`make PROBE_NODE=/usr/local/bin/node …`); CI pins whichever `node` its
+# toolchain step installed, which is what the default expression resolves.
+PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
+# Certification adapters use this variable, while the native build and tracers
+# use PROBE_NODE. Keep both on the executable whose bytes the build pins;
+# resolving PATH again can select a launcher shim instead of that executable.
+export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
+#
+# `PROBE_NODE` is exported alongside the digests, not only consumed here: the
+# probe-gate tracers and `scripts/check-bundled-contracts.mjs` would otherwise
+# re-resolve `node` from `PATH` and could pin — or skip on — a different
+# executable than the one this build hashed.
+PROBE_HARNESS_ENV = \
+	PROBE_NODE="$(PROBE_NODE)" \
+	SOLID_CHECKER_PROBE_HARNESS_SHA256="sha256:$$(node scripts/probe-harness-source-identity.mjs --build-id "$(SOLID_CHECKER_BUILD_ID)" --write-stamp --digest)" \
+	SOLID_CHECKER_PROBE_NODE_SHA256="sha256:$$(shasum -a 256 "$(PROBE_NODE)" | awk '{print $$1}')" \
+	$(PROBE_BROWSER_ENV)
+
+# ADR 0033: the optional browser pin for the controlled browser execution
+# profile. `PROBE_BROWSER` names the *real path* of a headless-shell executable
+# (`make PROBE_BROWSER=/path/to/chrome-headless-shell …`); the pin compiled into
+# the verifier is the tree digest of its directory, in `hash_tree`'s framing
+# (scripts/probe-browser-identity.mjs). Empty by default: a build without it
+# refuses the browser profile only, and every Node profile is unaffected. The
+# browser tracers skip when it is unset and fail loudly under
+# `SOLID_CHECKER_EXPECT_BROWSER_PIN=1`, which is set only when it is.
+PROBE_BROWSER ?=
+PROBE_BROWSER_ENV = $(if $(PROBE_BROWSER),PROBE_BROWSER="$(PROBE_BROWSER)" SOLID_CHECKER_PROBE_BROWSER_SHA256="sha256:$$(node scripts/probe-browser-identity.mjs "$(PROBE_BROWSER)")" SOLID_CHECKER_EXPECT_BROWSER_PIN=1,)
+
+CERTIFICATION_ENV = $(TYPEFACTS_CERTIFICATION_ENV) $(PROBE_HARNESS_ENV)
+
+# Turns a silently skipped probe assertion into a loud failure, exactly as
+# `scripts/verify.sh` does. Every probe-gate tracer returns early when the
+# binary was compiled without the pins or when no Node executable can be
+# resolved, so the fast loop would otherwise report a green run that asserted
+# nothing about the binding.
+#
+# Conditional on `PROBE_NODE`, which is empty when `node` is not installed: on
+# such a machine the pins cannot be computed at all, so demanding them would
+# fail the build rather than the assertion. **That is the stated limit** — a
+# `make test-rust` without Node still skips every tracer, and only
+# `scripts/verify.sh` (which exits 127 without Node) closes it.
+PROBE_EXPECT_PINS = $(if $(PROBE_NODE),SOLID_CHECKER_EXPECT_PROBE_PINS=1,)
+
+# The published archives the Solid 2.0 negative table's implementation-audited
+# rows quote by byte range. The cited ranges are checked into
+# `rust/crates/solid-dialect/audited-slices/` and their digests are verified
+# with no install; this arms the stronger arm, which re-reads the real archive
+# and asserts the checked-in slice is still exactly those bytes of the pinned
+# file. `PROBE_EXPECT_PINS` above makes rc.3's absence a loud failure, so any
+# target that sets that must set this too -- which is why `test-rust` depends on
+# `audited-archives-provision` (idempotent: it short-circuits on an archive
+# whose stamp and `package.json` digest already match
+# `rust/crates/solid-dialect/audited-archives.json`). One root per release,
+# because the test reads one variable per release; rc.6 and rc.9 are armed here
+# too, so a default run reads every cited archive rather than only rc.3's.
+#
+# Not the tsc-oracle install: that is the *audited release* and moves with it,
+# while a row's archive stays those bytes for as long as the row does.
+ARCHIVES_ROOT = $(CURDIR)/rust/target/audited-archives/solid-v2
+ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.3/node_modules" \
+  SOLID_CHECKER_RC6_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.6/node_modules" \
+  SOLID_CHECKER_RC9_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.9/node_modules" \
+  SOLID_CHECKER_RC13_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.13/node_modules"
+
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision audited-archives-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -21,33 +98,75 @@ build-typefacts:
 
 build-rust: build-typefacts
 	mkdir -p bin
-	$(TYPEFACTS_CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
 	cp rust/target/debug/solid-checker-rust bin/solid-checker-rust
 
-# A fresh source build for gates. Unlike build-rust this does not rebuild the
-# pinned TypeFacts producer or overwrite the packaged/check-in binary under bin/.
+# A fresh source build for gates. Checks the producer stamp first and leaves
+# the packaged checker under bin/ untouched.
 build-checker-debug: build-typefacts
-	$(TYPEFACTS_CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
-	  -p solid-facts-backend --bin solid-checker-rust
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
+	  -p solid-facts-backend --bin solid-checker-rust --bin solid-contract-authorize
 
 # A fresh optimized checker for performance measurements. Like the debug gate
 # build, this leaves the checked-in packaged binary under bin/ untouched.
 build-checker-release: build-typefacts
-	$(TYPEFACTS_CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
 	  -p solid-facts-backend --bin solid-checker-rust
 
 package: build-typefacts
-	$(TYPEFACTS_CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) scripts/package-rust.mjs --output dist/solid-checker
 
 test: test-rust test-cli
 
-test-rust: build-typefacts
-	$(TYPEFACTS_CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
+test-rust: build-typefacts audited-archives-provision
+	$(CERTIFICATION_ENV) $(PROBE_EXPECT_PINS) $(ARCHIVE_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
+
+# The probe-harness binding on its own, for the fast loop and for
+# `verify-delta`'s harness-script row.
+#
+# It must go through this Makefile rather than a bare `cargo test`: the two
+# harness digests are read with `option_env!`, so a bare invocation compiles a
+# binary that refuses probe authority and turns every assertion below into an
+# early return. The `probe` filter selects `probe_harness::tests::*`, the
+# `runtime_probes` evaluator tests, and `contract_certification::tests::the_probe_gate_tracer_*`.
+test-probe-harness: build-typefacts
+	$(CERTIFICATION_ENV) $(PROBE_EXPECT_PINS) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --lib probe
 
 test-cli:
 	$(BUN) install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
 	$(BUN) run --cwd packages/cli test
+
+# Exact/filter-based library tests, with the same certification inputs as the
+# full suite. The driver rejects missing or empty selections before testing.
+# Enables the repository's tracked git hooks. `core.hooksPath` is local
+# config, so a repository cannot turn its own hooks on — every clone runs this
+# once. The only hook today refuses a commit staging a file over 5 MB.
+hooks:
+	git config core.hooksPath .githooks
+	@echo "git hooks enabled from .githooks"
+
+.PHONY: hooks
+
+.PHONY: test-focused
+test-focused: export TEST := $(TEST)
+test-focused: export TEST_EXACT := $(if $(TEST_EXACT),$(TEST_EXACT),0)
+test-focused: export TEST_PACKAGE := $(if $(TEST_PACKAGE),$(TEST_PACKAGE),solid-facts-backend)
+test-focused: export SOLID_CHECKER_BUILD_ID := $(SOLID_CHECKER_BUILD_ID)
+test-focused:
+	$(BUN) scripts/test-focused.mjs
+
+.PHONY: verify-fast
+verify-fast: build-typefacts
+	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path $(RUST_MANIFEST) --all -- --check
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path $(RUST_MANIFEST) --workspace --all-targets -- -D warnings
+
+.PHONY: ecosystem-package
+ecosystem-package: export PACKAGE := $(PACKAGE)
+ecosystem-package: export ECOSYSTEM_PROFILE := $(if $(ECOSYSTEM_PROFILE),$(ECOSYSTEM_PROFILE),release)
+ecosystem-package: export SOLID_CHECKER_BUILD_ID := $(SOLID_CHECKER_BUILD_ID)
+ecosystem-package:
+	$(BUN) scripts/ecosystem-benchmark/package.mjs
 
 verify:
 	scripts/verify.sh
@@ -92,6 +211,12 @@ verify-delta:
 # to run on a version mismatch.
 tsc-oracle-provision:
 	$(BUN) scripts/tsc-oracle.mjs provision --dialect all
+
+# The archives the negative rows quote, each fetched at its exact version and
+# refused unless its tarball hashes to the integrity pinned in
+# rust/crates/solid-dialect/audited-archives.json.
+audited-archives-provision:
+	$(BUN) scripts/audited-archives.mjs provision
 
 # Needs the checker as well as the compiler: each case declares what TypeScript
 # says *and* what this checker says about the same bytes.
@@ -141,9 +266,10 @@ contract-differential: build-checker-debug tsc-oracle-provision
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/contract-differential.mjs
 
 contract-conformance:
-	$(BUN) scripts/check-bundled-contracts.mjs
+	PROBE_NODE="$(PROBE_NODE)" $(BUN) scripts/check-bundled-contracts.mjs
 	$(BUN) scripts/check-contract-pins.mjs
 	$(BUN) scripts/dialect-manifests.mjs check-composed-contracts
+	$(BUN) scripts/author-contracts.mjs check
 
 # Both targets replay the checked normalized authorities through the ordinary
 # proof-and-receipt bundle issuer. Registry pin verification remains a separate
@@ -199,10 +325,251 @@ ecosystem-sentinel:
 # Certification children share rust/target/registry-cache so the measured
 # wall time is the checker's, not the registry's; --no-registry-cache
 # restores fetch-everything-fresh acquisition.
+# Both certifying targets hand the runner the checked-in recipe corpus
+# (scripts/ecosystem-benchmark/probe-recipes): a `creates` candidate whose claim
+# a recipe names is vetoed and closed, one no recipe names is served by a
+# synthesized veto or withheld by name (ADR 0036). Without it every candidate in
+# the corpus was withheld as `noRecipe` (1664 on 2026-09-05) and the pinned
+# report described no closure at all.
+ECOSYSTEM_PROBE_RECIPES := scripts/ecosystem-benchmark/probe-recipes
+
 ecosystem-benchmark: build-checker-release
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 --attempt-certification \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 1800 --attempt-certification \
+	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" \
 	  --thresholds scripts/ecosystem-benchmark/phase16-thresholds.json
 
-.PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark
+# The certification regression gate: the same full run as ecosystem-benchmark,
+# compared against the pinned benchmarks/ecosystem/report.json and failing on
+# any row the pin certified that this commit does not. It writes its reports
+# under rust/target so the pin is never moved by a gate run; repinning stays a
+# deliberate `make ecosystem-benchmark`. This is what a change to the certifier,
+# the producer, the generator, or the runner runs before it lands: `make verify`
+# does not include it (it needs the registry and several minutes of compute),
+# and the three-row corpus cannot see a receipt lost elsewhere in the corpus --
+# twelve were lost between the 2026-09-04 pin and 01b84ada with every gate green.
+ecosystem-regression: build-checker-release
+	mkdir -p "$(CURDIR)/rust/target/ecosystem-regression"
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 1800 --attempt-certification \
+	  --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" \
+	  --baseline benchmarks/ecosystem/report.json \
+	  --thresholds scripts/ecosystem-benchmark/certification-regression-thresholds.json \
+	  --json "$(CURDIR)/rust/target/ecosystem-regression/report.json" \
+	  --markdown "$(CURDIR)/rust/target/ecosystem-regression/report.md"
+
+# The coverage census: what a consumer with contracts for the packages they
+# import actually gets told, measured against the pinned SC9005 demand sweep.
+#
+# Two halves on purpose. This target owns the slow one -- certifying every
+# package the demand names, into a catalog tree under rust/target -- and
+# `scripts/contract-coverage-census.mjs` owns the measurement, which is then
+# deterministic and re-runnable against the same tree in under a second:
+#
+#   bun scripts/contract-coverage-census.mjs --catalogs rust/target/coverage-census
+#
+# The package list is derived from the demand file rather than restated here,
+# so the denominator cannot drift away from the numerator. The run keeps its
+# temporary trees where the OS puts them and the census reads their locations
+# back out of the report: forcing TMPDIR inside the repository makes the probe
+# harness refuse every gated row ("probe write isolation was violated"), which
+# cost ten of eighteen packages on the first attempt.
+#
+# The second measurement over the same run is `probe-recipe-addressing.mjs`:
+# what the corpus of hand-written runtime-probe recipes still addresses. A
+# recipe is addressed by a content digest over its exact claim, so a generator
+# change silently orphans it -- the candidate is withheld as `no recipe in
+# corpus`, the row still certifies, and the export's summary goes degenerate.
+# It ran first on 2026-09-16 and found 1 of 325 recipes still addressing
+# anything; after the 2026-09-18 authoring pass it is 80 of 366, and the
+# consumer call sites it costs fell from 343 to 24. Both halves are pinned under
+# `benchmarks/ecosystem/`.
+#
+# Not in `make verify`, for `ecosystem-regression`'s reasons: it needs the
+# registry and minutes of compute. Run it when a change could move what a
+# contract *says*, as opposed to whether it certifies at all.
+#
+# **Never add `--conditions` here.** The census refuses to pin a run that used
+# one, because a requested export-condition set changes which bytes every row is
+# certified about rather than which rows ran -- `--conditions node` makes
+# `@solid-primitives/platform`'s gates complete, about its server build, where
+# the default set cannot run them at all. The flag exists on the runner for
+# measuring that trade-off; this target measures the baseline.
+#
+# `--solid 2` since 2026-09-16. It was `--solid 1`, and after the Solid 1.x
+# retirement (ADR 0110) that run would refuse every package with SC9013 and
+# report nothing. **The first `solid2` run is a new baseline, not a
+# continuation**: it measures a narrower corpus, so every percentage rises
+# without a single new statement being proven (ADR 0110 s 5). The census
+# refuses to compare across that boundary -- the pin records which corpus
+# measured it -- so the first run fails until it is re-pinned deliberately with
+# `--update`, and the 1.x-era numbers stay in git history as the evidence they
+# are.
+# The census certifies once host-free and once per host in TIER_HOSTS (ADR
+# 0140). The census and recipe-addressing pins gate the host-free run alone.
+# The per-host runs fed the compiled-in tier, retired by ADR 0228. Pass
+# TIER_HOSTS= for the host-free run alone.
+TIER_HOSTS ?= browser node
+
+contract-coverage-census: build-checker-release
+	mkdir -p "$(CURDIR)/rust/target/coverage-census"
+	@set -e; packages="$$($(BUN) scripts/contract-coverage-census.mjs --print-packages \
+	    | sed 's/^/--package /' | tr '\n' ' ')"; \
+	for host in none $(TIER_HOSTS); do \
+	  if [ "$$host" = none ]; then suffix=""; hostflag=""; else suffix="-$$host"; hostflag="--host $$host"; fi; \
+	  SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	    SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	    $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
+	    --attempt-certification --recover-entrypoints $$hostflag \
+	    --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
+	    $$packages \
+	    --json "$(CURDIR)/rust/target/coverage-census/run$$suffix.json" \
+	    --markdown "$(CURDIR)/rust/target/coverage-census/run$$suffix.md"; \
+	done
+	$(BUN) scripts/contract-coverage-census.mjs \
+	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
+	$(BUN) scripts/probe-recipe-addressing.mjs \
+	  --run "$(CURDIR)/rust/target/coverage-census/run.json"
+
+# The north-star certification metric: the share of the export surface of the
+# top 30 Solid 2 packages by weekly downloads that certifies clean, per package
+# and download-weighted, with every other export ranked by what blocks it.
+# The corpus is pinned in scripts/ecosystem-benchmark/certification-metric-corpus.json
+# (re-pin with `bun scripts/certification-metric.mjs --select`, network); the
+# probe list is derived from it, and --print-probes refuses a manifest that no
+# longer agrees with the pin. The run keeps its trees only long enough for the
+# measurement to read the certified catalogs, then --clean-retained removes
+# them; pass CERTIFICATION_METRIC_KEEP=1 to keep them for investigation.
+# Same flags as the census run; not in `make verify` (registry, minutes).
+#
+# ADR 0140: the corpus is certified once host-free (`run.json`, `metric.json`,
+# what a consumer that declares no host receives) and once per host in
+# CERTIFICATION_METRIC_HOSTS (`run-<host>.json`, `metric-<host>.json`, what a
+# consumer declaring that host receives); `metric-hosts.md` puts them side by
+# side. Pass CERTIFICATION_METRIC_HOSTS= to measure the host-free run alone.
+CERTIFICATION_METRIC_OUT := $(CURDIR)/rust/target/certification-metric
+CERTIFICATION_METRIC_HOSTS ?= browser node
+
+certification-metric: build-checker-release
+	mkdir -p "$(CERTIFICATION_METRIC_OUT)"
+	@probes="$$($(BUN) scripts/certification-metric.mjs --print-probes)" || exit 1; \
+	summary=""; \
+	for host in none $(CERTIFICATION_METRIC_HOSTS); do \
+	  if [ "$$host" = none ]; then suffix=""; hostflag=""; else suffix="-$$host"; hostflag="--host $$host"; fi; \
+	  SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	    SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	    $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
+	    --attempt-certification --recover-entrypoints \
+	    --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp $$hostflag \
+	    $$(printf '%s\n' "$$probes" | sed 's/^/--probe /' | tr '\n' ' ') \
+	    --json "$(CERTIFICATION_METRIC_OUT)/run$$suffix.json" \
+	    --markdown "$(CERTIFICATION_METRIC_OUT)/run$$suffix.md" || exit 1; \
+	  $(BUN) scripts/certification-metric.mjs --run "$(CERTIFICATION_METRIC_OUT)/run$$suffix.json" \
+	    --json "$(CERTIFICATION_METRIC_OUT)/metric$$suffix.json" \
+	    --markdown "$(CERTIFICATION_METRIC_OUT)/metric$$suffix.md" \
+	    $(if $(CERTIFICATION_METRIC_KEEP),,--clean-retained) > /dev/null || exit 1; \
+	  summary="$$summary$${summary:+,}$(CERTIFICATION_METRIC_OUT)/metric$$suffix.json"; \
+	done; \
+	$(BUN) scripts/certification-metric.mjs --summarize-hosts "$$summary" \
+	  --markdown "$(CERTIFICATION_METRIC_OUT)/metric-hosts.md"
+
+.PHONY: certification-metric
+
+# The @solid-primitives checkpoint (owner, 2026-09-28): every @solid-primitives
+# package with a Solid 2 release certified host free and per host (ADR 0140)
+# and in the accepted tier, every export accounted for, and misuse of each
+# primitive reporting the right finding against the real published typings.
+# The corpus is pinned in scripts/ecosystem-benchmark/primitives-checkpoint-corpus.json
+# (re-pin with `bun scripts/primitives-checkpoint.mjs --select`, network and
+# `gh`); the misuse ledger is fixtures/primitives-misuse/cases.json. Each host
+# is certified with the certification metric's flags, measured, and its
+# retained trees removed before the next host starts (pass
+# PRIMITIVES_CHECKPOINT_KEEP=1 to keep them). The misuse ledger installs each
+# case's package from the registry. Not in `make verify` (registry, minutes).
+PRIMITIVES_CHECKPOINT_OUT := $(CURDIR)/rust/target/primitives-checkpoint
+
+primitives-checkpoint: build-checker-release
+	mkdir -p "$(PRIMITIVES_CHECKPOINT_OUT)"
+	@probes="$$($(BUN) scripts/primitives-checkpoint.mjs --print-probes)" || exit 1; \
+	measured=""; \
+	for host in none browser node; do \
+	  if [ "$$host" = none ]; then suffix=""; hostflag=""; else suffix="-$$host"; hostflag="--host $$host"; fi; \
+	  start=$$(date +%s); \
+	  SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	    SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	    $(BUN) scripts/ecosystem-benchmark/run.mjs --solid 2 --timeout 1800 \
+	    --attempt-certification --recover-entrypoints \
+	    --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp $$hostflag \
+	    $$(printf '%s\n' "$$probes" | sed 's/^/--probe /' | tr '\n' ' ') \
+	    --json "$(PRIMITIVES_CHECKPOINT_OUT)/run$$suffix.json" \
+	    --markdown "$(PRIMITIVES_CHECKPOINT_OUT)/run$$suffix.md" || exit 1; \
+	  echo "primitives-checkpoint: host $$host certified in $$(( $$(date +%s) - start )) s"; \
+	  $(BUN) scripts/primitives-checkpoint.mjs --measure "$(PRIMITIVES_CHECKPOINT_OUT)/run$$suffix.json" \
+	    --json "$(PRIMITIVES_CHECKPOINT_OUT)/measure$$suffix.json" \
+	    $(if $(PRIMITIVES_CHECKPOINT_KEEP),,--clean-retained) || exit 1; \
+	  measured="$$measured$${measured:+,}$(PRIMITIVES_CHECKPOINT_OUT)/measure$$suffix.json"; \
+	done; \
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	  $(BUN) scripts/primitives-checkpoint.mjs --misuse --json "$(PRIMITIVES_CHECKPOINT_OUT)/misuse.json" || exit 1; \
+	$(BUN) scripts/primitives-checkpoint.mjs --report "$$measured" \
+	  --misuse-results "$(PRIMITIVES_CHECKPOINT_OUT)/misuse.json" \
+	  --json "$(PRIMITIVES_CHECKPOINT_OUT)/checkpoint.json" \
+	  --markdown "$(PRIMITIVES_CHECKPOINT_OUT)/checkpoint.md"
+
+.PHONY: primitives-checkpoint
+
+# The primary package-contract metric (owner decision 2026-09-28): of the
+# third-party import sites of real Solid 2 applications, the share the checker
+# certifies, per app, pooled and per package, with every other site ranked by
+# what blocks it. The corpus is pinned in
+# scripts/ecosystem-benchmark/app-import-corpus.json (re-pin with
+# `bun scripts/app-import-metric.mjs --pin <draft.json>`). Each app is fetched
+# at its commit, installed frozen with scripts off (reused while the lockfile
+# digest is unchanged), and analysed one-shot with the release checker as
+# shipped and with --no-bundled-contracts. Pass
+# APP_IMPORT_PACKAGE_METRIC=<metric.json> (a `make certification-metric`
+# output) to join open domains to the package side's causes, and
+# APP_IMPORT_CLEAN=1 to delete the clones afterwards (the extracted sites stay,
+# so `--measure` still works). Network; not in `make verify`.
+APP_IMPORT_METRIC_OUT := $(CURDIR)/rust/target/app-import-metric
+
+app-import-metric: build-checker-release
+	$(BUN) scripts/app-import-metric.mjs --run --work "$(APP_IMPORT_METRIC_OUT)" \
+	  --checker "$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  --typefacts "$(CURDIR)/bin/solid-typefacts" \
+	  $(if $(APP_IMPORT_PACKAGE_METRIC),--package-metric "$(APP_IMPORT_PACKAGE_METRIC)",) \
+	  $(if $(APP_IMPORT_CLEAN),--clean,) > /dev/null
+
+.PHONY: app-import-metric
+
+# Delivery-only certification runs, one per reviewed consumer environment in
+# scripts/ecosystem-benchmark/consumer-environments.json: each certifies the
+# listed packages, cloned from their solid2 manifest rows, in the exact tree
+# that consumer installs (its runtime tuple and closure pins), with the census
+# run's own flags so the two differ only in environment. Writes
+# rust/target/consumer-environments/<id>/run.json. The census refuses these
+# runs; they are measured by re-sweeping the consumer each one names.
+CONSUMER_ENVIRONMENT_RUNS := $(CURDIR)/rust/target/consumer-environments
+
+consumer-environment-runs: build-checker-release
+	@set -e; \
+	for id in $$($(BUN) scripts/ecosystem-benchmark/run.mjs --print-consumer-environments); do \
+	  mkdir -p "$(CONSUMER_ENVIRONMENT_RUNS)/$$id"; \
+	  for host in none $(TIER_HOSTS); do \
+	    if [ "$$host" = none ]; then suffix=""; hostflag=""; else suffix="-$$host"; hostflag="--host $$host"; fi; \
+	    SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	      SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	      $(BUN) scripts/ecosystem-benchmark/run.mjs --consumer-environment "$$id" \
+	      --timeout 1800 --attempt-certification --recover-entrypoints $$hostflag \
+	      --probe-recipe-corpus "$(ECOSYSTEM_PROBE_RECIPES)" --keep-temp \
+	      --json "$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run$$suffix.json" \
+	      --markdown "$(CONSUMER_ENVIRONMENT_RUNS)/$$id/run$$suffix.md"; \
+	  done; \
+	done
+
+.PHONY: contract-coverage-census consumer-environment-runs
+
+.PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark ecosystem-regression

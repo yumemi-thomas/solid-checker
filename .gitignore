@@ -1,4 +1,9 @@
 /bin/
+# Build-provenance stamp for the runtime-probe harness image, written by
+# scripts/probe-harness-source-identity.mjs --write-stamp. Generated like
+# bin/solid-typefacts.buildinfo, and never a root of trust on its own: the
+# probe adapter compares it with the manifest digest compiled into the verifier.
+/packages/cli/probe-harness.buildinfo
 # Per-user agent state; .claude/settings.json, skills, and hooks are shared.
 .claude/settings.local.json
 .claude/worktrees/
@@ -10,23 +15,51 @@ fixtures/upstream-parity/.staging/
 **/.DS_Store
 **/target/
 **/node_modules/
+!fixtures/reactive-ir/node_modules/
+!fixtures/reactive-ir/node_modules/@solidjs/
+!fixtures/reactive-ir/node_modules/@solidjs/vite-plugin/
+!fixtures/reactive-ir/node_modules/@solidjs/vite-plugin/**
+!fixtures/reactive-ir/inferred-host-metadata/node_modules/
+!fixtures/reactive-ir/inferred-host-metadata/node_modules/**
+!fixtures/reactive-ir/inferred-host-metadata-published/node_modules/
+!fixtures/reactive-ir/inferred-host-metadata-published/node_modules/**
+!fixtures/reactive-ir/inferred-host-alias/node_modules/
+!fixtures/reactive-ir/inferred-host-alias/node_modules/**
+!fixtures/reactive-ir/inferred-host-alias-unresolved/node_modules/
+!fixtures/reactive-ir/inferred-host-alias-unresolved/node_modules/**
+!fixtures/reactive-ir/inferred-host-dynamic/node_modules/
+!fixtures/reactive-ir/inferred-host-dynamic/node_modules/**
+!fixtures/reactive-ir/inferred-host-dynamic-unknown/node_modules/
+!fixtures/reactive-ir/inferred-host-dynamic-unknown/node_modules/**
+!fixtures/reactive-ir/inferred-host-workspace/node_modules/
+!fixtures/reactive-ir/inferred-host-workspace/node_modules/**
+!fixtures/reactive-ir/inferred-host-workspace-published/node_modules/
+!fixtures/reactive-ir/inferred-host-workspace-published/node_modules/**
+!fixtures/reactive-ir/standard-runtime-configuration/node_modules/
+!fixtures/reactive-ir/standard-runtime-configuration/node_modules/**
 !rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-v1/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-v1/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-future-major/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-future-major/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-experimental/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-experimental/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc9/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc9/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc13/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc13/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc8/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc8/node_modules/**
 # Contract integration tests use small, hand-written packages as fixtures.
 !fixtures/reactive-ir/package-*/node_modules/
 !fixtures/reactive-ir/package-*/node_modules/**
-!fixtures/reactive-ir/upstream-divergences/node_modules/
-!fixtures/reactive-ir/upstream-divergences/node_modules/**
-!fixtures/reactive-ir/array-shape-v1/node_modules/
-!fixtures/reactive-ir/array-shape-v1/node_modules/**
-!fixtures/reactive-ir/v1-reactivity/node_modules/
-!fixtures/reactive-ir/v1-reactivity/node_modules/**
-!fixtures/reactive-ir/v1-write-scope/node_modules/
-!fixtures/reactive-ir/v1-write-scope/node_modules/**
+!fixtures/package-contracts/props-split-vocabulary/node_modules/
+!fixtures/package-contracts/props-split-vocabulary/node_modules/**
 !fixtures/package-contracts/external-reexport/node_modules/
 !fixtures/package-contracts/external-reexport/node_modules/**
-!fixtures/package-contracts/dialect-detection/node_modules/
-!fixtures/package-contracts/dialect-detection/node_modules/**
+!fixtures/package-contracts/foreign-declaration-reexport/node_modules/
+!fixtures/package-contracts/foreign-declaration-reexport/node_modules/**
 !fixtures/package-contracts/class-expression-kind/node_modules/
 !fixtures/package-contracts/class-expression-kind/node_modules/**
 !fixtures/package-contracts/carried-value-kind/node_modules/
@@ -34,17 +67,17 @@ fixtures/upstream-parity/.staging/
 # The bundled-contract consumer resolves a real package name; its stub is the
 # only thing that makes the installed-version and callback-timing proofs
 # reproducible from a clean checkout.
-!fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/
-!fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/**
-!fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/
-!fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/**
-!fixtures/reactive-ir/bundled-rootless-consumer/node_modules/
-!fixtures/reactive-ir/bundled-rootless-consumer/node_modules/**
 !fixtures/package-contracts/shorthand-block-scope/node_modules/
 !fixtures/package-contracts/shorthand-block-scope/node_modules/**
+!fixtures/package-contracts/composed-operation-provenance/node_modules/
+!fixtures/package-contracts/composed-operation-provenance/node_modules/**
+!fixtures/package-contracts/composed-operation-shadowed-target/node_modules/
+!fixtures/package-contracts/composed-operation-shadowed-target/node_modules/**
 # Dialect detection reads the installed solid-js version from these stubs.
 !fixtures/reactive-ir/dialect-solid-*/node_modules/
 !fixtures/reactive-ir/dialect-solid-*/node_modules/**
+!fixtures/reactive-ir/optimistic-tuple-destructure/node_modules/
+!fixtures/reactive-ir/optimistic-tuple-destructure/node_modules/**
 !fixtures/reactive-ir/jsx-census-gap-*/node_modules/
 !fixtures/reactive-ir/jsx-census-gap-*/node_modules/**
 !fixtures/reactive-ir/jsx-void-child-divergence-*/node_modules/
@@ -53,53 +86,110 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/jsx-nested-children-attribute-*/node_modules/**
 !fixtures/reactive-ir/eslint-compat/node_modules/
 !fixtures/reactive-ir/eslint-compat/node_modules/**
-!fixtures/reactive-ir/store-subpath/node_modules/
-!fixtures/reactive-ir/store-subpath/node_modules/**
 !fixtures/reactive-ir/shared-reactivity-v2/node_modules/
 !fixtures/reactive-ir/shared-reactivity-v2/node_modules/**
-!fixtures/reactive-ir/no-owner-v1/node_modules/
-!fixtures/reactive-ir/no-owner-v1/node_modules/**
 !fixtures/reactive-ir/namespace-import-v2/node_modules/
 !fixtures/reactive-ir/namespace-import-v2/node_modules/**
+# rc.9 dialect stubs: the three callback forms rc.9 added (dynamic's static
+# option, omit's predicate, until) are only valid against rc.9's typings.
+!fixtures/reactive-ir/rc9-*/node_modules/
+!fixtures/reactive-ir/rc9-*/node_modules/**
+!fixtures/reactive-ir/fp-exec-*/node_modules/
+!fixtures/reactive-ir/fp-exec-*/node_modules/**
+!fixtures/package-contracts/rc9-callback-forms/node_modules/
+!fixtures/package-contracts/rc9-callback-forms/node_modules/**
 !fixtures/reactive-ir/solid2-precision/node_modules/
 !fixtures/reactive-ir/solid2-precision/node_modules/**
+!fixtures/reactive-ir/store-root-write-rc3/node_modules/
+!fixtures/reactive-ir/store-root-write-rc3/node_modules/**
+!fixtures/reactive-ir/store-root-write-rc9/node_modules/
+!fixtures/reactive-ir/store-root-write-rc9/node_modules/**
+!fixtures/reactive-ir/store-root-write-rc13/node_modules/
+!fixtures/reactive-ir/store-root-write-rc13/node_modules/**
+!fixtures/reactive-ir/setter-in-root-rc3/node_modules/
+!fixtures/reactive-ir/setter-in-root-rc3/node_modules/**
+!fixtures/reactive-ir/setter-in-root-rc9/node_modules/
+!fixtures/reactive-ir/setter-in-root-rc9/node_modules/**
+!fixtures/reactive-ir/write-scope-roots-rc3/node_modules/
+!fixtures/reactive-ir/write-scope-roots-rc3/node_modules/**
+!fixtures/reactive-ir/write-scope-roots-rc9/node_modules/
+!fixtures/reactive-ir/write-scope-roots-rc9/node_modules/**
+!fixtures/reactive-ir/write-scope-optimistic-store-rc0/node_modules/
+!fixtures/reactive-ir/write-scope-optimistic-store-rc0/node_modules/**
+!fixtures/reactive-ir/write-scope-optimistic-store-rc3/node_modules/
+!fixtures/reactive-ir/write-scope-optimistic-store-rc3/node_modules/**
+!fixtures/reactive-ir/flush-read-role/node_modules/
+!fixtures/reactive-ir/flush-read-role/node_modules/**
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/
 !fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/**
 !fixtures/reactive-ir/ported-structure-v2/node_modules/
 !fixtures/reactive-ir/ported-structure-v2/node_modules/**
-# solid-1x-sources selects the 1.x catalog from this stub. Without the
-# exception the stub is untracked, the fixture falls back to the 2.0 default in
-# CI, and its 1.x-only source factories stop being exercised at all.
-!fixtures/reactive-ir/solid-1x-sources/node_modules/
-!fixtures/reactive-ir/solid-1x-sources/node_modules/**
-!fixtures/reactive-ir/import-location/node_modules/
-!fixtures/reactive-ir/import-location/node_modules/**
-!fixtures/engine/eslint-reactivity-v1/node_modules/
-!fixtures/engine/eslint-reactivity-v1/node_modules/**
-!fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/
-!fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/**
-!fixtures/reactive-ir/summary-callback-extent/node_modules/
-!fixtures/reactive-ir/summary-callback-extent/node_modules/**
+!fixtures/reactive-ir/release-triple-*/node_modules/
+!fixtures/reactive-ir/release-triple-*/node_modules/**
+# Each of these stubs is the installed `solid-js@2.0.0-rc.3` the fixture's
+# imports resolve through. Without the exception the stub is untracked, and in
+# CI the fixture resolves no `solid-js` at all: dialect selection falls back to
+# the default rather than reading a manifest, and the re-export and
+# first-party-attribution claims below resolve against nothing. Coverage's
+# `checkDialectStubs` fails on the untracked stub, which is what catches it.
 !fixtures/package-contracts/solid-reexport/node_modules/
 !fixtures/package-contracts/solid-reexport/node_modules/**
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/**
-!fixtures/package-contracts/callback-slot-props-forwarding/node_modules/
-!fixtures/package-contracts/callback-slot-props-forwarding/node_modules/**
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/**
+!fixtures/package-contracts/callback-untracked-wrapper/node_modules/
+!fixtures/package-contracts/callback-untracked-wrapper/node_modules/**
+!fixtures/package-contracts/render-effect-apply-callback/node_modules/
+!fixtures/package-contracts/render-effect-apply-callback/node_modules/**
+!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/
+!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/**
+!fixtures/package-contracts/forwarded-local-untrack-wrapper/node_modules/
+!fixtures/package-contracts/forwarded-local-untrack-wrapper/node_modules/**
+!fixtures/package-contracts/escaping-private-helper/node_modules/
+!fixtures/package-contracts/escaping-private-helper/node_modules/**
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/**
+!fixtures/package-contracts/implementation-census-creates/node_modules/
+!fixtures/package-contracts/implementation-census-creates/node_modules/**
+!fixtures/package-contracts/value-exports/node_modules/
+!fixtures/package-contracts/value-exports/node_modules/**
+!fixtures/package-contracts/creates-decline-records/node_modules/
+!fixtures/package-contracts/creates-decline-records/node_modules/**
+!fixtures/package-contracts/host-constant-browser/node_modules/
+!fixtures/package-contracts/host-constant-browser/node_modules/**
+!fixtures/package-contracts/host-constant-free/node_modules/
+!fixtures/package-contracts/host-constant-free/node_modules/**
+!fixtures/package-contracts/host-constant-node/node_modules/
+!fixtures/package-contracts/host-constant-node/node_modules/**
+!fixtures/package-contracts/implementation-census-reads/node_modules/
+!fixtures/package-contracts/implementation-census-reads/node_modules/**
+!fixtures/package-contracts/implementation-census-reads-fresh-target/node_modules/
+!fixtures/package-contracts/implementation-census-reads-fresh-target/node_modules/**
+!fixtures/package-contracts/implementation-census-returns/node_modules/
+!fixtures/package-contracts/implementation-census-returns/node_modules/**
+!fixtures/package-contracts/signals-reexport-creates/node_modules/
+!fixtures/package-contracts/signals-reexport-creates/node_modules/**
+# The nested consumer whose own top-level `import "solid-js"` is what the
+# probe workspace's authenticated dependency closure has to resolve. Its stub
+# is copied into the private workspace and *run* there, so an untracked one
+# does not merely change the dialect in CI — it removes the only fixture that
+# proves a consumer recipe can import the package under test at all.
+!fixtures/package-contracts/implementation-census-creates/dependency-consumer/node_modules/
+!fixtures/package-contracts/implementation-census-creates/dependency-consumer/node_modules/**
+!fixtures/package-contracts/closed-domain-probe-gate/primitive-consumer/node_modules/
+!fixtures/package-contracts/closed-domain-probe-gate/primitive-consumer/node_modules/**
 # The dependency contract in this stub is the whole point of the fixture: it
 # advertises host conditions, so it only resolves when the generator passes the
 # analyzed target's export-map conditions through. Without this exception the
 # stub is untracked and the fixture silently stops pinning that in CI.
 !fixtures/package-contracts/torture-environment-conditions/node_modules/
 !fixtures/package-contracts/torture-environment-conditions/node_modules/**
-# These three pin unknown-claim attribution, and the obligation they turn on
-# only fires under the 1.x catalog: a PascalCase export with no JSX is a
-# *possible* component in 1.x and nothing at all under the 2.0 default. Without
-# the stub the fixtures still generate, still pass, and pin nothing.
+# These three pin unknown-claim attribution. The stub selects the dialect and
+# is otherwise unused by the exports under test (see the fixture READMEs), so
+# without it the fixtures still generate, still pass, and pin nothing. They
+# were repointed from 1.x to 2.0.0-rc.3 in the ADR 0110 retirement, and their
+# expectations were regenerated against 2.0 with the claim intact.
 !fixtures/package-contracts/unresolved-dispatch-attribution/node_modules/
 !fixtures/package-contracts/unresolved-dispatch-attribution/node_modules/**
 !fixtures/package-contracts/unresolved-dispatch-domains-control/node_modules/
@@ -111,13 +201,20 @@ fixtures/upstream-parity/.staging/
 # kind.
 !fixtures/package-contracts/unresolved-contract-export-attribution/node_modules/
 !fixtures/package-contracts/unresolved-contract-export-attribution/node_modules/**
+# ADR 0174: the same partial dependency contract, which opens every claim
+# domain of the exports beside a proven owner requirement.
+!fixtures/package-contracts/open-owner-requirements/node_modules/
+!fixtures/package-contracts/open-owner-requirements/node_modules/**
+# ADR 0173: an rc.9-faithful effect/cleanup stub for the owner-call cover.
+!fixtures/package-contracts/owner-call-cover/node_modules/
+!fixtures/package-contracts/owner-call-cover/node_modules/**
+!fixtures/package-contracts/owned-computation-callbacks/node_modules/
+!fixtures/package-contracts/owned-computation-callbacks/node_modules/**
 # Attribution-soundness fixtures. Each needs the solid-js stub for dialect
 # selection; uncaptured-source-return additionally needs the partial
 # `uncharted-helpers` contract, which is what makes its callee uncontracted.
 !fixtures/package-contracts/arrow-export-attribution/node_modules/
 !fixtures/package-contracts/arrow-export-attribution/node_modules/**
-!fixtures/package-contracts/escaping-private-helper/node_modules/
-!fixtures/package-contracts/escaping-private-helper/node_modules/**
 !fixtures/package-contracts/export-identity-join/node_modules/
 !fixtures/package-contracts/export-identity-join/node_modules/**
 !fixtures/package-contracts/parameter-member-forwarded/node_modules/
@@ -126,22 +223,25 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/callback-execution-boundary/node_modules/**
 !fixtures/package-contracts/destructured-parameter-callback/node_modules/
 !fixtures/package-contracts/destructured-parameter-callback/node_modules/**
+!fixtures/package-contracts/destructured-return-slot/node_modules/
+!fixtures/package-contracts/destructured-return-slot/node_modules/**
 !fixtures/package-contracts/unreached-private-obligation/node_modules/
 !fixtures/package-contracts/unreached-private-obligation/node_modules/**
 !fixtures/package-contracts/uncaptured-source-return/node_modules/
 !fixtures/package-contracts/uncaptured-source-return/node_modules/**
 !fixtures/package-contracts/declaration-sibling-reach/node_modules/
 !fixtures/package-contracts/declaration-sibling-reach/node_modules/**
+# ADR 0146: the solid-js stub is what lets the generator see an accessor.
+!fixtures/package-contracts/implementation-census-owned-signal-reads/node_modules/
+!fixtures/package-contracts/implementation-census-owned-signal-reads/node_modules/**
+!fixtures/package-contracts/implementation-census-memo-accessors/node_modules/
+!fixtures/package-contracts/implementation-census-memo-accessors/node_modules/**
 !fixtures/package-contracts/entry-reexport-identity/node_modules/
 !fixtures/package-contracts/entry-reexport-identity/node_modules/**
 !fixtures/package-contracts/conditional-returns-divergence/node_modules/
 !fixtures/package-contracts/conditional-returns-divergence/node_modules/**
 !fixtures/package-contracts/conditional-returns-divergence-both/node_modules/
 !fixtures/package-contracts/conditional-returns-divergence-both/node_modules/**
-!fixtures/package-contracts/callback-untracked-wrapper/node_modules/
-!fixtures/package-contracts/callback-untracked-wrapper/node_modules/**
-!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/
-!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/**
 !fixtures/package-contracts/multi-role-callback-parameter/node_modules/
 !fixtures/package-contracts/multi-role-callback-parameter/node_modules/**
 packages/wasm/browser.js
@@ -152,3 +252,137 @@ packages/wasm/solid-checker-wasm.wasi.cjs
 packages/wasm/solid-checker-wasm.wasm32-wasi*.wasm
 packages/wasm/wasi-worker*.mjs
 /.typefacts/
+
+# Bulk phase-21 measurement dumps. These are 20-70 MB machine-readable
+# artifacts of one measurement run each -- evidence a document cites, never an
+# input any code or gate reads. 63 of them were tracked before this rule
+# existed (961 MB, 21.3 M lines, 94% of the branch's whole diff), which is what
+# the name-based list here failed to prevent: it enumerated some names and
+# missed 42 others, and .gitignore never untracks what is already tracked.
+#
+# Structural now, not name-based, and the tracked copies were removed from the
+# index on 2026-09-17. The files stay on disk; regenerate rather than commit.
+# Documents citing one by relative link are citing a local artifact, not a
+# repository file.
+docs/package-contract-v2/phase21/*measurement.json
+!fixtures/package-contracts/class-creator-caller-creates/node_modules/
+!fixtures/package-contracts/class-creator-caller-creates/node_modules/**
+!fixtures/reactive-ir/fixed-structural-return-consumer/node_modules/
+!fixtures/reactive-ir/fixed-structural-return-consumer/node_modules/**
+!fixtures/reactive-ir/partial-structural-return-consumer/node_modules/
+!fixtures/reactive-ir/partial-structural-return-consumer/node_modules/**
+!fixtures/reactive-ir/package-effectful-member-consumer/node_modules/
+!fixtures/reactive-ir/package-effectful-member-consumer/node_modules/**
+!fixtures/reactive-ir/package-open-callbacks-eager-argument/node_modules/
+!fixtures/reactive-ir/package-open-callbacks-eager-argument/node_modules/**
+!fixtures/reactive-ir/package-own-tracked-read-consumer/node_modules/
+!fixtures/reactive-ir/package-own-tracked-read-consumer/node_modules/**
+
+# Callback-result provenance consumer fixture.
+!fixtures/reactive-ir/package-callback-result-consumer/node_modules/
+!fixtures/reactive-ir/package-callback-result-consumer/node_modules/**
+!fixtures/reactive-ir/package-member-receiver-consumer/node_modules/
+!fixtures/reactive-ir/package-member-receiver-consumer/node_modules/**
+!fixtures/reactive-ir/package-tracked-optional-callback-consumer/node_modules/
+!fixtures/reactive-ir/package-tracked-optional-callback-consumer/node_modules/**
+!fixtures/reactive-ir/package-mandatory-first-compute-consumer/node_modules/
+!fixtures/reactive-ir/package-mandatory-first-compute-consumer/node_modules/**
+!fixtures/reactive-ir/package-strict-read-cleared-consumer/node_modules/
+!fixtures/reactive-ir/package-strict-read-cleared-consumer/node_modules/**
+!fixtures/reactive-ir/forwarded-event-prop/node_modules/
+!fixtures/reactive-ir/forwarded-event-prop/node_modules/**
+!fixtures/reactive-ir/forwarded-tracked-compute/node_modules/
+!fixtures/reactive-ir/forwarded-tracked-compute/node_modules/**
+!fixtures/reactive-ir/summary-direct-read/node_modules/
+!fixtures/reactive-ir/summary-direct-read/node_modules/**
+!fixtures/reactive-ir/feedback-tiers/node_modules/
+!fixtures/reactive-ir/feedback-tiers/node_modules/**
+!fixtures/reactive-ir/feedback-tiers-open/node_modules/
+!fixtures/reactive-ir/feedback-tiers-open/node_modules/**
+!fixtures/reactive-ir/closed-export-member-dispatch/node_modules/
+!fixtures/reactive-ir/closed-export-member-dispatch/node_modules/**
+!fixtures/reactive-ir/closed-export-member-dispatch-open/node_modules/
+!fixtures/reactive-ir/closed-export-member-dispatch-open/node_modules/**
+!fixtures/reactive-ir/parameter-pass-through-dispatch/node_modules/
+!fixtures/reactive-ir/parameter-pass-through-dispatch/node_modules/**
+!fixtures/reactive-ir/prop-pass-through-dispatch/node_modules/
+!fixtures/reactive-ir/prop-pass-through-dispatch/node_modules/**
+!fixtures/reactive-ir/value-flow-review/node_modules/
+!fixtures/reactive-ir/value-flow-review/node_modules/**
+!fixtures/reactive-ir/leaf-scope-helper-demand/node_modules/
+!fixtures/reactive-ir/leaf-scope-helper-demand/node_modules/**
+!fixtures/reactive-ir/leaf-scope-host-timing/node_modules/
+!fixtures/reactive-ir/leaf-scope-host-timing/node_modules/**
+!fixtures/reactive-ir/leaf-scope-namespace-export/node_modules/
+!fixtures/reactive-ir/leaf-scope-namespace-export/node_modules/**
+!fixtures/reactive-ir/render-time-reads/node_modules/
+!fixtures/reactive-ir/render-time-reads/node_modules/**
+!fixtures/reactive-ir/project-callback-uses/node_modules/
+!fixtures/reactive-ir/project-callback-uses/node_modules/**
+!fixtures/reactive-ir/closed-export-declaration-sibling/node_modules/
+!fixtures/reactive-ir/closed-export-declaration-sibling/node_modules/**
+!fixtures/reactive-ir/prop-head-get/node_modules/
+!fixtures/reactive-ir/prop-head-get/node_modules/**
+!fixtures/reactive-ir/returned-store-source/node_modules/
+!fixtures/reactive-ir/returned-store-source/node_modules/**
+!fixtures/reactive-ir/helper-prop-read/node_modules/
+!fixtures/reactive-ir/helper-prop-read/node_modules/**
+!fixtures/reactive-ir/async-call-prefix/node_modules/
+!fixtures/reactive-ir/async-call-prefix/node_modules/**
+!fixtures/reactive-ir/shadowed-control-flow-tag/node_modules/
+!fixtures/reactive-ir/shadowed-control-flow-tag/node_modules/**
+
+!fixtures/reactive-ir/package-returned-callable-consumer/node_modules/
+!fixtures/reactive-ir/package-returned-callable-consumer/node_modules/**
+
+!fixtures/reactive-ir/package-owner-guards-consumer/node_modules/
+!fixtures/reactive-ir/package-owner-guards-consumer/node_modules/**
+
+!fixtures/reactive-ir/package-lazy-getter-consumer/node_modules/
+!fixtures/reactive-ir/package-lazy-getter-consumer/node_modules/**
+!fixtures/reactive-ir/package-captured-callable-consumer/node_modules/
+!fixtures/reactive-ir/package-captured-callable-consumer/node_modules/**
+
+!fixtures/reactive-ir/package-prototype-instance-consumer/node_modules/
+!fixtures/reactive-ir/package-prototype-instance-consumer/node_modules/**
+!fixtures/reactive-ir/package-prototype-instance-mutation-consumer/node_modules/
+!fixtures/reactive-ir/package-prototype-instance-mutation-consumer/node_modules/**
+
+!fixtures/reactive-ir/package-prototype-input-consumer/node_modules/
+!fixtures/reactive-ir/package-prototype-input-consumer/node_modules/**
+
+!fixtures/reactive-ir/package-prototype-isolation-consumer/node_modules/
+!fixtures/reactive-ir/package-prototype-isolation-consumer/node_modules/**
+!fixtures/reactive-ir/root-callback-return/node_modules/
+!fixtures/reactive-ir/root-callback-return/node_modules/**
+!fixtures/reactive-ir/package-scalar-result-consumer/node_modules/
+!fixtures/reactive-ir/package-scalar-result-consumer/node_modules/**
+!fixtures/reactive-ir/package-derived-get-consumer/node_modules/
+!fixtures/reactive-ir/package-derived-get-consumer/node_modules/**
+!fixtures/reactive-ir/package-closed-map-owner-consumer/node_modules/
+!fixtures/reactive-ir/package-closed-map-owner-consumer/node_modules/**
+!fixtures/reactive-ir/package-captured-lookup-consumer/node_modules/
+!fixtures/reactive-ir/package-captured-lookup-consumer/node_modules/**
+
+!fixtures/reactive-ir/inferred-host-client-start/node_modules/
+!fixtures/reactive-ir/inferred-host-client-start/node_modules/**
+!fixtures/reactive-ir/inferred-host-spa/node_modules/
+!fixtures/reactive-ir/inferred-host-spa/node_modules/**
+!fixtures/reactive-ir/inferred-host-reachability/node_modules/
+!fixtures/reactive-ir/inferred-host-reachability/node_modules/**
+!fixtures/reactive-ir/inferred-host-alias-congruent/node_modules/
+!fixtures/reactive-ir/inferred-host-alias-congruent/node_modules/**
+!fixtures/reactive-ir/inferred-host-alias-divergent/node_modules/
+!fixtures/reactive-ir/inferred-host-alias-divergent/node_modules/**
+!fixtures/reactive-ir/inferred-host-certification-clean/node_modules/
+!fixtures/reactive-ir/inferred-host-certification-clean/node_modules/**
+!fixtures/reactive-ir/inferred-host-server-scopes/node_modules/
+!fixtures/reactive-ir/inferred-host-server-scopes/node_modules/**
+!fixtures/reactive-ir/inferred-host-ssr/node_modules/
+!fixtures/reactive-ir/inferred-host-ssr/node_modules/**
+!fixtures/reactive-ir/inferred-host-library/node_modules/
+!fixtures/reactive-ir/inferred-host-library/node_modules/**
+!fixtures/reactive-ir/inferred-host-override/node_modules/
+!fixtures/reactive-ir/inferred-host-override/node_modules/**
+!fixtures/reactive-ir/inferred-host-callback-invocation/node_modules/
+!fixtures/reactive-ir/inferred-host-callback-invocation/node_modules/**

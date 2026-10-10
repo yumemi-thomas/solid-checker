@@ -12,6 +12,37 @@ bun add --dev solid-checker
 
 Then run `solid-checker --certify`.
 
+## Development feedback
+
+The experimental feedback command combines native findings with recorded
+application observations:
+
+```sh
+solid-checker feedback --project tsconfig.json
+solid-checker feedback manifest --project tsconfig.json > capture.json
+solid-checker feedback --project tsconfig.json --capture capture.json
+solid-checker feedback run --project tsconfig.json --scenario scenario.json --browser /absolute/path/chromium
+```
+
+The manifest starts an input-bound capture. A collector fills its `events` and
+`runtimeInputs` before the final command. Source, configuration, resolution and
+runtime changes refuse stale captures. Native findings keep their original
+violation/uncertifiable classification; recorded untracked reads are information
+because snapshot intent is open. Runtime exceptions and failed application
+assertions can be supplied as separate observations. `feedback run` now collects
+live native read observations and conditional automatic warnings from native
+source models. Scenarios can contain interactions without assertions or
+comparison code. Discarded reads, competing returns and unresolved result
+relevance stay open. The automatic notes do not prove stale output or intent.
+The command also executes supplied browser assertions. Add
+`--compare-project /absolute/path/comparison/tsconfig.json` to measure the same
+assertions in a separate checkout: failed assertions that pass there receive
+informational debugging guidance; passing originals stay quiet. The collector
+uses a reviewed RC.9 native-reader profile. Automatic source proposals and
+package behavior inference remain unavailable.
+
+See [the capture format and current limits](../../docs/development-feedback.md).
+
 Library maintainers can generate an unaccepted stable-v1 proposal from one
 exact installed package without writing semantic JSON:
 
@@ -51,6 +82,30 @@ the exact demand-local refusal but is explicitly non-replayable authority.
 Until every demanded producer answers and an issuer is configured, the native
 checker reports the exact import as uncertifiable rather than accepting
 name-only, stale, unreceipted, or artifact-mismatched input.
+
+A catalog certified this way applies to every file of the project that
+resolves the certified artifact only while the installed tree reproduces the
+dependency environment its receipt signs (`dependencyEnvironmentRoot`): the
+same package bytes, and every other package the certification read, at the
+same version and lockfile integrity. The environment records who resolved
+what: each entry names the package that looked it up (the certified package or
+another entry) and the name it looked up, and admission repeats exactly those
+lookups from each importer's installed location. A different version another
+package sees -- a pnpm `.pnpm/node_modules` hoist, say -- is not a premise and
+does not refuse. Certify in the tree you analyze; a catalog copied into a tree
+whose installs differ, or one whose receipt states no environment, reaches no
+project file. `contract certify` exits `0` when the entry it published states
+its environment and the tree it certified in admits it, `1` when it published
+an entry whose environment was not acquired or that its own tree does not
+admit (the last stderr line names the entry and the reason; no project will
+admit it until it is certified again), and `2` when it refused and published
+nothing. Node built-ins (`node:fs`, and bare
+core names such as `assert` or `fs/promises`) are not packages and never make
+an environment unacquired; as in Node, a bare core name is the built-in even
+where a userland package of that name is installed. The receipt's
+`artifactAcceptanceRoot` is signed, so a receipt issued before it was signed
+is refused with a message to certify again.
+
 `solid-checker contract probe` is a separate opt-in falsification workflow;
 ordinary generation and analysis never execute dependency code, and a passing
 probe never closes a claim.
@@ -101,7 +156,12 @@ longer matches the installed version:
 solid-checker contract check
 ```
 
-Packages are reported as bundled, accepted, unverified, stale, unbound, or
+Core runtime packages are reported as `builtin`, meaning the selected Solid
+dialect supplies their modeled behavior without a package receipt. This is
+model selection, not independent certification or installed-artifact
+authentication. A core package outside that dialect is `unsupported-runtime`.
+
+External packages are reported as certified, unverified, stale, unbound, or
 missing; every uncertifying status names its remedy, and the command exits
 non-zero when action is required. `unbound` means no exact project import
 occurrence matches the catalog entry. `stale` means document, receipt, package,
@@ -140,51 +200,155 @@ To report project findings through Oxlint, load the bundled JavaScript adapter:
 {
   "jsPlugins": ["solid-checker/eslint"],
   "rules": {
-    "solid-checker/certification": "error"
+    "solid-checker/certification": "error",
+    "solid-checker/contract-note": "warn"
   }
 }
 ```
 
+For a client application, whose analyzed code runs in the browser, also set
+the browser runtime target. Package contracts are then read with their browser
+claims, which find far more real misuse than the claims that must hold on every
+host (ADR 0269):
+
+```json
+{
+  "jsPlugins": ["solid-checker/eslint"],
+  "settings": { "solidChecker": { "runtime": { "target": "browser" } } },
+  "rules": {
+    "solid-checker/certification": "error",
+    "solid-checker/contract-note": "warn"
+  }
+}
+```
+
+In ESLint, the `browser-v2` config is `v2` with the same setting. This covers
+Solid 2 client start mode (`solid({ start: true })` in `@solidjs/vite-plugin`)
+and plain Vite SPAs. The target applies to the whole analyzed project: leave it
+unset for a project whose files include server-only code (`"use server"`
+modules, an authored server entry or middleware, HTTP route handlers, a
+client-mode custom `Document`), and for libraries. With SSR (`ssr: true`) the
+App also runs in the browser, so browser findings there are real, but the
+project's server-only files would be analyzed as browser code too.
+
+Without an explicit target, native analysis can infer browser execution for a
+restricted Vite application or workspace leaf: audited client start mode or local
+HTML module entries, with exact executed source edges. Browser authority
+applies to reached top levels and function bodies, including exact local calls,
+literal dynamic imports and reviewed feasible callback triggers (ADR 0270).
+Additional server/test/unknown callers never cancel
+a browser witness; uncalled bodies retain today's no-target analysis.
+Inference evidence names the root in JSON and ESLint/Oxlint messages. Exact
+installed plugin identities and literal config branches are supported under
+closed admission checks. Route manifests never establish page execution. Opaque
+configs, unknown plugins, server routes, SSR and unsupported integration bytes
+keep today's treatment. An explicit target disables inference and still applies
+to the whole project. Inference affects findings only: a clean inferred browser
+scope says nothing about its server execution, and `--certify` keeps requiring
+an explicit target for an inferred application. Contract receipts never use the
+inferred view. See [ADR 0270](../../docs/adr/0270-inferred-browser-host.md).
+
 The adapter discovers the nearest `tsconfig.json`, runs native project analysis
-once, caches its snapshot, and projects matching findings into Oxlint. Set
+and projects matching findings into Oxlint. Inferred requests revalidate native
+plugin inputs before reuse; explicit-target snapshots retain the adapter cache. Set
 `settings.solidChecker.project` when the project uses a nonstandard config name
 or a solution-style root config that only references application configs.
 
+Default import edges require exact local file paths; alias edges additionally
+require congruent Vite/TypeScript mappings. Nothing executes project config.
+An Oxlint JS-plugin user can opt into ADR 0220 client resolver answers with
+`"settings": { "solidChecker": { "runtimeResolution": "required" } }` in
+`.oxlintrc.json`. ESLint uses the same setting; CLI users pass
+`--runtime-resolution required`. This executes project Vite config and client
+resolver hooks, admits agreeing alias/file edges and bypasses cached snapshots.
+Unknown or disagreeing answers retain baseline analysis. The packaged worker is
+supplied automatically; `SOLID_CHECKER_RUNTIME_RESOLVER` overrides it. Resolution
+is serve/development observation, with no automatic production build.
+
 By default the analysis picks its dialect from the `solid-js` version the
-project resolves. Set `settings.solidChecker.dialect` to `"solid-v1"` or
-`"solid-v2"` to override detection for every rule the adapter runs.
+project resolves. This build analyzes **Solid 2.0 only**: a project whose
+resolved `solid-js` is a major it has no vocabulary for is refused outright
+with `SC9013 unsupported-solid-runtime` and no other findings, rather than
+analyzed under the wrong language (ADR 0110). The pre-beta
+`2.0.0-experimental.x` line is refused the same way. A Solid 2 installation
+the vocabulary was not audited on is analyzed, with one
+`SC9014 unaudited-solid-release` notice that keeps the result from certifying.
+The audited installation is `solid-js`, `@solidjs/signals` and `@solidjs/web`
+at `2.0.0-rc.13`; older release candidates are analyzed with the answers
+their reviews gave, under the notice. `@solidjs/signals` is a ranged
+dependency of `solid-js`, so pin it too.
+Set
+`settings.solidChecker.dialect` to `"solid-v2"` to override detection for every
+rule the adapter runs — which also overrides that refusal, and is appropriate
+only when the resolved manifest misreports what will actually be installed.
 When package contracts or rendering proofs depend on deployment conditions,
 set `settings.solidChecker.runtime` with explicit `target`, `build`,
 `rendering`, `conditions`, and `frameworkTransforms` fields. Incomplete or
 contradictory selections remain uncertifiable; the adapter includes the full
 selection in its analysis cache identity.
 
-Every catalog rule is also its own ESLint rule, so a project can disable one
-finding without losing the rest: unprefixed names
-(`solid-checker/strict-read-untracked`) come from the Solid 2.0 catalog, and
-`v1/`-prefixed names (`solid-checker/v1/no-destructure`) come from the Solid
-1.x catalog. A `v1/` rule analyzes with the 1.x dialect on its own when the
-configuration has not chosen one. All rules of one dialect share a single
-cached analysis run, so enabling an entire catalog still spawns the checker
-once per project.
+Package contracts reach the adapter the way they reach the CLI: the analysis
+discovers the project's `.solid-checker/` catalogs itself, and
+`settings.solidChecker.acceptedContracts` names one catalog instead. A catalog
+holding policy-2 receipts is only read with the issuer trust that certified
+it, so set `settings.solidChecker.receiptTrustConfiguration` to the file
+`contract certify --trust-configuration-output` wrote; the adapter passes it
+as `--receipt-trust-configuration`. Both paths resolve against
+`settings.solidChecker.cwd`, else the ESLint working directory, and reach the
+checker absolute. The trust file's bytes are part of the adapter's analysis
+cache identity, as they are of the daemon's, so replacing it in a running
+editor session re-runs the analysis. A trust path that cannot be read fails
+the lint with an error naming the setting and the path, before any analysis
+starts.
 
-The plugin ships three flat configs. `configs.recommended` enables only
+Without trust, a *discovered* policy-2 catalog is withheld rather than fatal:
+the analysis proceeds as if it were absent, so its imports fall back to the
+authored tier or report `SC9005`. The checker's note saying so (a
+`solid-checker: note:` line on stderr) is reported in ESLint as a
+`[solid-checker note]` message at line 1 of every linted file, by its own rule,
+`solid-checker/contract-note`, and by no other. Every shipped config enables it
+at `warn`, so a note never fails a lint by itself; set it to `off` to hide the
+notes, or to `error` to fail on them. Every file, not the first one linted,
+because the note is about the run, the same reason a project-scoped finding is
+reported on every file: an editor lints only the open file, and ESLint gives a
+plugin no project-level message or warning channel that its formatters and
+editors display. A catalog named by `acceptedContracts` that needs trust still
+fails the lint, and the error names the setting to add.
+
+Every catalog rule is also its own ESLint rule, so a project can disable one
+finding without losing the rest; the names are unprefixed
+(`solid-checker/strict-read-untracked`), since the Solid 2.0 catalog is the
+only one that ships. The `v1/`-prefixed names went with the 1.x catalog — see
+`docs/rule-catalog-migration.md` for mapping an existing `v1/` suppression onto
+its 2.0 identity. All rules of one dialect share a single cached analysis run,
+so enabling an entire catalog still spawns the checker once per project.
+
+The plugin ships two flat configs. `configs.recommended` enables
 `solid-checker/certification`, which reports every finding through one rule.
-`configs.v1` and `configs.v2` enable their catalog's rules at each rule's
-native severity and turn `certification` off. The configs compose in either
+`configs.v2` enables its catalog's rules at each rule's native severity and
+turns `certification` off. Both, and `configs["preferences-v2"]`, also enable
+`solid-checker/contract-note` at `warn`. The configs compose in either
 order: each finding reports exactly once, per rule. Even when a listing such
-as `[configs.v1, configs.recommended]` re-enables `certification` (flat
+as `[configs.v2, configs.recommended]` re-enables `certification` (flat
 config resolves each rule from the later entry), certification skips every
 finding an enabled per-rule rule owns for the linted file and reports only
 the rest.
+
+Contract gaps are opt-in. An import of a package without a complete
+reactivity contract raises `SC9005` (`package-contract-incomplete`,
+uncertifiable). That is a gap in what the analysis can see, not a finding
+about your code, so `certification` does not report it and no shipped config
+enables its rule. To see them in the editor, enable
+`solid-checker/package-contract-incomplete` (at `warn`, or `error` to fail on
+them). The CLI's default output summarizes them under "Analysis coverage",
+and `--format json` and `--format full` list every one.
 
 The adapter discovers shipped dialect catalogs by enumerating
 `lib/rules-solid-vN.json`. Each generated catalog carries its stable `dialect`
 id, compatibility `config` key, and optional rule `namespace`; adding a catalog
 does not require a JavaScript registry or version branch.
 
-Project-wide rule enablement and per-rule options (for example
-`v1/prefer-classlist`'s `classnames`) live in the project's
+Project-wide rule enablement and per-rule options live in the project's
 `.solid-checker/rule-options.json`, which the native analysis
 discovers itself — not in ESLint rule configuration. The adapter runs one
 analysis per project, so a single discovered file is what keeps ESLint, the

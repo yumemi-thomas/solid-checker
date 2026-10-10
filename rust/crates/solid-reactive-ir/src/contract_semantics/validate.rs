@@ -54,6 +54,18 @@ pub(super) fn normalize(mut proposal: ContractProposal) -> Result<NormalizedCont
             validate_export_identity(&case.id, &case.entrypoint, name, &export.identity)?;
             normalize_call(&mut export.call, &format!("case {} export {name}", case.id))?;
             let resources = resource_map(&export.call.resources);
+            if contains_prototype_instances(&export.shape) {
+                return contradiction(
+                    "export shape",
+                    "prototype instances require a constructor return",
+                );
+            }
+            if contains_lazy_getters(&export.shape) {
+                return contradiction(
+                    "export shape",
+                    "lazy getters are valid only as factory returns",
+                );
+            }
             normalize_value(
                 &mut export.shape,
                 &resources,
@@ -161,6 +173,100 @@ fn validate_artifact_guard(
 }
 
 fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError> {
+    normalize_call_in(call, path, None, false)
+}
+
+/// Validate retained identities in the factory namespace before normalizing
+/// the returned graph in its own invocation namespace. Never resolve by name.
+fn normalize_captures(
+    call: &mut CallSemantics,
+    resources: &BTreeMap<ResourceId, ResourceInfo>,
+    operations: &BTreeSet<OperationId>,
+    path: &str,
+) -> Result<(), ModelError> {
+    let mut ids = BTreeSet::new();
+    for capture in &call.captures {
+        require_text(&capture.id, "capture id")?;
+        if !ids.insert(capture.id.clone()) {
+            return Err(ModelError::DuplicateIdentity {
+                kind: "capture",
+                id: capture.id.clone(),
+            });
+        }
+        let source_path = match &capture.from {
+            ValueSource::Parameter { path, .. } => path,
+            ValueSource::OperationOutput {
+                operation,
+                path: source_path,
+            } => {
+                require_operation(operation, operations, path)?;
+                source_path
+            }
+            ValueSource::Resource {
+                resource,
+                path: source_path,
+            } => {
+                require_resource(resource, resources, path)?;
+                source_path
+            }
+            ValueSource::Capture { .. } | ValueSource::ParameterMembers { .. } => {
+                return contradiction(path.to_owned(), "a capture needs one exact factory source");
+            }
+        };
+        if source_path.iter().any(|key| key.is_empty() || key == "*") {
+            return contradiction(path.to_owned(), "capture paths must be exact");
+        }
+    }
+    for callback in call.claims.callbacks.items() {
+        if let ValueSource::Capture {
+            capture,
+            path: source_path,
+        } = &callback.from
+        {
+            if !ids.contains(capture) {
+                return contradiction(path.to_owned(), format!("unknown capture {capture}"));
+            }
+            if source_path.iter().any(|key| key.is_empty() || key == "*") {
+                return contradiction(path.to_owned(), "capture paths must be exact");
+            }
+        }
+    }
+    call.captures.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(())
+}
+
+/// The resources and operation ids of the export a nested call belongs to
+/// (ADR 0235): it may name the former and must not reuse the latter.
+type OuterScope<'a> = (
+    &'a BTreeMap<ResourceId, ResourceInfo>,
+    &'a BTreeSet<OperationId>,
+);
+
+fn normalize_call_in(
+    call: &mut CallSemantics,
+    path: &str,
+    outer: Option<OuterScope<'_>>,
+    returned_graph: bool,
+) -> Result<(), ModelError> {
+    if !returned_graph && !call.captures.is_empty() {
+        return contradiction(
+            path.to_owned(),
+            "captures belong only to a whole returned graph",
+        );
+    }
+    if !returned_graph
+        && call
+            .claims
+            .callbacks
+            .items()
+            .iter()
+            .any(|row| matches!(row.from, ValueSource::Capture { .. }))
+    {
+        return contradiction(
+            path.to_owned(),
+            "a capture source belongs only to a returned graph",
+        );
+    }
     normalize_knowledge(&mut call.claims.callbacks, &format!("{path}.callbacks"))?;
     normalize_knowledge(&mut call.claims.reads, &format!("{path}.reads"))?;
     normalize_knowledge(&mut call.claims.writes, &format!("{path}.writes"))?;
@@ -191,7 +297,17 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
         validate_resource_local(resource, path)?;
     }
     call.resources.sort_by(|left, right| left.id.cmp(&right.id));
-    let resources = resource_map(&call.resources);
+    let mut resources = resource_map(&call.resources);
+    if let Some((outer_resources, _)) = outer {
+        for (id, info) in outer_resources {
+            if resources.insert(id.clone(), info.clone()).is_some() {
+                return Err(ModelError::DuplicateIdentity {
+                    kind: "resource",
+                    id: id.0.clone(),
+                });
+            }
+        }
+    }
     for resource in &call.resources {
         if let Some(lifetime) = &resource.lifetime {
             validate_lifetime(
@@ -206,23 +322,121 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
     let mut operation_ids = BTreeSet::new();
     for operation in &call.operations {
         require_text(&operation.id.0, "operation id")?;
-        if !operation_ids.insert(operation.id.clone()) {
+        if !operation_ids.insert(operation.id.clone())
+            || outer.is_some_and(|(_, outer_operations)| outer_operations.contains(&operation.id))
+        {
             return Err(ModelError::DuplicateIdentity {
                 kind: "operation",
                 id: operation.id.0.clone(),
             });
         }
     }
-    for operation in &mut call.operations {
-        normalize_operation(operation, &operation_ids, &resources, path)?;
+    // New whole returns reserve every sibling graph's IDs in one export
+    // namespace. Keep the historical member-only normalization unchanged.
+    if call
+        .operations
+        .iter()
+        .any(|operation| matches!(operation.output, Some(ValueShape::ReturnedCallable { .. })))
+    {
+        validate_returned_callable_ids(call, path)?;
     }
+    let result_uses = call
+        .callback_results
+        .iter()
+        .flat_map(|result| result.uses.items().iter().cloned())
+        .collect::<BTreeSet<_>>();
+    for operation in &mut call.operations {
+        let result_use = result_uses.contains(&operation.id);
+        normalize_operation(
+            operation,
+            &operation_ids,
+            &resources,
+            path,
+            outer.is_some(),
+            result_use,
+        )?;
+    }
+    normalize_callback_results(call, &resources, path)?;
+    normalize_captured_lookup(call, returned_graph, path)?;
     call.operations
         .sort_by(|left, right| left.id.cmp(&right.id));
 
-    validate_call_claims(&call.claims, &call.operations, &resources, path)?;
+    validate_call_claims(
+        &call.claims,
+        &call.operations,
+        &resources,
+        path,
+        &result_uses,
+    )?;
+    validate_proposed_closures(call, path)?;
+    validate_accessor_bounds(call, path)?;
     normalize_operation_graph(&mut call.edges, &call.operations, &operation_ids, path)?;
     normalize_guard_partition(&mut call.guards, &operation_ids, path)?;
     Ok(())
+}
+
+/// A proposed closure labels a closure this document *states*, so the label
+/// is well-formed only over a domain the document actually closes, and only
+/// over a domain a certifier has a closure proof mode for — a proposal nothing
+/// can decide is a refused row, never a weaker document.
+fn validate_proposed_closures(call: &CallSemantics, path: &str) -> Result<(), ModelError> {
+    for domain in call.proposed_closures() {
+        if !domain.is_proposable() {
+            return Err(ModelError::InvalidKnowledge {
+                path: format!("{path}.proposedClosures"),
+                reason: format!(
+                    "call domain {} has no closure proof mode and cannot be proposed",
+                    claim_domain_name(*domain)
+                ),
+            });
+        }
+        if !call.claim_state(*domain).is_open() {
+            continue;
+        }
+        return Err(ModelError::Contradiction {
+            path: format!("{path}.proposedClosures"),
+            reason: format!(
+                "call domain {} is proposed closed and states no closure",
+                claim_domain_name(*domain)
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// An accessor-installation bound (ADR 0153 item C) names a hazard source; an
+/// empty name bounds no site. A bound beside an open `reads` is admitted: the
+/// certifier's candidate weakening opens a proposed `reads` over the knowledge
+/// it states and closes it again, and the bound must survive the round trip.
+/// Every opening that withdraws a claim (`open_call_domains`) clears the
+/// bounds with it, so a published document never carries one beside an open
+/// `reads` it did not come from.
+fn validate_accessor_bounds(call: &CallSemantics, path: &str) -> Result<(), ModelError> {
+    if call.accessor_bounds().is_empty() {
+        return Ok(());
+    }
+    if call.accessor_bounds().iter().any(String::is_empty) {
+        return Err(ModelError::InvalidKnowledge {
+            path: format!("{path}.accessorBounds"),
+            reason: "an accessor bound names no hazard source".into(),
+        });
+    }
+    Ok(())
+}
+
+const fn claim_domain_name(domain: ClaimDomain) -> &'static str {
+    match domain {
+        ClaimDomain::Callbacks => "callbacks",
+        ClaimDomain::Reads => "reads",
+        ClaimDomain::Writes => "writes",
+        ClaimDomain::Creates => "creates",
+        ClaimDomain::Invalidates => "invalidates",
+        ClaimDomain::Throws => "throws",
+        ClaimDomain::Returns => "returns",
+        ClaimDomain::Cleanups => "cleanups",
+        ClaimDomain::Disposals => "disposals",
+        ClaimDomain::Computations => "computations",
+    }
 }
 
 fn normalize_knowledge<T: Ord>(
@@ -360,8 +574,18 @@ fn normalize_operation(
     operations: &BTreeSet<OperationId>,
     resources: &BTreeMap<ResourceId, ResourceInfo>,
     path: &str,
+    nested: bool,
+    result_use: bool,
 ) -> Result<(), ModelError> {
     let op_path = format!("{path}.operation.{}", operation.id.0);
+    if operation.strict_read.is_some()
+        && (operation.kind != OperationKind::Read || operation.tracking != Tracking::Untracked)
+    {
+        return contradiction(
+            format!("{op_path}.strictRead"),
+            "strictRead cleared is valid only on a read with untracked tracking",
+        );
+    }
     if let Some(guard) = &mut operation.guard {
         super::guards::normalize_guard(guard, &format!("{op_path}.guard"))?;
     }
@@ -380,11 +604,299 @@ fn normalize_operation(
     }
     validate_cardinality(&operation.cardinality, &op_path)?;
     normalize_owner(&mut operation.owner, resources, &op_path)?;
+    if operation.inputs.iter().any(contains_prototype_instances) {
+        return contradiction(&op_path, "prototype instances cannot be operation inputs");
+    }
+    if let Some(output) = operation.output.as_ref()
+        && contains_prototype_instances(output)
+        && (nested
+            || operation.kind != OperationKind::Return
+            || !matches!(output, ValueShape::PrototypeInstance { .. }))
+    {
+        return contradiction(
+            &op_path,
+            "prototype instances require a whole constructor return",
+        );
+    }
+    if operation.inputs.iter().any(contains_lazy_getters) {
+        return contradiction(&op_path, "lazy getters cannot be operation inputs");
+    }
+    if let Some(output) = operation.output.as_ref()
+        && contains_lazy_getters(output)
+        && (nested || operation.kind != OperationKind::Return || !direct_lazy_getter_output(output))
+    {
+        return contradiction(
+            &op_path,
+            "lazy getters require a whole factory return or direct tuple item",
+        );
+    }
     for (index, input) in operation.inputs.iter_mut().enumerate() {
         normalize_value(input, resources, &format!("{op_path}.input.{index}"))?;
     }
     if let Some(output) = &mut operation.output {
-        normalize_value(output, resources, &format!("{op_path}.output"))?;
+        if let ValueShape::PrototypeInstance { members, .. } = output {
+            if operation.kind != OperationKind::Return || nested {
+                return contradiction(
+                    format!("{op_path}.output"),
+                    "prototype instances require a whole constructor return",
+                );
+            }
+            normalize_prototype_members(members, &format!("{op_path}.output"))?;
+        } else if let ValueShape::ReturnedCallable { call, members } = output {
+            if operation.kind != OperationKind::Return || nested {
+                return contradiction(
+                    format!("{op_path}.output"),
+                    "a returned callable is valid only as the whole output of a factory return",
+                );
+            }
+            let out_path = format!("{op_path}.output");
+            let names = members
+                .iter()
+                .map(|member| &member.name)
+                .collect::<BTreeSet<_>>();
+            if names.len() != members.len() {
+                return Err(ModelError::DuplicateIdentity {
+                    kind: "returned member",
+                    id: out_path,
+                });
+            }
+            if let Some(call) = call {
+                if call.captures().iter().any(|capture| {
+                    matches!(&capture.from, ValueSource::OperationOutput { operation: source, .. }
+                        if source == &operation.id)
+                }) {
+                    return contradiction(
+                        out_path,
+                        "a returned graph cannot capture its own factory return",
+                    );
+                }
+                normalize_captures(call, resources, operations, &out_path)?;
+                normalize_call_in(call, &out_path, Some((resources, operations)), true)?;
+            }
+            // Reuse ADR 0235's lift/normalize/restore machinery verbatim.
+            let mut container = ValueShape::Object(KnowledgeSet::Complete(std::mem::take(members)));
+            let lifted = lift_effectful_members(&mut container);
+            normalize_value(&mut container, resources, &format!("{out_path}.members"))?;
+            for (member, mut call) in lifted {
+                normalize_call_in(
+                    &mut call,
+                    &format!("{out_path}.member.{member}"),
+                    Some((resources, operations)),
+                    false,
+                )?;
+                restore_effectful_member(&mut container, &member, call);
+            }
+            if let ValueShape::Object(KnowledgeSet::Complete(properties)) = container {
+                *members = properties;
+            }
+        } else if let ValueShape::DescribedCallable(call) = output {
+            if operation.kind != OperationKind::Return {
+                return contradiction(
+                    format!("{op_path}.output"),
+                    "a described callable is valid only as the output of a return operation",
+                );
+            }
+            normalize_described_callable(call, &format!("{op_path}.output"))?;
+        } else if operation.kind == OperationKind::Return {
+            // ADR 0235: a member of a returned tuple or object may carry its
+            // own call graph. Lifted out, the container normalizes as
+            // before; each member's graph normalizes in the export's scope.
+            let out_path = format!("{op_path}.output");
+            let lifted = lift_effectful_members(output);
+            normalize_value(output, resources, &out_path)?;
+            for (member, mut call) in lifted {
+                let member_path = format!("{out_path}.member.{member}");
+                if nested {
+                    return contradiction(
+                        member_path,
+                        "an effectful callable cannot return another effectful callable",
+                    );
+                }
+                normalize_call_in(
+                    &mut call,
+                    &member_path,
+                    Some((resources, operations)),
+                    false,
+                )?;
+                restore_effectful_member(output, &member, call);
+            }
+        } else {
+            normalize_value(output, resources, &format!("{op_path}.output"))?;
+        }
+    }
+    // One meaning for a call: a stated `call` is the absent protocol.
+    if operation.protocol == Some(InvokeProtocol::Call) {
+        operation.protocol = None;
+    }
+    if let Some(protocol) = operation.protocol
+        && !result_use
+    {
+        validate_protocol_operation(operation, protocol, &op_path)?;
+    }
+    if operation.is_result_access() && !result_use {
+        validate_result_access_operation(operation, &op_path)?;
+    }
+    if let Some(composed) = &operation.composed_from {
+        let composed_path = format!("{op_path}.composedFrom");
+        require_text(&composed.export, &format!("{composed_path}.export"))?;
+        require_text(&composed.operation.0, &format!("{composed_path}.operation"))?;
+        // Only a `read` operation may state provenance today. The premise a
+        // consumer discharges it with is a reachable, uncaptured *call* whose
+        // callee resolves to the named export, and that premise was reviewed
+        // for the read families alone: an `invoke` operation's provenance
+        // would additionally have to compose the callback binding, and a
+        // `create`'s would have to compose the owner relation. Publishing one
+        // without the premise that answers it is a fact carried with no
+        // witness, which is exactly what the demand inventory exists to
+        // prevent.
+        if operation.kind != OperationKind::Read {
+            return contradiction(
+                composed_path,
+                "only a read operation may state composed provenance",
+            );
+        }
+        // Provenance names *another* export's operation. Operation ids are
+        // qualified by export, so an id this export also owns means the
+        // generator named itself — a self-composition, which is a cycle
+        // rather than a proof.
+        if operations.contains(&composed.operation) {
+            return contradiction(
+                composed_path,
+                "composed provenance names an operation of the composing export itself",
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Legacy non-call uses retain their one broad shape; the two value-copy
+/// enumeration protocols have fixed narrower entry bounds and ambient owner.
+///
+/// It runs whatever the caller's value carries, at the call, on the caller's
+/// stack, in the caller's tracking context: so `at` the call event,
+/// `same-stack`, and `ambient-at-execution` -- never `untracked`, which would
+/// claim the export cleared the caller's listener, and never `tracked` or
+/// unknown. How often it happens is not proved, so the count is the call's
+/// `0..many` for a legacy use, and nothing guards it. Which `callbacks` item names it, and from
+/// where, is checked with the claims (`validate_call_claims`).
+fn validate_protocol_operation(
+    operation: &Operation,
+    protocol: InvokeProtocol,
+    path: &str,
+) -> Result<(), ModelError> {
+    let protocol_path = format!("{path}.protocol");
+    let refuse = |reason: &str| {
+        contradiction(
+            protocol_path.clone(),
+            format!("a {} invocation {reason}", protocol.wire_name()),
+        )
+    };
+    if operation.kind != OperationKind::Invoke {
+        return contradiction(
+            protocol_path,
+            "only an invoke operation may state a protocol",
+        );
+    }
+    if operation.at != Some(Event::Call) || operation.schedule != Some(Schedule::SameStack) {
+        return refuse("happens at the call event on the same stack");
+    }
+    if operation.tracking != Tracking::AmbientAtExecution {
+        return refuse("runs in the caller's tracking context and is ambient-at-execution");
+    }
+    if let Some(cardinality) = protocol.enumeration_cardinality() {
+        if operation.trigger != Some(Trigger::Event(Event::Call))
+            || operation.cardinality != cardinality
+            || operation.owner.source != OwnerSource::AmbientAtExecution
+            || operation.owner.requirements != OwnerRequirements::default()
+            || operation.owner.capabilities != OwnerCapabilities::default()
+            || operation.owner.lifetime.is_some()
+            || operation.owner.productions != KnowledgeSet::Unknown
+            || !operation.inputs.is_empty()
+            || operation.output.is_some()
+            || !operation.resources.is_empty()
+            || operation.composed_from.is_some()
+            || operation.guard.is_some()
+        {
+            return refuse(
+                "requires its fixed enumeration count, call trigger, ambient owner and no additional claims",
+            );
+        }
+        return Ok(());
+    }
+    if operation.cardinality
+        != (Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        })
+    {
+        return refuse("is counted per call, from zero to many");
+    }
+    if operation.guard.is_some() {
+        return refuse("is unguarded");
+    }
+    Ok(())
+}
+
+/// An operation at the `result-access` event (ADR 0139) states exactly one
+/// shape.
+///
+/// It says the export stores the caller's callable only in the value it
+/// returns, and the callable runs later, on the stack of whoever invokes it
+/// through that value: so an `invoke` whose trigger and execution point are
+/// both the event, scheduled `external` (it is not this call's stack), in the
+/// tracking context and under the owner of that later caller
+/// (`ambient-at-execution` for both -- never `untracked`, which would claim a
+/// clear nobody proved), counted per trigger from zero to many, with no guard
+/// and no protocol but a call. Which `callbacks` item names it, and from
+/// where, is checked with the claims (`validate_call_claims`).
+fn validate_result_access_operation(operation: &Operation, path: &str) -> Result<(), ModelError> {
+    let refuse = |reason: &str| {
+        contradiction(
+            format!("{path}.at"),
+            format!("a result-access operation {reason}"),
+        )
+    };
+    if operation.kind != OperationKind::Invoke {
+        return refuse("is an invoke");
+    }
+    if operation.trigger != Some(Trigger::Event(Event::ResultAccess))
+        || operation.at != Some(Event::ResultAccess)
+        || operation.schedule != Some(Schedule::External)
+    {
+        return refuse(
+            "is triggered by and happens at the result-access event, on an external schedule",
+        );
+    }
+    if operation.tracking != Tracking::AmbientAtExecution
+        || operation.owner.source != OwnerSource::AmbientAtExecution
+        || operation.owner.requirements
+            != (OwnerRequirements {
+                owner: Requirement::Unconstrained,
+                child_owners: Requirement::Unconstrained,
+                cleanup: Requirement::Unconstrained,
+            })
+    {
+        return refuse(
+            "runs in the tracking context and under the owner of its later caller, \
+             ambient-at-execution and unconstrained",
+        );
+    }
+    if operation.cardinality
+        != (Cardinality {
+            scope: Some(CardinalityScope::Trigger),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        })
+    {
+        return refuse("is counted per trigger, from zero to many");
+    }
+    if operation.guard.is_some() || operation.protocol.is_some() {
+        return refuse("is an unguarded call");
+    }
+    if !operation.inputs.is_empty() || operation.output.is_some() || !operation.resources.is_empty()
+    {
+        return refuse("states no inputs, output or resources");
     }
     Ok(())
 }
@@ -655,18 +1167,398 @@ fn contradiction<T>(path: impl Into<String>, reason: impl Into<String>) -> Resul
     })
 }
 
+/// ADR 0145/0146: a described callable's two exact lists, canonically sorted
+/// and without duplicates, each drawn from its reviewed vocabulary. A `returns`
+/// entry is an exact output whose meaning does not depend on who calls:
+/// `plain`, or (ADR 0146) the value a stated read observed. Nothing nests: a
+/// described callable returning one is a claim no census decides.
+pub(super) fn normalize_described_callable(
+    call: &mut super::DescribedCall,
+    path: &str,
+) -> Result<(), ModelError> {
+    call.reads.sort();
+    if call.reads.windows(2).any(|pair| pair[0] == pair[1]) {
+        return contradiction(format!("{path}.reads"), "a described read is repeated");
+    }
+    call.returns.sort();
+    if call.returns.windows(2).any(|pair| pair[0] == pair[1]) {
+        return contradiction(format!("{path}.returns"), "a described return is repeated");
+    }
+    // ADR 0152: each nested item is the one invocation the census can prove,
+    // of a bare export argument, at most one item per argument.
+    call.callbacks.sort();
+    for (index, callback) in call.callbacks.iter().enumerate() {
+        let item = format!("{path}.callbacks.{index}");
+        let Some(parameter) = callback.parameter() else {
+            return contradiction(
+                format!("{item}.from"),
+                "a described callable's callback item invokes a bare argument of its export",
+            );
+        };
+        if *callback != super::DescribedCallback::same_stack_once(parameter) {
+            return contradiction(
+                item,
+                "a described callable's callback item is triggered by and happens at the \
+                 described call, on the same stack, in the invoking caller's tracking context and \
+                 under its owner (ambient-at-execution, unconstrained), exactly once per call, \
+                 unguarded",
+            );
+        }
+    }
+    if call
+        .callbacks
+        .windows(2)
+        .any(|pair| pair[0].parameter() == pair[1].parameter())
+    {
+        return contradiction(
+            format!("{path}.callbacks"),
+            "a described callable names one export argument in at most one callback item",
+        );
+    }
+    let invoked = |parameter: u16| {
+        call.callbacks
+            .iter()
+            .any(|callback| callback.parameter() == Some(parameter))
+    };
+    if let Some(unsupported) = call.returns.iter().find(|returned| {
+        !matches!(returned, ValueShape::Plain | ValueShape::ReadValue)
+            && !matches!(returned, ValueShape::InvocationResult { parameter } if invoked(*parameter))
+    }) {
+        return contradiction(
+            format!("{path}.returns"),
+            format!(
+                "a described callable may return only `plain`, a read value, or what an export \
+                 argument one of its callback items invokes returned, not {unsupported:?}"
+            ),
+        );
+    }
+    if call.reads.is_empty() && call.returns.contains(&ValueShape::ReadValue) {
+        return contradiction(
+            format!("{path}.returns"),
+            "a described callable that reads nothing cannot return a read value",
+        );
+    }
+    Ok(())
+}
+
+/// All graphs of a new whole return share its factory's ID namespace.
+/// Outer IDs are reservations only, never nested trigger targets.
+fn validate_returned_callable_ids(call: &CallSemantics, _path: &str) -> Result<(), ModelError> {
+    fn reserve(
+        call: &CallSemantics,
+        operations: &mut BTreeSet<OperationId>,
+        resources: &mut BTreeSet<ResourceId>,
+    ) -> Result<(), ModelError> {
+        for operation in &call.operations {
+            if !operations.insert(operation.id.clone()) {
+                return Err(ModelError::DuplicateIdentity {
+                    kind: "operation",
+                    id: operation.id.0.clone(),
+                });
+            }
+        }
+        for resource in &call.resources {
+            if !resources.insert(resource.id.clone()) {
+                return Err(ModelError::DuplicateIdentity {
+                    kind: "resource",
+                    id: resource.id.0.clone(),
+                });
+            }
+        }
+        for operation in &call.operations {
+            if let Some(output) = &operation.output {
+                visit(output, operations, resources)?;
+            }
+        }
+        Ok(())
+    }
+    fn visit(
+        value: &ValueShape,
+        operations: &mut BTreeSet<OperationId>,
+        resources: &mut BTreeSet<ResourceId>,
+    ) -> Result<(), ModelError> {
+        match value {
+            ValueShape::ReturnedCallable { call, members } => {
+                if let Some(call) = call {
+                    reserve(call, operations, resources)?;
+                }
+                for member in members {
+                    visit(&member.value, operations, resources)?;
+                }
+            }
+            ValueShape::EffectfulCallable(call) => reserve(call, operations, resources)?,
+            ValueShape::Tuple(items) => {
+                for item in items.items() {
+                    visit(item, operations, resources)?;
+                }
+            }
+            ValueShape::Object(properties) => {
+                for property in properties.items() {
+                    visit(&property.value, operations, resources)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    reserve(call, &mut BTreeSet::new(), &mut BTreeSet::new())
+}
+
+/// Where an effectful callable sits in a returned container: its tuple index
+/// or object property name.
+enum EffectfulMember {
+    Item(usize),
+    Property(String),
+}
+
+impl std::fmt::Display for EffectfulMember {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Item(index) => write!(formatter, "{index}"),
+            Self::Property(name) => formatter.write_str(name),
+        }
+    }
+}
+
+/// Takes every effectful callable out of `output`'s direct tuple items or
+/// object properties, leaving `callable` in its place (ADR 0235).
+fn lift_effectful_members(output: &mut ValueShape) -> Vec<(EffectfulMember, Box<CallSemantics>)> {
+    let mut lifted = Vec::new();
+    match output {
+        ValueShape::Tuple(KnowledgeSet::Complete(items) | KnowledgeSet::Partial(items)) => {
+            for (index, item) in items.iter_mut().enumerate() {
+                if matches!(item, ValueShape::EffectfulCallable(_))
+                    && let ValueShape::EffectfulCallable(call) =
+                        std::mem::replace(item, ValueShape::Callable)
+                {
+                    lifted.push((EffectfulMember::Item(index), call));
+                }
+            }
+        }
+        ValueShape::Object(
+            KnowledgeSet::Complete(properties) | KnowledgeSet::Partial(properties),
+        ) => {
+            for property in properties.iter_mut() {
+                if matches!(property.value, ValueShape::EffectfulCallable(_))
+                    && let ValueShape::EffectfulCallable(call) =
+                        std::mem::replace(&mut property.value, ValueShape::Callable)
+                {
+                    lifted.push((EffectfulMember::Property(property.name.clone()), call));
+                }
+            }
+        }
+        _ => {}
+    }
+    lifted
+}
+
+/// Puts a normalized effectful callable back where it was lifted from.
+fn restore_effectful_member(
+    output: &mut ValueShape,
+    member: &EffectfulMember,
+    call: Box<CallSemantics>,
+) {
+    match (output, member) {
+        (
+            ValueShape::Tuple(KnowledgeSet::Complete(items) | KnowledgeSet::Partial(items)),
+            EffectfulMember::Item(index),
+        ) => {
+            if let Some(item) = items.get_mut(*index) {
+                *item = ValueShape::EffectfulCallable(call);
+            }
+        }
+        (
+            ValueShape::Object(
+                KnowledgeSet::Complete(properties) | KnowledgeSet::Partial(properties),
+            ),
+            EffectfulMember::Property(name),
+        ) => {
+            if let Some(property) = properties
+                .iter_mut()
+                .find(|property| &property.name == name)
+            {
+                property.value = ValueShape::EffectfulCallable(call);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn contains_lazy_getters(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::LazyGetterObject { .. } => true,
+        ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+            items.items().iter().any(contains_lazy_getters)
+        }
+        ValueShape::Object(properties) => properties
+            .items()
+            .iter()
+            .any(|property| contains_lazy_getters(&property.value)),
+        ValueShape::Array { element, .. }
+        | ValueShape::Promise(element)
+        | ValueShape::AsyncIterable(element) => contains_lazy_getters(element),
+        _ => false,
+    }
+}
+
+fn direct_lazy_getter_output(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::LazyGetterObject { .. } => true,
+        ValueShape::Tuple(items) => items.items().iter().all(|item| {
+            matches!(item, ValueShape::LazyGetterObject { .. }) || !contains_lazy_getters(item)
+        }),
+        _ => false,
+    }
+}
+
+fn contains_prototype_instances(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::PrototypeInstance { .. } => true,
+        ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+            items.items().iter().any(contains_prototype_instances)
+        }
+        ValueShape::Object(items) => items
+            .items()
+            .iter()
+            .any(|item| contains_prototype_instances(&item.value)),
+        ValueShape::Array { element, .. }
+        | ValueShape::Promise(element)
+        | ValueShape::AsyncIterable(element) => contains_prototype_instances(element),
+        _ => false,
+    }
+}
+
+fn normalize_prototype_members(
+    members: &mut [PrototypeMember],
+    path: &str,
+) -> Result<(), ModelError> {
+    if members.is_empty() {
+        return contradiction(path, "a prototype recipe must state at least one member");
+    }
+    for member in members.iter_mut() {
+        require_text(&member.name, "prototype member")?;
+        if member.name != "@@iterator"
+            && !member.name.chars().enumerate().all(|(index, ch)| {
+                ch == '_'
+                    || ch == '$'
+                    || ch.is_ascii_alphabetic()
+                    || (index > 0 && ch.is_ascii_digit())
+            })
+        {
+            return contradiction(
+                path,
+                "prototype members require exact identifier keys or @@iterator",
+            );
+        }
+        if matches!(
+            member.name.as_str(),
+            "constructor" | "prototype" | "__proto__"
+        ) || (member.name == "@@iterator" && member.kind != PrototypeMemberKind::Iterator)
+            || member.tracks.is_empty()
+        {
+            return contradiction(
+                path,
+                "invalid prototype member or omitted tracking behavior",
+            );
+        }
+        for track in &member.tracks {
+            require_text(&track.cache, "instance cache")?;
+            if track.argument.is_some() == track.shared.is_some()
+                || (member.kind != PrototypeMemberKind::Method && track.argument.is_some())
+            {
+                return contradiction(path, "a cache key is one argument or one shared identity");
+            }
+            if let Some(shared) = &track.shared {
+                require_text(shared, "shared cache key")?;
+            }
+        }
+        member.tracks.sort();
+        if member.tracks.windows(2).any(|pair| pair[0] == pair[1]) {
+            return contradiction(path, "duplicate prototype track");
+        }
+    }
+    members.sort_by(|left, right| left.name.cmp(&right.name));
+    if members.windows(2).any(|pair| pair[0].name == pair[1].name) {
+        return contradiction(path, "duplicate prototype member");
+    }
+    Ok(())
+}
+
 fn normalize_value(
     value: &mut ValueShape,
     resources: &BTreeMap<ResourceId, ResourceInfo>,
     path: &str,
 ) -> Result<(), ModelError> {
     match value {
+        // A merged props object carries no resource and no child shape: what it
+        // exposes is the caller's argument's, which this side never sees.
         ValueShape::Unknown
         | ValueShape::Plain
         | ValueShape::Parameter { .. }
         | ValueShape::Callable
         | ValueShape::Component
+        | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
+        | ValueShape::Undefined
         | ValueShape::RefApplication => {}
+        // ADR 0145: only as the whole output of a `return`, which
+        // `normalize_operation` validates before any value walk reaches it.
+        // Anywhere else -- an input, an export's shape, inside a tuple -- it
+        // would state a callable's call claims no census decides there.
+        ValueShape::DescribedCallable(_) => {
+            return contradiction(
+                path,
+                "a described callable is valid only as the whole output of a return operation",
+            );
+        }
+        // ADR 0235: lifted out of a return's tuple or object before this
+        // walk; anywhere else it states a call graph no consumer binds.
+        ValueShape::EffectfulCallable(_) => {
+            return contradiction(
+                path,
+                "an effectful callable is valid only as a member of a returned tuple or object",
+            );
+        }
+        ValueShape::ReturnedCallable { .. } => {
+            return contradiction(
+                path,
+                "a returned callable is valid only as the whole output of a factory return",
+            );
+        }
+        ValueShape::PrototypeInstance { .. } => {
+            return contradiction(
+                path,
+                "prototype instances require a whole constructor return",
+            );
+        }
+        ValueShape::LazyGetterObject { keys, from } => {
+            if from.is_some() != keys.is_empty() {
+                return contradiction(
+                    path,
+                    "lazy getters require either exact keys or an argument index",
+                );
+            }
+            for key in keys.iter() {
+                require_text(key, "lazy getter key")?;
+                if super::lazy_getter_cache_key_is_reserved(key) {
+                    return contradiction(
+                        path,
+                        "lazy getter key collides with the cache prototype",
+                    );
+                }
+            }
+            keys.sort();
+            if keys.windows(2).any(|pair| pair[0] == pair[1]) {
+                return contradiction(path, "duplicate lazy getter key");
+            }
+        }
+        ValueShape::ReadValue => {
+            return contradiction(
+                path,
+                "a read value is valid only as a return of a described callable that reads",
+            );
+        }
         ValueShape::Tuple(items) => {
             validate_open_nonempty(items, &format!("{path}.tuple-items"))?;
             if !matches!(items, KnowledgeSet::Unknown) {
@@ -1002,6 +1894,7 @@ fn validate_call_claims(
     operations: &[Operation],
     resources: &BTreeMap<ResourceId, ResourceInfo>,
     path: &str,
+    result_uses: &BTreeSet<OperationId>,
 ) -> Result<(), ModelError> {
     let operation_kinds = operation_map(operations);
     for callback in claims.callbacks.items() {
@@ -1012,7 +1905,21 @@ fn validate_call_claims(
             &format!("{path}.callbacks"),
         )?;
         match &callback.from {
-            ValueSource::Parameter { .. } => {}
+            ValueSource::Parameter { .. } | ValueSource::Capture { .. } => {}
+            // ADR 0207: a member class is invoked as a call; any other protocol
+            // of an unbounded set of members has no meaning here.
+            ValueSource::ParameterMembers { .. } => {
+                if operations.iter().any(|operation| {
+                    operation.id == callback.operation
+                        && operation.invoke_protocol()
+                            != crate::contract_semantics::InvokeProtocol::Call
+                }) {
+                    return Err(ModelError::InvalidKnowledge {
+                        path: format!("{path}.callbacks.source"),
+                        reason: "a member class is invoked only as a call".into(),
+                    });
+                }
+            }
             ValueSource::OperationOutput { operation, .. } => {
                 if !operation_kinds.contains_key(operation) {
                     return Err(ModelError::MissingOperation {
@@ -1074,6 +1981,73 @@ fn validate_call_claims(
         &operation_kinds,
         &format!("{path}.disposals"),
     )?;
+    // ADR 0114: version 1 states `computations` by item only. Its closure
+    // would be "registers no computation on an owner it does not create",
+    // which no census decides and which a consumer never reads -- owner
+    // requirements are complete where `creates` is closed -- so a document
+    // asserting it is claiming what nothing here can check.
+    if claims.computations.is_closed() {
+        return contradiction(
+            format!("{path}.computations"),
+            "computations is stated by item only in schema version 1 and cannot be closed",
+        );
+    }
+    validate_operation_claim(
+        &claims.computations,
+        Some(OperationKind::Compute),
+        &operation_kinds,
+        &format!("{path}.computations"),
+    )?;
+    // A non-call protocol is a use of the caller's own argument: exactly one
+    // item names it, from a bare parameter. A member of the argument, an
+    // operation's output or a resource is a value this export reached rather
+    // than one the caller handed it, and no census confirms a protocol there.
+    for operation in operations
+        .iter()
+        .filter(|operation| operation.protocol.is_some() && !result_uses.contains(&operation.id))
+    {
+        let naming = claims
+            .callbacks
+            .items()
+            .iter()
+            .filter(|callback| callback.operation == operation.id)
+            .collect::<Vec<_>>();
+        match naming.as_slice() {
+            [callback] if matches!(&callback.from, ValueSource::Parameter { path, .. } if path.is_empty()) =>
+                {}
+            _ => {
+                return contradiction(
+                    format!("{path}.operation.{}.protocol", operation.id.0),
+                    "a non-call invocation is named by exactly one callbacks item from a bare parameter",
+                );
+            }
+        }
+    }
+    // ADR 0139: a result-access operation keeps the caller's own argument, so
+    // exactly one item names it, from a bare parameter -- a member of the
+    // argument, an operation's output or a resource is a value this export
+    // reached, and no census states what the export keeps of one.
+    for operation in operations
+        .iter()
+        .filter(|operation| operation.is_result_access() && !result_uses.contains(&operation.id))
+    {
+        let naming = claims
+            .callbacks
+            .items()
+            .iter()
+            .filter(|callback| callback.operation == operation.id)
+            .collect::<Vec<_>>();
+        match naming.as_slice() {
+            [callback] if matches!(&callback.from, ValueSource::Parameter { path, .. } if path.is_empty()) =>
+                {}
+            _ => {
+                return contradiction(
+                    format!("{path}.operation.{}.at", operation.id.0),
+                    "a result-access invocation is named by exactly one callbacks item from a bare parameter",
+                );
+            }
+        }
+    }
     for operation in operations {
         let represented = match operation.kind {
             OperationKind::Invoke => claims
@@ -1088,6 +2062,7 @@ fn validate_call_claims(
             OperationKind::Create => claims.creates.items().contains(&operation.id),
             OperationKind::Cleanup => claims.cleanups.items().contains(&operation.id),
             OperationKind::Dispose => claims.disposals.items().contains(&operation.id),
+            OperationKind::Compute => claims.computations.items().contains(&operation.id),
         };
         if !represented {
             return contradiction(
@@ -1095,6 +2070,33 @@ fn validate_call_claims(
                 "operation node lacks its corresponding positive call claim",
             );
         }
+        // A `compute` is the registration of a computation on an owner the
+        // operation does not create (ADR 0114): it requires that owner to admit
+        // a child. It may require the owner itself, or tolerate its absence:
+        // rc.13's computed nodes run unowned yet throw under a leaf owner
+        // (ADR 0226), and the leaf rule reads the child requirement. An owner
+        // it forbids, or creates, is not a registration on the caller's.
+        if operation.kind == OperationKind::Compute
+            && !(!matches!(operation.owner.source, OwnerSource::Created(_))
+                && operation.owner.requirements.owner != Requirement::Forbidden
+                && operation.owner.requirements.child_owners == Requirement::Required)
+        {
+            return contradiction(
+                format!("{path}.operation.{}", operation.id.0),
+                "a compute operation requires child owners of an owner it does not create, which it may not forbid",
+            );
+        }
+        // NOT YET: "a `create` operation naming no resource is a
+        // contradiction" (`semantic-model.md` § creates, decision 2026-09-03,
+        // and the census plan's § 2.2 item 3) belongs exactly here. It cannot
+        // land before the two compiled-in Solid 1.x authority documents that
+        // carry that shape are corrected, and they cannot be corrected soundly
+        // today -- see `docs/precision-backlog.md`'s 2026-09-03 entry, which
+        // records the blocker with the code that proves it. The generator no
+        // longer produces the shape -- it emits no `create` operation at all
+        // (`inferred_contract.rs`'s `owner_requirement_operation`, pinned by
+        // `the_generator_emits_no_resourceless_create`) -- so nothing new can
+        // arrive here while the rule waits.
     }
     Ok(())
 }
@@ -1605,6 +2607,16 @@ fn visit_closed_value(
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
+        | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
+        | ValueShape::Undefined
+        | ValueShape::DescribedCallable(_)
+        | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. }
+        | ValueShape::PrototypeInstance { .. }
+        | ValueShape::LazyGetterObject { .. }
+        | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -1707,6 +2719,7 @@ pub(super) fn open_proposed_closure(export: &mut ExportSemantics) -> Vec<ClaimPa
             ClaimDomain::Returns => &mut export.call.claims.returns,
             ClaimDomain::Cleanups => &mut export.call.claims.cleanups,
             ClaimDomain::Disposals => &mut export.call.claims.disposals,
+            ClaimDomain::Computations => &mut export.call.claims.computations,
         };
         if knowledge.open_proposed_closure() {
             candidates.push(ClaimPath::Call(domain));
@@ -1762,6 +2775,11 @@ pub(super) fn open_proposed_closure(export: &mut ExportSemantics) -> Vec<ClaimPa
     if export.call.guards.cases.open_proposed_closure() {
         candidates.push(ClaimPath::GuardPartition);
     }
+    // Every marked domain is a closed call domain, so the loop above has just
+    // withdrawn all of them: the label goes with the closure it labelled, and
+    // a document whose closure was weakened while the label survived would not
+    // normalize.
+    export.call.proposed_closures.clear();
     for guarded in export.call.guards.cases.items_mut() {
         let operations = match guarded {
             GuardedCase::When { operations, .. } | GuardedCase::Otherwise { operations } => {
@@ -1792,6 +2810,13 @@ pub(super) fn close_verified_claim(
             ClaimDomain::Returns => export.call.claims.returns.close_verified(),
             ClaimDomain::Cleanups => export.call.claims.cleanups.close_verified(),
             ClaimDomain::Disposals => export.call.claims.disposals.close_verified(),
+            // ADR 0114: no proof closes it, because no document may state it.
+            ClaimDomain::Computations => {
+                return contradiction(
+                    "call.computations",
+                    "computations cannot be closed in schema version 1",
+                );
+            }
         },
         ClaimPath::Value { root, path, domain } => {
             let value =
@@ -1997,6 +3022,16 @@ fn open_value_closure(
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
+        | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
+        | ValueShape::Undefined
+        | ValueShape::DescribedCallable(_)
+        | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. }
+        | ValueShape::PrototypeInstance { .. }
+        | ValueShape::LazyGetterObject { .. }
+        | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
@@ -2022,6 +3057,16 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
+        | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
+        | ValueShape::Undefined
+        | ValueShape::DescribedCallable(_)
+        | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. }
+        | ValueShape::PrototypeInstance { .. }
+        | ValueShape::LazyGetterObject { .. }
+        | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
         ValueShape::Tuple(items) => {
@@ -2121,4 +3166,321 @@ fn push_value(
     domain: ValueClaimDomain,
 ) {
     claims.push(ClaimPath::Value { root, path, domain });
+}
+
+/// Result provenance is one finite hop from an exact caller invocation.
+/// Cycles, recursive traversal and wildcard member dispatch are not implied.
+fn normalize_callback_results(
+    call: &mut CallSemantics,
+    resources: &BTreeMap<ResourceId, ResourceInfo>,
+    path: &str,
+) -> Result<(), ModelError> {
+    let mut producers = BTreeSet::new();
+    let mut uses = BTreeSet::new();
+    for result in &mut call.callback_results {
+        let result_path = format!("{path}.callbackResults.{}", result.producer.0);
+        if !producers.insert(result.producer.clone()) {
+            return contradiction(result_path, "duplicate callback result producer");
+        }
+        let sources = call
+            .claims
+            .callbacks
+            .items()
+            .iter()
+            .filter(|row| row.operation == result.producer)
+            .collect::<Vec<_>>();
+        if !matches!(sources.as_slice(), [row] if matches!(row.from, ValueSource::Parameter { .. }))
+        {
+            return contradiction(
+                result_path,
+                "a result producer is one exact parameter invocation; recursive results are unsupported",
+            );
+        }
+        let Some(producer) = call.operations.iter().find(|op| op.id == result.producer) else {
+            return Err(ModelError::MissingOperation {
+                path: result_path,
+                operation: result.producer.0.clone(),
+            });
+        };
+        if producer.kind != OperationKind::Invoke || producer.is_protocol_invocation() {
+            return contradiction(result_path, "a callback result producer invokes a callable");
+        }
+        normalize_value(
+            &mut result.shape,
+            resources,
+            &format!("{result_path}.shape"),
+        )?;
+        normalize_knowledge(&mut result.uses, &format!("{result_path}.uses"))?;
+        for id in &result.callable_only {
+            if !result.uses.items().contains(id)
+                || !call.operations.iter().any(|operation| {
+                    &operation.id == id
+                        && operation.invoke_protocol() == InvokeProtocol::Call
+                        && operation.cardinality.min == Some(0)
+                })
+            {
+                return contradiction(
+                    result_path.clone(),
+                    "callableOnly names an optional call use in this result census",
+                );
+            }
+        }
+        for id in result.uses.items() {
+            if !uses.insert(id.clone()) || id == &result.producer {
+                return contradiction(
+                    result_path.clone(),
+                    "result uses are distinct and non-recursive",
+                );
+            }
+            let Some(operation) = call.operations.iter().find(|op| &op.id == id) else {
+                return Err(ModelError::MissingOperation {
+                    path: result_path.clone(),
+                    operation: id.0.clone(),
+                });
+            };
+            let rows = call
+                .claims
+                .callbacks
+                .items()
+                .iter()
+                .filter(|row| &row.operation == id)
+                .collect::<Vec<_>>();
+            if !matches!(rows.as_slice(), [row] if matches!(&row.from,
+                ValueSource::OperationOutput { operation, path } if operation == &result.producer
+                    && path.iter().all(|segment| !segment.is_empty() && segment != "*")))
+            {
+                return contradiction(
+                    result_path.clone(),
+                    "a use names exactly one literal path on its producer output",
+                );
+            }
+            if operation.kind != OperationKind::Invoke
+                || operation.at.is_none()
+                || operation.schedule.is_none()
+                || operation.tracking == Tracking::Unknown
+                || operation.owner.source == OwnerSource::Unknown
+                || operation.cardinality.scope.is_none()
+                || operation.cardinality.min.is_none()
+                || operation.cardinality.max.is_none()
+                || !matches!(
+                    operation.invoke_protocol(),
+                    InvokeProtocol::Call
+                        | InvokeProtocol::Get
+                        | InvokeProtocol::Iterate
+                        | InvokeProtocol::Coerce
+                        | InvokeProtocol::GetEnumerableStringValues
+                        | InvokeProtocol::GetOwnEnumerableValues
+                )
+            {
+                return contradiction(
+                    result_path.clone(),
+                    "a result use states its exact protocol, timing, owner, tracking and count",
+                );
+            }
+            if !call.edges.iter().any(|edge| {
+                edge.kind == EdgeKind::Data && edge.from == result.producer && &edge.to == id
+            }) {
+                return contradiction(
+                    result_path.clone(),
+                    "a result use requires an exact producer-to-use data edge",
+                );
+            }
+        }
+        let described = call
+            .claims
+            .callbacks
+            .items()
+            .iter()
+            .filter_map(|row| {
+                matches!(&row.from, ValueSource::OperationOutput { operation, .. }
+                if operation == &result.producer)
+                .then_some(&row.operation)
+            })
+            .collect::<BTreeSet<_>>();
+        if described != result.uses.items().iter().collect::<BTreeSet<_>>() {
+            return contradiction(
+                result_path,
+                "result uses and output-source callback rows must agree exactly",
+            );
+        }
+    }
+    call.callback_results
+        .sort_by(|a, b| a.producer.cmp(&b.producer));
+    Ok(())
+}
+
+fn normalize_captured_lookup(
+    call: &mut CallSemantics,
+    returned_graph: bool,
+    path: &str,
+) -> Result<(), ModelError> {
+    let Some(lookup) = call.captured_lookup.as_mut() else {
+        return Ok(());
+    };
+    lookup.default_arguments.sort_unstable();
+    let [capture] = call.captures.as_slice() else {
+        return contradiction(path.to_owned(), "captured lookup needs exactly one capture");
+    };
+    let ValueSource::Parameter {
+        index,
+        path: member_path,
+    } = &capture.from
+    else {
+        return contradiction(
+            path.to_owned(),
+            "captured lookup needs a bare parameter capture",
+        );
+    };
+    let [row] = call.claims.callbacks.items() else {
+        return contradiction(
+            path.to_owned(),
+            "captured lookup needs one possible dictionary call",
+        );
+    };
+    let [operation] = call.operations.as_slice() else {
+        return contradiction(
+            path.to_owned(),
+            "captured lookup's conditional slice owns its dispatch",
+        );
+    };
+    if !returned_graph
+        || capture.id != lookup.dictionary
+        || !member_path.is_empty()
+        || lookup.default_arguments.len() > 16
+        || lookup
+            .default_arguments
+            .windows(2)
+            .any(|pair| pair[0] == pair[1])
+        || lookup.default_arguments.contains(index)
+        || call.claims.callbacks.is_closed()
+        || !matches!(call.claims.returns, KnowledgeSet::Unknown)
+        || !call.claims.reads.is_closed()
+        || !call.claims.reads.items().is_empty()
+        || !call.claims.creates.is_closed()
+        || !call.claims.creates.items().is_empty()
+        || !call.callback_results.is_empty()
+        || !call.edges.is_empty()
+        || !call.resources.is_empty()
+        || !matches!(&row.from, ValueSource::Capture { capture, path }
+            if capture == &lookup.dictionary && path.is_empty())
+        || row.operation != operation.id
+        || operation.kind != OperationKind::Invoke
+        || operation.invoke_protocol() != InvokeProtocol::Call
+        || !operation.inputs.is_empty()
+        || operation.guard.is_some()
+        || operation.strict_read.is_some()
+        || operation.trigger != Some(Trigger::Event(Event::Call))
+        || operation.at != Some(Event::Call)
+        || operation.schedule != Some(Schedule::SameStack)
+        || operation.tracking != Tracking::AmbientAtExecution
+        || operation.owner
+            != (OwnerRelation {
+                source: OwnerSource::AmbientAtExecution,
+                ..OwnerRelation::default()
+            })
+        || operation.output.is_some()
+        || !operation.resources.is_empty()
+        || operation.composed_from.is_some()
+        || operation.cardinality.scope != Some(CardinalityScope::Call)
+        || operation.cardinality.min != Some(0)
+        || operation.cardinality.max != Some(UpperBound::Finite(1))
+    {
+        return contradiction(
+            path.to_owned(),
+            "unsupported or unconditional captured lookup claim",
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod lazy_getter_tests {
+
+    fn member(name: &str) -> PrototypeMember {
+        PrototypeMember {
+            name: name.into(),
+            kind: PrototypeMemberKind::Method,
+            tracks: vec![PrototypeTrack {
+                cache: "keys".into(),
+                argument: Some(0),
+                shared: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn prototype_members_sort_and_reject_duplicate_or_ambiguous_keys() {
+        let mut members = vec![member("has"), member("get")];
+        normalize_prototype_members(&mut members, "fixture").unwrap();
+        assert_eq!(members[0].name, "get");
+        assert!(
+            normalize_prototype_members(&mut [member("has"), member("has")], "fixture").is_err()
+        );
+        let mut ambiguous = member("has");
+        ambiguous.tracks[0].shared = Some("structural".into());
+        assert!(normalize_prototype_members(&mut [ambiguous], "fixture").is_err());
+        let mut getter = member("size");
+        getter.kind = PrototypeMemberKind::Getter;
+        assert!(normalize_prototype_members(&mut [getter], "fixture").is_err());
+        assert!(normalize_prototype_members(&mut [], "fixture").is_err());
+    }
+
+    #[test]
+    fn only_a_whole_return_can_hold_the_recipe() {
+        let value = ValueShape::PrototypeInstance {
+            members: vec![member("has")],
+            population: PrototypePopulation::Values,
+        };
+        assert!(contains_prototype_instances(&value));
+        assert!(contains_prototype_instances(&ValueShape::Tuple(
+            KnowledgeSet::Complete(vec![value])
+        )));
+        assert!(!contains_prototype_instances(&ValueShape::Plain));
+    }
+    use super::*;
+
+    #[test]
+    fn lazy_getters_require_one_key_provenance_and_reject_cache_collisions() {
+        let resources = BTreeMap::new();
+        let mut sorted = ValueShape::LazyGetterObject {
+            keys: vec!["width".into(), "height".into()],
+            from: None,
+        };
+        normalize_value(&mut sorted, &resources, "return").unwrap();
+        assert_eq!(
+            sorted,
+            ValueShape::LazyGetterObject {
+                keys: vec!["height".into(), "width".into()],
+                from: None,
+            }
+        );
+        let mut from = ValueShape::LazyGetterObject {
+            keys: vec![],
+            from: Some(0),
+        };
+        normalize_value(&mut from, &resources, "return").unwrap();
+        for mut invalid in [
+            ValueShape::LazyGetterObject {
+                keys: vec![],
+                from: None,
+            },
+            ValueShape::LazyGetterObject {
+                keys: vec!["count".into()],
+                from: Some(0),
+            },
+            ValueShape::LazyGetterObject {
+                keys: vec!["count".into(), "count".into()],
+                from: None,
+            },
+            ValueShape::LazyGetterObject {
+                keys: vec!["constructor".into()],
+                from: None,
+            },
+        ] {
+            assert!(normalize_value(&mut invalid, &resources, "return").is_err());
+        }
+        assert!(!direct_lazy_getter_output(&ValueShape::Promise(Box::new(
+            from
+        ))));
+    }
 }

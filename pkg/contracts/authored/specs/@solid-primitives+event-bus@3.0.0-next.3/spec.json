@@ -1,0 +1,414 @@
+{
+  "package": "@solid-primitives/event-bus",
+  "version": "3.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createEventStack": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/event-bus/dist/eventStack.js:6-33 \u2014 Constructor creates exactly one ownedWrite stack signal and two plain Set buses; installs one package listener. No own reactive read or mapper invocation occurs at construction. stack() and config.toValue run only when the opaque returned emit dispatches, synchronously in that later caller's ambient context. external-event/external is relative to the factory, not a host/owner-clearing premise. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-37 \u2014 Two clear registrations plus one listen-unsubscribe registration use tryOnCleanup; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 Under a present owner these three register cleanup; absent owner tolerated. Draft only; retained controls remain opaque and future calls/escapes remain uncertifiable.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "bus-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 3,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "clear",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "listen",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "emit",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "value",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "stack"
+                  }
+                },
+                {
+                  "name": "setValue",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "remove",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stack-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "stack"
+            ]
+          },
+          {
+            "id": "mapper",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "listener-stack-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "stack"
+              }
+            ]
+          }
+        ],
+        "cleanups": [
+          "bus-cleanups"
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "stack",
+            "kind": "reactive-source"
+          }
+        ],
+        "creates": [
+          "stack-production"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "toValue"
+              ]
+            },
+            "operation": "mapper"
+          }
+        ],
+        "reads": [
+          "listener-stack-read"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ]
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Optional-owner tryOnCleanup enters onCleanup under a present leaf and rejects cleanup registration."
+        },
+        {
+          "label": "mapper-context",
+          "rule": "strict-read-untracked",
+          "why": "The mapper runs on a later emit caller's stack. Misuse emits in the component strict-read window; correct explicitly untracks that later emit. This pair is runtime evidence, not a claim describing the opaque control."
+        }
+      ],
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/event-bus/dist/eventStack.js:6-33 \u2014 Constructor creates exactly one ownedWrite stack signal and two plain Set buses; installs one package listener. No own reactive read or mapper invocation occurs at construction. stack() and config.toValue run only when the opaque returned emit dispatches, synchronously in that later caller's ambient context. external-event/external is relative to the factory, not a host/owner-clearing premise.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/event-bus/dist/eventStack.js:6-33 \u2014 Constructor creates exactly one ownedWrite stack signal and two plain Set buses; installs one package listener. No own reactive read or mapper invocation occurs at construction. stack() and config.toValue run only when the opaque returned emit dispatches, synchronously in that later caller's ambient context. external-event/external is relative to the factory, not a host/owner-clearing premise.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/event-bus/dist/eventStack.js:6-33 \u2014 Constructor creates exactly one ownedWrite stack signal and two plain Set buses; installs one package listener. No own reactive read or mapper invocation occurs at construction. stack() and config.toValue run only when the opaque returned emit dispatches, synchronously in that later caller's ambient context. external-event/external is relative to the factory, not a host/owner-clearing premise. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-37 \u2014 Two clear registrations plus one listen-unsubscribe registration use tryOnCleanup; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 Under a present owner these three register cleanup; absent owner tolerated.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/event-bus/dist/eventStack.js:6-33 \u2014 Constructor creates exactly one ownedWrite stack signal and two plain Set buses; installs one package listener. No own reactive read or mapper invocation occurs at construction. stack() and config.toValue run only when the opaque returned emit dispatches, synchronously in that later caller's ambient context. external-event/external is relative to the factory, not a host/owner-clearing premise. P2: config destructuring is data; mapper is the only retained constructor callback, not a native host callback."
+      }
+    },
+    "toEffect": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-toEffect-module-scope/node_modules/@solid-primitives/event-bus/dist/utils.js:62-71 \u2014 Required-owner effect only; wrapper and captured-owner emit protocol stay open.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "emit-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "emit-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ],
+        "computations": [
+          "emit-effect"
+        ],
+        "resources": [
+          {
+            "id": "emit-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "createEffect always runs at construction and rejects a present leaf."
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/event-bus/dist/utils.js:62-71; Both register one compute under an ambient parent and return the same payload => setStack(...) wrapper. Server runs compute under its created owner/observer but omits user apply, so the emit forwarding may be absent. No emit invocation or stack read operation is asserted, and every domain is already open; no new closure is proposed. Immutable push/copy: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/utils/dist/immutable/array.js:10, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solid-primitives/utils/dist/immutable/copy.js:15-19. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/event-bus-createEventStack-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [],
+        "closures": {}
+      }
+    },
+    "createEventBus": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "clear-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "listen",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "emit",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "clear",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "clear-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 tryOnCleanup registers only when an owner exists in browser dev.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 tryOnCleanup registers only when an owner exists in browser dev.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 tryOnCleanup registers only when an owner exists in browser dev.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-bus/dist/eventBus.js:28-38 - No signal or reactive read. One optional-owner tryOnCleanup for clear at construction; object contains listen, emit, clear. Opaque members are obligations under ADR 0234. Registering and dispatching stored listeners needs later stateful-member/capture work.; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:149 tryOnCleanup registers only when an owner exists in browser dev."
+      }
+    }
+  }
+}

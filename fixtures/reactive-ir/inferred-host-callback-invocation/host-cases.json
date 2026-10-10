@@ -1,0 +1,262 @@
+[
+  {
+    "path": "src/main.tsx",
+    "text": "exact local binding",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "authored Route child",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "authored direct Route child",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "ignored prop",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "feasible intrinsic event",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "feasible For child",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "cancelled timer",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "feasible timer",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "noncancelable microtask",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "server-only callback",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "Show selected",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "Show never selected",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "Repeat selected",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "feasible animation",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "cancelled animation",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "feasible listener",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "removed listener",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "feasible effect apply",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "feasible settlement",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "feasible disposal",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "client-dead timer",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "RPC-only callback",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "empty For",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "empty Repeat",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "authored deferred callback",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "non-Call callback row",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "shadowed timer",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "immediately consumed handle",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "inert-prefix cancellation",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "client-guarded cancellation",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "different handle stays feasible",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "unregistered top-level cleanup",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "event under dead Show",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "namespace effect bundle",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "namespace error bundle",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "different capture stays feasible",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "argument never registers timer",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "explicit capture object removed",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "nested component under dead Show",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "nested component under ignored prop",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "direct intrinsic child selected",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "JSX parameter initialization never completes",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "unregistered helper cleanup",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "unregistered fresh-stack cleanup",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "browser prefix before await",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "permanently pending continuation",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "deferred constant effect never applies",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "constant effect initial apply",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "inert bundle never errors",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "throwing bundle error feasible",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "browser prefix before exact throw",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "exact throwing IIFE dead continuation",
+    "browser": false
+  }
+]

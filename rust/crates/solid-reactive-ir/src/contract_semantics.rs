@@ -14,11 +14,13 @@ pub mod proof;
 pub mod solid2_rc3;
 mod validate;
 
+pub(crate) use consumer::owner_guard_at_call;
+
 pub use consumer::{
     AcceptedContractIndex, AcceptedContractInput, AcceptedContractUse, AcceptedImportIdentity,
     AcceptedSemanticIdentity, CallSiteFacts, FiniteFact, InstantiatedClaim, InstantiatedExport,
     OpenDomainDiagnostic, OpenDomainReason, PropertyFact, SemanticQueryError,
-    UncertifiableImportReason, native_claim_precedence,
+    UncertifiableImportReason, enumeration_get_is_guaranteed, native_claim_precedence,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,7 +32,59 @@ pub const SEMANTIC_MODEL_VERSION: u16 = 1;
 pub const SEMANTIC_DIGEST_ALGORITHM: &str = "sha256";
 /// Domain separator frozen for semantic-model version 1 contract identities.
 pub const SEMANTIC_DIGEST_DOMAIN: &str = "solid-checker:normalized-package-contract";
+/// The digest domain for a contract in which at least one operation states
+/// composed provenance.
+///
+/// A second domain rather than a second model version, because the model is
+/// unchanged: `composedFrom` is an additive optional field, every document
+/// that omits it still validates, and `semanticModelVersion` stays 1. What
+/// needs separating is the *byte stream*, so that a contract with no composed
+/// operation keeps hashing exactly what it hashed before the field existed —
+/// and with it every policy-2 receipt already issued for it. A contract that
+/// does carry provenance is a new document making a new claim, and it gets a
+/// digest in its own family.
+pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED: &str =
+    "solid-checker:normalized-package-contract:composed-provenance";
+/// The digest domain for a contract in which at least one export proposes a
+/// call domain for closure proof (`CallSemantics::proposed_closures`).
+///
+/// The same reasoning as `SEMANTIC_DIGEST_DOMAIN_COMPOSED`, one field later,
+/// and the two features are independent: a contract may carry either, both, or
+/// neither, so there are four domains and not three. Each is a distinct
+/// length-prefixed first write, so the families cannot collide, and every
+/// contract that proposes nothing keeps hashing exactly what it hashed before
+/// the marker existed.
+pub const SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE: &str =
+    "solid-checker:normalized-package-contract:proposed-closure";
+/// The digest domain for a contract carrying composed provenance *and* a
+/// proposed closure.
+pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE: &str =
+    "solid-checker:normalized-package-contract:composed-provenance:proposed-closure";
+/// The length-prefixed marker a semantic digest or a recipe address writes
+/// first when some operation it encodes states a non-call
+/// [`InvokeProtocol`]. A stream with no such operation never writes it, so it
+/// hashes exactly as it did before the protocol existed.
+pub const SEMANTIC_INVOKE_PROTOCOL_MARKER: &str = "solid-checker:semantic-invoke-protocol:v1";
+/// The length-prefixed marker a semantic digest or a recipe address writes
+/// first when some operation it encodes happens at [`Event::ResultAccess`]
+/// (ADR 0139). A stream with no such operation never writes it, so it hashes
+/// exactly as it did before the event existed.
+pub const SEMANTIC_RESULT_ACCESS_MARKER: &str = "solid-checker:semantic-result-access:v1";
+/// The length-prefixed marker a semantic digest writes first when some export
+/// it encodes states a [`ContextPremise`] (ADR 0153 part 3). A contract with
+/// none never writes it, so it hashes exactly as it did before premises
+/// existed.
+pub const SEMANTIC_CONTEXT_PREMISES_MARKER: &str = "solid-checker:semantic-context-premises:v1";
+/// The length-prefixed marker a semantic digest writes first when some export
+/// it encodes states an accessor-installation bound (ADR 0153 item C). A
+/// contract with none never writes it, so it hashes exactly as it did before
+/// bounds existed.
+pub const SEMANTIC_ACCESSOR_BOUNDS_MARKER: &str = "solid-checker:semantic-accessor-bounds:v1";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
+/// Version of the byte-only artifact-case identity a [`RecipeAddress`] binds.
+pub const ARTIFACT_CASE_BYTES_VERSION: u16 = 1;
+/// Version of the [`RecipeAddress`] stream.
+pub const RECIPE_ADDRESS_VERSION: u16 = 1;
 
 /// Local knowledge for one immediate collection-valued claim domain.
 ///
@@ -237,6 +291,12 @@ pub enum ModelError {
     DuplicateArtifactSelection { first: String, second: String },
     #[error("selected artifact case index {selected} does not exist")]
     MissingArtifactCase { selected: usize },
+    #[error("no recipe address: {reason}")]
+    Unaddressable { reason: String },
+    #[error(
+        "recipe address must be canonical recipe-address:v1:sha256 followed by 64 lowercase hexadecimal digits"
+    )]
+    RecipeAddressFormat,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -274,8 +334,16 @@ pub struct ExportIdentity {
     pub declarations: ExportTargetIdentity,
 }
 
+/// An explicit proposal about evaluation of the selected runtime module.
+/// Absence is not a claim; only authenticated proof can make this knowledge.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ModuleInitializationClaim {
+    Inert,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ArtifactCase {
+    pub initialization: Option<ModuleInitializationClaim>,
     pub id: String,
     pub entrypoint: String,
     pub resolution_trace: Vec<ResolutionStep>,
@@ -399,6 +467,73 @@ impl NormalizedContract {
         ))
     }
 
+    /// The byte-only identity of one artifact case (ways-to-improve § 3.2):
+    /// package bytes, entrypoint, resolution trace, runtime, declarations and
+    /// transform artifacts, and `closure_bytes`, the caller's byte-only
+    /// identity of the case's dependency closure. It deliberately omits the
+    /// case id and `dependency_closure`, both of which hash every accepted
+    /// dependency edge's contract digest.
+    ///
+    /// It is an input to [`Self::recipe_address`] and nothing else: it is not
+    /// a claim identity and authenticates nothing.
+    pub fn artifact_case_byte_identity(
+        &self,
+        artifact_case: &str,
+        closure_bytes: &str,
+    ) -> Result<Digest, ModelError> {
+        let case = self
+            .artifact_case(artifact_case)
+            .ok_or_else(|| ModelError::Unaddressable {
+                reason: format!("the contract has no artifact case {artifact_case}"),
+            })?;
+        Ok(canonical::artifact_case_byte_identity(
+            &self.package,
+            case,
+            closure_bytes,
+        ))
+    }
+
+    /// The second address of a probe recipe: `case_bytes` (from
+    /// [`Self::artifact_case_byte_identity`]), the export identity, the claim
+    /// path, and the claim's normalized value, with every artifact-case prefix
+    /// removed from the ids it writes.
+    ///
+    /// A recipe corpus may bind an entry by this address when its claim id no
+    /// longer names a plan claim. The address decides only which claim a
+    /// recipe module is launched for; it is never authority. Only call-domain
+    /// and operation subjects have one.
+    pub fn recipe_address(
+        &self,
+        subject: &SemanticClaimSubject,
+        case_bytes: &Digest,
+    ) -> Result<RecipeAddress, ModelError> {
+        let artifact_case = self.artifact_case(&subject.artifact_case).ok_or_else(|| {
+            ModelError::Unaddressable {
+                reason: format!(
+                    "the contract has no artifact case {}",
+                    subject.artifact_case
+                ),
+            }
+        })?;
+        let export = artifact_case.exports.get(&subject.export).ok_or_else(|| {
+            ModelError::Unaddressable {
+                reason: format!(
+                    "artifact case {} has no export {}",
+                    subject.artifact_case, subject.export
+                ),
+            }
+        })?;
+        if !validate::claim_subject_exists(export, &subject.path) {
+            return Err(ModelError::Unaddressable {
+                reason: format!(
+                    "the subject does not exist for export {} in artifact case {}",
+                    subject.export, subject.artifact_case
+                ),
+            });
+        }
+        canonical::recipe_address(artifact_case, export, &subject.path, case_bytes)
+    }
+
     /// Answers whether one exact semantic claim is closed in this contract.
     ///
     /// Claim identity binds the package, artifact case, export, and semantic
@@ -464,6 +599,38 @@ impl SemanticClaimId {
     fn from_sha256(bytes: [u8; 32]) -> Self {
         Self(format!(
             "claim:v{SEMANTIC_CLAIM_ID_VERSION}:{}",
+            Digest::from_sha256(bytes).as_str()
+        ))
+    }
+}
+
+/// A recipe's byte-only second address; see
+/// [`NormalizedContract::recipe_address`]. Formatted
+/// `recipe-address:v1:sha256:<64 lowercase hex>`.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RecipeAddress(String);
+
+impl RecipeAddress {
+    pub fn parse(value: impl Into<String>) -> Result<Self, ModelError> {
+        let value = value.into();
+        let digest = value
+            .strip_prefix("recipe-address:v1:")
+            .ok_or(ModelError::RecipeAddressFormat)?;
+        let parsed = Digest::parse(digest).map_err(|_| ModelError::RecipeAddressFormat)?;
+        if parsed.as_str() != digest {
+            return Err(ModelError::RecipeAddressFormat);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    fn from_sha256(bytes: [u8; 32]) -> Self {
+        Self(format!(
+            "recipe-address:v{RECIPE_ADDRESS_VERSION}:{}",
             Digest::from_sha256(bytes).as_str()
         ))
     }
@@ -658,6 +825,41 @@ impl ExportSemantics {
         validate::open_proposed_closure(self)
     }
 
+    /// Republishes the named call domains as *proposed* closures: the domain
+    /// closed over the positive items it already carries, and labelled as the
+    /// generator's proposal rather than a reviewed claim.
+    ///
+    /// The inverse of the weakening [`Self::open_proposed_closure`] performs,
+    /// used by the proposal generator on exactly the domains a certifier has a
+    /// census for. See [`CallSemantics::proposed_closures`].
+    pub fn propose_closures(&mut self, domains: impl IntoIterator<Item = ClaimDomain>) {
+        for domain in domains {
+            match self.call.claims.operation_claim_mut(domain) {
+                Some(claim) => claim.close_verified(),
+                None => self.call.claims.callbacks.close_verified(),
+            };
+            self.call.proposed_closures.insert(domain);
+        }
+    }
+
+    /// Restates an unaccepted fixed-return enumeration as a proposal. The
+    /// certifier withdraws it again and independently proves every member.
+    /// This cannot propose capability or unrelated call-domain closure.
+    pub fn propose_return_value_closure(&mut self, claim: &ClaimPath) -> Result<(), ModelError> {
+        let supported = matches!(claim, ClaimPath::Value {
+            root: ValueRoot::OperationOutput { operation },
+            domain: ValueClaimDomain::TupleItems | ValueClaimDomain::ObjectProperties,
+            ..
+        } if self.operation(&operation.0).is_some_and(Operation::is_bare_return));
+        if !supported {
+            return Err(ModelError::InvalidKnowledge {
+                path: format!("{claim:?}"),
+                reason: "only a fixed return's member enumeration can be proposed here".into(),
+            });
+        }
+        self.close_verified_claim(claim)
+    }
+
     fn close_verified_claim(&mut self, claim: &ClaimPath) -> Result<(), ModelError> {
         validate::close_verified_claim(self, claim)
     }
@@ -669,15 +871,368 @@ impl ExportSemantics {
     /// finite set of domains. A complete negative becomes unknown and a
     /// complete positive becomes partial; unrelated call and recursive value
     /// knowledge is unchanged.
+    /// Opening a domain also withdraws its *proposal*. A proposal is an offer
+    /// to prove closure over exactly the knowledge the document states; an
+    /// opaque closure frontier or a recipe-gated withholding that reopens the
+    /// domain has invalidated that offer, so leaving the marker in place would
+    /// let the candidate outlive the fact it was derived from — and would make
+    /// `withheld_weakening` a no-op, since the certifier would rediscover the
+    /// candidate it had just withheld.
     pub fn open_call_domains(&mut self, domains: impl IntoIterator<Item = ClaimDomain>) {
         for domain in domains {
             self.call.claims.open(domain);
+            self.call.proposed_closures.remove(&domain);
+            // A bound conditions a closed `reads` and nothing else (ADR 0153
+            // item C); an open one has nothing left for it to bound.
+            if domain == ClaimDomain::Reads {
+                self.call.accessor_bounds.clear();
+            }
         }
+    }
+
+    /// States that this export's closed `reads` holds against the named
+    /// accessor-installation hazard sites (ADR 0153 item C).
+    pub fn add_accessor_bounds(&mut self, sources: impl IntoIterator<Item = String>) {
+        self.call.accessor_bounds.extend(sources);
+    }
+
+    /// Adds context premises to this export's claims (ADR 0153 part 3). A
+    /// premise only ever weakens: the claims it conditions are the same
+    /// claims, now stated for fewer programs.
+    pub fn add_context_premises(&mut self, premises: impl IntoIterator<Item = ContextPremise>) {
+        self.call.context_premises.extend(premises);
+    }
+
+    /// Clears `composed_from` naming any withdrawn `(export, operation)` of
+    /// this artifact case.
+    ///
+    /// The sibling half of [`Self::withhold_operations`], which can only see
+    /// its own export. Provenance is an *additional* discharge route, never the
+    /// only one, so clearing it weakens the document and never strengthens it.
+    pub fn clear_composed_provenance(&mut self, withdrawn: &BTreeSet<(String, OperationId)>) {
+        for operation in &mut self.call.operations {
+            if operation.composed_from.as_ref().is_some_and(|composed| {
+                withdrawn.contains(&(composed.export.clone(), composed.operation.clone()))
+            }) {
+                operation.composed_from = None;
+            }
+        }
+    }
+
+    /// Withdraws operations whose positive facts no census could certify, and
+    /// opens every domain that listed one.
+    ///
+    /// This is the weakening below [`Self::open_call_domains`]. Opening a
+    /// domain keeps every operation and only stops claiming the enumeration is
+    /// exhaustive; this *removes* an operation the document should never have
+    /// stated, and then opens its domain for the same reason — a shorter list
+    /// still marked closed would assert an absence the census never
+    /// established, which is a stronger claim than the one being withdrawn.
+    ///
+    /// The withdrawal is transitive within the export, because a reference to
+    /// a withdrawn operation describes nothing:
+    ///
+    /// - an operation triggered by a withdrawn one goes with it;
+    /// - an edge touching a withdrawn operation is removed;
+    /// - a callback invocation naming a withdrawn operation, or sourced from
+    ///   its output, is removed and opens `callbacks`;
+    /// - `composed_from` naming a withdrawn operation of *this* export is
+    ///   cleared, which only removes a discharge route and never adds one.
+    ///
+    /// Returns every id actually withdrawn, the seeds included, so a caller
+    /// can record the cascade rather than infer it. An id this export does not
+    /// carry contributes nothing.
+    pub fn withhold_operations(&mut self, seeds: &BTreeSet<OperationId>) -> BTreeSet<OperationId> {
+        self.withhold_operations_narrowing(seeds, &BTreeSet::new())
+    }
+
+    /// ADR 0177: leaves the named members of a bare return's literal tuple or
+    /// object output undescribed (`unknown`), keeping every other member and
+    /// the container's own enumeration.
+    ///
+    /// The weakening the structural census asks for when it can prove the
+    /// container and some members but not the others: `unknown` asserts
+    /// nothing of a member, so the weaker claim is true wherever the stronger
+    /// one was, and the census re-confirms it member for member. Claims at a
+    /// path below a weakened member disappear with it, because they are read
+    /// off the shape. Returns `false`, changing nothing, when the operation is
+    /// not a bare return with such an output or a path does not name one of
+    /// its members.
+    pub fn weaken_return_members(
+        &mut self,
+        operation: &OperationId,
+        members: &[ValuePath],
+    ) -> bool {
+        fn member_mut<'a>(
+            value: &'a mut ValueShape,
+            path: &[ValuePathSegment],
+        ) -> Option<&'a mut ValueShape> {
+            let Some((segment, rest)) = path.split_first() else {
+                return Some(value);
+            };
+            let next = match (value, segment) {
+                (
+                    ValueShape::Tuple(KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items)),
+                    ValuePathSegment::TupleItem(index),
+                ) => items.get_mut(usize::try_from(*index).ok()?)?,
+                (
+                    ValueShape::Object(
+                        KnowledgeSet::Partial(properties) | KnowledgeSet::Complete(properties),
+                    ),
+                    ValuePathSegment::ObjectProperty(name),
+                ) => {
+                    &mut properties
+                        .iter_mut()
+                        .find(|property| property.name == *name)?
+                        .value
+                }
+                _ => return None,
+            };
+            member_mut(next, rest)
+        }
+        let Some(output) = self
+            .call
+            .operations
+            .iter_mut()
+            .find(|candidate| candidate.id == *operation && candidate.is_bare_return())
+            .and_then(|candidate| candidate.output.as_mut())
+        else {
+            return false;
+        };
+        if !matches!(output, ValueShape::Tuple(_) | ValueShape::Object(_)) {
+            return false;
+        }
+        let mut weakened = output.clone();
+        for member in members {
+            if member.0.is_empty()
+                || !member.0.iter().all(|segment| {
+                    matches!(
+                        segment,
+                        ValuePathSegment::TupleItem(_) | ValuePathSegment::ObjectProperty(_)
+                    )
+                })
+            {
+                return false;
+            }
+            let Some(slot) = member_mut(&mut weakened, &member.0) else {
+                return false;
+            };
+            *slot = ValueShape::Unknown;
+        }
+        *output = weakened;
+        true
+    }
+
+    /// ADR 0183: withdraws the created-owner claim of an `invoke` and its
+    /// per-call lower bound, keeping the operation. The owner becomes the
+    /// default (unknown) relation, `min` becomes `0`, and the owner resource is
+    /// removed when nothing else in the export names it.
+    ///
+    /// The weakening the owned-computation census asks for when it cannot
+    /// prove the eager computation around the caller's value: every other
+    /// field of the row (tracking, schedule, inputs) keeps its own evidence,
+    /// which the census re-confirms. Returns `false`, changing nothing, when
+    /// the operation is not an `invoke` under an owner it creates.
+    pub fn weaken_created_owner(&mut self, operation: &OperationId) -> bool {
+        let Some(candidate) = self.call.operations.iter_mut().find(|candidate| {
+            candidate.id == *operation
+                && candidate.kind == OperationKind::Invoke
+                && matches!(candidate.owner.source, OwnerSource::Created(_))
+        }) else {
+            return false;
+        };
+        let OwnerSource::Created(resource) = candidate.owner.source.clone() else {
+            return false;
+        };
+        candidate.owner = OwnerRelation::default();
+        if candidate.cardinality.min.is_some_and(|min| min > 0) {
+            candidate.cardinality.min = Some(0);
+        }
+        // A name is a whole `ResourceId("…")` in the debug rendering, so one
+        // id never matches inside another.
+        let name = format!("{resource:?}");
+        let named = self
+            .call
+            .operations
+            .iter()
+            .any(|operation| format!("{operation:?}").contains(&name))
+            || self
+                .call
+                .resources
+                .iter()
+                .filter(|candidate| candidate.id != resource)
+                .any(|candidate| format!("{candidate:?}").contains(&name));
+        if !named {
+            self.call
+                .resources
+                .retain(|candidate| candidate.id != resource);
+        }
+        true
+    }
+
+    /// [`Self::withhold_operations`], except that a seed in `narrowed` which is
+    /// a non-call `invoke` (a property read, iteration, coercion or
+    /// `hasInstance` of the caller's value) *narrows* `callbacks` instead of
+    /// opening it: its item is removed and the domain keeps its knowledge
+    /// state, closed or partial, and with it any proposed closure.
+    ///
+    /// Narrowing is not a weaker claim that the census is spared from checking.
+    /// A closed enumeration that lost an item is still a closure candidate, and
+    /// the implementation census re-confirms the narrowed enumeration site for
+    /// site -- a use it does see still refuses as undescribed -- so nothing is
+    /// certified the census did not confirm. The caller decides which items may
+    /// narrow (the certifier: an item whose positive facts found no use of a
+    /// parameter its declared signature types primitive-only); any other
+    /// removal from `callbacks`, or a narrowed id that is not a non-call
+    /// invoke, opens the domain as before.
+    pub fn withhold_operations_narrowing(
+        &mut self,
+        seeds: &BTreeSet<OperationId>,
+        narrowed: &BTreeSet<OperationId>,
+    ) -> BTreeSet<OperationId> {
+        let narrows: BTreeSet<OperationId> = self
+            .call
+            .operations
+            .iter()
+            .filter(|operation| narrowed.contains(&operation.id))
+            .filter(|operation| {
+                operation.kind == OperationKind::Invoke && operation.is_protocol_invocation()
+            })
+            .map(|operation| operation.id.clone())
+            .collect();
+        let mut gone: BTreeSet<OperationId> = self
+            .call
+            .operations
+            .iter()
+            .filter(|operation| seeds.contains(&operation.id))
+            .map(|operation| operation.id.clone())
+            .collect();
+        loop {
+            let cascade: BTreeSet<OperationId> = self
+                .call
+                .operations
+                .iter()
+                .filter(|operation| !gone.contains(&operation.id))
+                .filter(|operation| match &operation.trigger {
+                    Some(Trigger::Operation(trigger)) => gone.contains(trigger),
+                    _ => false,
+                })
+                .map(|operation| operation.id.clone())
+                .collect();
+            if cascade.is_empty() {
+                break;
+            }
+            gone.extend(cascade);
+        }
+        if gone.is_empty() {
+            return gone;
+        }
+        let mut opened: BTreeSet<ClaimDomain> = BTreeSet::new();
+        for domain in ClaimDomain::ALL {
+            let Some(claim) = self.call.claims.operation_claim_mut(domain) else {
+                continue;
+            };
+            let removed = match claim {
+                KnowledgeSet::Unknown => continue,
+                KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items) => {
+                    let before = items.len();
+                    items.retain(|id| !gone.contains(id));
+                    before != items.len()
+                }
+            };
+            if !removed {
+                continue;
+            }
+            // A domain emptied by the withdrawal is *unknown*, not an empty
+            // list. `Complete([])` proves the domain has no operations and
+            // `Partial([])` is refused outright ("partial knowledge must
+            // contain positive evidence"); the truth after withdrawing the
+            // only thing it listed is that this document no longer says.
+            if claim.items().is_empty() {
+                *claim = KnowledgeSet::Unknown;
+            }
+            opened.insert(domain);
+        }
+        // A consumer reads a closed `creates` as "no owner requirement beyond
+        // the published items" (`contracts.rs`' `project_owner_requirements`),
+        // so withdrawing an operation that imposes one on the caller withdraws
+        // that reading with it: `creates` opens too, and the import stays
+        // uncertifiable rather than reading as needing no owner (ADR 0114).
+        if self
+            .call
+            .operations
+            .iter()
+            .any(|operation| gone.contains(&operation.id) && operation.imposes_owner_requirement())
+        {
+            opened.insert(ClaimDomain::Creates);
+        }
+        let sourced_from_gone = |source: &ValueSource| match source {
+            ValueSource::OperationOutput { operation, .. } => gone.contains(operation),
+            _ => false,
+        };
+        let mut callbacks_narrowed = false;
+        let callbacks_changed = match &mut self.call.claims.callbacks {
+            KnowledgeSet::Unknown => false,
+            KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items) => {
+                // Removals that open the domain; a narrowing one does not.
+                let mut opening = 0usize;
+                items.retain(|invocation| {
+                    let removed =
+                        gone.contains(&invocation.operation) || sourced_from_gone(&invocation.from);
+                    if !removed {
+                        return true;
+                    }
+                    if narrows.contains(&invocation.operation) {
+                        callbacks_narrowed = true;
+                    } else {
+                        opening += 1;
+                    }
+                    false
+                });
+                opening > 0
+            }
+        };
+        // A partial enumeration narrowed to nothing is not "partial with no
+        // item", which the model refuses; it says nothing, so it is unknown.
+        if callbacks_narrowed
+            && !callbacks_changed
+            && !self.call.claims.callbacks.is_closed()
+            && self.call.claims.callbacks.items().is_empty()
+        {
+            self.call.claims.callbacks = KnowledgeSet::Unknown;
+        }
+        if callbacks_changed {
+            if self.call.claims.callbacks.items().is_empty() {
+                self.call.claims.callbacks = KnowledgeSet::Unknown;
+            }
+            opened.insert(ClaimDomain::Callbacks);
+        }
+        // Withdrawing an effect loses its result census too; do not leave a
+        // complete empty list behind after removing its only positive item.
+        self.call.callback_results.retain(|result| {
+            !gone.contains(&result.producer)
+                && !result.uses.items().iter().any(|id| gone.contains(id))
+        });
+        self.call
+            .operations
+            .retain(|operation| !gone.contains(&operation.id));
+        self.call
+            .edges
+            .retain(|edge| !gone.contains(&edge.from) && !gone.contains(&edge.to));
+        for operation in &mut self.call.operations {
+            if operation.composed_from.as_ref().is_some_and(|composed| {
+                composed.export == self.identity.public_name && gone.contains(&composed.operation)
+            }) {
+                operation.composed_from = None;
+            }
+        }
+        self.open_call_domains(opened);
+        gone
     }
 
     #[must_use]
     pub fn unresolved_call_claims(&self) -> Vec<ClaimPath> {
-        ClaimDomain::ALL
+        ClaimDomain::CLOSABLE
             .into_iter()
             .filter(|domain| self.call.claims.state(*domain).is_open())
             .map(ClaimPath::Call)
@@ -696,10 +1251,32 @@ pub enum ClaimDomain {
     Returns,
     Cleanups,
     Disposals,
+    /// The computations one invocation registers on an owner it does not
+    /// create (ADR 0114). Version 1 states it by item only: no document may
+    /// close it, so it is never one of [`Self::CLOSABLE`].
+    Computations,
 }
 
 impl ClaimDomain {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
+        Self::Callbacks,
+        Self::Reads,
+        Self::Writes,
+        Self::Creates,
+        Self::Invalidates,
+        Self::Throws,
+        Self::Returns,
+        Self::Cleanups,
+        Self::Disposals,
+        Self::Computations,
+    ];
+
+    /// The domains a document may name in `closed`, which are therefore the
+    /// ones an open domain is an *unresolved claim* in: every domain but
+    /// `computations`. That one has no closure in version 1 -- no census
+    /// decides it and `closed` may not name it -- so a document that does not
+    /// mention it says nothing, and nothing can resolve the silence (ADR 0114).
+    pub const CLOSABLE: [Self; 9] = [
         Self::Callbacks,
         Self::Reads,
         Self::Writes,
@@ -710,6 +1287,69 @@ impl ClaimDomain {
         Self::Cleanups,
         Self::Disposals,
     ];
+
+    /// Whether a document may name this domain in `closed`.
+    #[must_use]
+    pub fn is_closable(self) -> bool {
+        Self::CLOSABLE.contains(&self)
+    }
+
+    /// The call domains a document may *propose* closed
+    /// (`CallSemantics::proposed_closures`).
+    ///
+    /// The behavioral call domains the certifier has a proof mode for — the
+    /// implementation census: `creates` (ADR 0008) and `returns` (ADR 0035,
+    /// the empty closure only). A candidate the certifier cannot decide is not
+    /// a weaker proposal, it is a refused row — every other domain refuses by
+    /// name at witness acquisition, and only these are recipe-gated, so a
+    /// proposal of one of the others could never close and could only turn a
+    /// row whose every other claim was proven into a refusal. The generator's
+    /// candidates for the other domains therefore stay in the proposal plan
+    /// sidecar as measurement, and this list grows one domain at a time as
+    /// each census lands.
+    /// `Reads` is admitted (2026-09-10) on a premise it does not obtain
+    /// itself: a `runtime-accessor-installation` closure hazard withdraws the
+    /// domain for a case whose reads the census structurally cannot refuse.
+    /// That hazard is computed twice, over two ASTs, and both must agree —
+    /// see § 10 of
+    /// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`.
+    /// `Callbacks` is admitted (2026-09-12) for the empty enumeration only:
+    /// "this export invokes none of the callable arguments it is handed". The
+    /// implementation census proves it by there being no parameter-rooted
+    /// disposition in the same call walk `creates` runs, and the synthesized
+    /// veto contradicts it by observing invocation from inside the sampled
+    /// callback. ADR 0023's line holds by construction: the walk dispositions
+    /// calls, and retaining a callable is not one.
+    pub const PROPOSABLE: [Self; 4] = [Self::Creates, Self::Returns, Self::Reads, Self::Callbacks];
+
+    /// Whether a document may propose this domain for closure proof.
+    #[must_use]
+    pub fn is_proposable(self) -> bool {
+        Self::PROPOSABLE.contains(&self)
+    }
+
+    /// The domain's stable wire name, as every document, audit and refusal
+    /// sidecar spells it.
+    ///
+    /// One mapping, because there were two: the certifier had its own copy in
+    /// `contract_certification::type_facts`, and a generator-side record
+    /// needing the same names would have made a third. A name that drifts
+    /// between producer and consumer is the dual-census failure in miniature.
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Callbacks => "callbacks",
+            Self::Reads => "reads",
+            Self::Writes => "writes",
+            Self::Creates => "creates",
+            Self::Invalidates => "invalidates",
+            Self::Throws => "throws",
+            Self::Returns => "returns",
+            Self::Cleanups => "cleanups",
+            Self::Disposals => "disposals",
+            Self::Computations => "computations",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -788,6 +1428,54 @@ pub enum ResourceClaimDomain {
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CallSemantics {
     claims: CallClaims,
+    /// The closed call domains this document *proposes* rather than asserts:
+    /// closure a generator inferred and offers for proof, not closure an audit
+    /// established.
+    ///
+    /// Each named domain is closed in `claims` — a proposal of a closure the
+    /// document does not state is meaningless, and normalization refuses it.
+    /// The closure has to be in the document because that is the only place a
+    /// closure ever is: `ProofPolicy2::inspect_candidates` rebuilds the
+    /// planner's candidate universe by weakening the candidate's own closed
+    /// claims, and the canonical main a receipt binds is the candidate
+    /// document itself. A candidate that stated its closure anywhere else —
+    /// a sidecar, a request field — would make the planner's universe a
+    /// caller's choice and would leave nothing for a receipt to bind.
+    ///
+    /// What the marker adds is the distinction the weakening used to carry:
+    /// an emitted proposal is otherwise byte-indistinguishable from a reviewed
+    /// document making the same claim. It is in the semantic digest for the
+    /// same reason `composed_from` is — the two documents mean different
+    /// things, and a receipt for one must not authenticate the other.
+    proposed_closures: BTreeSet<ClaimDomain>,
+    /// ADR 0153 part 3: the conditions every claim of this export holds under.
+    /// Each names a context this package exports, and the claims hold only in
+    /// a program where that context receives no value from outside the
+    /// package. Empty for every export whose certification needed none.
+    ///
+    /// It is a condition, not a closure: weakening a candidate's closures
+    /// keeps it, and a consumer that cannot show the condition holds reads
+    /// every domain of the export as open.
+    context_premises: BTreeSet<ContextPremise>,
+    /// ADR 0153 item C: the closure's `runtime-accessor-installation` hazard
+    /// sites, by the source each names, that this export's closed `reads`
+    /// holds against. Each is a site whose target is an allocation its
+    /// installing function makes fresh and on which this export can execute
+    /// no operation, so what was installed there cannot run inside a call of
+    /// it. A consumer opens `reads` for every accessor hazard of the closure
+    /// not named here, exactly as it did before bounds existed. Stated only
+    /// beside a closed `reads`.
+    accessor_bounds: BTreeSet<String>,
+    /// Authored result-use censuses, local to this call graph. Omission is
+    /// historical behavior, never a negative claim about callback results.
+    callback_results: Vec<CallbackResult>,
+    /// Values retained at the enclosing factory call, not invocation arguments.
+    /// Valid only on a whole returned callable's graph. Authored only.
+    captures: Vec<CapturedValue>,
+    /// Authored conditional slice: an own string key of a captured dictionary,
+    /// with the listed factory defaults, returns that string after one ambient
+    /// dictionary call. Outside the premise, callbacks/returns stay unknown.
+    captured_lookup: Option<CapturedLookup>,
     pub operations: Vec<Operation>,
     pub edges: Vec<OperationEdge>,
     pub resources: Vec<Resource>,
@@ -805,11 +1493,97 @@ impl CallSemantics {
     ) -> Self {
         Self {
             claims,
+            proposed_closures: BTreeSet::new(),
+            context_premises: BTreeSet::new(),
+            accessor_bounds: BTreeSet::new(),
+            callback_results: Vec::new(),
+            captures: Vec::new(),
+            captured_lookup: None,
             operations,
             edges,
             resources,
             guards,
         }
+    }
+
+    /// State the package's finite uses of each invocation result. This never
+    /// asserts that a caller's implementation has the declared shape.
+    #[must_use]
+    pub fn with_callback_results(mut self, results: Vec<CallbackResult>) -> Self {
+        self.callback_results = results;
+        self
+    }
+
+    #[must_use]
+    pub fn callback_results(&self) -> &[CallbackResult] {
+        &self.callback_results
+    }
+
+    #[must_use]
+    pub fn with_captures(mut self, captures: Vec<CapturedValue>) -> Self {
+        self.captures = captures;
+        self
+    }
+
+    #[must_use]
+    pub fn with_captured_lookup(mut self, lookup: Option<CapturedLookup>) -> Self {
+        self.captured_lookup = lookup;
+        self
+    }
+
+    #[must_use]
+    pub fn captured_lookup(&self) -> Option<&CapturedLookup> {
+        self.captured_lookup.as_ref()
+    }
+
+    #[must_use]
+    pub fn captures(&self) -> &[CapturedValue] {
+        &self.captures
+    }
+
+    /// The same call semantics, additionally proposing the named domains for
+    /// closure proof. The domains' knowledge is untouched.
+    #[must_use]
+    pub fn with_proposed_closures(
+        mut self,
+        domains: impl IntoIterator<Item = ClaimDomain>,
+    ) -> Self {
+        self.proposed_closures.extend(domains);
+        self
+    }
+
+    #[must_use]
+    pub const fn proposed_closures(&self) -> &BTreeSet<ClaimDomain> {
+        &self.proposed_closures
+    }
+
+    /// The same call semantics, holding only under the named context
+    /// premises as well (ADR 0153 part 3).
+    #[must_use]
+    pub fn with_context_premises(
+        mut self,
+        premises: impl IntoIterator<Item = ContextPremise>,
+    ) -> Self {
+        self.context_premises.extend(premises);
+        self
+    }
+
+    #[must_use]
+    pub const fn context_premises(&self) -> &BTreeSet<ContextPremise> {
+        &self.context_premises
+    }
+
+    /// The same call semantics, with its closed `reads` bounded against the
+    /// named accessor-installation hazard sites as well (ADR 0153 item C).
+    #[must_use]
+    pub fn with_accessor_bounds(mut self, sources: impl IntoIterator<Item = String>) -> Self {
+        self.accessor_bounds.extend(sources);
+        self
+    }
+
+    #[must_use]
+    pub const fn accessor_bounds(&self) -> &BTreeSet<String> {
+        &self.accessor_bounds
     }
 
     #[must_use]
@@ -823,6 +1597,20 @@ impl CallSemantics {
     }
 }
 
+/// ADR 0153 part 3: a context this package exports as `export` receives no
+/// value from outside the package in the program the claims are used in.
+///
+/// A context that a package creates and provides itself can only be read as
+/// what the package provided, and a certification may rest a claim on that.
+/// Once the context escapes through an export, a consumer can provide its own
+/// value (`<RouterContext value={mock}>`), so the claim is stated under this
+/// premise, and the consumer discharges it or loses the claim.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+pub struct ContextPremise {
+    /// The package export the context escapes under (`RouterContext`).
+    pub export: String,
+}
+
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CallClaims {
     pub callbacks: KnowledgeSet<CallbackInvocation>,
@@ -834,6 +1622,8 @@ pub struct CallClaims {
     pub returns: KnowledgeSet<OperationId>,
     pub cleanups: KnowledgeSet<OperationId>,
     pub disposals: KnowledgeSet<OperationId>,
+    /// ADR 0114: never `Complete` in version 1.
+    pub computations: KnowledgeSet<OperationId>,
 }
 
 impl CallClaims {
@@ -845,6 +1635,24 @@ impl CallClaims {
                 .operation_claim(domain)
                 .expect("non-callback claim has an operation domain")
                 .state(),
+        }
+    }
+
+    fn operation_claim_mut(
+        &mut self,
+        domain: ClaimDomain,
+    ) -> Option<&mut KnowledgeSet<OperationId>> {
+        match domain {
+            ClaimDomain::Callbacks => None,
+            ClaimDomain::Reads => Some(&mut self.reads),
+            ClaimDomain::Writes => Some(&mut self.writes),
+            ClaimDomain::Creates => Some(&mut self.creates),
+            ClaimDomain::Invalidates => Some(&mut self.invalidates),
+            ClaimDomain::Throws => Some(&mut self.throws),
+            ClaimDomain::Returns => Some(&mut self.returns),
+            ClaimDomain::Cleanups => Some(&mut self.cleanups),
+            ClaimDomain::Disposals => Some(&mut self.disposals),
+            ClaimDomain::Computations => Some(&mut self.computations),
         }
     }
 
@@ -860,6 +1668,7 @@ impl CallClaims {
             ClaimDomain::Returns => Some(&self.returns),
             ClaimDomain::Cleanups => Some(&self.cleanups),
             ClaimDomain::Disposals => Some(&self.disposals),
+            ClaimDomain::Computations => Some(&self.computations),
         }
     }
 
@@ -880,8 +1689,25 @@ impl CallClaims {
             ClaimDomain::Disposals => {
                 self.disposals = std::mem::take(&mut self.disposals).weaken();
             }
+            ClaimDomain::Computations => {
+                self.computations = std::mem::take(&mut self.computations).weaken();
+            }
         }
     }
+}
+
+/// A finite, non-recursive use census for the value a caller invocation
+/// produces. `shape` is an upper-bound description; consumers must substitute
+/// the actual caller result before proving a negative or executing a target.
+/// A partial/unknown `uses` remains an obligation even for primitive data.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CallbackResult {
+    pub producer: OperationId,
+    pub shape: ValueShape,
+    pub uses: KnowledgeSet<OperationId>,
+    /// Exact uses guarded by a runtime callable test of this result value.
+    /// A zero lower bound alone never supplies that negative premise.
+    pub callable_only: BTreeSet<OperationId>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -892,9 +1718,23 @@ pub struct CallbackInvocation {
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ValueSource {
+    /// A value from this returned graph's capture catalogue. `path` is
+    /// relative to the retained value, never to an invocation argument.
+    Capture {
+        capture: String,
+        path: Vec<String>,
+    },
     Parameter {
         index: u16,
         path: Vec<String>,
+    },
+    /// ADR 0207: every member of the value at `index`/`path` in `class`. The
+    /// item is exhaustive for that class: every invocation of such a member
+    /// is its operation, whatever the domain's closure says.
+    ParameterMembers {
+        index: u16,
+        path: Vec<String>,
+        class: MemberClass,
     },
     OperationOutput {
         operation: OperationId,
@@ -907,7 +1747,53 @@ pub enum ValueSource {
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CapturedValue {
+    pub id: String,
+    /// Exact source in the enclosing factory's graph.
+    pub from: ValueSource,
+}
+
+/// ADR 0207: a class of an object's own properties a callback item names.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum MemberClass {
+    /// Every key that starts with `on` and contains no `:`: the properties
+    /// the Solid runtime's spread attaches as event listeners.
+    EventHandlerProps,
+}
+
+impl MemberClass {
+    /// Whether `key` is a member of the class.
+    #[must_use]
+    pub fn contains(self, key: &str) -> bool {
+        match self {
+            Self::EventHandlerProps => key.starts_with("on") && !key.contains(':'),
+        }
+    }
+
+    /// The class's wire spelling.
+    #[must_use]
+    pub const fn wire(self) -> &'static str {
+        match self {
+            Self::EventHandlerProps => "event-handler-props",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct OperationId(pub String);
+
+/// Finite conditional lookup recipe, not an unconditional callback census.
+/// `dictionary` names one bare factory-parameter capture; `key` is an invocation
+/// argument. Only omitted `default_arguments` are initially admitted. A literal
+/// string key is optionally stripped of one leading dot, then an exact own data
+/// string property is selected. No dictionary/result identity escapes this slice.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CapturedLookup {
+    pub dictionary: String,
+    pub key: u16,
+    pub default_arguments: Vec<u16>,
+    pub strip_leading_dot: bool,
+}
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ResourceId(pub String);
@@ -922,6 +1808,9 @@ pub enum OperationKind {
     Create,
     Cleanup,
     Dispose,
+    /// Registering a computation on an owner this operation does not create
+    /// (ADR 0114); the `computations` domain's one kind.
+    Compute,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -936,6 +1825,16 @@ pub enum Event {
     External,
     Request,
     ResponseCommitment,
+    /// ADR 0139: the export stores the callable only in the value it returns
+    /// (for a construction, the instance), and the callable runs later, on
+    /// the stack of code that invokes it through that value. Valid only on an
+    /// `invoke` a `callbacks` item names from a bare parameter, with schedule
+    /// `external`, tracking and owner `ambient-at-execution`, counted per
+    /// trigger from zero to many, unguarded
+    /// (`validate::validate_result_access_operation`). A catalogued callback
+    /// result use instead states its exact context and can run synchronously
+    /// and untracked on a later caller's stack; it is never guessed queued.
+    ResultAccess,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -950,6 +1849,72 @@ pub enum Schedule {
     SameStack,
     Queued,
     External,
+}
+
+/// Which protocol of the caller's value an `invoke` operation runs.
+///
+/// A call is the historical meaning of every `invoke`, and stays the one
+/// spelled by absence: [`Operation::protocol`] is `None` for it, and a decoded
+/// `call` normalizes to `None`, so the model has one meaning for it. The other
+/// four are the non-call invocations of caller-supplied code `semantic-model.md`
+/// § callbacks names: a property read that may run a getter or a proxy trap
+/// (`Get`), the iteration protocol (`Iterate`), ToPrimitive (`Coerce`), and
+/// `Symbol.hasInstance` (`HasInstance`). Two explicit value enumerations
+/// additionally distinguish which property values are obtained; their entry
+/// bounds never establish every getter's execution. Each runs whatever the caller's value
+/// carries, at the call, on the caller's stack, in the caller's tracking
+/// context. Historical argument protocol items are always
+/// `ambient-at-execution`. A catalogued callback-result use states its exact
+/// execution point, owner and tracking independently of the producer.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum InvokeProtocol {
+    Call,
+    Get,
+    Iterate,
+    Coerce,
+    HasInstance,
+    /// One for-in value-copy enumeration entered on every call. Own keys
+    /// precede inherited enumerable string keys. This does not guarantee
+    /// reaching a key after an earlier getter throws or mutates the object.
+    GetEnumerableStringValues,
+    /// At most one CopyDataProperties occurrence, after an unproved prefix.
+    /// Own enumerable strings and symbols participate; inherited keys do not.
+    GetOwnEnumerableValues,
+}
+
+impl InvokeProtocol {
+    /// The wire spelling (`has-instance`, kebab-case).
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Call => "call",
+            Self::Get => "get",
+            Self::Iterate => "iterate",
+            Self::Coerce => "coerce",
+            Self::HasInstance => "has-instance",
+            Self::GetEnumerableStringValues => "get-enumerable-string-values",
+            Self::GetOwnEnumerableValues => "get-own-enumerable-values",
+        }
+    }
+
+    #[must_use]
+    pub const fn is_value_enumeration(self) -> bool {
+        matches!(
+            self,
+            Self::GetEnumerableStringValues | Self::GetOwnEnumerableValues
+        )
+    }
+
+    /// Fixed occurrence bounds of the two deliberately narrow initial forms.
+    /// Bounds count enumeration entries, never every selected property Get.
+    #[must_use]
+    pub fn enumeration_cardinality(self) -> Option<Cardinality> {
+        self.is_value_enumeration().then_some(Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(u32::from(self == Self::GetEnumerableStringValues)),
+            max: Some(UpperBound::Finite(1)),
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1090,6 +2055,37 @@ pub enum BehaviorStrength {
     Guaranteed,
 }
 
+/// The `(export, operation)` an operation was composed from, inside the same
+/// artifact case.
+///
+/// A *positive* claim, not a hint: "the behaviour this operation describes is
+/// that export's own operation, performed through this export's call to it".
+/// The export is named because a consumer has to resolve the composing call's
+/// callee to it exactly, and the operation is named because a composed row
+/// says which of the target's operations it is — "some read of that export"
+/// would be a claim about a set.
+///
+/// Composition is intra-package and same-stack by construction. The operation
+/// id is qualified with this artifact case, so a provenance can never name
+/// another package's export; and a consumer must prove the composing call is
+/// a reachable, uncaptured *call*, so the composed row's `at: call /
+/// schedule: same-stack` stamp survives the hop rather than being inherited
+/// through a closure.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ComposedFrom {
+    pub export: String,
+    pub operation: OperationId,
+}
+
+/// An explicitly established strict-read execution context. Absence states
+/// no fact about strict-read warnings, including on an untracked operation.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum StrictRead {
+    /// The read executes with the strict-read window cleared. Valid only on
+    /// a read whose tracking is untracked; never inferred from tracking alone.
+    Cleared,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Operation {
     pub id: OperationId,
@@ -1099,11 +2095,100 @@ pub struct Operation {
     pub at: Option<Event>,
     pub schedule: Option<Schedule>,
     pub tracking: Tracking,
+    /// Only an explicit contract assertion can clear strict-read attribution.
+    pub strict_read: Option<StrictRead>,
     pub owner: OwnerRelation,
     pub cardinality: Cardinality,
     pub inputs: Vec<ValueShape>,
     pub output: Option<ValueShape>,
     pub resources: BTreeSet<ResourceId>,
+    /// The `(export, operation)` of the same artifact case this operation was
+    /// composed from, when the generator could name it exactly.
+    ///
+    /// `None` is every other case and keeps the operation's own evidence the
+    /// only route to discharging it. Provenance may only *add* a discharge
+    /// route, never remove one.
+    pub composed_from: Option<ComposedFrom>,
+    /// The protocol a non-call `invoke` runs (see [`InvokeProtocol`]). `None`
+    /// is a call, and is the only value any other kind may carry.
+    pub protocol: Option<InvokeProtocol>,
+}
+
+impl Operation {
+    /// Whether this operation imposes an owner obligation on the export's
+    /// *caller*: it requires an owner it does not itself create.
+    ///
+    /// `requires: required` alone is not the test. Audited `render`'s
+    /// `register-delegation` requires an owner *and* made it (`source:
+    /// created`), and reading `requires` alone would report an owner-less
+    /// effect for a top-level `render(...)`. The consumer's owner-requirement
+    /// projection and [`ExportSemantics::withhold_operations`] both ask this,
+    /// so the two cannot disagree about which operations a withdrawal loses.
+    #[must_use]
+    pub fn imposes_owner_requirement(&self) -> bool {
+        self.owner.requirements.owner == Requirement::Required
+            && !matches!(self.owner.source, OwnerSource::Created(_))
+    }
+
+    /// Whether this is a `return` that states nothing but its output: unguarded,
+    /// triggered by and at the call, on the same stack, untracked, under no
+    /// owner relation, of the default per-call cardinality, with no input, no
+    /// resource, no provenance and no protocol (ADR 0170).
+    ///
+    /// The shape every generated `return` has. A dependency's return that
+    /// states anything more -- a guard, an owner, a resource it names -- is not
+    /// one a re-exporting package can state again by output alone, because the
+    /// restatement would drop what the extra field said.
+    #[must_use]
+    pub fn is_bare_return(&self) -> bool {
+        self.kind == OperationKind::Return
+            && self.guard.is_none()
+            && self.trigger == Some(Trigger::Event(Event::Call))
+            && self.at == Some(Event::Call)
+            && self.schedule == Some(Schedule::SameStack)
+            && self.tracking == Tracking::Untracked
+            && self.owner == OwnerRelation::default()
+            && self.cardinality
+                == (Cardinality {
+                    scope: Some(CardinalityScope::Call),
+                    min: Some(0),
+                    max: Some(UpperBound::Many),
+                })
+            && self.inputs.is_empty()
+            && self.resources.is_empty()
+            && self.composed_from.is_none()
+            && self.protocol.is_none()
+    }
+
+    /// The protocol this operation invokes, `Call` for every operation that
+    /// states none.
+    #[must_use]
+    pub fn invoke_protocol(&self) -> InvokeProtocol {
+        self.protocol.unwrap_or(InvokeProtocol::Call)
+    }
+
+    /// Whether this is an `invoke` of a protocol other than a call — a
+    /// property read, iteration, coercion or `hasInstance` of the caller's
+    /// value, which is not an inline invocation of a callable.
+    #[must_use]
+    pub fn is_protocol_invocation(&self) -> bool {
+        self.invoke_protocol() != InvokeProtocol::Call
+    }
+
+    /// Whether this operation happens at [`Event::ResultAccess`] (ADR 0139):
+    /// its execution point or its trigger names the event.
+    #[must_use]
+    pub fn is_result_access(&self) -> bool {
+        self.at == Some(Event::ResultAccess)
+            || matches!(
+                self.trigger,
+                Some(Trigger::Event(Event::ResultAccess))
+                    | Some(Trigger::Resource {
+                        event: Event::ResultAccess,
+                        ..
+                    })
+            )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1189,6 +2274,13 @@ pub enum GuardAtom {
         argument: u16,
         path: Vec<String>,
         kind: ValueKind,
+    },
+    /// An exact, fresh own-data object with precisely this unordered key set.
+    /// Type declarations and partial property observations cannot prove it.
+    OwnDataKeys {
+        argument: u16,
+        path: Vec<String>,
+        names: Vec<String>,
     },
     Property {
         argument: u16,
@@ -1331,8 +2423,73 @@ pub enum ValueShape {
         resource: Option<ResourceId>,
         capabilities: KnowledgeSet<CapabilityClaim>,
     },
+    /// An object whose property reads reach through to **the caller's argument
+    /// at `from`**: what a props merge yields (ADR 0109).
+    ///
+    /// Conditional, and that is the whole shape. A merge creates no reactive
+    /// source; it carries its arguments'. `solid-js@1.9.14` returns a `$PROXY`
+    /// only when some source is already a proxy or is a function, and otherwise
+    /// rebuilds the object preserving each source's own descriptors — so
+    /// `mergeProps({ a: 1 }, { b: 2 })` is plain and destructuring it loses
+    /// nothing. A [`ValueShape::Store`] here would assert reactivity the
+    /// runtime does not always produce; this shape asserts it exactly of a
+    /// caller who passed a reactive argument at `from`, and asserts nothing
+    /// otherwise.
+    MergedProps {
+        from: u16,
+    },
+    /// A **fresh** array whose elements, in order, are exactly the caller's own
+    /// arguments at `items` (ADR 0115): `[value]` is `[0]`, and `[]` is empty.
+    ///
+    /// Exact by construction, so it carries no knowledge set and no closure of
+    /// its own to decide: a `Tuple` of `Parameter`s would say the same thing
+    /// with a `tuple-items` closure beside it, which no census decides for an
+    /// operation's output. The array is the callee's, freshly built; what it
+    /// holds is the caller's.
+    ArgumentArray {
+        items: Vec<u16>,
+    },
+    /// The value **an invocation of the caller's own argument at `parameter`**
+    /// returned, handed back unchanged (ADR 0116): `valueOrFn(...args)` is
+    /// `parameter: 0`.
+    ///
+    /// Exact for the same reason [`ValueShape::ArgumentArray`] is: no
+    /// knowledge set and no closure of its own. It names no argument of the
+    /// invocation -- which arguments produced the value is the `callbacks`
+    /// domain's question -- and says nothing of the value but where it came
+    /// from.
+    InvocationResult {
+        parameter: u16,
+    },
+    /// Exactly `undefined` (item B round 2 of ways-to-improve § 3.3): what an
+    /// optional chain hands back when its receiver is nullish -- `p?.key`'s
+    /// other value. Narrower than [`ValueShape::Plain`], which says only
+    /// "no reactive capability": this names the one value, so a `returns`
+    /// census can enumerate it beside the member read and a veto can compare
+    /// a completion with it by `===`. Exact, with no knowledge set and no
+    /// closure of its own.
+    Undefined,
     Action {
         transition: Option<ResourceId>,
+    },
+    /// ADR 0235: a callable the export returns as a member of a tuple or
+    /// object, with what one call of it does: its own call graph. Its
+    /// operations share the export's id namespace (distinct from the
+    /// export's own), and it may name the export's resources, which is how
+    /// it states that `start` reads the signal its constructor created. Valid
+    /// only as a direct member of a `return` operation's tuple or object
+    /// output, never nested.
+    EffectfulCallable(Box<CallSemantics>),
+    /// A whole function returned by a factory. The graph's parameters are
+    /// invocation arguments, never retained factory arguments. Its explicit
+    /// capture catalogue supplies those retained values in a separate scope.
+    /// Named function
+    /// object members use the existing returned-member vocabulary. Missing
+    /// graphs or members assert nothing about later dispatch. Authored only;
+    /// valid only as the whole output of a factory return, never nested.
+    ReturnedCallable {
+        call: Option<Box<CallSemantics>>,
+        members: Vec<ObjectProperty>,
     },
     Component,
     Cleanup {
@@ -1343,6 +2500,239 @@ pub enum ValueShape {
     ServerFunctionReference {
         resource: Option<ResourceId>,
     },
+    /// ADR 0145: a callable the export hands its caller, **together with what
+    /// one invocation of it does** -- its own call claims, stated exactly.
+    ///
+    /// Exact by construction, like [`ValueShape::ArgumentArray`]: it carries
+    /// no knowledge set and so no closure of its own for a census to decide.
+    /// Stated, it says that one invocation of the value, by whoever holds it,
+    /// invokes no callable it did not itself define -- neither its own
+    /// arguments nor any value the export was handed (`callbacks: []`),
+    /// creates nothing and registers nothing on an owner (`creates: []`),
+    /// performs exactly [`DescribedCall::reads`], and hands back exactly one of
+    /// [`DescribedCall::returns`] (none: it completes without a value). It says
+    /// nothing about the other domains. Where the census cannot establish all
+    /// of that, the `return` stating it is withdrawn and the domain opens: a
+    /// nested claim is never partially stated.
+    ///
+    /// Valid only as the whole output of a `return` operation
+    /// (`validate::normalize_described_callable`).
+    DescribedCallable(Box<DescribedCall>),
+    /// ADR 0146: exactly the value one of the enclosing described callable's
+    /// own [`DescribedCall::reads`] observed, handed back unchanged --
+    /// `() => count()`. Valid only as an item of a described callable's
+    /// `returns` whose `reads` is not empty (`validate::normalize_described_callable`).
+    ReadValue,
+    /// Authored-only fresh instance returned by an exact exported constructor.
+    /// Members state the audited getObserver-gated TriggerCache recipe, not an
+    /// unconditional reactive brand. Iterator tracks run on first resumption.
+    /// Each cache is local to this one instance; argument and shared keys are
+    /// distinct. A missing member never states an empty call graph.
+    PrototypeInstance {
+        members: Vec<PrototypeMember>,
+        population: PrototypePopulation,
+    },
+    /// Authored Get recipe for a fresh static object. Exact named keys, or
+    /// keys of the factory argument at `from`; these alternatives are exclusive.
+    /// An unobserved first Get returns plain data; an observed Get creates an
+    /// owned-write signal for this key and reads it. Subsequent Gets retain
+    /// that signal. This does not brand the object as an unconditional store.
+    /// The initial consumer proves only direct tracked Gets. It deliberately
+    /// retains every untracked Get as an obligation, without guessing cache
+    /// state, dominance, or the observer from the lifecycle owner.
+    /// `from` additionally requires a getter-free primitive-valued literal
+    /// at the consumer: arbitrary functions can select createSignal's memo
+    /// overload, and arbitrary inherited/cache-prototype keys are unsafe.
+    LazyGetterObject {
+        keys: Vec<String>,
+        from: Option<u16>,
+    },
+}
+
+/// Constructor input protocol. Opaque population admits only the zero-argument
+/// slice. Values iterate one input; entries additionally spread every entry.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PrototypePopulation {
+    Opaque,
+    Values,
+    Entries,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PrototypeInstanceRecipe {
+    pub members: Vec<PrototypeMember>,
+    pub population: PrototypePopulation,
+}
+
+/// One exact prototype dispatch. `@@iterator` names the well-known iteration
+/// protocol, never a string-named property or an arbitrary computed expression.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PrototypeMember {
+    pub name: String,
+    pub kind: PrototypeMemberKind,
+    pub tracks: Vec<PrototypeTrack>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PrototypeMemberKind {
+    Method,
+    Getter,
+    Iterator,
+}
+
+/// TriggerCache.track's complete conditional behavior: absent observer does
+/// nothing; present observer creates a signal if missing, always registers
+/// cleanup, and always reads the signal. Signal construction alone is optional.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PrototypeTrack {
+    pub cache: String,
+    pub argument: Option<u16>,
+    pub shared: Option<String>,
+}
+
+/// The audited static-store cache is an ordinary object, not a Map or a
+/// null-prototype object. A prototype collision is not a lazy signal recipe.
+pub(crate) fn lazy_getter_cache_key_is_reserved(key: &str) -> bool {
+    matches!(
+        key,
+        "__proto__"
+            | "constructor"
+            | "toString"
+            | "toLocaleString"
+            | "valueOf"
+            | "hasOwnProperty"
+            | "isPrototypeOf"
+            | "propertyIsEnumerable"
+            | "__defineGetter__"
+            | "__defineSetter__"
+            | "__lookupGetter__"
+            | "__lookupSetter__"
+    )
+}
+
+/// ADR 0145: what one invocation of a [`ValueShape::DescribedCallable`] does.
+///
+/// Every list is an exact enumeration, canonically sorted and without
+/// duplicates. `returns` admits only exact outputs whose meaning does not
+/// depend on who calls: `plain`, (ADR 0146) [`ValueShape::ReadValue`], and
+/// (ADR 0152) [`ValueShape::InvocationResult`] of an argument one of
+/// `callbacks` names. Every read is performed on the invoking caller's stack,
+/// in that caller's tracking context.
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DescribedCall {
+    pub reads: Vec<DescribedRead>,
+    pub returns: Vec<ValueShape>,
+    /// ADR 0152: the callables one invocation of the described callable runs
+    /// that it did not itself define -- each an argument the **export** was
+    /// handed and the returned callable captured. Empty is ADR 0145's
+    /// `callbacks: []`, and it is how every document before ADR 0152 reads.
+    pub callbacks: Vec<DescribedCallback>,
+}
+
+/// ADR 0152: one invocation a described callable performs of a callable its
+/// export was handed, in the top-level `callbacks` vocabulary: a `from` (the
+/// export's own argument, a bare [`ValueSource::Parameter`]) and the
+/// invocation's execution point, schedule, tracking, owner and count, spelled
+/// as an `invoke` operation spells them. Stated inside a described callable,
+/// every `call` is the invocation of the described callable, not the export's.
+///
+/// Validation admits exactly one invocation today
+/// (`validate::normalize_described_callable`): triggered by and at that call,
+/// on the same stack, in the invoking caller's tracking context and under its
+/// owner, exactly once per invocation, unguarded, a call. That is the one the
+/// census can prove -- a call of the captured argument in the returned
+/// literal's own frame that runs on every normal completion of it; a deferred,
+/// conditional or repeated invocation is not stated at all, and the `return`
+/// carrying it is withdrawn instead.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DescribedCallback {
+    pub from: ValueSource,
+    pub trigger: Option<Trigger>,
+    pub at: Option<Event>,
+    pub schedule: Option<Schedule>,
+    pub tracking: Tracking,
+    pub owner: OwnerRelation,
+    pub cardinality: Cardinality,
+}
+
+impl DescribedCallback {
+    /// The one invocation ADR 0152 admits, of the export's argument `index`.
+    #[must_use]
+    pub fn same_stack_once(index: u16) -> Self {
+        Self {
+            from: ValueSource::Parameter {
+                index,
+                path: Vec::new(),
+            },
+            trigger: Some(Trigger::Event(Event::Call)),
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            tracking: Tracking::AmbientAtExecution,
+            owner: OwnerRelation {
+                source: OwnerSource::AmbientAtExecution,
+                requirements: OwnerRequirements::default(),
+                capabilities: OwnerCapabilities::default(),
+                lifetime: None,
+                productions: KnowledgeSet::Unknown,
+            },
+            cardinality: Cardinality {
+                scope: Some(CardinalityScope::Call),
+                min: Some(1),
+                max: Some(UpperBound::Finite(1)),
+            },
+        }
+    }
+
+    /// The export argument this item invokes, when it is the bare parameter
+    /// the one admitted shape names.
+    #[must_use]
+    pub fn parameter(&self) -> Option<u16> {
+        match &self.from {
+            ValueSource::Parameter { index, path } if path.is_empty() => Some(*index),
+            _ => None,
+        }
+    }
+}
+
+/// ADR 0145/0146: one reactive read a described callable performs when it is
+/// invoked.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum DescribedRead {
+    /// ADR 0146: a read of a signal accessor the export's own invocation
+    /// created through a dialect primitive and captured, whose read runs no
+    /// code of anyone's.
+    OwnedSignal,
+    /// ADR 0162: a read of a memo accessor the export's own invocation
+    /// created with the dialect's `createMemo` and handed back unaltered. It
+    /// observes the memo's current value in the invoking caller's tracking
+    /// context. Unlike [`DescribedRead::OwnedSignal`] it is **not inert**: when
+    /// the memo is stale the read re-runs the computation the creating call
+    /// registered, and that computation -- the code the export defined or was
+    /// handed, and every callable it invokes -- is accounted for by the
+    /// export's own `creates` and `callbacks` claims where it was registered,
+    /// never by this read. Its creating call's options are certified to retain
+    /// no callback; the read invokes no other callable, and may throw
+    /// the memo's own error or a not-ready signal.
+    OwnedMemo,
+}
+
+impl DescribedRead {
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::OwnedSignal => "owned-signal",
+            Self::OwnedMemo => "owned-memo",
+        }
+    }
+
+    #[must_use]
+    pub fn from_wire(value: &str) -> Option<Self> {
+        match value {
+            "owned-signal" => Some(Self::OwnedSignal),
+            "owned-memo" => Some(Self::OwnedMemo),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

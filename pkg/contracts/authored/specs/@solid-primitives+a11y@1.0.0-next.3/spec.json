@@ -1,0 +1,137 @@
+{
+  "package": "@solid-primitives/a11y",
+  "version": "1.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createReducedMotion": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/a11y/dist/reduced-motion.js:32-40 \u2014 Ordinary signal reads are strict; no lazy observer-only signal construction. Browser draft; Chrome probes pending, not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "reduced-motion"
+            }
+          },
+          {
+            "id": "create-preference",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "reduced-motion"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "reduced-motion",
+            "kind": "reactive-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-preference"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/a11y/dist/reduced-motion.js:32-40 \u2014 Browser always makes one eager scalar signal and one direct cleanup, returns exactly the accessor, invokes no caller callable and reads no own reactive state. P1 covers matchMedia matches and listener methods. No hydration branch.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/a11y/dist/reduced-motion.js:32-40 \u2014 Browser always makes one eager scalar signal and one direct cleanup, returns exactly the accessor, invokes no caller callable and reads no own reactive state. P1 covers matchMedia matches and listener methods. No hydration branch.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/a11y/dist/reduced-motion.js:32-40 \u2014 Browser always makes one eager scalar signal and one direct cleanup, returns exactly the accessor, invokes no caller callable and reads no own reactive state. P1 covers matchMedia matches and listener methods. No hydration branch.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/a11y/dist/reduced-motion.js:32-40 \u2014 Browser always makes one eager scalar signal and one direct cleanup, returns exactly the accessor, invokes no caller callable and reads no own reactive state. P1 covers matchMedia matches and listener methods. No hydration branch."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "The direct cleanup or effect runs ownerless versus inside a live root; dispose is queued outside render."
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        }
+      ]
+    }
+  }
+}

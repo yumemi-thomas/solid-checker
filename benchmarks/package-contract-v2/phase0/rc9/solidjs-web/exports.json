@@ -1,0 +1,255 @@
+{
+  ".": {
+    "worker": {
+      "development": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.observe.js"
+      },
+      "types": "./types/index.d.ts",
+      "default": "./dist/server.js"
+    },
+    "browser": {
+      "development": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/web.dev.js"
+      },
+      "observe": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/web.observe.js"
+      },
+      "types": "./types/index.d.ts",
+      "default": "./dist/web.js"
+    },
+    "deno": {
+      "development": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.observe.js"
+      },
+      "types": "./types/index.d.ts",
+      "default": "./dist/server.js"
+    },
+    "node": {
+      "development": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.observe.js"
+      },
+      "types": "./types/index.d.ts",
+      "default": "./dist/server.js"
+    },
+    "development": {
+      "types": "./types/index.d.ts",
+      "default": "./dist/web.dev.js"
+    },
+    "observe": {
+      "types": "./types/index.d.ts",
+      "default": "./dist/web.observe.js"
+    },
+    "types": "./types/index.d.ts",
+    "default": "./dist/web.js"
+  },
+  "./jsx-runtime": {
+    "types": "./types/jsx.d.ts",
+    "default": "./dist/web.js"
+  },
+  "./jsx-dev-runtime": {
+    "types": "./types/jsx.d.ts",
+    "default": "./dist/web.dev.js"
+  },
+  "./storage": {
+    "types": "./storage/types/index.d.ts",
+    "default": "./storage/dist/storage.js"
+  },
+  "./serialization": {
+    "types": "./serialization/types/index.d.ts",
+    "default": "./serialization/dist/serialization.js"
+  },
+  "./serialization/decode": {
+    "types": "./serialization/types/serializer-decode.d.ts",
+    "default": "./serialization/dist/decode.js"
+  },
+  "./server-functions": {
+    "worker": {
+      "development": {
+        "types": "./types/server-functions/server.d.ts",
+        "default": "./server-functions/dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/server-functions/server.d.ts",
+        "default": "./server-functions/dist/server.observe.js"
+      },
+      "types": "./types/server-functions/server.d.ts",
+      "default": "./server-functions/dist/server.js"
+    },
+    "browser": {
+      "development": {
+        "types": "./types/server-functions/client.d.ts",
+        "default": "./server-functions/dist/client.dev.js"
+      },
+      "observe": {
+        "types": "./types/server-functions/client.d.ts",
+        "default": "./server-functions/dist/client.observe.js"
+      },
+      "types": "./types/server-functions/client.d.ts",
+      "default": "./server-functions/dist/client.js"
+    },
+    "deno": {
+      "development": {
+        "types": "./types/server-functions/server.d.ts",
+        "default": "./server-functions/dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/server-functions/server.d.ts",
+        "default": "./server-functions/dist/server.observe.js"
+      },
+      "types": "./types/server-functions/server.d.ts",
+      "default": "./server-functions/dist/server.js"
+    },
+    "node": {
+      "development": {
+        "types": "./types/server-functions/server.d.ts",
+        "default": "./server-functions/dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/server-functions/server.d.ts",
+        "default": "./server-functions/dist/server.observe.js"
+      },
+      "types": "./types/server-functions/server.d.ts",
+      "default": "./server-functions/dist/server.js"
+    },
+    "development": {
+      "types": "./types/server-functions/client.d.ts",
+      "default": "./server-functions/dist/client.dev.js"
+    },
+    "observe": {
+      "types": "./types/server-functions/client.d.ts",
+      "default": "./server-functions/dist/client.observe.js"
+    },
+    "types": "./types/server-functions/client.d.ts",
+    "default": "./server-functions/dist/client.js"
+  },
+  "./server-functions/server": {
+    "development": {
+      "types": "./types/server-functions/server.d.ts",
+      "default": "./server-functions/dist/server.dev.js"
+    },
+    "observe": {
+      "types": "./types/server-functions/server.d.ts",
+      "default": "./server-functions/dist/server.observe.js"
+    },
+    "types": "./types/server-functions/server.d.ts",
+    "default": "./server-functions/dist/server.js"
+  },
+  "./server-functions/client": {
+    "development": {
+      "types": "./types/server-functions/client.d.ts",
+      "default": "./server-functions/dist/client.dev.js"
+    },
+    "observe": {
+      "types": "./types/server-functions/client.d.ts",
+      "default": "./server-functions/dist/client.observe.js"
+    },
+    "types": "./types/server-functions/client.d.ts",
+    "default": "./server-functions/dist/client.js"
+  },
+  "./server-functions/rich-args": {
+    "types": "./types/server-functions/rich-args.d.ts",
+    "default": "./server-functions/dist/rich-args.js"
+  },
+  "./frames": {
+    "worker": {
+      "development": {
+        "types": "./types/frames/server.d.ts",
+        "default": "./frames/dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/frames/server.d.ts",
+        "default": "./frames/dist/server.observe.js"
+      },
+      "types": "./types/frames/server.d.ts",
+      "default": "./frames/dist/server.js"
+    },
+    "browser": {
+      "development": {
+        "types": "./types/frames/client.d.ts",
+        "default": "./frames/dist/client.dev.js"
+      },
+      "observe": {
+        "types": "./types/frames/client.d.ts",
+        "default": "./frames/dist/client.observe.js"
+      },
+      "types": "./types/frames/client.d.ts",
+      "default": "./frames/dist/client.js"
+    },
+    "deno": {
+      "development": {
+        "types": "./types/frames/server.d.ts",
+        "default": "./frames/dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/frames/server.d.ts",
+        "default": "./frames/dist/server.observe.js"
+      },
+      "types": "./types/frames/server.d.ts",
+      "default": "./frames/dist/server.js"
+    },
+    "node": {
+      "development": {
+        "types": "./types/frames/server.d.ts",
+        "default": "./frames/dist/server.dev.js"
+      },
+      "observe": {
+        "types": "./types/frames/server.d.ts",
+        "default": "./frames/dist/server.observe.js"
+      },
+      "types": "./types/frames/server.d.ts",
+      "default": "./frames/dist/server.js"
+    },
+    "development": {
+      "types": "./types/frames/client.d.ts",
+      "default": "./frames/dist/client.dev.js"
+    },
+    "observe": {
+      "types": "./types/frames/client.d.ts",
+      "default": "./frames/dist/client.observe.js"
+    },
+    "types": "./types/frames/client.d.ts",
+    "default": "./frames/dist/client.js"
+  },
+  "./frames/server": {
+    "development": {
+      "types": "./types/frames/server.d.ts",
+      "default": "./frames/dist/server.dev.js"
+    },
+    "observe": {
+      "types": "./types/frames/server.d.ts",
+      "default": "./frames/dist/server.observe.js"
+    },
+    "types": "./types/frames/server.d.ts",
+    "default": "./frames/dist/server.js"
+  },
+  "./frames/client": {
+    "development": {
+      "types": "./types/frames/client.d.ts",
+      "default": "./frames/dist/client.dev.js"
+    },
+    "observe": {
+      "types": "./types/frames/client.d.ts",
+      "default": "./frames/dist/client.observe.js"
+    },
+    "types": "./types/frames/client.d.ts",
+    "default": "./frames/dist/client.js"
+  },
+  "./types/*": "./types/*"
+}

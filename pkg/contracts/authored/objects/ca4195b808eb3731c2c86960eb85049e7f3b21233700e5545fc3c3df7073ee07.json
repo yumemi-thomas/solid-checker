@@ -1,0 +1,198 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "20e557023969236a592253cefe58f806cdb466a7db74d4f1d8d35fead6cf257b",
+            "path": "./dist/index.js",
+            "sha256": "d33cc1cbd81d0b3e806efb3eb4fcc733b0f7e03eaeefc383ed4d4df6dcedde85"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "a6a26f742e3e506e3168824aa885ffcfab085621cc9785aa948b6633c56a92dc"
+          },
+          "exports": {
+            "createReactiveWorker": "open-callable",
+            "createWorker": "authored-createWorker",
+            "createWorkerPool": "open-callable",
+            "createWorkerQuery": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-rbzg3Pn8iN0gcRlhwF2FaE3afvLiHCUIE6A+UgfGQVnv34lwasU+dwaXX0Ru+kSoK2ulayuiV6ObifyWF78uOA==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "81ac115741f58b3f16229afbea0f02c04b9985322ce7bf2d20cb0c88eb8e5f83"
+    },
+    "name": "@solid-primitives/workers",
+    "version": "2.0.1-next.1"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createWorker": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "unknown"
+                },
+                {
+                  "kind": "effectful-callable",
+                  "call": {
+                    "closed": [
+                      "reads",
+                      "creates",
+                      "callbacks",
+                      "returns"
+                    ],
+                    "reads": [],
+                    "creates": [],
+                    "callbacks": [],
+                    "returns": [
+                      "worker-start-return"
+                    ],
+                    "operations": [
+                      {
+                        "id": "worker-start-return",
+                        "kind": "return",
+                        "trigger": {
+                          "event": "call"
+                        },
+                        "at": {
+                          "event": "call",
+                          "schedule": "same-stack"
+                        },
+                        "tracking": "untracked",
+                        "count": {
+                          "min": 1,
+                          "max": 1,
+                          "scope": "call"
+                        },
+                        "output": "undefined"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "effectful-callable",
+                  "call": {
+                    "closed": [
+                      "reads",
+                      "creates",
+                      "callbacks",
+                      "returns"
+                    ],
+                    "reads": [],
+                    "creates": [],
+                    "callbacks": [],
+                    "returns": [
+                      "worker-stop-return"
+                    ],
+                    "operations": [
+                      {
+                        "id": "worker-stop-return",
+                        "kind": "return",
+                        "trigger": {
+                          "event": "call"
+                        },
+                        "at": {
+                          "event": "call",
+                          "schedule": "same-stack"
+                        },
+                        "tracking": "untracked",
+                        "count": {
+                          "min": 1,
+                          "max": 1,
+                          "scope": "call"
+                        },
+                        "output": "undefined"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "plain"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

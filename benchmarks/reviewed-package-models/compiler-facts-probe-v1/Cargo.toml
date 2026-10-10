@@ -1,0 +1,15 @@
+[package]
+name = "research-compiler-facts-probe-v1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+solid-facts = { path = "../../../rust/crates/solid-facts" }
+solid-v2-compiler = { path = "../../../rust/dialects/solid-v2/compiler" }
+serde_json = "1"
+
+[patch.crates-io]
+napi-build = { path = "../../../rust/crates/napi-build-host-aware" }

@@ -25,6 +25,9 @@ pub enum Rule {
     ReactiveWriteInOwnedScope,
     ActionCalledInOwnedScope,
     ResolveInReactiveScope,
+    UntilInTrackedScope,
+    FlushInAction,
+    StaticDynamicAsyncSource,
     LeafOwnerForbiddenCall,
     MissingOwner,
     PendingAsyncUnsuspendableRead,
@@ -36,6 +39,20 @@ pub enum Rule {
     ServerFunctionModuleDirective,
     ServerFunctionRichArgument,
     PackageContractIncomplete,
+    /// The only identity in this catalog the rules engine never produces.
+    ///
+    /// Analysis decides whether every other rule applies; this one is decided
+    /// *before* analysis, by dialect detection, and is emitted straight to the
+    /// reporting path (`main.rs`, at the selection site). It lives in the
+    /// catalog anyway because it is an externally visible diagnostic identity:
+    /// adapters resolve its code and severity here, `docs/rules/` documents
+    /// it, and a suppression naming it has to be a known rule. See ADR 0110.
+    UnsupportedSolidRuntime,
+    /// Decided by dialect detection too, but *beside* the analysis rather than
+    /// instead of it: the installed release of a carried major is one this
+    /// vocabulary was not audited on. The backend appends it to the analysis
+    /// result (`diagnostics.rs`); the rules engine never produces it.
+    UnauditedSolidRelease,
     JsxNoDuplicateProps,
     PreferFor,
     PreferShow,
@@ -53,7 +70,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 31] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -66,6 +83,9 @@ impl Rule {
         Self::ReactiveWriteInOwnedScope,
         Self::ActionCalledInOwnedScope,
         Self::ResolveInReactiveScope,
+        Self::UntilInTrackedScope,
+        Self::FlushInAction,
+        Self::StaticDynamicAsyncSource,
         Self::LeafOwnerForbiddenCall,
         Self::MissingOwner,
         Self::PendingAsyncUnsuspendableRead,
@@ -77,6 +97,8 @@ impl Rule {
         Self::ServerFunctionModuleDirective,
         Self::ServerFunctionRichArgument,
         Self::PackageContractIncomplete,
+        Self::UnsupportedSolidRuntime,
+        Self::UnauditedSolidRelease,
         Self::JsxNoDuplicateProps,
         Self::PreferFor,
         Self::PreferShow,
@@ -115,6 +137,24 @@ impl Rule {
             // error; production has no guard and silently takes a one-shot
             // snapshot.
             Self::ResolveInReactiveScope => ("SC2004", "resolve-in-tracked-scope", "error", false),
+            // rc.9's `until` carries resolve's observer guard verbatim
+            // (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:2718-2722`) and the
+            // same dev-only throw, so it takes the next code in the family
+            // and the same severity.
+            Self::UntilInTrackedScope => ("SC2005", "until-in-tracked-scope", "error", false),
+            // `@solidjs/signals@2.0.0-rc.8` added the `FLUSH_IN_ACTION` dev
+            // throw to `flush` inside an action step (rc.9
+            // `dist/dev-shared.js:2210-2219`): an error like the other
+            // runtime-mirrored throws in the family.
+            Self::FlushInAction => ("SC2006", "flush-in-action", "error", false),
+            // rc.9's static `dynamic` form refuses a promise-valued source:
+            // the dev builds throw at the call (`@solidjs/web@2.0.0-rc.9`
+            // `dist/web.dev.js:2249`, `dist/server.dev.js:3979`) and the
+            // production builds render nothing. A proven violation with the
+            // family's dev-throw severity.
+            Self::StaticDynamicAsyncSource => {
+                ("SC2007", "static-dynamic-async-source", "error", false)
+            }
             Self::LeafOwnerForbiddenCall => ("SC3001", "leaf-owner-forbidden-call", "error", false),
             // Settled-cleanup findings override this family default to error:
             // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
@@ -166,6 +206,17 @@ impl Rule {
             Self::PackageContractIncomplete => {
                 ("SC9005", "package-contract-incomplete", "error", true)
             }
+            // Uncertifiable, not a violation: the project's own code is not
+            // the defect. The checker cannot model the runtime it installs,
+            // so it states that and proves nothing else -- reporting a
+            // violation here would assert something about source it never
+            // analyzed. Error severity because the alternative is a silent
+            // analysis under the wrong language.
+            Self::UnsupportedSolidRuntime => ("SC9013", "unsupported-solid-runtime", "error", true),
+            // Uncertifiable for the same reason as SC9013 -- the claim is about
+            // the installed runtime, not the project's source -- but a warning:
+            // the analysis ran, and every other finding beside it stands.
+            Self::UnauditedSolidRelease => ("SC9014", "unaudited-solid-release", "warning", true),
             Self::JsxNoDuplicateProps => ("SC8003", "jsx-no-duplicate-props", "error", false),
             Self::PreferFor => ("SC8014", "prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "prefer-show", "warning", false),
@@ -262,6 +313,9 @@ mod tests {
     fn every_v2_static_violation_identity_resolves() {
         for (code, name) in [
             ("SC2004", "resolve-in-tracked-scope"),
+            ("SC2005", "until-in-tracked-scope"),
+            ("SC2006", "flush-in-action"),
+            ("SC2007", "static-dynamic-async-source"),
             ("SC7002", "sync-computation-received-async"),
             ("SC7005", "http-response-after-flush"),
             ("SC7006", "server-function-module-directive"),
@@ -317,6 +371,16 @@ mod tests {
         // bundle), mirrored as an error like the other owned/tracked-scope
         // throws.
         assert_eq!(Rule::ResolveInReactiveScope.metadata().severity, "error");
+        // until() carries the same dev throw ("Cannot call until inside a
+        // reactive scope", rc.9 signals dev bundle).
+        assert_eq!(Rule::UntilInTrackedScope.metadata().severity, "error");
+        // flush() in an action step throws FLUSH_IN_ACTION in dev (rc.8 and
+        // rc.9 signals dev bundles, probed).
+        assert_eq!(Rule::FlushInAction.metadata().severity, "error");
+        // A promise-valued static dynamic() source is a dev *throw*
+        // ("dynamic(): a static source must resolve synchronously, not to a
+        // promise", rc.9 web.dev.js and server.dev.js).
+        assert_eq!(Rule::StaticDynamicAsyncSource.metadata().severity, "error");
         // The rich-argument transport throw is unconditional at the default
         // client (probed) — error; the post-flush header drop only occurs
         // when the boundary settles after the shell flush — warning.

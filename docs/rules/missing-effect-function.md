@@ -8,7 +8,13 @@ single-callback form.
 ## What it does
 
 Flags the published, deprecated one-argument overload and values that only
-type-check because a TypeScript assertion hid their runtime shape. An absent
+type-check because a TypeScript assertion hid their runtime shape. The
+overload is release-dependent: `@solidjs/signals` rc.0-rc.5 declare
+`createEffect(compute): never`, and rc.6 removed it, so on the audited rc.13 a
+one-argument call (or an exact one-element spread) is TS2554 and this rule is
+silent on it — the call resolves to no published signature. Those spellings
+are reported only where the installed release still declares the overload
+(measured on rc.3; the tsc oracle now installs only rc.9). An absent
 apply function throws `MISSING_EFFECT_FN` in dev; a cast-hidden non-function
 crashes when the runtime reads `.effect` off it or calls it. Raw `undefined`,
 `null`, primitive, array, and invalid object arguments are already rejected by

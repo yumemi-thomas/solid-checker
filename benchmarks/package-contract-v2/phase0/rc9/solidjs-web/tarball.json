@@ -1,0 +1,24 @@
+{
+  "name": "@solidjs/web",
+  "version": "2.0.0-rc.9",
+  "tarball": "https://registry.npmjs.org/@solidjs/web/-/web-2.0.0-rc.9.tgz",
+  "gitHead": "9a29b1a07aa3e06ee32afd1fc4c18414b4a558bb",
+  "registryIntegrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+  "registryShasum": "a056d25115dcefd9aed178716c8bf7e6c031400f",
+  "registryFileCount": 67,
+  "registryUnpackedSize": 2191463,
+  "downloaded": {
+    "date": "2026-09-27",
+    "by": "npm pack @solidjs/web@2.0.0-rc.9",
+    "bytes": 524585,
+    "sha512": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+    "sha1": "a056d25115dcefd9aed178716c8bf7e6c031400f",
+    "sha256": "21840a396e8e3bca617fef3ce49d0e2e509b4f56208e7215171f2e5edb88c5ad",
+    "extractedFileCount": 67,
+    "extractedTreeEqualsLockfileInstall": true
+  },
+  "lockfileIntegrity": {
+    "source": "solid-primitives (next) pnpm-lock.yaml, line 4909",
+    "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ=="
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/static-store",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-cyMzFe39VMVF9zVYgZEck1TESbIB4Tnpp00vNQlaOYuhOr4nstRBSS3zsBqZMuF+a5qWlKqS0RHO48FwLScX9w==",
+      "snapshotRoot": "sha256:05e72bc6f5bb67e46ba1be134a91d88ff53e8ef58c8b54ace2623f135981d3e0",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "6b43dbd3d127007e937b5c323bb908477c8a66e820cdf3af1f30ef1ce1a45982",
+                  "path": "./dist/index.js",
+                  "sha256": "e5a919539d052727f52e07d994011c5b59ae4684a2a4443c4be74850b8d6fee6"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "b0078e6162671c5e2a876fab00d2ce805e1ffd8d50ea340f839442bae26e64bc"
+                },
+                "exports": {
+                  "createDerivedStaticStore": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createHydratableStaticStore": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createStaticStore": "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-cyMzFe39VMVF9zVYgZEck1TESbIB4Tnpp00vNQlaOYuhOr4nstRBSS3zsBqZMuF+a5qWlKqS0RHO48FwLScX9w==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "e2b8689bb612b29de7df3df250fd098c2139279987b5b2f001fff97793c704cb"
+          },
+          "name": "@solid-primitives/static-store",
+          "version": "1.0.0-next.2"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

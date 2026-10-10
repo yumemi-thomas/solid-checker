@@ -21,8 +21,8 @@ use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
 use super::{
-    Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit, location,
-    primitive_name,
+    Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit,
+    call_primitive_name, location,
 };
 use crate::execution_role::direct_callback_contains;
 use crate::owners::{callback_owner_at_call, containing_ast_function};
@@ -37,12 +37,14 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
         .chain(ctx.actions.keys())
         .cloned()
         .collect::<HashSet<_>>();
+    let setter_symbols = ctx.setters.keys().cloned().collect::<HashSet<_>>();
     draft.leaf_operations.extend(
         parallel_file_results(&ctx.facts.files, |file| {
             leaf_owner_operations_for_file(
                 file,
                 ctx.symbol_names,
                 &safe_call_symbols,
+                &setter_symbols,
                 ctx.semantic_lookup,
             )
         })
@@ -55,6 +57,7 @@ pub(super) fn leaf_owner_operations_for_file(
     file: &FileFacts,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     safe_call_symbols: &HashSet<SymbolId>,
+    setter_symbols: &HashSet<SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<LeafOwnerOperation> {
     let Some(file) = lookup.file_by_path(file.path.as_str()) else {
@@ -66,6 +69,7 @@ pub(super) fn leaf_owner_operations_for_file(
         lookup,
         symbol_names,
         safe_call_symbols,
+        setter_symbols,
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
@@ -91,14 +95,7 @@ pub(super) fn leaf_owner_operations_for_file(
         if crate::execution_role::discarded_region_contains(file, owner_call.span) {
             continue;
         }
-        let owner = primitive_name(
-            file.path.as_str(),
-            owner_call.callee,
-            owner_call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        );
+        let owner = call_primitive_name(file, owner_call, entities, symbol_names, dialect);
         let Some(owner) = owner.as_ref() else {
             continue;
         };
@@ -164,6 +161,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     &mut kinds,
                     &mut visited,
                     8,
+                    None,
                 );
                 let via = file
                     .source_text(callback_span)
@@ -171,12 +169,14 @@ pub(super) fn leaf_owner_operations_for_file(
                     .to_owned();
                 for kind in kinds {
                     operations.push(LeafOwnerOperation {
+                        through_contract: false,
                         kind,
                         owner: owner.to_string(),
                         location: location(file.path.shared(), callback_span),
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: false,
+                        possible: false,
                         via: Some(via.clone()),
                     });
                 }
@@ -184,12 +184,14 @@ pub(super) fn leaf_owner_operations_for_file(
                     continue;
                 }
                 operations.push(LeafOwnerOperation {
+                    through_contract: false,
                     kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                     owner: owner.to_string(),
                     location: location(file.path.shared(), callback_span),
                     fix: None,
                     call_site_gate,
                     uncertain: true,
+                    possible: false,
                     via: None,
                 });
                 continue;
@@ -210,12 +212,14 @@ pub(super) fn leaf_owner_operations_for_file(
             }
             let callback_span = file.ast.peel_ts_sugar_span(region);
             operations.push(LeafOwnerOperation {
+                through_contract: false,
                 kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                 owner: owner.to_string(),
                 location: location(file.path.shared(), callback_span),
                 fix: None,
                 call_site_gate,
                 uncertain: true,
+                possible: false,
                 via: None,
             });
             continue;
@@ -232,15 +236,53 @@ pub(super) fn leaf_owner_operations_for_file(
             if !direct_callback_contains(callback_file, leaf_callback.span, call.span) {
                 continue;
             }
-            let primitive = primitive_name(
-                callback_file.path.as_str(),
-                call.callee,
-                call.static_callee(&callback_file.source),
-                entities,
-                symbol_names,
-                dialect,
-            );
+            let primitive =
+                call_primitive_name(callback_file, call, entities, symbol_names, dialect);
             let Some(primitive) = primitive else {
+                // ADR 0179: a package export whose accepted contract states a
+                // registration on its caller's owner, at the call, performs it
+                // here -- inside the leaf scope. On every call it is a
+                // violation; with `min: 0` it may not happen, a proof
+                // obligation (ADR 0231).
+                if let Some(registrations) = lookup
+                    .callee_symbol(callback_file, call.callee)
+                    .and_then(|symbol| lookup.contract_leaf_forbidden_operations(symbol))
+                    .filter(|registrations| !registrations.is_empty())
+                {
+                    let via = callback_file
+                        .source_text(call.callee)
+                        .unwrap_or_default()
+                        .to_owned();
+                    for registration in registrations {
+                        // ADR 0223: a guarded registration is a forbidden
+                        // operation only where its guard holds at this call.
+                        // Where it may hold, or the contract states `min: 0`,
+                        // the registration may happen: a proof obligation
+                        // (ADR 0231), never silence.
+                        let Some(guaranteed) =
+                            crate::owners::owner_requirement_at_call(registration, call)
+                        else {
+                            continue;
+                        };
+                        operations.push(LeafOwnerOperation {
+                            through_contract: true,
+                            kind: match registration.operation {
+                                crate::OwnerRequirementOperation::Cleanup => {
+                                    crate::LeafOwnerOperationKind::Cleanup
+                                }
+                                _ => crate::LeafOwnerOperationKind::Primitive(via.clone()),
+                            },
+                            owner: owner.to_string(),
+                            location: location(callback_file.path.shared(), call.callee),
+                            fix: None,
+                            call_site_gate: call_site_gate.clone(),
+                            uncertain: false,
+                            possible: !guaranteed,
+                            via: Some(via.clone()),
+                        });
+                    }
+                    continue;
+                }
                 // Not a primitive: an exactly-resolved in-project helper
                 // called here runs its synchronous extent in this leaf
                 // scope, so a forbidden operation inside it executes here.
@@ -253,6 +295,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     &mut kinds,
                     &mut visited,
                     8,
+                    None,
                 );
                 if kinds.is_empty() && complete {
                     continue;
@@ -263,23 +306,27 @@ pub(super) fn leaf_owner_operations_for_file(
                     .to_owned();
                 for kind in kinds {
                     operations.push(LeafOwnerOperation {
+                        through_contract: false,
                         kind,
                         owner: owner.to_string(),
                         location: location(callback_file.path.shared(), call.callee),
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: false,
+                        possible: false,
                         via: Some(via.clone()),
                     });
                 }
                 if !complete {
                     operations.push(LeafOwnerOperation {
+                        through_contract: false,
                         kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                         owner: owner.to_string(),
                         location: location(callback_file.path.shared(), call.callee),
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: true,
+                        possible: false,
                         via: Some(via),
                     });
                 }
@@ -301,12 +348,14 @@ pub(super) fn leaf_owner_operations_for_file(
             .then(|| terminal_cleanup_fix(callback_file, leaf_callback.span, call))
             .flatten();
             operations.push(LeafOwnerOperation {
+                through_contract: false,
                 kind,
                 owner: owner.to_string(),
                 location: location(callback_file.path.shared(), call.callee),
                 fix,
                 call_site_gate: call_site_gate.clone(),
                 uncertain: false,
+                possible: false,
                 via: None,
             });
         }
@@ -491,6 +540,97 @@ struct LeafScopeResolution<'a, 'lookup> {
     /// Calls that cannot open a leaf scope of their own: accessors, setters,
     /// and actions.
     safe_call_symbols: &'a HashSet<SymbolId>,
+    /// The setters among them, whose function argument runs (ADR 0210).
+    setter_symbols: &'a HashSet<SymbolId>,
+}
+
+/// ADR 0209: the class a call's `this` is exactly an instance of, when the
+/// function the call is written in is a method declared in that class and was
+/// entered through such an instance. Inside an inherited method `this` may be
+/// a subclass instance that overrides what `this.m` names, so no class is
+/// carried there.
+type ExactThis = Option<(String, Span)>;
+
+/// ADR 0209: the method a member call runs, when its receiver is exactly an
+/// instance of one project class.
+///
+/// The receiver is either `this` under [`ExactThis`], or a `const` bound
+/// directly to `new C(…)` whose callee resolves to a project class. Then the
+/// object's class is exactly `C`. The method TypeScript resolves runs when it
+/// is declared in `C` itself, or, through `this` in `C`'s own method, when `C`
+/// inherits it. Not when
+/// some assignment writes a member of that name, or anything writes through a
+/// `prototype` (`member_name_may_be_reassigned`). The method itself is
+/// returned with the class its `this` is exact for, when it is declared in
+/// that class.
+fn exact_instance_method<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    exact_this: &ExactThis,
+) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact, ExactThis)> {
+    if call.construct {
+        return None;
+    }
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let member = file
+        .ast
+        .members
+        .iter()
+        .find(|member| member.span == callee)?;
+    let name = file.source_text(member.property)?;
+    if lookup.member_name_may_be_reassigned(name) {
+        return None;
+    }
+    let receiver = file.ast.peel_ts_sugar_span(member.object);
+    let through_this = file.source_text(receiver) == Some("this");
+    let class = if through_this {
+        let (path, span) = exact_this
+            .clone()
+            .filter(|(path, _)| path == file.path.as_str())?;
+        let class_file = lookup.file_by_path(path.as_str())?;
+        let class = class_file
+            .ast
+            .classes
+            .iter()
+            .find(|class| class.span == span)?;
+        if !lookup.class_instance_is_exact(class_file, class, name, 4) {
+            return None;
+        }
+        (path, span)
+    } else {
+        let (binding_file, binding, _) =
+            lookup.binding_at_reference(file.path.as_str(), receiver)?;
+        if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
+            return None;
+        }
+        let construction = binding_file
+            .ast
+            .call_at(binding_file.ast.peel_ts_sugar_span(binding.initializer?))
+            .filter(|construction| construction.construct)?;
+        let class_symbol = lookup.callee_symbol(binding_file, construction.callee)?;
+        let (class_file, class) = lookup.class_for_symbol(class_symbol)?;
+        // The constructor chain must hand back this instance, and no own
+        // field may shadow the method (ADR 0209 as amended).
+        if !lookup.class_instance_is_exact(class_file, class, name, 4) {
+            return None;
+        }
+        (class_file.path.to_string(), class.span)
+    };
+    let symbol = lookup.callee_symbol(file, call.callee)?;
+    let (method_file, method) = lookup.function_for_symbol(symbol)?;
+    method.method_name.as_ref()?;
+    let own = method_file.path.as_str() == class.0 && class.1.contains(method.span);
+    // Through a binding, TypeScript resolves the member on the binding's type,
+    // which an annotation can widen to a superclass (`const d: Base = new
+    // Derived()` names `Base.run` while `Derived.run` runs). Only a method
+    // declared in the constructed class itself is the one that runs. Inside
+    // that class's own method, `this` is typed by that class, so an inherited
+    // resolution is exact too.
+    if !own && !through_this {
+        return None;
+    }
+    Some((method_file, method, own.then_some(class)))
 }
 
 fn helper_forbidden_operations(
@@ -500,6 +640,7 @@ fn helper_forbidden_operations(
     kinds: &mut Vec<crate::LeafOwnerOperationKind>,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
+    exact_this: ExactThis,
 ) -> bool {
     let LeafScopeResolution {
         lookup,
@@ -509,19 +650,363 @@ fn helper_forbidden_operations(
     if depth == 0 {
         return false;
     }
+    if let Some((method_file, method, method_this)) =
+        exact_instance_method(lookup, call_file, call, &exact_this)
+    {
+        return function_forbidden_operations(
+            resolution,
+            method_file,
+            method,
+            kinds,
+            visited,
+            depth,
+            method_this,
+        );
+    }
+    let callee = call_file.ast.peel_ts_sugar_span(call.callee);
+    if lookup.is_member_span(call_file, callee)
+        || call_file
+            .ast
+            .computed_members
+            .binary_search(&callee)
+            .is_ok()
+    {
+        return member_call_operations(resolution, call_file, call, callee, kinds, visited, depth);
+    }
     let Some(symbol) = lookup.entities().at(call_file.path.as_str(), call.callee) else {
         return false;
     };
+    if resolution.setter_symbols.contains(symbol) {
+        // A setter runs a function argument -- the updater -- before it
+        // returns (ADR 0210).
+        return setter_updater_operations(resolution, call_file, call, kinds, visited, depth);
+    }
     if safe_call_symbols.contains(symbol) {
         return true;
     }
-    let Some((helper_file, helper)) = lookup.function_for_symbol(symbol) else {
-        return lookup
-            .resolved_callee_call(call_file, call.callee)
-            .and_then(|resolved| resolved.declaration.as_ref())
-            .is_some_and(|declaration| declaration.standard_library);
+    let Some((helper_file, helper)) = lookup
+        .function_for_symbol(symbol)
+        .filter(|(helper_file, helper)| lookup.function_value_is_current(helper_file, helper))
+    else {
+        let Some(resolved) =
+            lookup
+                .resolved_callee_call(call_file, call.callee)
+                .filter(|resolved| {
+                    resolved
+                        .declaration
+                        .as_ref()
+                        .is_some_and(|declaration| declaration.standard_library)
+                })
+        else {
+            return false;
+        };
+        return standard_library_argument_operations(
+            resolution, call_file, call, resolved, kinds, visited, depth,
+        );
     };
-    function_forbidden_operations(resolution, helper_file, helper, kinds, visited, depth)
+    function_forbidden_operations(resolution, helper_file, helper, kinds, visited, depth, None)
+}
+
+/// A member call that is not an exact instance's method (ADR 0210).
+///
+/// The compiler's entity at a member callee's complete span names the
+/// receiver's root binding, not the member: `items().forEach` answers `items`
+/// and `register.bind` answers `register`. Read as the callee, that made an
+/// accessor's array method a safe accessor call and `register.bind(null)` a
+/// call of `register`. An exact namespace export is followed by its property
+/// symbol. Otherwise a standard-library member's arguments are followed by
+/// [`standard_library_argument_operations`], and the receiver itself when the
+/// member is `call` or `apply`, which run it before they return.
+fn member_call_operations(
+    resolution: LeafScopeResolution<'_, '_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    callee: Span,
+    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    visited: &mut Vec<(String, Span)>,
+    depth: usize,
+) -> bool {
+    if !call.construct
+        && let Some((helper_file, helper)) =
+            resolution.lookup.namespace_member_function(file, callee)
+    {
+        return function_forbidden_operations(
+            resolution,
+            helper_file,
+            helper,
+            kinds,
+            visited,
+            depth,
+            None,
+        );
+    }
+    let Some((resolved, declaration)) = resolution
+        .lookup
+        .resolved_callee_call(file, call.callee)
+        .and_then(|resolved| Some((resolved, resolved.declaration.as_ref()?)))
+        .filter(|(_, declaration)| declaration.standard_library)
+    else {
+        return false;
+    };
+    let mut complete = standard_library_argument_operations(
+        resolution, file, call, resolved, kinds, visited, depth,
+    );
+    let invokes_receiver = matches!(
+        declaration.qualified_name.as_ref(),
+        "Function.call"
+            | "Function.apply"
+            | "CallableFunction.call"
+            | "CallableFunction.apply"
+            | "NewableFunction.call"
+            | "NewableFunction.apply"
+    );
+    if invokes_receiver {
+        complete &= file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == callee)
+            .is_some_and(|member| {
+                argument_body_operations(resolution, file, member.object, kinds, visited, depth)
+            });
+    }
+    complete
+}
+
+/// Whether the function arguments a standard-library call may run in the
+/// leaf scope are proven free of forbidden operations (ADR 0210).
+///
+/// The host runs no Solid code of its own, but it runs the functions it is
+/// handed, and the audited timing table
+/// ([`crate::runtime_semantics::argument_behavior`]) says when:
+///
+/// - an inline callback (`list.forEach(register)`) runs before the call
+///   returns, so its body is walked like a helper's and a forbidden operation
+///   there is a violation of this call;
+/// - a fresh-stack callback (`setTimeout`, `queueMicrotask`) runs from a host
+///   queue, after the leaf scope is gone;
+/// - a deferred callback (`addEventListener`'s listener, `bind`'s bound
+///   arguments) runs after the call returns. A synchronous dispatch in the
+///   leaf scope (`el.click()`, `el.focus()`) would run a listener there, but
+///   dispatch is not modeled: the same `focus()` runs listeners registered
+///   anywhere, and the walk has always read it as a host call that runs only
+///   what it is handed;
+/// - a `PromiseLike.then` call leaves the obligation open: the thenable is
+///   any object with a `then`, and that `then` is user code, whatever it is
+///   handed;
+/// - a value the host only reads or keeps is not run;
+/// - any other argument the host may call -- a callable parameter with no
+///   audited timing (`new Promise(executor)`) -- leaves the obligation open.
+///
+/// A parameter typed `any` or `unknown` (`console.log(...data)`) is read as a
+/// value. Implicit invocation through getters, `toString`, `valueOf`, an
+/// iterator or a thenable is not modeled, as it is not for the rest of the
+/// standard-library trust here.
+fn standard_library_argument_operations(
+    resolution: LeafScopeResolution<'_, '_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    resolved: &typefacts::ResolvedCall,
+    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    visited: &mut Vec<(String, Span)>,
+    depth: usize,
+) -> bool {
+    use crate::runtime_semantics::RuntimeArgumentBehavior;
+    use typefacts::Callability;
+    let lookup = resolution.lookup;
+    // A `PromiseLike` may be any object with a `then`: its implementation is
+    // not the host's and may call back before it returns.
+    let thenable = resolved
+        .declaration
+        .as_ref()
+        .is_some_and(|declaration| declaration.qualified_name.as_ref() == "PromiseLike.then");
+    // The thenable's own `then` is user code, whatever it is handed.
+    if thenable {
+        return false;
+    }
+    let mut complete = true;
+    for (index, argument) in call.arguments.iter().enumerate() {
+        // An object literal's accessors run when the host reads them, whether
+        // it is written here or bound to a `const` and named here.
+        if argument.value == solid_facts::ast::ArgumentValueKind::Identifier
+            && resolution
+                .lookup
+                .binding_at_reference(
+                    file.path.as_str(),
+                    file.ast.peel_ts_sugar_span(argument.span),
+                )
+                .is_some_and(|(binding_file, binding, _)| {
+                    binding.initializer_value_kind == solid_facts::ast::RuntimeValueKind::Object
+                        && binding.initializer.is_some_and(|initializer| {
+                            object_literal_has_accessor(binding_file, initializer)
+                        })
+                })
+        {
+            complete = false;
+            continue;
+        }
+        if crate::runtime_semantics::literal_argument_is_not_callable(argument.runtime_value_kind) {
+            if argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Object
+                && object_literal_has_accessor(file, argument.span)
+            {
+                complete = false;
+            }
+            continue;
+        }
+        let callability = lookup
+            .entity_at(file.path.as_str(), argument.span)
+            .and_then(|entity| entity.callability);
+        if callability == Some(Callability::NonCallable) {
+            continue;
+        }
+        if argument.spread {
+            // A spread hands over values at indices the mapping does not name.
+            complete = false;
+            continue;
+        }
+        // Every default-library listener slot, whichever DOM interface
+        // redeclares `addEventListener`, is a deferred callback.
+        let listener_slot =
+            crate::runtime_semantics::runs_on_invoker_stack(resolved, callability, index);
+        match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
+            Some(RuntimeArgumentBehavior::InlineCallback) => {
+                complete &= argument_body_operations(
+                    resolution,
+                    file,
+                    argument.span,
+                    kinds,
+                    visited,
+                    depth,
+                );
+            }
+            Some(
+                RuntimeArgumentBehavior::DeferredCallback
+                | RuntimeArgumentBehavior::FreshStackCallback
+                | RuntimeArgumentBehavior::RetainedValue
+                | RuntimeArgumentBehavior::ValueOnly,
+            ) => {}
+            None if listener_slot => {}
+            None => {
+                let parameter_callable = crate::runtime_semantics::resolved_parameter(
+                    resolved, index,
+                )
+                .is_none_or(|parameter| {
+                    !matches!(
+                        parameter.callability,
+                        Callability::NonCallable | Callability::Unknown
+                    )
+                });
+                complete &= !parameter_callable;
+            }
+        }
+    }
+    complete
+}
+
+/// Whether the object literal at `span`, or one nested in it, defines a
+/// property that is not plain data: a getter, a setter or a method.
+fn object_literal_has_accessor(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .object_properties
+        .iter()
+        .any(|property| span.contains(property.span) && !property.data)
+}
+
+/// A setter's function argument is its updater, which the setter runs before
+/// it returns (ADR 0210). Any other argument is the new value.
+fn setter_updater_operations(
+    resolution: LeafScopeResolution<'_, '_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    visited: &mut Vec<(String, Span)>,
+    depth: usize,
+) -> bool {
+    let mut complete = true;
+    for argument in &call.arguments {
+        // An object literal's accessors run when the host reads them, whether
+        // it is written here or bound to a `const` and named here.
+        if argument.value == solid_facts::ast::ArgumentValueKind::Identifier
+            && resolution
+                .lookup
+                .binding_at_reference(
+                    file.path.as_str(),
+                    file.ast.peel_ts_sugar_span(argument.span),
+                )
+                .is_some_and(|(binding_file, binding, _)| {
+                    binding.initializer_value_kind == solid_facts::ast::RuntimeValueKind::Object
+                        && binding.initializer.is_some_and(|initializer| {
+                            object_literal_has_accessor(binding_file, initializer)
+                        })
+                })
+        {
+            complete = false;
+            continue;
+        }
+        if crate::runtime_semantics::literal_argument_is_not_callable(argument.runtime_value_kind) {
+            if argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Object
+                && object_literal_has_accessor(file, argument.span)
+            {
+                complete = false;
+            }
+            continue;
+        }
+        let callability = resolution
+            .lookup
+            .entity_at(file.path.as_str(), argument.span)
+            .and_then(|entity| entity.callability);
+        if callability == Some(typefacts::Callability::NonCallable) {
+            continue;
+        }
+        complete &=
+            argument_body_operations(resolution, file, argument.span, kinds, visited, depth);
+    }
+    complete
+}
+
+/// The forbidden operations of the function an argument evaluates to, when
+/// that function is exactly known: a function literal written as the
+/// argument, or an identifier bound to a project function. Anything else --
+/// a call's result, a member, a parameter -- is not followed.
+fn argument_body_operations(
+    resolution: LeafScopeResolution<'_, '_>,
+    file: &FileFacts,
+    argument: Span,
+    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    visited: &mut Vec<(String, Span)>,
+    depth: usize,
+) -> bool {
+    if let Some(literal) = callback_argument_literal(file, argument) {
+        return function_forbidden_operations(
+            resolution,
+            file,
+            literal,
+            kinds,
+            visited,
+            depth - 1,
+            None,
+        );
+    }
+    let lookup = resolution.lookup;
+    let Some((function_file, function)) = lookup
+        .entities()
+        .at(file.path.as_str(), file.ast.peel_ts_sugar_span(argument))
+        .and_then(|symbol| lookup.function_for_symbol(symbol))
+        .filter(|(function_file, function)| {
+            lookup.function_value_is_current(function_file, function)
+        })
+    else {
+        return false;
+    };
+    function_forbidden_operations(
+        resolution,
+        function_file,
+        function,
+        kinds,
+        visited,
+        depth - 1,
+        None,
+    )
 }
 
 fn function_forbidden_operations(
@@ -531,6 +1016,7 @@ fn function_forbidden_operations(
     kinds: &mut Vec<crate::LeafOwnerOperationKind>,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
+    exact_this: ExactThis,
 ) -> bool {
     let LeafScopeResolution {
         lookup,
@@ -547,23 +1033,75 @@ fn function_forbidden_operations(
     visited.push(key);
     let dialect = lookup.dialect;
     let entities = lookup.entities();
+    // The parameter list runs on entry: its defaults, top-level or nested in
+    // a destructuring pattern, and its computed keys. Whether a default runs
+    // depends on the argument, which is not decided here, so an operation
+    // there, or a call there the walk cannot follow, leaves the obligation
+    // open.
+    let parameter_spans = helper
+        .parameters
+        .iter()
+        .flat_map(|parameter| std::iter::once(parameter.pattern).chain(parameter.initializer))
+        .collect::<Vec<_>>();
+    let mut parameter_calls = helper_file
+        .ast
+        .calls
+        .iter()
+        .filter(|inner| {
+            parameter_spans.iter().any(|span| span.contains(inner.span))
+                && !helper_file.ast.functions.iter().any(|nested| {
+                    nested.span != helper.span
+                        && helper.span.contains(nested.span)
+                        && nested.span.contains(inner.span)
+                })
+        })
+        .peekable();
+    // Calling a generator runs none of its body, only its parameter list.
+    if helper.generator {
+        return parameter_calls.peek().is_none();
+    }
     let mut complete = true;
+    for inner in parameter_calls {
+        let mut possible = Vec::new();
+        let mut scratch = visited.clone();
+        complete &= call_primitive_name(helper_file, inner, entities, symbol_names, dialect)
+            .is_none()
+            && helper_forbidden_operations(
+                resolution,
+                helper_file,
+                inner,
+                &mut possible,
+                &mut scratch,
+                depth - 1,
+                exact_this.clone(),
+            )
+            && possible.is_empty();
+    }
     for inner in helper_file.ast.calls_within(helper.body) {
-        // A call inside a nested function is not executed by calling the
-        // helper; it belongs to whatever later invokes that function.
-        let nested = containing_ast_function(&helper_file.ast, inner.span)
-            .is_some_and(|function| function.span != helper.span);
-        if nested {
+        // A call inside a nested function -- its body or its parameter list
+        // (ADR 0204) -- is not executed by calling the helper; it belongs to
+        // whatever later invokes that function.
+        if !crate::owners::written_directly_in(&helper_file.ast, helper, inner.span) {
             continue;
         }
-        let primitive = primitive_name(
-            helper_file.path.as_str(),
-            inner.callee,
-            inner.static_callee(&helper_file.source),
-            entities,
-            symbol_names,
-            dialect,
-        );
+        // After an `await` that every run of the helper reaches first, the
+        // call executes from a promise continuation: the leaf scope that
+        // invoked the helper is long gone and no owner exists at all. That is
+        // a different claim (an ownerless operation, `missing-owner`'s), not a
+        // forbidden call in the leaf scope.
+        if helper_file
+            .ast
+            .unconditional_awaits
+            .iter()
+            .any(|await_span| {
+                await_span.end <= inner.span.start
+                    && containing_ast_function(&helper_file.ast, *await_span)
+                        .is_some_and(|function| function.span == helper.span)
+            })
+        {
+            continue;
+        }
+        let primitive = call_primitive_name(helper_file, inner, entities, symbol_names, dialect);
         let Some(primitive) = primitive else {
             complete &= helper_forbidden_operations(
                 resolution,
@@ -572,6 +1110,7 @@ fn function_forbidden_operations(
                 kinds,
                 visited,
                 depth - 1,
+                exact_this.clone(),
             );
             continue;
         };

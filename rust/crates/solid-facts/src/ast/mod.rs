@@ -17,7 +17,8 @@ use oxc_ast::ast::{
     JSXAttributeValue, JSXElement, JSXElementName, JSXExpression, LogicalExpression,
     LogicalOperator, ModuleExportName, NewExpression, ObjectProperty, ObjectPropertyKind,
     PropertyKey, PropertyKind, ReturnStatement, SpreadElement, StaticMemberExpression,
-    TSGlobalDeclaration, TSModuleBlock, TSModuleDeclaration, TSModuleDeclarationName,
+    TSGlobalDeclaration, TSImportEqualsDeclaration, TSImportType, TSImportTypeQualifier,
+    TSModuleBlock, TSModuleDeclaration, TSModuleDeclarationName, TSModuleReference, TSTypeQuery,
     UnaryExpression, UpdateExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
@@ -28,10 +29,69 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 41;
+pub const AST_FACTS_SCHEMA: u32 = 57;
 
+mod binding_references;
+mod class_obligation;
+mod completion_call_cover;
+mod component_value_flow;
+mod emission;
+mod host_call_completion;
+mod host_constants;
+mod host_execution;
+mod import_reexport;
+mod inert_erasure;
+mod inert_javascript;
+mod module_requests;
+mod object_binding;
+mod primitive_completion;
+mod reexport_chain;
+mod retained_arguments;
 mod span_index;
+mod super_argument;
+mod unconditional_calls;
 
+pub use binding_references::import_binding_references;
+pub use class_obligation::{ClassObligation, ClassObligationKind, class_obligation};
+pub use completion_call_cover::{completion_call_cover, completion_return_cover};
+pub use component_value_flow::{ComponentPropSite, ComponentValueFlow, component_value_flows};
+pub use host_constants::{
+    HostConstantFold, HostConstantImport, HostConstantScope, exported_boolean_constant,
+    fold_host_constant_branches, named_value_imports,
+};
+pub use host_execution::{
+    HostCallSequence, HostConstantIdentity, HostDefaultInitializer, HostExecutionFact,
+    HostExecutionPredicate, HostExecutionSiteKind,
+};
+pub use import_reexport::reexport_only_import_names;
+pub use inert_erasure::{
+    ImportFreeErasure, InertErasure, RelativeImportErasure, import_free_erasure, inert_erasure,
+    relative_import_erasure,
+};
+pub use inert_javascript::{
+    InertJavaScriptModule, InertJavaScriptRefusal, inert_javascript_module,
+    inert_javascript_module_with_export_all,
+};
+pub use module_requests::static_module_requests;
+pub use object_binding::{
+    UnwrittenObjectBinding, UnwrittenPrimitiveBinding, unwritten_object_binding,
+    unwritten_primitive_binding,
+};
+pub use primitive_completion::primitive_completion_by_syntax;
+pub use reexport_chain::{ModuleGraph, ModuleLanding, entry_names_publishing_import};
+pub use retained_arguments::{
+    RetainedConstructorArguments, RetainedParameter, retained_constructor_arguments,
+};
+pub use super_argument::{
+    SuperArgumentFunction, SuperArgumentSite, super_argument_function,
+    super_argument_sites_of_binding,
+};
+pub use unconditional_calls::unconditional_calls;
+
+pub use emission::{
+    EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, has_export_assignment,
+    module_emission,
+};
 pub use span_index::{AstSpanIndex, LazySpanIndex};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -40,6 +100,22 @@ pub struct AstFacts {
     pub schema: u32,
     pub source: SourceIdentity,
     pub calls: Vec<CallFact>,
+    /// Host-sensitive execution, facts schema 57. Absent old tables confer no
+    /// browser authority. Runtime constant values belong to the host consumer.
+    #[serde(default)]
+    pub host_execution: Vec<HostExecutionFact>,
+    #[serde(default)]
+    pub host_defaults: Vec<HostDefaultInitializer>,
+    #[serde(default)]
+    pub host_call_sequences: Vec<HostCallSequence>,
+    #[serde(default)]
+    pub host_empty_arrays: Vec<Span>,
+    #[serde(default)]
+    pub host_zero_values: Vec<Span>,
+    /// Exact `void 0` runtime values. In particular, an unresolved identifier
+    /// spelled undefined is not positive input-value evidence.
+    #[serde(default)]
+    pub host_undefined_arguments: Vec<Span>,
     pub bindings: Vec<BindingFact>,
     pub functions: Vec<FunctionFact>,
     /// Direct named function declarations, including overload signatures whose
@@ -69,6 +145,29 @@ pub struct AstFacts {
     /// module census.
     #[serde(default)]
     pub module_loads: Vec<ModuleLoadFact>,
+    /// Every TypeScript `import S = require("…")` (facts schema 46): the one
+    /// module load that is neither an `ImportDeclaration` nor a call, so
+    /// neither [`AstFacts::imports`] nor [`AstFacts::module_loads`] records
+    /// it. `S` binds the module's namespace object. The entity-name form
+    /// (`import S = Other.Name`) loads no module and is not recorded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub import_equals: Vec<ImportEqualsFact>,
+    /// Every `import("…")` written in a type position (facts schema 46):
+    /// `import("m").Name`, `typeof import("m").name`, `typeof import("m")`.
+    /// Erased at run time and loading nothing, but resolved through the same
+    /// module declarations an import is, so a consumer that counts type-only
+    /// imports counts these too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_imports: Vec<TypeImportFact>,
+    /// TypeScript type queries, erased at runtime (facts schema 49).
+    /// Runtime `typeof value` expressions are deliberately not recorded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_queries: Vec<Span>,
+    /// The tag expression of each tagged template (facts schema 48). The
+    /// template calls its tag, with the member's object as `this` when the
+    /// tag is a member expression; no call fact records that invocation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tagged_template_tags: Vec<Span>,
     /// Syntax whose module/runtime reachability cannot be made finite from a
     /// local specifier graph. These rows are scope-resolved by Oxc's binder.
     #[serde(default)]
@@ -116,6 +215,13 @@ pub struct AstFacts {
     /// core the after-await member-read check builds on.
     #[serde(default)]
     pub unconditional_awaits: Vec<Span>,
+    /// The call expressions written in their innermost enclosing function's
+    /// straight-line flow, as [`Self::unconditional_awaits`] are, and outside
+    /// any optional chain (`a?.b(c())` evaluates `c()` only when `a` is not
+    /// nullish). Such a call runs on every execution of that function that
+    /// reaches its position.
+    #[serde(default)]
+    pub straight_line_calls: Vec<Span>,
     pub returns: Vec<ReturnFact>,
     pub jsx_elements: Vec<JsxElementFact>,
     /// JSX fragment spans (`<>…</>`). A fragment's children are as tracked
@@ -132,6 +238,29 @@ pub struct AstFacts {
     pub members: Vec<MemberFact>,
     #[serde(default)]
     pub computed_members: Vec<Span>,
+    /// Every array literal (`[a, ...b]`), sorted by span. An array literal
+    /// evaluates to a fresh `Array`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub array_literals: Vec<Span>,
+    /// The subset of [`AstFacts::computed_members`] whose key is a literal
+    /// naming exactly one property, sorted by member span: a string literal
+    /// (its cooked value, lone surrogates refused) or a numeric literal whose
+    /// value is a non-negative integer no larger than `i32::MAX` (its
+    /// canonical decimal spelling, which is the property key ToPropertyKey
+    /// gives it). The same key the Type Facts producer's
+    /// `literalElementAccessSegment` roots a callee at, so the generator can
+    /// name `handler[0]` as the member the census sees (item B of
+    /// ways-to-improve § 3.3). Absence names nothing: a computed key the table
+    /// does not hold is unknown, never "no member".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub literal_computed_members: Vec<LiteralMemberKeyFact>,
+    /// The spans of the member links written `?.`, sorted (facts schema 44):
+    /// `p?.key` and `p?.[0]`, never a later link of the same chain. What the
+    /// generator's `returns` walk reads to propose "the member, or undefined"
+    /// for a returned optional read of a parameter (item B round 2 of
+    /// ways-to-improve § 3.3); the census decides it from the producer's arms.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub optional_members: Vec<Span>,
     #[serde(default)]
     pub parameter_properties: Vec<Span>,
     pub spreads: Vec<SpreadFact>,
@@ -142,6 +271,9 @@ pub struct AstFacts {
     pub logical_expressions: Vec<LogicalExpressionFact>,
     #[serde(default)]
     pub object_properties: Vec<ObjectPropertyFact>,
+    /// Descriptor-aware literal shapes for per-occurrence package Gets.
+    #[serde(default)]
+    pub object_get_shapes: Vec<ObjectGetShapeFact>,
     #[serde(default)]
     pub template_literals: Vec<TemplateLiteralFact>,
     /// Operands in TypeScript-valid coercions where a function object is
@@ -154,10 +286,101 @@ pub struct AstFacts {
     /// is this checker's to report.
     #[serde(default)]
     pub coercive_operands: Vec<CoerciveOperandFact>,
+    /// Every operand span of an operator that applies ToPrimitive to it, by
+    /// span, sorted: the binary and compound-assignment operators the Type
+    /// Facts producer's `coercingBinaryOperators` lists (arithmetic, the four
+    /// relational comparisons, loose equality, shifts and bitwise operators,
+    /// and each compound assignment of one), the prefix `+ - ~`, the prefix
+    /// and postfix `++ --`, and each substitution of an untagged template
+    /// literal.
+    ///
+    /// A different fact from [`AstFacts::coercive_operands`], deliberately:
+    /// that table is about positions where TypeScript *accepts* a function
+    /// operand, so it omits binary arithmetic, and it includes `!` (ToBoolean,
+    /// which runs no user code). This one is about the runtime protocol --
+    /// which operands can reach a value's `Symbol.toPrimitive`, `valueOf` or
+    /// `toString` -- and is read by the contract generator to describe a
+    /// coercion of a caller's argument, never by a rule.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coercing_operands: Vec<Span>,
+    /// Every value the iteration protocol is driven over, by span, sorted: the
+    /// iterated operand of a `for…of` (and `for await…of`), of an array or
+    /// argument spread (an object spread is a property enumeration, not an
+    /// iteration, and is absent), of `yield*`, and the initializer of an array
+    /// binding pattern or the right side of an array assignment pattern.
+    ///
+    /// Read by the contract generator only, to decline describing a
+    /// `callbacks` enumeration it could not describe whole: it derives no
+    /// `iterate` item, so an iteration of a caller's value leaves the
+    /// enumeration undescribable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iterated_operands: Vec<Span>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
+    /// Exact simple assignment targets, including destructuring leaves,
+    /// update operands and iteration targets. Keys and defaults are reads.
+    /// Transparent TypeScript wrappers are peeled (facts schema 53).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub write_targets: Vec<Span>,
+    /// Exact operands of delete expressions, independently of assignments.
+    #[serde(default)]
+    pub deleted_targets: Vec<Span>,
     #[serde(default)]
     pub if_regions: Vec<IfRegionFact>,
+    /// Every `break` and `continue` statement, by span, sorted.
+    ///
+    /// **No consumer reads this today.** It was added for the `creates`
+    /// implementation census, which refused any declaration node containing a
+    /// jump: the Type Facts producer *withheld* every call row inside the
+    /// region a jump makes non-universal, and for a claim of the absence of
+    /// behavior a withheld row is a silence indistinguishable from the absence
+    /// of the call. Since handshake protocol 15 the producer states such a row
+    /// with `reach: unknown` and classifies the enclosing construct, so the
+    /// census reads the row instead — a producer fact in place of a syntactic
+    /// approximation that could see the jump but never which rows it touched
+    /// (`docs/typefacts/adr/0026-…` amendment).
+    ///
+    /// Retained rather than removed because it is a faithful syntactic fact and
+    /// its extraction is two pushes; its removal is recorded as a candidate in
+    /// `docs/precision-backlog.md`. Any new consumer must state its own premise:
+    /// a jump in a span says nothing about what any other fact domain withheld.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jump_statements: Vec<Span>,
+    /// The left side of every `for (target in …)` / `for (target of …)` whose
+    /// target is an *assignment* to an existing binding rather than a
+    /// declaration, by span, sorted. Each iteration writes the target, so it
+    /// is a write of every binding it names, exactly as an
+    /// [`AssignmentFact`] is; it lives apart from [`AstFacts::assignments`]
+    /// because that table's consumers read a value provenance a loop head does
+    /// not have.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iteration_targets: Vec<Span>,
+    /// The span of every iteration statement -- `for`, `for … in`,
+    /// `for … of` (including `for await`), `while` and `do … while` -- sorted
+    /// (facts schema 45). The only construct that can run code positioned
+    /// earlier in a function body again after code positioned later: without
+    /// one, a function body's own statements execute in source order. What
+    /// the action-step proof (SC2006) reads to refuse a call a loop can reach
+    /// again after a suspension.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loop_statements: Vec<Span>,
+    /// The points where an `async` function or generator suspends without an
+    /// [`AstFacts::awaits`] expression, by span, sorted (facts schema 45):
+    ///
+    /// - a `for await (… of …)` statement, which awaits every iterator result
+    ///   before its body runs;
+    /// - a delegating `yield* operand` (in an async generator it awaits every
+    ///   result of the delegate; in a sync generator it does not suspend the
+    ///   caller's step, and a consumer must tell the two apart by the
+    ///   function's own `async` flag);
+    /// - an `await using` declaration, which awaits its disposal when the
+    ///   enclosing block exits.
+    ///
+    /// Recorded for the function the construct is written in, never for a
+    /// nested one; like `awaits`, a consumer attributes each span to its
+    /// innermost enclosing function.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub implicit_suspensions: Vec<Span>,
     /// Module-level string directives (`"use server"`, `"use strict"`, …):
     /// the statements the parser classifies as the module's directive
     /// prologue, in source order, carrying the cooked directive text. A
@@ -179,6 +402,22 @@ pub struct CallFact {
     pub arguments: Vec<ArgumentFact>,
     pub static_callee: bool,
     pub owned_write_option: bool,
+    /// Whether this call's own result provably reaches nothing: the call
+    /// **is** the expression of an `ExpressionStatement`.
+    ///
+    /// One direction only. `true` proves the result is discarded; `false`
+    /// proves nothing and is the default, so a consumer that needs "the
+    /// result is used" reads `!result_discarded` and stays fail-closed on
+    /// every form this does not classify. `await f()` and `void f()` are
+    /// deliberately `false`: the statement's expression is the `await` or the
+    /// unary, and the call's result reaches *it*.
+    #[serde(default)]
+    pub result_discarded: bool,
+    /// Whether this is a `new` expression rather than a call. Both are
+    /// recorded here, because both run the callee; a consumer describing a
+    /// *call* of a member (item B of ways-to-improve § 3.3) asks this first.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub construct: bool,
 }
 
 impl CallFact {
@@ -256,6 +495,50 @@ pub struct ArgumentFact {
     /// `satisfies` are transparent too, but cannot launder an invalid value.
     #[serde(default)]
     pub runtime_type_escape: bool,
+    /// The members of an array or object literal written as this argument
+    /// (after transparent TypeScript wrappers), each keyed by the property key
+    /// the runtime gives it, when that set is statically exact: an array
+    /// literal's elements up to its first spread (a hole is skipped and still
+    /// counts its index), and an object literal's data properties when every
+    /// property has a static identifier, string or canonical integer key and
+    /// the literal has no spread, accessor, computed key or `__proto__` key
+    /// (a later duplicate key wins, as it does at runtime). Empty for any
+    /// other argument, which names no member: absence is unknown, never "no
+    /// such member". Read by the consumer to resolve a member-path
+    /// `callbacks` row (`handler[0]` of `[readCount, data]`, item B of
+    /// ways-to-improve § 3.3) to the value it invokes, and by nothing else.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub literal_members: Vec<ArgumentMemberFact>,
+    /// Exact runtime literals written at this argument, underneath transparent
+    /// TypeScript wrappers. Identifiers, getters, spreads and computed keys
+    /// yield unknown facts, never a type-based claim about runtime values.
+    #[serde(default)]
+    pub literal_value: ArgumentLiteralFact,
+}
+
+/// A normalized literal value; no parser node crosses the fact boundary.
+/// Objects contain only their final own data properties. Arrays state length
+/// only without spreads (holes still contribute to length). Nested literals
+/// stop at depth 32; an unknown child does not erase known sibling facts.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "kebab-case")]
+pub enum ArgumentLiteralFact {
+    #[default]
+    Unknown,
+    Null,
+    Boolean(bool),
+    Integer(u32),
+    String(CompactString),
+    Function,
+    Object(Vec<ArgumentLiteralPropertyFact>),
+    ArrayLength(u32),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArgumentLiteralPropertyFact {
+    pub name: CompactString,
+    pub value: ArgumentLiteralFact,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -352,6 +635,11 @@ pub struct BindingFact {
     pub initializer_function: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer_identifier: Option<NamedSpan>,
+    /// The normalized runtime shape of the initializer underneath transparent
+    /// TypeScript wrappers, as [`ArgumentFact::runtime_value_kind`] gives it
+    /// for an argument: `const items = [a, b]` is `Array`.
+    #[serde(default)]
+    pub initializer_value_kind: RuntimeValueKind,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -387,6 +675,45 @@ pub struct ClassFact {
     pub span: Span,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<NamedSpan>,
+    /// The `extends` expression, when the class has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heritage: Option<Span>,
+    /// Every element of the class body, in source order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements: Vec<ClassElementFact>,
+}
+
+/// One element of a class body: what it defines, under which key, on the
+/// instance or the constructor.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassElementFact {
+    pub span: Span,
+    pub kind: ClassElementKind,
+    /// The key's span; `None` for a computed key, a private name, a static
+    /// block or an index signature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<Span>,
+    #[serde(default)]
+    pub computed: bool,
+    #[serde(default)]
+    pub r#static: bool,
+    /// The method's function, or the field's initializer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<Span>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ClassElementKind {
+    Constructor,
+    Method,
+    Getter,
+    Setter,
+    /// A field or auto-accessor: an own property of every instance.
+    Field,
+    StaticBlock,
+    IndexSignature,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -506,6 +833,44 @@ pub struct ModuleLoadFact {
     pub kind: ModuleLoadKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub specifier: Option<CompactString>,
+    /// The runtime argument literal's own span when `specifier` is known
+    /// (facts schema 50). A type argument such as
+    /// `require<typeof import("x")>("x")` may hold another literal with the
+    /// same text, so a resolution is joined to this span, not to `span`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specifier_span: Option<Span>,
+}
+
+/// `import S = require("m")`, `import type S = require("m")`, or either
+/// exported (`export import S = require("m")`).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportEqualsFact {
+    /// The whole declaration, which contains the specifier literal.
+    pub span: Span,
+    /// The specifier, cooked.
+    pub module: CompactString,
+    /// The binding `S`, whose references the binder resolves to this span.
+    pub local: NamedSpan,
+    pub type_only: bool,
+    /// `export import S = require("m")`: the namespace object is also one of
+    /// this module's exports.
+    pub exported: bool,
+}
+
+/// `import("m")` in a type position, with the first name its qualifier
+/// reads: `Name` in `import("m").Name.Inner` and in
+/// `typeof import("m").Name`, `None` for a bare `typeof import("m")`, whose
+/// type is the whole namespace.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TypeImportFact {
+    /// The import type, which contains the specifier literal.
+    pub span: Span,
+    /// The specifier, cooked.
+    pub module: CompactString,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member: Option<CompactString>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -515,6 +880,16 @@ pub enum ModuleHazardKind {
     Eval,
     OpaqueWasm,
     MutableUnboundGlobal,
+    /// A property accessor installed at run time: a `Proxy` trap, a getter
+    /// descriptor, or a prototype swapped for one that carries either.
+    ///
+    /// The point of the fact is what it makes *invisible*. A declared getter
+    /// is seen — the producer records a `get-accessor` form for it — but an
+    /// accessor installed at run time leaves the receiver's declared type
+    /// saying data property, so a read through it records nothing at all and
+    /// no census can refuse what it cannot see. This hazard is that premise,
+    /// stated syntactically at the one place it is still visible.
+    RuntimeAccessorInstallation,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -544,6 +919,9 @@ pub struct ExportFact {
     /// than contributing the target's names to an export-star set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub namespace: Option<CompactString>,
+    /// Exact exported namespace binding, distinct from any member it exposes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace_binding: Option<NamedSpan>,
     pub specifiers: Vec<ExportSpecifierFact>,
     pub declarations: Vec<ExportSpecifierFact>,
     /// Public declaration names that do not authenticate an exact value
@@ -589,6 +967,11 @@ pub struct ReturnFact {
     pub callee: Option<Span>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub structure: Option<Box<ReturnStructureFact>>,
+    /// The returned value's normalized runtime shape, as
+    /// [`ArgumentFact::runtime_value_kind`] gives it for an argument. A bare
+    /// `return;` is `Nullish`.
+    #[serde(default)]
+    pub runtime_value_kind: RuntimeValueKind,
 }
 
 impl ReturnFact {
@@ -610,6 +993,10 @@ impl ReturnFact {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReturnStructureFact {
+    /// Whether the entire literal uses the initial fixed-construction grammar.
+    /// This selects proposals only; the independent compiler census proves it.
+    #[serde(default)]
+    pub complete_literal: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub elements: Vec<Option<Span>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -709,6 +1096,15 @@ pub struct ConditionalExpressionFact {
     pub test: Span,
     pub consequent: Span,
     pub alternate: Span,
+    /// ADR 0115: the elements of a branch that is an array literal, after
+    /// parentheses and type wrappers, in order -- `None` for a spread or a
+    /// hole, and `Some([])` for `[]`. Absent for every other branch. What the
+    /// generator's `returns` walk reads to propose a fresh array of arguments;
+    /// the census decides it from the producer's own arms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consequent_array: Option<Box<[Option<Span>]>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate_array: Option<Box<[Option<Span>]>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -797,11 +1193,91 @@ pub struct MemberFact {
     pub property: Span,
 }
 
+/// A computed member access whose key is a literal naming one property: the
+/// member's span and that property key. See
+/// [`AstFacts::literal_computed_members`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiteralMemberKeyFact {
+    pub span: Span,
+    pub key: CompactString,
+}
+
+/// One member of an array or object literal written directly as a call
+/// argument: the property key the runtime gives it and the span of the value
+/// written there. See [`ArgumentFact::literal_members`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArgumentMemberFact {
+    pub key: CompactString,
+    pub value: Span,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpreadFact {
     pub span: Span,
     pub argument: Span,
+}
+
+/// A fresh literal, with its own enumerable string properties in source
+/// order. `closed` is false on any spread, computed/numeric key, duplicate,
+/// setter or prototype-setting member. No descriptor or proxy is inferred.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectGetShapeFact {
+    pub span: Span,
+    pub closed: bool,
+    pub properties: Vec<ObjectGetPropertyFact>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectGetPropertyFact {
+    pub key: CompactString,
+    /// Exact function expression of a get descriptor; never a method value.
+    pub getter: Option<Span>,
+    /// A no-argument identifier Call evaluated as the first operation of the
+    /// getter body. This is a positive prefix fact, not absence of hazards.
+    pub entry_call: Option<Span>,
+}
+
+fn getter_entry_call(value: &Expression<'_>) -> Option<Span> {
+    fn first(expression: &Expression<'_>) -> Option<Span> {
+        match expression.get_inner_expression() {
+            Expression::CallExpression(call)
+                if !call.optional
+                    && call.arguments.is_empty()
+                    && matches!(
+                        call.callee.get_inner_expression(),
+                        Expression::Identifier(_)
+                    ) =>
+            {
+                Some(span(call.span))
+            }
+            // The receiver is evaluated before the member is obtained.
+            Expression::StaticMemberExpression(member) => first(&member.object),
+            _ => None,
+        }
+    }
+    let Expression::FunctionExpression(function) = value else {
+        return None;
+    };
+    if function.r#async || function.generator || !function.params.items.is_empty() {
+        return None;
+    }
+    let body = function.body.as_ref()?;
+    // Directives cause no effect, but no other statement is skipped.
+    match body.statements.first()? {
+        oxc_ast::ast::Statement::ReturnStatement(statement) => first(statement.argument.as_ref()?),
+        oxc_ast::ast::Statement::ExpressionStatement(statement) => first(&statement.expression),
+        oxc_ast::ast::Statement::VariableDeclaration(statement)
+            if statement.declarations.len() == 1 =>
+        {
+            first(statement.declarations[0].init.as_ref()?)
+        }
+        _ => None,
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1044,6 +1520,12 @@ impl AstFacts {
             source,
             span_index: LazySpanIndex::default(),
             calls: Vec::new(),
+            host_execution: Vec::new(),
+            host_defaults: Vec::new(),
+            host_call_sequences: Vec::new(),
+            host_empty_arrays: Vec::new(),
+            host_zero_values: Vec::new(),
+            host_undefined_arguments: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
             function_declarations: Vec::new(),
@@ -1052,28 +1534,45 @@ impl AstFacts {
             imports: Vec::new(),
             exports: Vec::new(),
             module_loads: Vec::new(),
+            import_equals: Vec::new(),
+            type_imports: Vec::new(),
+            type_queries: Vec::new(),
+            tagged_template_tags: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
+            straight_line_calls: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
             transparent_wrappers: Vec::new(),
             members: Vec::new(),
             computed_members: Vec::new(),
+            array_literals: Vec::new(),
+            literal_computed_members: Vec::new(),
+            optional_members: Vec::new(),
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
             conditional_expressions: Vec::new(),
             logical_expressions: Vec::new(),
             object_properties: Vec::new(),
+            object_get_shapes: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
+            coercing_operands: Vec::new(),
+            iterated_operands: Vec::new(),
             assignments: Vec::new(),
+            write_targets: Vec::new(),
+            deleted_targets: Vec::new(),
             if_regions: Vec::new(),
+            jump_statements: Vec::new(),
+            iteration_targets: Vec::new(),
+            loop_statements: Vec::new(),
+            implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
         }
     }
@@ -1161,10 +1660,20 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
     // GetSymbolAtLocation deliberately returns no symbol for `use:name`.
     // Build Oxc's semantic scope tree once and retain the exact declaration
     // chosen by its binder instead of approximating scope with source text.
-    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let built = SemanticBuilder::new().build(&parsed.program);
+    let execution_semantics_valid = built.errors.is_empty();
+    let semantic = built.semantic;
     let mut collector = Collector::new(source, semantic.scoping());
     collector.visit_program(&parsed.program);
-    Ok(collector.finish(identity))
+    let mut facts = collector.finish(identity);
+    if execution_semantics_valid {
+        (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
+        facts.host_undefined_arguments = host_execution::undefined_values(&semantic);
+        facts.host_call_sequences = host_execution::call_sequences(&semantic);
+        (facts.host_empty_arrays, facts.host_zero_values) =
+            host_execution::empty_and_zero_values(&semantic);
+    }
+    Ok(facts)
 }
 
 struct Collector<'s, 'semantic> {
@@ -1180,6 +1689,13 @@ struct Collector<'s, 'semantic> {
     imports: Vec<ImportFact>,
     exports: Vec<ExportFact>,
     module_loads: Vec<ModuleLoadFact>,
+    import_equals: Vec<ImportEqualsFact>,
+    type_imports: Vec<TypeImportFact>,
+    type_queries: Vec<Span>,
+    tagged_template_tags: Vec<Span>,
+    /// The declaration spans of `export import S = require("m")`, recorded by
+    /// the export visitor before the walk reaches the declaration itself.
+    exported_import_equals: Vec<Span>,
     module_hazards: Vec<ModuleHazardFact>,
     module_blocks: Vec<Span>,
     ambient_module_depth: usize,
@@ -1187,22 +1703,35 @@ struct Collector<'s, 'semantic> {
     reference_declarations: Vec<(Span, Span)>,
     awaits: Vec<Span>,
     unconditional_awaits: Vec<Span>,
+    straight_line_calls: Vec<Span>,
     returns: Vec<ReturnFact>,
     jsx_elements: Vec<JsxElementFact>,
     jsx_fragments: Vec<Span>,
     transparent_wrappers: Vec<TransparentWrapperFact>,
     members: Vec<MemberFact>,
     computed_members: Vec<Span>,
+    array_literals: Vec<Span>,
+    literal_computed_members: Vec<LiteralMemberKeyFact>,
+    optional_members: Vec<Span>,
     parameter_properties: Vec<Span>,
     spreads: Vec<SpreadFact>,
     conditional_tests: Vec<Span>,
     conditional_expressions: Vec<ConditionalExpressionFact>,
     logical_expressions: Vec<LogicalExpressionFact>,
     object_properties: Vec<ObjectPropertyFact>,
+    object_get_shapes: Vec<ObjectGetShapeFact>,
     template_literals: Vec<TemplateLiteralFact>,
     coercive_operands: Vec<CoerciveOperandFact>,
+    coercing_operands: Vec<Span>,
+    iterated_operands: Vec<Span>,
     assignments: Vec<AssignmentFact>,
+    write_targets: Vec<Span>,
+    deleted_targets: Vec<Span>,
     if_regions: Vec<IfRegionFact>,
+    jump_statements: Vec<Span>,
+    iteration_targets: Vec<Span>,
+    loop_statements: Vec<Span>,
+    implicit_suspensions: Vec<Span>,
     module_directives: Vec<DirectiveFact>,
     conditional_control_stack: Vec<Span>,
     method_names: Vec<Option<NamedSpan>>,
@@ -1215,6 +1744,25 @@ struct Collector<'s, 'semantic> {
     /// The [`Collector::conditional_flow_depth`] at each enclosing function's
     /// entry, innermost last.
     function_flow_depths: Vec<usize>,
+    /// How many optional chains enclose the current node. Kept apart from
+    /// [`Collector::conditional_flow_depth`], whose answer for awaits is
+    /// unchanged; read only for [`AstFacts::straight_line_calls`].
+    optional_chain_depth: usize,
+    /// The span of the expression the innermost enclosing `ExpressionStatement`
+    /// discards, while that statement's own expression is being walked.
+    ///
+    /// Compared by span equality rather than tracked as a depth, so a nested
+    /// call answers correctly without any unwinding: in `f(g())` as a
+    /// statement, only `f(...)`'s span matches.
+    discarded_expression: Option<OxcSpan>,
+    /// The concise arrow bodies enclosing the walk, innermost last.
+    ///
+    /// Oxc models `() => f()` as a body holding one `ExpressionStatement`, so
+    /// the syntax that discards a result and the syntax that *returns* one are
+    /// the same node. Without this the arrow's returned call would be recorded
+    /// as discarded, which is the one direction `result_discarded` may never
+    /// be wrong in.
+    concise_arrow_bodies: Vec<OxcSpan>,
 }
 
 struct UnresolvedAssignmentTargets<'semantic> {
@@ -1278,6 +1826,7 @@ struct BindingMetadata {
     call_initializer: Option<OxcSpan>,
     initializer_function: bool,
     initializer_identifier: Option<NamedSpan>,
+    initializer_value_kind: RuntimeValueKind,
     immutable: bool,
 }
 
@@ -1296,6 +1845,11 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             imports: Vec::new(),
             exports: Vec::new(),
             module_loads: Vec::new(),
+            import_equals: Vec::new(),
+            type_imports: Vec::new(),
+            type_queries: Vec::new(),
+            tagged_template_tags: Vec::new(),
+            exported_import_equals: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
             ambient_module_depth: 0,
@@ -1303,27 +1857,43 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
+            straight_line_calls: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
             transparent_wrappers: Vec::new(),
             members: Vec::new(),
             computed_members: Vec::new(),
+            array_literals: Vec::new(),
+            literal_computed_members: Vec::new(),
+            optional_members: Vec::new(),
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
             conditional_expressions: Vec::new(),
             logical_expressions: Vec::new(),
             object_properties: Vec::new(),
+            object_get_shapes: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
+            coercing_operands: Vec::new(),
+            iterated_operands: Vec::new(),
             assignments: Vec::new(),
+            write_targets: Vec::new(),
+            deleted_targets: Vec::new(),
             if_regions: Vec::new(),
+            jump_statements: Vec::new(),
+            iteration_targets: Vec::new(),
+            loop_statements: Vec::new(),
+            implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
             conditional_control_stack: Vec::new(),
+            discarded_expression: None,
+            concise_arrow_bodies: Vec::new(),
             method_names: Vec::new(),
             conditional_flow_depth: 0,
             function_flow_depths: Vec::new(),
+            optional_chain_depth: 0,
         }
     }
 
@@ -1338,18 +1908,27 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.imports.sort_by_key(|fact| fact.span);
         self.exports.sort_by_key(|fact| fact.span);
         self.module_loads.sort_by_key(|fact| fact.span);
+        self.import_equals.sort_by_key(|fact| fact.span);
+        self.type_imports.sort_by_key(|fact| fact.span);
         self.module_hazards.sort_by_key(|fact| fact.span);
+        self.type_queries.sort_unstable();
+        self.type_queries.dedup();
+        self.tagged_template_tags.sort_unstable();
         self.module_blocks.sort_unstable();
         self.identifiers.sort_by_key(|identifier| identifier.span);
         self.reference_declarations.sort_unstable();
         self.awaits.sort_unstable();
         self.unconditional_awaits.sort_unstable();
+        self.straight_line_calls.sort_unstable();
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
         self.jsx_fragments.sort();
         self.transparent_wrappers.sort_by_key(|fact| fact.span);
         self.members.sort_by_key(|fact| fact.span);
         self.computed_members.sort_unstable();
+        self.array_literals.sort_unstable();
+        self.literal_computed_members.sort_by_key(|fact| fact.span);
+        self.optional_members.sort_unstable();
         self.parameter_properties.sort_unstable();
         self.spreads.sort_by_key(|fact| fact.span);
         self.conditional_tests.sort_unstable();
@@ -1358,14 +1937,30 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.object_properties.sort_by_key(|fact| fact.span);
         self.template_literals.sort_by_key(|fact| fact.span);
         self.coercive_operands.sort_by_key(|fact| fact.span);
+        self.coercing_operands.sort_unstable();
+        self.coercing_operands.dedup();
+        self.iterated_operands.sort_unstable();
+        self.iterated_operands.dedup();
         self.assignments.sort_by_key(|fact| fact.target);
+        self.write_targets.sort_unstable();
+        self.write_targets.dedup();
         self.if_regions.sort_by_key(|fact| fact.consequent);
+        self.jump_statements.sort_unstable();
+        self.iteration_targets.sort_unstable();
+        self.loop_statements.sort_unstable();
+        self.implicit_suspensions.sort_unstable();
         self.module_directives.sort_by_key(|fact| fact.span);
         AstFacts {
             schema: AST_FACTS_SCHEMA,
             source,
             span_index: LazySpanIndex::default(),
             calls: self.calls,
+            host_execution: Vec::new(),
+            host_defaults: Vec::new(),
+            host_call_sequences: Vec::new(),
+            host_empty_arrays: Vec::new(),
+            host_zero_values: Vec::new(),
+            host_undefined_arguments: Vec::new(),
             bindings: self.bindings,
             functions: self.functions,
             function_declarations: self.function_declarations,
@@ -1374,28 +1969,45 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             imports: self.imports,
             exports: self.exports,
             module_loads: self.module_loads,
+            import_equals: self.import_equals,
+            type_imports: self.type_imports,
+            type_queries: self.type_queries,
+            tagged_template_tags: self.tagged_template_tags,
             module_hazards: self.module_hazards,
             module_blocks: self.module_blocks,
             identifiers: self.identifiers,
             reference_declarations: self.reference_declarations,
             awaits: self.awaits,
             unconditional_awaits: self.unconditional_awaits,
+            straight_line_calls: self.straight_line_calls,
             returns: self.returns,
             jsx_elements: self.jsx_elements,
             jsx_fragments: self.jsx_fragments,
             transparent_wrappers: self.transparent_wrappers,
             members: self.members,
             computed_members: self.computed_members,
+            array_literals: self.array_literals,
+            literal_computed_members: self.literal_computed_members,
+            optional_members: self.optional_members,
             parameter_properties: self.parameter_properties,
             spreads: self.spreads,
             conditional_tests: self.conditional_tests,
             conditional_expressions: self.conditional_expressions,
             logical_expressions: self.logical_expressions,
             object_properties: self.object_properties,
+            object_get_shapes: self.object_get_shapes,
             template_literals: self.template_literals,
             coercive_operands: self.coercive_operands,
+            coercing_operands: self.coercing_operands,
+            iterated_operands: self.iterated_operands,
             assignments: self.assignments,
+            write_targets: self.write_targets,
+            deleted_targets: self.deleted_targets,
             if_regions: self.if_regions,
+            jump_statements: self.jump_statements,
+            iteration_targets: self.iteration_targets,
+            loop_statements: self.loop_statements,
+            implicit_suspensions: self.implicit_suspensions,
             module_directives: self.module_directives,
         }
     }
@@ -1440,21 +2052,18 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 })
                 .collect(),
             array_slots: match pattern {
-                BindingPattern::ArrayPattern(array) => {
-                    array
-                        .elements
-                        .iter()
-                        .map(|element| {
-                            element.as_ref().and_then(|pattern| {
-                                pattern.get_binding_identifiers().into_iter().next().map(
-                                    |identifier| NamedSpan {
-                                        span: span(identifier.span),
-                                    },
-                                )
-                            })
+                BindingPattern::ArrayPattern(array) => array
+                    .elements
+                    .iter()
+                    .map(|element| {
+                        element.as_ref().and_then(|pattern| match pattern {
+                            BindingPattern::BindingIdentifier(identifier) => Some(NamedSpan {
+                                span: span(identifier.span),
+                            }),
+                            _ => None,
                         })
-                        .collect()
-                }
+                    })
+                    .collect(),
                 _ => vec![],
             },
             object_slots: match pattern {
@@ -1462,11 +2071,12 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                     .properties
                     .iter()
                     .filter_map(|property| {
-                        let local = property
-                            .value
-                            .get_binding_identifiers()
-                            .into_iter()
-                            .next()?;
+                        let BindingPattern::BindingIdentifier(local) = &property.value else {
+                            return None;
+                        };
+                        if property.computed {
+                            return None;
+                        }
                         let property_name = self
                             .source
                             .get(
@@ -1489,6 +2099,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             call_initializer: metadata.call_initializer.map(span),
             initializer_function: metadata.initializer_function,
             initializer_identifier: metadata.initializer_identifier,
+            initializer_value_kind: metadata.initializer_value_kind,
         }
     }
 
@@ -1502,6 +2113,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 conditional: false,
                 callee: None,
                 structure: None,
+                runtime_value_kind: RuntimeValueKind::Nullish,
             };
         };
         let argument_span = span(expression.span());
@@ -1542,6 +2154,39 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             _ => Vec::new(),
         };
         let conditional = matches!(expression, Expression::ConditionalExpression(_));
+        let complete_literal = match expression {
+            Expression::ArrayExpression(array) => array.elements.iter().all(|element| {
+                !matches!(
+                    element,
+                    ArrayExpressionElement::Elision(_) | ArrayExpressionElement::SpreadElement(_)
+                )
+            }),
+            Expression::ObjectExpression(object) => {
+                let mut keys = std::collections::BTreeSet::new();
+                object.properties.iter().all(|property| {
+                    let ObjectPropertyKind::ObjectProperty(property) = property else {
+                        return false;
+                    };
+                    // ADR 0181: a shorthand `{ value }` is `{ value: value }`;
+                    // its value is the identifier, resolved by the binder.
+                    if property.kind != PropertyKind::Init
+                        || property.method
+                        || property.computed
+                        || (property.shorthand
+                            && !matches!(property.value, Expression::Identifier(_)))
+                    {
+                        return false;
+                    }
+                    let key = match &property.key {
+                        PropertyKey::StaticIdentifier(key) => key.name.as_str(),
+                        PropertyKey::StringLiteral(key) => key.value.as_str(),
+                        _ => return false,
+                    };
+                    key != "__proto__" && keys.insert(key)
+                })
+            }
+            _ => false,
+        };
         let (value, callee) = match expression {
             Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
                 (ReturnValueKind::Function, None)
@@ -1567,6 +2212,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             _ => (ReturnValueKind::Other, None),
         };
         ReturnFact {
+            runtime_value_kind: self.runtime_value_kind(expression),
             span: span(expression.span()),
             argument: Some(argument_span),
             control_tests: self.conditional_control_stack.clone().into_boxed_slice(),
@@ -1575,6 +2221,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             callee,
             structure: (!elements.is_empty() || !properties.is_empty()).then(|| {
                 Box::new(ReturnStructureFact {
+                    complete_literal,
                     elements,
                     properties,
                 })
@@ -1768,8 +2415,13 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 .map(|symbol| span(self.scoping.symbol_span(symbol))),
             _ => None,
         };
+        let literal_members = expression.map_or_else(Vec::new, literal_members_of);
         ArgumentFact {
             span: span(argument.span()),
+            literal_members,
+            literal_value: expression.map_or(ArgumentLiteralFact::Unknown, |expression| {
+                argument_literal_fact(expression, 0)
+            }),
             binding_declaration,
             spread: argument.is_spread(),
             value,
@@ -1814,6 +2466,31 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
     /// current program. This is deliberately stricter than a name check:
     /// shadowed `require`, `eval`, and `WebAssembly` values are ordinary local
     /// behavior and must not become package-closure hazards.
+    /// Member names that install a property accessor, or a prototype that
+    /// carries one, at run time.
+    ///
+    /// Matched by name alone rather than by receiver. `Object`, `Reflect` and
+    /// `globalThis.Object` all reach the same intrinsic, and an alias
+    /// (`const dp = Object.defineProperty`) reads the member before it calls
+    /// anything, so a receiver test would miss both. Over-refusing is free
+    /// here: the corpus measurement found the broad set and the narrow one
+    /// refuse exactly the same packages.
+    const ACCESSOR_INSTALLING_MEMBERS: [&'static str; 6] = [
+        "defineProperty",
+        "defineProperties",
+        "setPrototypeOf",
+        "__defineGetter__",
+        "__defineSetter__",
+        "__proto__",
+    ];
+
+    fn record_accessor_installation(&mut self, at: oxc_span::Span) {
+        self.module_hazards.push(ModuleHazardFact {
+            span: span(at),
+            kind: ModuleHazardKind::RuntimeAccessorInstallation,
+        });
+    }
+
     fn is_unresolved_named(&self, identifier: &IdentifierReference<'_>, name: &str) -> bool {
         identifier.name == name
             && identifier.reference_id.get().is_some_and(|reference| {
@@ -1933,21 +2610,25 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     fn visit_import_expression(&mut self, expression: &ImportExpression<'a>) {
         let specifier = if expression.options.is_none() {
             match &expression.source {
-                Expression::StringLiteral(source) => Some(source.value.as_str().into()),
+                Expression::StringLiteral(source) => {
+                    Some((source.value.as_str().into(), span(source.span)))
+                }
                 Expression::TemplateLiteral(source) if source.expressions.is_empty() => source
                     .quasis
                     .first()
                     .and_then(|quasi| quasi.value.cooked.as_ref())
-                    .map(|value| value.as_str().into()),
+                    .map(|value| (value.as_str().into(), span(source.span))),
                 _ => None,
             }
         } else {
             None
         };
+        let (specifier, specifier_span) = specifier.unzip();
         self.module_loads.push(ModuleLoadFact {
             span: span(expression.span),
             kind: ModuleLoadKind::DynamicImport,
             specifier: specifier.clone(),
+            specifier_span,
         });
         if specifier.is_none() {
             self.module_hazards.push(ModuleHazardFact {
@@ -1958,22 +2639,51 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_import_expression(self, expression);
     }
 
+    fn visit_expression_statement(&mut self, statement: &oxc_ast::ast::ExpressionStatement<'a>) {
+        // Saved and restored rather than cleared: an expression statement
+        // inside a function inside this statement's own expression is a
+        // different discard, and the outer one has to survive it.
+        let expression = statement.expression.span();
+        let returned = self.concise_arrow_bodies.last() == Some(&expression);
+        let enclosing = if returned {
+            self.discarded_expression.take()
+        } else {
+            self.discarded_expression.replace(expression)
+        };
+        walk::walk_expression_statement(self, statement);
+        self.discarded_expression = enclosing;
+    }
+
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        if self.optional_chain_depth == 0
+            && self.conditional_flow_depth
+                == self
+                    .function_flow_depths
+                    .last()
+                    .copied()
+                    .unwrap_or_default()
+        {
+            self.straight_line_calls.push(span(call.span));
+        }
         if let Expression::Identifier(callee) = &call.callee {
             if self.is_unresolved_named(callee, "require") {
                 let specifier = match call.arguments.as_slice() {
-                    [Argument::StringLiteral(source)] => Some(source.value.as_str().into()),
+                    [Argument::StringLiteral(source)] => {
+                        Some((source.value.as_str().into(), span(source.span)))
+                    }
                     [Argument::TemplateLiteral(source)] if source.expressions.is_empty() => source
                         .quasis
                         .first()
                         .and_then(|quasi| quasi.value.cooked.as_ref())
-                        .map(|value| value.as_str().into()),
+                        .map(|value| (value.as_str().into(), span(source.span))),
                     _ => None,
                 };
+                let (specifier, specifier_span) = specifier.unzip();
                 self.module_loads.push(ModuleLoadFact {
                     span: span(call.span),
                     kind: ModuleLoadKind::Require,
                     specifier: specifier.clone(),
+                    specifier_span,
                 });
                 if specifier.is_none() {
                     self.module_hazards.push(ModuleHazardFact {
@@ -1988,6 +2698,17 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 });
             }
         }
+        // `Object.create(prototype, descriptors)` installs the descriptors it
+        // is handed. The one-argument form installs nothing and is ordinary
+        // code, so the arity is the whole distinction.
+        if let Expression::StaticMemberExpression(member) = &call.callee
+            && member.property.name == "create"
+            && call.arguments.len() >= 2
+            && let Expression::Identifier(object) = &member.object
+            && self.is_unresolved_named(object, "Object")
+        {
+            self.record_accessor_installation(call.span);
+        }
         let callee_span = call.callee.span();
         self.calls.push(CallFact {
             span: span(call.span),
@@ -2000,6 +2721,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .map(|argument| self.argument_fact(argument))
                 .collect(),
             static_callee: self.is_static_callee(callee_span),
+            result_discarded: self.discarded_expression == Some(call.span),
             owned_write_option: call.arguments.get(1).is_some_and(|argument| {
                 let Argument::ObjectExpression(options) = argument else {
                     return false;
@@ -2018,6 +2740,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         )
                 })
             }),
+            construct: false,
         });
         walk::walk_call_expression(self, call);
     }
@@ -2035,12 +2758,25 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .map(|argument| self.argument_fact(argument))
                 .collect(),
             static_callee: self.is_static_callee(callee_span),
+            result_discarded: self.discarded_expression == Some(expression.span),
             owned_write_option: false,
+            construct: true,
         });
         walk::walk_new_expression(self, expression);
     }
 
     fn visit_variable_declarator(&mut self, declaration: &VariableDeclarator<'a>) {
+        // The disposal is awaited where the block exits, which is after this
+        // declarator; recording the declarator itself is the earlier, and so
+        // the conservative, position.
+        if declaration.kind == oxc_ast::ast::VariableDeclarationKind::AwaitUsing {
+            self.implicit_suspensions.push(span(declaration.span));
+        }
+        if matches!(declaration.id, BindingPattern::ArrayPattern(_))
+            && let Some(init) = &declaration.init
+        {
+            self.iterated_operands.push(span(init.span()));
+        }
         let initializer = declaration.init.as_ref().map(GetSpan::span);
         let initializer_function = declaration.init.as_ref().is_some_and(|expression| {
             matches!(
@@ -2062,17 +2798,24 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 _ => None,
             }
         });
-        self.bindings.push(self.binding_fact(
-            declaration.span,
-            &declaration.id,
-            BindingMetadata {
-                initializer,
-                call_initializer,
-                initializer_function,
-                initializer_identifier,
-                immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
-            },
-        ));
+        self.bindings.push(
+            self.binding_fact(
+                declaration.span,
+                &declaration.id,
+                BindingMetadata {
+                    initializer,
+                    call_initializer,
+                    initializer_function,
+                    initializer_identifier,
+                    initializer_value_kind: declaration
+                        .init
+                        .as_ref()
+                        .map(|expression| self.runtime_value_kind(expression))
+                        .unwrap_or_default(),
+                    immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
+                },
+            ),
+        );
         walk::walk_variable_declarator(self, declaration);
     }
 
@@ -2112,7 +2855,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         self.binding_fact(
                             parameter.span,
                             &parameter.pattern,
-                            BindingMetadata::default(),
+                            BindingMetadata {
+                                initializer: parameter
+                                    .initializer
+                                    .as_ref()
+                                    .map(|value| value.span()),
+                                ..BindingMetadata::default()
+                            },
                         )
                     })
                     .collect(),
@@ -2141,11 +2890,73 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_class(&mut self, class: &oxc_ast::ast::Class<'a>) {
+        use oxc_ast::ast::{ClassElement, MethodDefinitionKind, PropertyKey};
+        let key = |key: &PropertyKey<'_>, computed: bool| {
+            (!computed && !matches!(key, PropertyKey::PrivateIdentifier(_)))
+                .then(|| span(key.span()))
+        };
+        let elements = class
+            .body
+            .body
+            .iter()
+            .map(|element| match element {
+                ClassElement::MethodDefinition(method) => ClassElementFact {
+                    span: span(method.span),
+                    kind: match method.kind {
+                        MethodDefinitionKind::Constructor => ClassElementKind::Constructor,
+                        MethodDefinitionKind::Method => ClassElementKind::Method,
+                        MethodDefinitionKind::Get => ClassElementKind::Getter,
+                        MethodDefinitionKind::Set => ClassElementKind::Setter,
+                    },
+                    key: key(&method.key, method.computed),
+                    computed: method.computed,
+                    r#static: method.r#static,
+                    value: Some(span(method.value.span)),
+                },
+                ClassElement::PropertyDefinition(property) => ClassElementFact {
+                    span: span(property.span),
+                    kind: ClassElementKind::Field,
+                    key: key(&property.key, property.computed),
+                    computed: property.computed,
+                    r#static: property.r#static,
+                    value: property.value.as_ref().map(|value| span(value.span())),
+                },
+                ClassElement::AccessorProperty(property) => ClassElementFact {
+                    span: span(property.span),
+                    kind: ClassElementKind::Field,
+                    key: key(&property.key, property.computed),
+                    computed: property.computed,
+                    r#static: property.r#static,
+                    value: property.value.as_ref().map(|value| span(value.span())),
+                },
+                ClassElement::StaticBlock(block) => ClassElementFact {
+                    span: span(block.span),
+                    kind: ClassElementKind::StaticBlock,
+                    key: None,
+                    computed: false,
+                    r#static: true,
+                    value: None,
+                },
+                ClassElement::TSIndexSignature(signature) => ClassElementFact {
+                    span: span(signature.span),
+                    kind: ClassElementKind::IndexSignature,
+                    key: None,
+                    computed: false,
+                    r#static: signature.r#static,
+                    value: None,
+                },
+            })
+            .collect();
         self.classes.push(ClassFact {
             span: span(class.span),
             name: class.id.as_ref().map(|id| NamedSpan {
                 span: span(id.span),
             }),
+            heritage: class
+                .super_class
+                .as_ref()
+                .map(|heritage| span(heritage.span())),
+            elements,
         });
         walk::walk_class(self, class);
     }
@@ -2168,7 +2979,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     self.binding_fact(
                         parameter.span,
                         &parameter.pattern,
-                        BindingMetadata::default(),
+                        BindingMetadata {
+                            initializer: parameter.initializer.as_ref().map(|value| value.span()),
+                            ..BindingMetadata::default()
+                        },
                     )
                 })
                 .collect(),
@@ -2192,7 +3006,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             },
         });
         self.function_flow_depths.push(self.conditional_flow_depth);
+        let concise = function.get_expression().map(GetSpan::span);
+        if let Some(concise) = concise {
+            self.concise_arrow_bodies.push(concise);
+        }
         walk::walk_arrow_function_expression(self, function);
+        if concise.is_some() {
+            self.concise_arrow_bodies.pop();
+        }
         self.function_flow_depths.pop();
     }
 
@@ -2263,7 +3084,52 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_import_declaration(self, declaration);
     }
 
+    fn visit_ts_import_equals_declaration(&mut self, declaration: &TSImportEqualsDeclaration<'a>) {
+        if let TSModuleReference::ExternalModuleReference(reference) = &declaration.module_reference
+        {
+            let declaration_span = span(declaration.span);
+            self.import_equals.push(ImportEqualsFact {
+                span: declaration_span,
+                module: reference.expression.value.as_str().into(),
+                local: NamedSpan {
+                    span: span(declaration.id.span),
+                },
+                type_only: declaration.import_kind.is_type(),
+                exported: self.exported_import_equals.contains(&declaration_span),
+            });
+        }
+        walk::walk_ts_import_equals_declaration(self, declaration);
+    }
+
+    fn visit_ts_type_query(&mut self, query: &TSTypeQuery<'a>) {
+        self.type_queries.push(span(query.span));
+        walk::walk_ts_type_query(self, query);
+    }
+
+    fn visit_ts_import_type(&mut self, import: &TSImportType<'a>) {
+        let mut qualifier = import.qualifier.as_ref();
+        let mut member = None;
+        while let Some(current) = qualifier {
+            match current {
+                TSImportTypeQualifier::Identifier(name) => {
+                    member = Some(name.name.as_str().into());
+                    qualifier = None;
+                }
+                TSImportTypeQualifier::QualifiedName(name) => qualifier = Some(&name.left),
+            }
+        }
+        self.type_imports.push(TypeImportFact {
+            span: span(import.span),
+            module: import.source.value.as_str().into(),
+            member,
+        });
+        walk::walk_ts_import_type(self, import);
+    }
+
     fn visit_export_named_declaration(&mut self, declaration: &ExportNamedDeclaration<'a>) {
+        if let Some(Declaration::TSImportEqualsDeclaration(inner)) = &declaration.declaration {
+            self.exported_import_equals.push(span(inner.span));
+        }
         // Oxc represents a local `export { value }` name as a module-export
         // name and does not walk it through `visit_identifier_reference`.
         // Preserve the binder-selected declaration explicitly so consumers do
@@ -2292,6 +3158,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .map(|source| source.value.as_str().into()),
             type_only: declaration.export_kind.is_type(),
             namespace: None,
+            namespace_binding: None,
             specifiers: declaration
                 .specifiers
                 .iter()
@@ -2363,6 +3230,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             module: None,
             type_only: false,
             namespace: None,
+            namespace_binding: None,
             specifiers: vec![],
             declarations: vec![ExportSpecifierFact {
                 local: NamedSpan { span: span(local) },
@@ -2381,6 +3249,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             module: Some(declaration.source.value.as_str().into()),
             type_only: declaration.export_kind.is_type(),
             namespace: declaration.exported.as_ref().map(module_export_name),
+            namespace_binding: declaration.exported.as_ref().map(|name| NamedSpan {
+                span: span(name.span()),
+            }),
             specifiers: vec![],
             declarations: vec![],
             declaration_surface_only: vec![],
@@ -2393,6 +3264,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             span: span(identifier.span),
             role: IdentifierRole::Reference,
         });
+        // The identifier, not `new Proxy(`: `Proxy.revocable` builds the same
+        // thing, and `const P = Proxy` defers the construction to a name this
+        // pass does not follow. A shadowed `Proxy` is somebody's own class and
+        // states nothing.
+        if self.is_unresolved_named(identifier, "Proxy") {
+            self.record_accessor_installation(identifier.span);
+        }
         if let Some(declaration) = identifier
             .reference_id
             .get()
@@ -2472,6 +3350,30 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         let plain = expression.operator == AssignmentOperator::Assign;
+        if plain && matches!(expression.left, AssignmentTarget::ArrayAssignmentTarget(_)) {
+            self.iterated_operands.push(span(expression.right.span()));
+        }
+        // A compound assignment coerces exactly as its binary operator does:
+        // `total += obj` is `total + obj`. The logical assignments coerce
+        // nothing.
+        if matches!(
+            expression.operator,
+            AssignmentOperator::Addition
+                | AssignmentOperator::Subtraction
+                | AssignmentOperator::Multiplication
+                | AssignmentOperator::Exponential
+                | AssignmentOperator::Division
+                | AssignmentOperator::Remainder
+                | AssignmentOperator::ShiftLeft
+                | AssignmentOperator::ShiftRight
+                | AssignmentOperator::ShiftRightZeroFill
+                | AssignmentOperator::BitwiseAnd
+                | AssignmentOperator::BitwiseOR
+                | AssignmentOperator::BitwiseXOR
+        ) {
+            self.coercing_operands
+                .extend([span(expression.left.span()), span(expression.right.span())]);
+        }
         let inner = expression.right.get_inner_expression();
         self.assignments.push(AssignmentFact {
             target: span(expression.left.span()),
@@ -2512,6 +3414,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_assignment_expression(self, expression);
     }
 
+    fn visit_simple_assignment_target(
+        &mut self,
+        target: &oxc_ast::ast::SimpleAssignmentTarget<'a>,
+    ) {
+        let written = target.get_expression().map_or_else(
+            || span(target.span()),
+            |expression| span(peel_ts_sugar(expression).span()),
+        );
+        self.write_targets.push(written);
+        walk::walk_simple_assignment_target(self, target);
+    }
+
     fn visit_update_expression(&mut self, expression: &UpdateExpression<'a>) {
         if self.simple_assignment_target_has_unresolved(&expression.argument) {
             self.module_hazards.push(ModuleHazardFact {
@@ -2527,19 +3441,34 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             call_initializer: None,
             array_slots: Vec::new(),
         });
+        // Prefix and postfix `++`/`--` apply ToNumeric to the old value.
+        self.coercing_operands
+            .push(span(expression.argument.span()));
         walk::walk_update_expression(self, expression);
     }
 
     fn visit_for_statement_left(&mut self, left: &oxc_ast::ast::ForStatementLeft<'a>) {
-        if let Some(target) = left.as_assignment_target()
-            && self.assignment_target_has_unresolved(target)
-        {
-            self.module_hazards.push(ModuleHazardFact {
-                span: span(left.span()),
-                kind: ModuleHazardKind::MutableUnboundGlobal,
-            });
+        if let Some(target) = left.as_assignment_target() {
+            // Not a declaration: every iteration writes an existing binding.
+            self.iteration_targets.push(span(left.span()));
+            if self.assignment_target_has_unresolved(target) {
+                self.module_hazards.push(ModuleHazardFact {
+                    span: span(left.span()),
+                    kind: ModuleHazardKind::MutableUnboundGlobal,
+                });
+            }
         }
         walk::walk_for_statement_left(self, left);
+    }
+
+    fn visit_break_statement(&mut self, statement: &oxc_ast::ast::BreakStatement<'a>) {
+        self.jump_statements.push(span(statement.span));
+        walk::walk_break_statement(self, statement);
+    }
+
+    fn visit_continue_statement(&mut self, statement: &oxc_ast::ast::ContinueStatement<'a>) {
+        self.jump_statements.push(span(statement.span));
+        walk::walk_continue_statement(self, statement);
     }
 
     fn visit_formal_parameter(&mut self, parameter: &FormalParameter<'a>) {
@@ -2555,6 +3484,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_formal_parameter(self, parameter);
     }
 
+    fn visit_chain_expression(&mut self, expression: &oxc_ast::ast::ChainExpression<'a>) {
+        self.optional_chain_depth += 1;
+        walk::walk_chain_expression(self, expression);
+        self.optional_chain_depth -= 1;
+    }
+
     fn visit_conditional_expression(&mut self, expression: &ConditionalExpression<'a>) {
         self.conditional_tests.push(span(expression.test.span()));
         self.conditional_expressions
@@ -2563,6 +3498,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 test: span(expression.test.span()),
                 consequent: span(expression.consequent.span()),
                 alternate: span(expression.alternate.span()),
+                consequent_array: array_literal_elements(&expression.consequent),
+                alternate_array: array_literal_elements(&expression.alternate),
             });
         self.visit_expression(&expression.test);
         self.conditional_flow_depth += 1;
@@ -2589,30 +3526,39 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_for_statement(&mut self, statement: &oxc_ast::ast::ForStatement<'a>) {
+        self.loop_statements.push(span(statement.span));
         self.conditional_flow_depth += 1;
         walk::walk_for_statement(self, statement);
         self.conditional_flow_depth -= 1;
     }
 
     fn visit_for_in_statement(&mut self, statement: &oxc_ast::ast::ForInStatement<'a>) {
+        self.loop_statements.push(span(statement.span));
         self.conditional_flow_depth += 1;
         walk::walk_for_in_statement(self, statement);
         self.conditional_flow_depth -= 1;
     }
 
     fn visit_for_of_statement(&mut self, statement: &oxc_ast::ast::ForOfStatement<'a>) {
+        self.iterated_operands.push(span(statement.right.span()));
+        self.loop_statements.push(span(statement.span));
+        if statement.r#await {
+            self.implicit_suspensions.push(span(statement.span));
+        }
         self.conditional_flow_depth += 1;
         walk::walk_for_of_statement(self, statement);
         self.conditional_flow_depth -= 1;
     }
 
     fn visit_while_statement(&mut self, statement: &oxc_ast::ast::WhileStatement<'a>) {
+        self.loop_statements.push(span(statement.span));
         self.conditional_flow_depth += 1;
         walk::walk_while_statement(self, statement);
         self.conditional_flow_depth -= 1;
     }
 
     fn visit_do_while_statement(&mut self, statement: &oxc_ast::ast::DoWhileStatement<'a>) {
+        self.loop_statements.push(span(statement.span));
         self.conditional_flow_depth += 1;
         walk::walk_do_while_statement(self, statement);
         self.conditional_flow_depth -= 1;
@@ -2624,7 +3570,63 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.conditional_flow_depth -= 1;
     }
 
+    fn visit_object_expression(&mut self, object: &oxc_ast::ast::ObjectExpression<'a>) {
+        let mut shape = ObjectGetShapeFact {
+            span: span(object.span),
+            closed: true,
+            properties: Vec::new(),
+        };
+        for item in &object.properties {
+            let ObjectPropertyKind::ObjectProperty(property) = item else {
+                shape.closed = false;
+                continue;
+            };
+            let key: Option<CompactString> = match &property.key {
+                PropertyKey::StaticIdentifier(key) => Some(key.name.as_str().into()),
+                PropertyKey::StringLiteral(key) if !key.lone_surrogates => {
+                    Some(key.value.as_str().into())
+                }
+                _ => None,
+            };
+            let Some(key) = key else {
+                shape.closed = false;
+                continue;
+            };
+            // Integer-index keys reorder enumeration. Refuse them here until
+            // the fact domain records canonical ECMAScript key order.
+            if property.computed
+                || key == "__proto__"
+                || key.parse::<u32>().is_ok()
+                || property.kind == PropertyKind::Set
+                || shape.properties.iter().any(|prior| prior.key == key)
+            {
+                shape.closed = false;
+            }
+            shape.properties.push(ObjectGetPropertyFact {
+                key,
+                getter: (property.kind == PropertyKind::Get).then(|| span(property.value.span())),
+                entry_call: (property.kind == PropertyKind::Get)
+                    .then(|| getter_entry_call(&property.value))
+                    .flatten(),
+            });
+        }
+        self.object_get_shapes.push(shape);
+        walk::walk_object_expression(self, object);
+    }
+
     fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {
+        // `{ __proto__: p }` sets the prototype at construction, and no member
+        // expression exists for a literal key, so the static-member arm never
+        // sees it. A *computed* `{ ["__proto__"]: p }` is an ordinary own
+        // property per the specification and installs nothing.
+        let literal_proto = match &property.key {
+            PropertyKey::StaticIdentifier(key) => key.name == "__proto__",
+            PropertyKey::StringLiteral(key) => key.value == "__proto__",
+            _ => false,
+        };
+        if literal_proto && !property.computed && !property.shorthand {
+            self.record_accessor_installation(property.span);
+        }
         let method_name = property
             .method
             .then(|| static_property_name(&property.key))
@@ -2654,6 +3656,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         // contract. The tag and the interpolated expressions are visited
         // directly so their own nested nodes — including genuinely untagged
         // templates inside an interpolation — are still collected.
+        self.tagged_template_tags.push(span(expression.tag.span()));
         self.visit_expression(&expression.tag);
         for interpolated in &expression.quasi.expressions {
             self.visit_expression(interpolated);
@@ -2661,6 +3664,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_template_literal(&mut self, literal: &oxc_ast::ast::TemplateLiteral<'a>) {
+        // Untagged only (see `visit_tagged_template_expression`): each
+        // substitution is converted with ToString.
+        self.coercing_operands.extend(
+            literal
+                .expressions
+                .iter()
+                .map(|interpolated| span(interpolated.span())),
+        );
         self.template_literals.push(TemplateLiteralFact {
             span: span(literal.span),
             expressions: literal
@@ -2846,6 +3857,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
+        if Self::ACCESSOR_INSTALLING_MEMBERS.contains(&member.property.name.as_str()) {
+            self.record_accessor_installation(member.span);
+        }
         if let Expression::Identifier(object) = &member.object
             && self.is_unresolved_named(object, "WebAssembly")
         {
@@ -2859,10 +3873,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             object: span(member.object.span()),
             property: span(member.property.span),
         });
+        if member.optional {
+            self.optional_members.push(span(member.span));
+        }
         walk::walk_static_member_expression(self, member);
     }
 
     fn visit_computed_member_expression(&mut self, member: &ComputedMemberExpression<'a>) {
+        // A computed member on an intrinsic namespace can spell any of the
+        // names above, so the namespace itself is the fact.
+        if let Expression::Identifier(object) = &member.object
+            && (self.is_unresolved_named(object, "Object")
+                || self.is_unresolved_named(object, "Reflect"))
+        {
+            self.record_accessor_installation(member.span);
+        }
         let property = member.expression.span();
         let member_span = span(member.span);
         self.members.push(MemberFact {
@@ -2870,8 +3895,52 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             object: span(member.object.span()),
             property: span(property),
         });
+        if member.optional {
+            self.optional_members.push(member_span);
+        }
         self.computed_members.push(member_span);
+        if let Some(key) = literal_property_key(&member.expression) {
+            self.literal_computed_members.push(LiteralMemberKeyFact {
+                span: member_span,
+                key,
+            });
+        }
         walk::walk_computed_member_expression(self, member);
+    }
+
+    fn visit_array_expression(&mut self, array: &oxc_ast::ast::ArrayExpression<'a>) {
+        self.array_literals.push(span(array.span));
+        walk::walk_array_expression(self, array);
+    }
+
+    fn visit_array_expression_element(&mut self, element: &ArrayExpressionElement<'a>) {
+        if let ArrayExpressionElement::SpreadElement(spread) = element {
+            self.iterated_operands.push(span(spread.argument.span()));
+        }
+        walk::walk_array_expression_element(self, element);
+    }
+
+    // `walk_arguments` visits a spread argument through `visit_spread_element`
+    // directly, never through `visit_argument`, so the list is the hook.
+    fn visit_arguments(&mut self, arguments: &oxc_allocator::Vec<'a, Argument<'a>>) {
+        for argument in arguments {
+            if let Argument::SpreadElement(spread) = argument {
+                self.iterated_operands.push(span(spread.argument.span()));
+            }
+        }
+        walk::walk_arguments(self, arguments);
+    }
+
+    fn visit_yield_expression(&mut self, expression: &oxc_ast::ast::YieldExpression<'a>) {
+        if expression.delegate {
+            self.implicit_suspensions.push(span(expression.span));
+        }
+        if expression.delegate
+            && let Some(argument) = &expression.argument
+        {
+            self.iterated_operands.push(span(argument.span()));
+        }
+        walk::walk_yield_expression(self, expression);
     }
 
     fn visit_spread_element(&mut self, spread: &SpreadElement<'a>) {
@@ -2884,6 +3953,46 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
         use oxc_syntax::operator::BinaryOperator;
+
+        // The producer's `coercingBinaryOperators`, exactly: every operator
+        // that applies ToPrimitive to both operands. `===`/`!==`, `in` and
+        // `instanceof` are absent there and here. And its one exception, also
+        // exactly (`binaryFormLocked`): a loose (in)equality with the `null`
+        // keyword itself as an operand -- unparenthesized, as the producer
+        // compares the operand's own node kind -- takes IsLooselyEqual's
+        // null arm and applies ToPrimitive to nothing. `undefined` is an
+        // identifier there, not a keyword, and stays a coercion on both sides.
+        let null_comparison = matches!(
+            expression.operator,
+            BinaryOperator::Equality | BinaryOperator::Inequality
+        ) && (matches!(&expression.left, Expression::NullLiteral(_))
+            || matches!(&expression.right, Expression::NullLiteral(_)));
+        if !null_comparison
+            && matches!(
+                expression.operator,
+                BinaryOperator::Addition
+                    | BinaryOperator::Subtraction
+                    | BinaryOperator::Multiplication
+                    | BinaryOperator::Exponential
+                    | BinaryOperator::Division
+                    | BinaryOperator::Remainder
+                    | BinaryOperator::LessThan
+                    | BinaryOperator::GreaterThan
+                    | BinaryOperator::LessEqualThan
+                    | BinaryOperator::GreaterEqualThan
+                    | BinaryOperator::Equality
+                    | BinaryOperator::Inequality
+                    | BinaryOperator::ShiftLeft
+                    | BinaryOperator::ShiftRight
+                    | BinaryOperator::ShiftRightZeroFill
+                    | BinaryOperator::BitwiseAnd
+                    | BinaryOperator::BitwiseOR
+                    | BinaryOperator::BitwiseXOR
+            )
+        {
+            self.coercing_operands
+                .extend([span(expression.left.span()), span(expression.right.span())]);
+        }
 
         // Most binary operators reject function operands themselves, so a
         // checker finding there would duplicate TypeScript. Keep only the
@@ -2911,6 +4020,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_unary_expression(&mut self, expression: &UnaryExpression<'a>) {
         use oxc_syntax::operator::UnaryOperator;
+        if expression.operator == UnaryOperator::Delete {
+            self.deleted_targets.push(span(expression.argument.span()));
+        }
 
         // Every unary operator here accepts a function operand in TypeScript
         // (probed against the published typings: `-f`, `+f`, `~f`, and `!f`
@@ -2930,6 +4042,15 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 span: span(expression.argument.span()),
                 kind,
             });
+        }
+        // The producer's `coercingUnaryOperators`: `!` is ToBoolean and runs
+        // no user code, so it is in the table above and not in this one.
+        if matches!(
+            expression.operator,
+            UnaryOperator::UnaryPlus | UnaryOperator::UnaryNegation | UnaryOperator::BitwiseNot
+        ) {
+            self.coercing_operands
+                .push(span(expression.argument.span()));
         }
         walk::walk_unary_expression(self, expression);
     }
@@ -3004,9 +4125,295 @@ fn export_declaration_surface_names(declaration: &Declaration<'_>) -> Vec<Export
     }]
 }
 
+/// The one property key a literal names: a string literal's cooked value (lone
+/// surrogates refused), or a numeric literal whose value is a non-negative
+/// integer no larger than `i32::MAX`, in the canonical decimal spelling
+/// ToPropertyKey gives it. Everything else names no key statically.
+fn literal_property_key(expression: &Expression<'_>) -> Option<CompactString> {
+    match expression {
+        Expression::StringLiteral(literal) if !literal.lone_surrogates => {
+            Some(literal.value.as_str().into())
+        }
+        Expression::NumericLiteral(literal) => canonical_index_key(literal.value),
+        _ => None,
+    }
+}
+
+fn canonical_index_key(value: f64) -> Option<CompactString> {
+    (value.fract() == 0.0 && (0.0..=f64::from(i32::MAX)).contains(&value)).then(|| {
+        // Exact: an integral value in range converts without loss.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let index = value as u32;
+        index.to_string().into()
+    })
+}
+
+/// Record literal facts from the exact argument expression, without following
+/// bindings or inferring properties from their declared types.
+fn argument_literal_fact(expression: &Expression<'_>, depth: u8) -> ArgumentLiteralFact {
+    if depth >= 32 {
+        return ArgumentLiteralFact::Unknown;
+    }
+    match peel_ts_sugar(expression) {
+        Expression::NullLiteral(_) => ArgumentLiteralFact::Null,
+        Expression::BooleanLiteral(value) => ArgumentLiteralFact::Boolean(value.value),
+        Expression::NumericLiteral(value) => canonical_index_key(value.value)
+            .and_then(|key| key.parse().ok())
+            .map_or(ArgumentLiteralFact::Unknown, ArgumentLiteralFact::Integer),
+        Expression::StringLiteral(value) if !value.lone_surrogates => {
+            ArgumentLiteralFact::String(value.value.as_str().into())
+        }
+        Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
+            ArgumentLiteralFact::Function
+        }
+        Expression::ArrayExpression(array)
+            if !array
+                .elements
+                .iter()
+                .any(|element| matches!(element, ArrayExpressionElement::SpreadElement(_))) =>
+        {
+            u32::try_from(array.elements.len()).map_or(
+                ArgumentLiteralFact::Unknown,
+                ArgumentLiteralFact::ArrayLength,
+            )
+        }
+        Expression::ObjectExpression(object) => {
+            let mut properties = Vec::<ArgumentLiteralPropertyFact>::new();
+            for property in &object.properties {
+                let ObjectPropertyKind::ObjectProperty(property) = property else {
+                    return ArgumentLiteralFact::Unknown;
+                };
+                if property.kind != PropertyKind::Init || property.computed {
+                    return ArgumentLiteralFact::Unknown;
+                }
+                let name: CompactString = match &property.key {
+                    PropertyKey::StaticIdentifier(key) => key.name.as_str().into(),
+                    PropertyKey::StringLiteral(key) if !key.lone_surrogates => {
+                        key.value.as_str().into()
+                    }
+                    PropertyKey::NumericLiteral(key) => {
+                        let Some(key) = canonical_index_key(key.value) else {
+                            return ArgumentLiteralFact::Unknown;
+                        };
+                        key
+                    }
+                    _ => return ArgumentLiteralFact::Unknown,
+                };
+                if name == "__proto__" {
+                    return ArgumentLiteralFact::Unknown;
+                }
+                properties.retain(|property| property.name != name);
+                properties.push(ArgumentLiteralPropertyFact {
+                    name,
+                    value: argument_literal_fact(&property.value, depth + 1),
+                });
+            }
+            ArgumentLiteralFact::Object(properties)
+        }
+        _ => ArgumentLiteralFact::Unknown,
+    }
+}
+
+/// The statically exact members of an array or object literal: see
+/// [`ArgumentFact::literal_members`].
+fn literal_members_of(expression: &Expression<'_>) -> Vec<ArgumentMemberFact> {
+    match expression {
+        Expression::ArrayExpression(array) => {
+            let mut members = Vec::new();
+            for (index, element) in array.elements.iter().enumerate() {
+                match element {
+                    ArrayExpressionElement::SpreadElement(_) => break,
+                    ArrayExpressionElement::Elision(_) => {}
+                    element => {
+                        let Ok(index) = u32::try_from(index) else {
+                            break;
+                        };
+                        members.push(ArgumentMemberFact {
+                            key: index.to_string().into(),
+                            value: span(element.span()),
+                        });
+                    }
+                }
+            }
+            members
+        }
+        Expression::ObjectExpression(object) => {
+            let mut members = Vec::<ArgumentMemberFact>::new();
+            for property in &object.properties {
+                let ObjectPropertyKind::ObjectProperty(property) = property else {
+                    return Vec::new();
+                };
+                if property.kind != PropertyKind::Init || property.computed {
+                    return Vec::new();
+                }
+                let key: CompactString = match &property.key {
+                    PropertyKey::StaticIdentifier(key) => key.name.as_str().into(),
+                    PropertyKey::StringLiteral(key) if !key.lone_surrogates => {
+                        key.value.as_str().into()
+                    }
+                    PropertyKey::NumericLiteral(key) => {
+                        let Some(key) = canonical_index_key(key.value) else {
+                            return Vec::new();
+                        };
+                        key
+                    }
+                    _ => return Vec::new(),
+                };
+                // A non-shorthand `__proto__: value` sets the prototype rather
+                // than a property, and a shorthand one is an ordinary property:
+                // neither is worth the distinction here.
+                if key == "__proto__" {
+                    return Vec::new();
+                }
+                members.retain(|member| member.key != key);
+                members.push(ArgumentMemberFact {
+                    key,
+                    value: span(property.value.span()),
+                });
+            }
+            members
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// The elements of an array literal, after parentheses and type wrappers, in
+/// order: `None` for a spread or a hole. `None` when the expression is not an
+/// array literal at all (ADR 0115).
+fn array_literal_elements(expression: &Expression<'_>) -> Option<Box<[Option<Span>]>> {
+    let Expression::ArrayExpression(array) = expression.get_inner_expression() else {
+        return None;
+    };
+    Some(
+        array
+            .elements
+            .iter()
+            .map(|element| {
+                (!matches!(
+                    element,
+                    ArrayExpressionElement::Elision(_) | ArrayExpressionElement::SpreadElement(_)
+                ))
+                .then(|| span(element.span()))
+            })
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
+    /// ADR 0195: a straight-line call is one its function runs on every
+    /// execution that reaches it. Every construct that can skip or repeat a
+    /// call, or that moves it into another function, keeps it out.
+    #[test]
+    fn straight_line_calls_exclude_every_conditional_construct() {
+        let source = concat!(
+            "declare function s(): number; declare const o: { f(x: number): void } | undefined;\n",
+            "declare const c: boolean;\n",
+            "async function g() {\n",
+            "  s();\n",
+            "  const v = s();\n",
+            "  if (c) s();\n",
+            "  c ? s() : 0;\n",
+            "  c && s();\n",
+            "  for (const x of [1]) s();\n",
+            "  try { s(); } catch {}\n",
+            "  switch (v) { case 1: s(); }\n",
+            "  o?.f(s());\n",
+            "  const nested = () => s();\n",
+            "  await 0;\n",
+            "  return nested;\n",
+            "}\n",
+        );
+        let facts = super::extract("straight.ts", source).unwrap();
+        let line_of =
+            |span: crate::core::Span| source[..span.start as usize].matches('\n').count() + 1;
+        let lines = facts
+            .straight_line_calls
+            .iter()
+            .filter(|span| source[span.start as usize..span.end as usize] == *"s()")
+            .map(|span| line_of(*span))
+            .collect::<Vec<_>>();
+        // Line 13 is straight-line in the nested arrow's own flow: the fact is
+        // recorded for the innermost function, as `unconditional_awaits` is,
+        // and a consumer attributes each span to it.
+        assert_eq!(lines, [4, 5, 13], "{lines:?}");
+    }
+
+    #[test]
+    fn structural_binding_slots_require_direct_identifiers() {
+        let facts = super::extract("slots.ts", "const [first, {nested}, fallback = 0, ...rest] = make(); const {value: direct, nested: {inner}, optional = 0, [key]: computed} = other(); delete (other as any).value;").unwrap();
+        let array = &facts.bindings[0];
+        assert!(array.array_slots[0].is_some());
+        assert!(array.array_slots[1..].iter().all(Option::is_none));
+        let object = facts
+            .bindings
+            .iter()
+            .find(|binding| binding.shape == super::BindingShape::Object)
+            .unwrap();
+        assert_eq!(object.object_slots.len(), 1);
+        assert_eq!(object.object_slots[0].property, "value");
+        assert_eq!(facts.deleted_targets.len(), 1);
+    }
     use super::*;
+
+    /// `result_discarded` proves the result reaches nothing, and proves it in
+    /// one direction only.
+    ///
+    /// The consumer this exists for reads `!result_discarded` as "the result
+    /// may be used", so every form the classifier does not recognise has to
+    /// answer `false`. The negative half of this test is therefore the
+    /// load-bearing half: `await`, `void`, a nested call and a concise arrow
+    /// body all keep the obligation rather than shedding it.
+    #[test]
+    fn a_discarded_call_result_is_stated_only_where_the_call_is_the_whole_statement() {
+        let source = concat!(
+            "declare function f(x?: unknown): unknown;\n",
+            "async function cases(flag: boolean) {\n",
+            "  f();\n",               // 0 discarded: the call is the statement
+            "  const bound = f();\n", // 1 used: bound to a name
+            "  await f();\n",         // 2 used: the await consumes it
+            "  void f();\n",          // 3 used: the unary consumes it
+            "  f(f());\n",            // 4 discarded (outer), 5 used (inner)
+            "  if (flag) { f(); }\n", // 6 discarded inside a block
+            "  return bound;\n",
+            "}\n",
+            "const concise = () => f();\n", // 7 used: a concise body returns it
+            "new Date();\n",                // 8 discarded: `new` as a statement
+        );
+        let facts = extract("/project/discarded.ts", source).unwrap();
+        let discarded: Vec<bool> = facts
+            .calls
+            .iter()
+            .map(|call| call.result_discarded)
+            .collect();
+        assert_eq!(
+            discarded,
+            vec![true, false, false, false, true, false, true, false, true],
+            "calls: {:?}",
+            facts
+                .calls
+                .iter()
+                .map(|call| &source[call.span.start as usize..call.span.end as usize])
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn parameter_initializers_survive_function_and_arrow_normalization() {
+        let source = "function direct(value: number) { return value; } function defaulted(value = 1) { return value; } const arrow = (value = 2) => value;";
+        let facts = extract("/project/parameters.ts", source).unwrap();
+        assert_eq!(facts.functions.len(), 3);
+        let initializers = facts
+            .functions
+            .iter()
+            .map(|function| {
+                function.parameters[0]
+                    .initializer
+                    .map(|span| &source[span.start as usize..span.end as usize])
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(initializers, vec![None, Some("1"), Some("2")]);
+    }
 
     /// String directives: the module prologue lands in `module_directives`,
     /// each function's prologue lands on its `FunctionFact`, and a string
@@ -3059,6 +4466,104 @@ export const short = async () => 2;
         // The trailing string literal sits after a statement and is not a
         // module directive.
         assert_eq!(facts.module_directives.len(), 2);
+    }
+
+    #[test]
+    fn type_queries_are_erased_but_runtime_typeof_is_not() {
+        let source = "function f() {} type T = ReturnType<typeof f>; const value = typeof f;";
+        let facts = extract("/project/types.ts", source).unwrap();
+        assert_eq!(facts.type_queries.len(), 1);
+        let query = facts.type_queries[0];
+        assert_eq!(
+            &source[query.start as usize..query.end as usize],
+            "typeof f"
+        );
+        let runtime = source.rfind("typeof f").unwrap();
+        let runtime = Span::new(runtime as u32, (runtime + "typeof f".len()) as u32);
+        assert!(!query.contains(runtime));
+    }
+
+    #[test]
+    fn a_load_records_its_runtime_literal_not_a_type_argument() {
+        let source = r#"const ns = require<typeof import("x")>("x"); const m = import("./m");"#;
+        let facts = extract("/project/loads.ts", source).unwrap();
+        let [required, imported] = facts.module_loads.as_slice() else {
+            panic!("two loads: {:?}", facts.module_loads);
+        };
+        let literal = required.specifier_span.expect("require literal");
+        assert_eq!(literal.start as usize, source.rfind(r#""x""#).unwrap());
+        assert_eq!(
+            &source[literal.start as usize..literal.end as usize],
+            r#""x""#
+        );
+        let literal = imported.specifier_span.expect("import literal");
+        assert_eq!(
+            &source[literal.start as usize..literal.end as usize],
+            r#""./m""#
+        );
+    }
+
+    #[test]
+    fn tagged_template_tags_are_recorded() {
+        let source = "const o = { t() { return 1; } }; o.t`x${1}`; `plain${2}`;";
+        let facts = extract("/project/tags.ts", source).unwrap();
+        let [tag] = facts.tagged_template_tags.as_slice() else {
+            panic!("one tag: {:?}", facts.tagged_template_tags);
+        };
+        assert_eq!(&source[tag.start as usize..tag.end as usize], "o.t");
+    }
+
+    #[test]
+    fn object_get_shapes_distinguish_getters_from_function_values() {
+        let facts = extract(
+            "/project/gets.ts",
+            "const o = { get count() { return n(); }, fn: () => n(), method() { return n(); } }; ",
+        )
+        .unwrap();
+        let shape = &facts.object_get_shapes[0];
+        assert!(shape.closed);
+        assert_eq!(shape.properties.len(), 3);
+        assert!(shape.properties[0].getter.is_some());
+        assert!(shape.properties[0].entry_call.is_some());
+        assert!(shape.properties[1].getter.is_none());
+        assert!(shape.properties[2].getter.is_none());
+        for source in [
+            "const o = { get x() { before(); return n(); } };",
+            "const o = { get x() { const y = unknown; return n(); } };",
+            "const o = { get x() { return n(before()); } };",
+            "const o = { get x() { if (ready) return n(); return 0; } };",
+            "const o = { get x() { return () => n(); } };",
+        ] {
+            // `n()` is never the getter's guaranteed entry: something else
+            // is evaluated first, or it is conditional or deferred. An
+            // earlier no-argument statement call (`before()`) may itself be
+            // the entry call, which proves nothing about `n()`.
+            let entry = extract("/project/gets.ts", source)
+                .unwrap()
+                .object_get_shapes[0]
+                .properties[0]
+                .entry_call;
+            assert!(
+                entry.is_none_or(|span| &source[span.start as usize..span.end as usize] != "n()"),
+                "{source}"
+            );
+        }
+        for source in [
+            "const o = { ...other, get count() { return n(); } };",
+            "const o = { [key]: 1 };",
+            "const o = { __proto__: other };",
+            "const o = { get x() { return n(); }, x: 1 };",
+            "const o = { set x(v) {} };",
+            "const o = { '0': 1, get x() { return n(); } };",
+        ] {
+            assert!(
+                !extract("/project/gets.ts", source)
+                    .unwrap()
+                    .object_get_shapes[0]
+                    .closed,
+                "{source}"
+            );
+        }
     }
 
     #[test]
@@ -3456,6 +4961,36 @@ const mixed = () => {
     }
 
     #[test]
+    fn argument_literals_keep_exact_values_and_refuse_dynamic_structure() {
+        let facts = extract(
+            "arguments.ts",
+            r#"use(true as const); use(["Control", "K"]); use([, ,]);
+use([...keys]); use({ resize() {}, resize: undefined });
+use({ resize: () => {}, ...other }); use({ get resize() { return fn; } });
+use({ [key]: () => {} }); use({ nested: { enabled: false } });"#,
+        )
+        .unwrap();
+        let values = facts
+            .calls
+            .iter()
+            .map(|call| &call.arguments[0].literal_value)
+            .collect::<Vec<_>>();
+        assert_eq!(values[0], &ArgumentLiteralFact::Boolean(true));
+        assert_eq!(values[1], &ArgumentLiteralFact::ArrayLength(2));
+        assert_eq!(values[2], &ArgumentLiteralFact::ArrayLength(2));
+        for index in [3, 5, 6, 7] {
+            assert_eq!(values[index], &ArgumentLiteralFact::Unknown);
+        }
+        let ArgumentLiteralFact::Object(properties) = values[4] else {
+            panic!("expected final own properties");
+        };
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].name, "resize");
+        assert_eq!(properties[0].value, ArgumentLiteralFact::Unknown);
+        assert!(matches!(values[8], ArgumentLiteralFact::Object(_)));
+    }
+
+    #[test]
     fn object_completeness_survives_transparent_typescript_wrappers() {
         let source = "effect(compute, {} as unknown as Apply); effect(compute, ({ effect: apply }) satisfies Bundle); effect(compute, [] as unknown as Apply); effect(compute, null!); effect(compute, <Apply><unknown>5);";
         let facts = extract("effect.ts", source).unwrap();
@@ -3733,6 +5268,151 @@ renamed();"#,
         assert_eq!(facts.module_hazards.len(), 7);
     }
 
+    /// `import S = require("m")` and a type-position `import("m")` are module
+    /// references no import declaration or call records (facts schema 46).
+    #[test]
+    fn import_equals_and_type_imports_are_recorded() {
+        let source = r#"import S = require("solid-js");
+import type T = require("./types");
+export import E = require("@solidjs/web");
+import Alias = S.createSignal;
+type A = import("solid-js").Accessor<number>;
+type B = typeof import("solid-js").createErrorBoundary;
+type C = typeof import("solid-js");
+type D = import("./deep").Outer.Inner;
+S.createErrorBoundary;
+"#;
+        let facts = extract("/p/App.ts", source).unwrap();
+        let rows = facts
+            .import_equals
+            .iter()
+            .map(|fact| {
+                (
+                    fact.module.as_str(),
+                    &source[fact.local.span.start as usize..fact.local.span.end as usize],
+                    fact.type_only,
+                    fact.exported,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows,
+            [
+                ("solid-js", "S", false, false),
+                ("./types", "T", true, false),
+                ("@solidjs/web", "E", false, true),
+            ]
+        );
+        // Every declaration contains its specifier literal, which is how an
+        // attested resolution row joins it.
+        for fact in &facts.import_equals {
+            let text = &source[fact.span.start as usize..fact.span.end as usize];
+            assert!(text.contains(&format!("\"{}\"", fact.module)), "{text}");
+        }
+        // The binder resolves a member read's object to the import-equals
+        // binding.
+        let member = facts
+            .members
+            .iter()
+            .find(|member| {
+                &source[member.property.start as usize..member.property.end as usize]
+                    == "createErrorBoundary"
+            })
+            .expect("the member read is recorded");
+        assert_eq!(
+            facts.reference_declaration(member.object),
+            Some(facts.import_equals[0].local.span)
+        );
+        let types = facts
+            .type_imports
+            .iter()
+            .map(|fact| (fact.module.as_str(), fact.member.as_deref()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            types,
+            [
+                ("solid-js", Some("Accessor")),
+                ("solid-js", Some("createErrorBoundary")),
+                ("solid-js", None),
+                ("./deep", Some("Outer")),
+            ]
+        );
+    }
+
+    /// Every way to install a property accessor at run time, which is the
+    /// condition the `reads` implementation census refuses on
+    /// (`docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
+    /// § 7-§ 9).
+    ///
+    /// The set is not a style preference: each member is pinned by a
+    /// zero-form case in the producer's
+    /// `TestRuntimeInstalledAccessorReadsAreInvisibleToTheProducer`, which
+    /// measured that a read through it records **nothing** for the census to
+    /// refuse. A shape missing here is a hole in the refusal, so add its case
+    /// there and its line here together.
+    ///
+    /// Detection is deliberately by *name*, not by receiver: `Object`,
+    /// `Reflect` and `globalThis.Object` all reach the same intrinsic, and an
+    /// alias (`const dp = Object.defineProperty`) reads the member before it
+    /// calls anything. Over-refusing here is free — the corpus measurement
+    /// (§ 8) found the broad set and the narrow one refuse the same packages.
+    #[test]
+    fn records_every_run_time_accessor_installation_as_a_module_hazard() {
+        let installations = [
+            "new Proxy(target, handler);",
+            "Proxy.revocable(target, handler);",
+            "const aliased = Proxy;",
+            "Object.defineProperty(target, key, descriptor);",
+            "Object.defineProperties(target, descriptors);",
+            "Object.create(prototype, descriptors);",
+            "Reflect.defineProperty(target, key, descriptor);",
+            "target.__defineGetter__(key, read);",
+            "target.__defineSetter__(key, write);",
+            "Object.setPrototypeOf(target, prototype);",
+            "target.__proto__ = prototype;",
+            "const literal = { __proto__: prototype };",
+            "const dp = Object.defineProperty;",
+            "Object[name](target, key, descriptor);",
+        ];
+        for source in installations {
+            let facts = extract("fixture.ts", source).unwrap();
+            assert!(
+                facts
+                    .module_hazards
+                    .iter()
+                    .any(|hazard| hazard.kind == ModuleHazardKind::RuntimeAccessorInstallation),
+                "no accessor-installation hazard for {source}"
+            );
+        }
+    }
+
+    /// The other half of the claim: ordinary code must not be refused. A
+    /// census that refuses everything is sound and worthless.
+    #[test]
+    fn ordinary_object_use_is_not_an_accessor_installation() {
+        let benign = [
+            "Object.create(prototype);",
+            "Object.keys(target);",
+            "Object.assign(target, source);",
+            "Object.entries(target);",
+            "Object.freeze(target);",
+            "const value = target.property;",
+            "const proxied = { proxy: 1 };",
+            "class Declared { get value() { return 1; } }",
+            "const declared = { get value() { return 1; } };",
+        ];
+        for source in benign {
+            let facts = extract("fixture.ts", source).unwrap();
+            assert!(
+                !facts
+                    .module_hazards
+                    .iter()
+                    .any(|hazard| hazard.kind == ModuleHazardKind::RuntimeAccessorInstallation),
+                "{source} was refused as an accessor installation"
+            );
+        }
+    }
+
     #[test]
     fn distinguishes_namespace_reexports_from_export_stars() {
         let facts = extract(
@@ -3742,7 +5422,11 @@ renamed();"#,
         .unwrap();
 
         assert_eq!(facts.exports[0].namespace.as_deref(), Some("namespace"));
+        let binding = facts.exports[0].namespace_binding.as_ref().unwrap().span;
+        assert_eq!(binding.start, 12);
+        assert_eq!(binding.end, 21);
         assert_eq!(facts.exports[1].namespace, None);
+        assert_eq!(facts.exports[1].namespace_binding, None);
     }
 
     #[test]
@@ -3861,6 +5545,181 @@ renamed();"#,
         );
     }
 
+    /// Item B of ways-to-improve § 3.3: a computed member names one property
+    /// when its key is a string literal or a non-negative integer numeric
+    /// literal -- in the canonical decimal spelling the producer states --
+    /// and names none otherwise; a `new` is marked as one.
+    #[test]
+    fn records_literal_member_keys_and_construct_calls() {
+        let source = "h[0](); h[\"run\"](); h[0x6](); h[k](); h[-1](); h[1.5](); \
+                      h[`x`](); h[1e21](); new h[2]();";
+        let facts = extract("members.ts", source).unwrap();
+        let keys = facts
+            .literal_computed_members
+            .iter()
+            .map(|fact| {
+                (
+                    source
+                        .get(fact.span.start as usize..fact.span.end as usize)
+                        .unwrap(),
+                    fact.key.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            [
+                ("h[0]", "0"),
+                ("h[\"run\"]", "run"),
+                ("h[0x6]", "6"),
+                ("h[2]", "2")
+            ]
+        );
+        let constructs = facts
+            .calls
+            .iter()
+            .filter(|call| call.construct)
+            .map(|call| {
+                source
+                    .get(call.span.start as usize..call.span.end as usize)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(constructs, ["new h[2]()"]);
+    }
+
+    /// Facts schema 44: a member link written `?.` says so, and a later link
+    /// of the same chain, or a plain member, does not.
+    #[test]
+    fn records_which_member_links_are_optional() {
+        let source = "p?.a; p?.[0]; p.b; p?.c.d; (p?.e).f;";
+        let facts = extract("members.ts", source).unwrap();
+        let optional = facts
+            .optional_members
+            .iter()
+            .map(|member| {
+                source
+                    .get(member.start as usize..member.end as usize)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(optional, ["p?.a", "p?.[0]", "p?.c", "p?.e"]);
+    }
+
+    /// The members of an array or object literal argument, keyed by the
+    /// property key the runtime gives them, exactly when the set is static;
+    /// every other argument names none.
+    #[test]
+    fn records_the_exact_members_of_a_literal_argument() {
+        let source = "f([a, , b, ...c, d]); f({ x: a, \"y\": b, 0: c, x: d }); \
+                      f({ ...o, x: a }); f({ [k]: a }); f({ get x() { return a; } }); \
+                      f({ __proto__: a }); f(a); f([a] as const);";
+        let facts = extract("literals.ts", source).unwrap();
+        let members = facts
+            .calls
+            .iter()
+            .map(|call| {
+                call.arguments[0]
+                    .literal_members
+                    .iter()
+                    .map(|member| {
+                        (
+                            member.key.to_string(),
+                            source
+                                .get(member.value.start as usize..member.value.end as usize)
+                                .unwrap()
+                                .to_owned(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let pairs = |items: &[(&str, &str)]| {
+            items
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            members,
+            [
+                // A hole counts its index; the spread ends what is known.
+                pairs(&[("0", "a"), ("2", "b")]),
+                // A later duplicate key wins, as at runtime.
+                pairs(&[("y", "b"), ("0", "c"), ("x", "d")]),
+                pairs(&[]),
+                pairs(&[]),
+                pairs(&[]),
+                pairs(&[]),
+                pairs(&[]),
+                // Behind a transparent wrapper, the literal itself.
+                pairs(&[("0", "a")]),
+            ]
+        );
+    }
+
+    /// The runtime coercion table mirrors the Type Facts producer's own
+    /// `coercingBinaryOperators`/`coercingUnaryOperators` and template
+    /// substitutions, and is a separate fact from `coercive_operands`:
+    /// binary arithmetic is in, `!` is out, and so are strict equality,
+    /// `in`, `instanceof` and a tagged template's substitutions.
+    #[test]
+    fn records_the_operands_every_coercing_operator_reaches() {
+        let source = "a < b; c * d; e == f; g += h; +i; ~j; k++; --l; `${m}`; \
+                      !n; o === p; q in r; s instanceof t; tag`${u}`; v && w; \
+                      x != null; null == y; z == undefined;";
+        let facts = extract("coercions.ts", source).unwrap();
+        let operands = facts
+            .coercing_operands
+            .iter()
+            .filter_map(|span| source.get(span.start as usize..span.end as usize))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            operands,
+            [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "g",
+                "h",
+                "i",
+                "j",
+                "k",
+                "l",
+                "m",
+                "z",
+                "undefined"
+            ],
+            "a loose comparison with the `null` keyword coerces nothing, as the producer \
+             counts it; `undefined` is an identifier and still does"
+        );
+        assert!(
+            facts.coercive_operands.iter().all(|operand| source
+                .get(operand.span.start as usize..operand.span.end as usize)
+                != Some("c")),
+            "`coercive_operands` keeps its own meaning: binary arithmetic stays out"
+        );
+    }
+
+    /// The operands the iteration protocol is driven over: a `for…of` operand,
+    /// an array or argument spread, `yield*`, and an array pattern's source.
+    /// An object spread is a property enumeration and is absent.
+    #[test]
+    fn records_every_value_the_iteration_protocol_is_driven_over() {
+        let source = "for (const x of a) {} [...b]; f(...c); const [d0] = d; [e0] = e; \
+                      function* g() { yield* h; } ({ ...i }); const { j0 } = j;";
+        let facts = extract("iterations.ts", source).unwrap();
+        let operands = facts
+            .iterated_operands
+            .iter()
+            .filter_map(|span| source.get(span.start as usize..span.end as usize))
+            .collect::<Vec<_>>();
+        assert_eq!(operands, ["a", "b", "c", "d", "e", "h"]);
+    }
+
     #[test]
     fn retains_only_typescript_valid_operators_that_coerce_accessor_values() {
         let source = "const a = signal + 1; const b = -signal; const c = !signal; const d = signal === other; const e = typeof signal; const f = \"value: \" + signal;";
@@ -3940,6 +5799,28 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
         assert_eq!(
             reads,
             vec![("value", false), ("value", true), ("value", true)]
+        );
+    }
+
+    #[test]
+    fn exact_write_targets_separate_destructuring_leaves_from_reads() {
+        let source = "out[host.hydrating ? 1 : 0] = 1; ({ a: host.done, b: local = host.hydrating } = input); host.done ||= true; for (host.hydrating of flags) {} (host.done as boolean) = false;";
+        let facts = extract("targets.ts", source).unwrap();
+        let written = facts
+            .write_targets
+            .iter()
+            .map(|target| &source[target.start as usize..target.end as usize])
+            .collect::<Vec<_>>();
+        assert_eq!(
+            written,
+            vec![
+                "out[host.hydrating ? 1 : 0]",
+                "host.done",
+                "local",
+                "host.done",
+                "host.hydrating",
+                "host.done",
+            ]
         );
     }
 
@@ -4331,5 +6212,53 @@ function object() { return { active: () => state(), pending: createMemo(() => st
             Some("createMemo(() => state())")
         );
         assert!(facts.calls.iter().any(|call| call.span == pending.value));
+    }
+
+    /// Facts schema 45: every loop, and every suspension an `async` body can
+    /// take without an `await` expression, is recorded where it is written.
+    #[test]
+    fn records_loops_and_suspensions_without_an_await_expression() {
+        let source = r#"
+async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<number>) {
+  for (let i = 0; i < 1; i++) {}
+  for (const key in {}) {}
+  for (const item of [1]) {}
+  while (false) {}
+  do {} while (false);
+  for await (const item of items) {}
+  yield* inner();
+  yield 1;
+  await using resource = { async [Symbol.asyncDispose]() {} };
+  await 0;
+}
+"#;
+        let facts = extract("/project/body.ts", source).unwrap();
+        let text = |span: &Span| &source[span.start as usize..span.end as usize];
+        assert_eq!(
+            facts
+                .loop_statements
+                .iter()
+                .map(|span| text(span).split_whitespace().next().unwrap())
+                .collect::<Vec<_>>(),
+            ["for", "for", "for", "while", "do", "for"]
+        );
+        assert_eq!(
+            facts
+                .implicit_suspensions
+                .iter()
+                .map(text)
+                .collect::<Vec<_>>(),
+            [
+                "for await (const item of items) {}",
+                "yield* inner()",
+                "resource = { async [Symbol.asyncDispose]() {} }"
+            ]
+        );
+        // A plain `yield` resumes inside its caller's step and is not one; an
+        // `await` expression is its own fact.
+        assert_eq!(
+            facts.awaits.iter().map(text).collect::<Vec<_>>(),
+            ["await 0"]
+        );
     }
 }

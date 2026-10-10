@@ -1,0 +1,8 @@
+function createStore(e, t, r) {
+    if (typeof e === "function") return createStoreDerivedNext(e, t, r);
+    {
+        const r = createStoreNext(e, !!t?.shallow);
+        if (t?.name) nameStore(r[0], t.name);
+        return r;
+    }
+}

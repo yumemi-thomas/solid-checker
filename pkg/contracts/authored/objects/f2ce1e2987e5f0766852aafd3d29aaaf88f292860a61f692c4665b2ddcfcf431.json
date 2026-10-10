@@ -1,0 +1,173 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "29e0644e1e302ddc97b3bb2f5dff69cad4a338445d89051c09741f480f3dce45",
+            "path": "./dist/index.js",
+            "sha256": "1304777a3c87a88b776ca592310466214ad369bc94dd4a220f140a0d806e0d14"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "6f8f93a9cb9af6425f924e08a3715bd0e14ebfeb6f2eeb5a754e5ebd1b800ba7"
+          },
+          "exports": {
+            "chainedTranslator": "open-callable",
+            "flatten": "open-callable",
+            "identityResolveTemplate": "authored-identityResolveTemplate",
+            "missingKeyAsPath": "authored-missingKeyAsPath",
+            "prefix": "open-callable",
+            "proxyTranslator": "open-callable",
+            "resolveRichTemplate": "open-callable",
+            "resolveTemplate": "open-callable",
+            "richText": "open-callable",
+            "scopedTranslator": "open-callable",
+            "template": "authored-template",
+            "translator": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-r5ZwXcxsE0NEC4MCs5nphs9gnEdDkvZ5zp3P/I0h0wHHXBQi1fuXkQv857HBgTi2Mwja7vS5D6nePyQQxd9q/A==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "b511c04763acff76920999c9fea704d5c86eece86cf05c572de0f710529e40e8"
+    },
+    "name": "@solid-primitives/i18n",
+    "version": "3.0.0-next.4"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-identityResolveTemplate": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-missingKeyAsPath": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-template": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

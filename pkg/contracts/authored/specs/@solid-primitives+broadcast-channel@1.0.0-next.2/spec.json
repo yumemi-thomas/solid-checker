@@ -1,0 +1,311 @@
+{
+  "package": "@solid-primitives/broadcast-channel",
+  "version": "1.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "makeBroadcastChannel": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-89 — Browser ownership is unconditional; opaque returned functions retain per-call obligations. Research draft; Chrome attribution/probe gate has not run. Do not ship before every listed pair passes.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "onMessage",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "postMessage",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "close",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "channelName",
+                  "value": {
+                    "kind": "plain"
+                  }
+                },
+                {
+                  "name": "instance",
+                  "value": {
+                    "kind": "plain"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-89 — Constructor reads only module plain state and host-native BroadcastChannel members (P1/P2), never a reactive source. Message reads occur only through the returned signal accessor.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-89 — No Solid primitive/owner/computation is created; onCleanup registers exactly one cleanup.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-89 — The constructor accepts only a channel name. No caller callback is invoked. Later onMessage subscriptions are opaque member invocations; createBroadcastChannel's listener is package-defined.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-89 — Both fresh and cached browser paths return the stated complete object shape. Every function-valued opaque member stays callable under ADR 0234; instance is a native platform object (P1).",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-89 — Browser build always calls onCleanup(close) at 61 before fresh/cached selection. SSR return at 22-28 is excluded, so count.min is 1."
+      },
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "onCleanup(close) rejects the leaf owner; createSignal itself is not claimed forbidden."
+        }
+      ]
+    },
+    "createBroadcastChannel": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-118 — Browser ownership is unconditional; opaque returned functions retain per-call obligations. Research draft; Chrome attribution/probe gate has not run. Do not ship before every listed pair passes.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "create-message",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "message"
+            ]
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "message",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "message"
+                  }
+                },
+                {
+                  "name": "postMessage",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "close",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "channelName",
+                  "value": {
+                    "kind": "plain"
+                  }
+                },
+                {
+                  "name": "instance",
+                  "value": {
+                    "kind": "plain"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-message"
+        ],
+        "resources": [
+          {
+            "id": "message",
+            "kind": "reactive-source"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-118 — Constructor reads only module plain state and host-native BroadcastChannel members (P1/P2), never a reactive source. Message reads occur only through the returned signal accessor.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-118 — Exactly one message signal is created at 106, plus the unconditional onCleanup inherited from makeBroadcastChannel. No memo/effect/owner is created.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-118 — The constructor accepts only a channel name. No caller callback is invoked. Later onMessage subscriptions are opaque member invocations; createBroadcastChannel's listener is package-defined.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-118 — Both fresh and cached browser paths return the stated complete object shape. Every function-valued opaque member stays callable under ADR 0234; instance is a native platform object (P1).",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/broadcast-channel-makeBroadcastChannel-module-scope/node_modules/@solid-primitives/broadcast-channel/dist/index.js:21-118 — Browser build always calls onCleanup(close) at 61 before fresh/cached selection. SSR return at 22-28 is excluded, so count.min is 1."
+      },
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "Same ownerless call after capture starts; correct restores the captured component owner.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "onCleanup(close) rejects the leaf owner; createSignal itself is not claimed forbidden."
+        }
+      ]
+    }
+  }
+}

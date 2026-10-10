@@ -1,0 +1,3 @@
+ */ function getOwner() {
+    return context;
+}

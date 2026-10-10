@@ -1,0 +1,263 @@
+{
+  "format": "duplicate-package-origin-diagnostic",
+  "authoritative": false,
+  "scope": "producer-only; not certification or receipt reuse",
+  "source": "export const check = (input) => input.size;",
+  "package": {
+    "name": "duplicate",
+    "version": "1.0.0"
+  },
+  "observations": [
+    {
+      "variant": "shared",
+      "log": "/private/tmp/duplicate-package-origin-canonical.log",
+      "logDigest": "sha256:9803c4bba47adf6cbb70b3d99c642ae111d40206b9ad132f656ceddcf5327360",
+      "observations": [
+        {
+          "context": "a",
+          "query": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin3485840329/001/a/node_modules/duplicate/index.js",
+            "startByte": 13,
+            "endByte": 18
+          },
+          "declaration": {
+            "symbol": "symbol:h:b58b1d9a722398e0189caa45",
+            "name": "check",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin3485840329/001/a/node_modules/duplicate/index.js",
+              "startByte": 21,
+              "endByte": 42
+            },
+            "qualifiedName": "check",
+            "sourceFile": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin3485840329/001/a/node_modules/duplicate/index.js"
+          },
+          "unwrittenParameters": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin3485840329/001/a/node_modules/duplicate/index.js",
+                "startByte": 22,
+                "endByte": 27
+              }
+            }
+          ],
+          "ownDeclaration": true
+        },
+        {
+          "context": "b",
+          "query": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin3485840329/001/b/node_modules/duplicate/index.js",
+            "startByte": 13,
+            "endByte": 18
+          },
+          "declaration": {
+            "symbol": "symbol:h:b58b1d9a722398e0189caa45",
+            "name": "check",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin3485840329/001/a/node_modules/duplicate/index.js",
+              "startByte": 21,
+              "endByte": 42
+            },
+            "qualifiedName": "check",
+            "sourceFile": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin3485840329/001/a/node_modules/duplicate/index.js"
+          },
+          "unwrittenParameters": null,
+          "ownDeclaration": false
+        }
+      ]
+    },
+    {
+      "variant": "roots-last",
+      "log": "/private/tmp/duplicate-package-origin-roots-last.log",
+      "logDigest": "sha256:f53c0203b5437af27079d7c08ae42e61168407c0d3a716dc9f66c8062e4928ae",
+      "observations": [
+        {
+          "context": "a",
+          "query": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1434974945/001/a/node_modules/duplicate/index.js",
+            "startByte": 13,
+            "endByte": 18
+          },
+          "declaration": {
+            "symbol": "symbol:h:942001da54ed68752864b4ea",
+            "name": "check",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1434974945/001/a/node_modules/duplicate/index.js",
+              "startByte": 21,
+              "endByte": 42
+            },
+            "qualifiedName": "check",
+            "sourceFile": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1434974945/001/a/node_modules/duplicate/index.js"
+          },
+          "unwrittenParameters": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1434974945/001/a/node_modules/duplicate/index.js",
+                "startByte": 22,
+                "endByte": 27
+              }
+            }
+          ],
+          "ownDeclaration": true
+        },
+        {
+          "context": "b",
+          "query": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1434974945/001/b/node_modules/duplicate/index.js",
+            "startByte": 13,
+            "endByte": 18
+          },
+          "declaration": {
+            "symbol": "symbol:h:942001da54ed68752864b4ea",
+            "name": "check",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1434974945/001/a/node_modules/duplicate/index.js",
+              "startByte": 21,
+              "endByte": 42
+            },
+            "qualifiedName": "check",
+            "sourceFile": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1434974945/001/a/node_modules/duplicate/index.js"
+          },
+          "unwrittenParameters": null,
+          "ownDeclaration": false
+        }
+      ]
+    },
+    {
+      "variant": "roots-first",
+      "log": "/private/tmp/duplicate-package-origin-roots-first.log",
+      "logDigest": "sha256:39304d5b2041e36a5a7df21ca5e36b04d5400d5898584863bacf79be532638c2",
+      "observations": [
+        {
+          "context": "a",
+          "query": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin2281714665/001/a/node_modules/duplicate/index.js",
+            "startByte": 13,
+            "endByte": 18
+          },
+          "declaration": {
+            "symbol": "symbol:h:9f6f9878a4a44278f9021714",
+            "name": "check",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin2281714665/001/a/node_modules/duplicate/index.js",
+              "startByte": 21,
+              "endByte": 42
+            },
+            "qualifiedName": "check",
+            "sourceFile": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin2281714665/001/a/node_modules/duplicate/index.js"
+          },
+          "unwrittenParameters": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin2281714665/001/a/node_modules/duplicate/index.js",
+                "startByte": 22,
+                "endByte": 27
+              }
+            }
+          ],
+          "ownDeclaration": true
+        },
+        {
+          "context": "b",
+          "query": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin2281714665/001/b/node_modules/duplicate/index.js",
+            "startByte": 13,
+            "endByte": 18
+          },
+          "declaration": {
+            "symbol": "symbol:h:9f6f9878a4a44278f9021714",
+            "name": "check",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin2281714665/001/a/node_modules/duplicate/index.js",
+              "startByte": 21,
+              "endByte": 42
+            },
+            "qualifiedName": "check",
+            "sourceFile": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin2281714665/001/a/node_modules/duplicate/index.js"
+          },
+          "unwrittenParameters": null,
+          "ownDeclaration": false
+        }
+      ]
+    },
+    {
+      "variant": "isolated",
+      "log": "/private/tmp/duplicate-package-origin-isolated.log",
+      "logDigest": "sha256:b0c550641b3095add29d8e426d5deab55cc9e25de2d9214a6ead568b1547bece",
+      "observations": [
+        {
+          "context": "a",
+          "query": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1406541199/001/a/node_modules/duplicate/index.js",
+            "startByte": 13,
+            "endByte": 18
+          },
+          "declaration": {
+            "symbol": "symbol:h:6369cde6ea92efe5283e49a7",
+            "name": "check",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1406541199/001/a/node_modules/duplicate/index.js",
+              "startByte": 21,
+              "endByte": 42
+            },
+            "qualifiedName": "check",
+            "sourceFile": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1406541199/001/a/node_modules/duplicate/index.js"
+          },
+          "unwrittenParameters": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1406541199/001/a/node_modules/duplicate/index.js",
+                "startByte": 22,
+                "endByte": 27
+              }
+            }
+          ],
+          "ownDeclaration": true
+        },
+        {
+          "context": "b",
+          "query": {
+            "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1406541199/001/b/node_modules/duplicate/index.js",
+            "startByte": 13,
+            "endByte": 18
+          },
+          "declaration": {
+            "symbol": "symbol:h:157860d8753a0d9e798f870a",
+            "name": "check",
+            "kind": "ArrowFunction",
+            "location": {
+              "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1406541199/001/b/node_modules/duplicate/index.js",
+              "startByte": 21,
+              "endByte": 42
+            },
+            "qualifiedName": "check",
+            "sourceFile": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1406541199/001/b/node_modules/duplicate/index.js"
+          },
+          "unwrittenParameters": [
+            {
+              "parameterIndex": 0,
+              "declaration": {
+                "path": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/TestDiagnosticDuplicatePackageOrigin1406541199/001/b/node_modules/duplicate/index.js",
+                "startByte": 22,
+                "endByte": 27
+              }
+            }
+          ],
+          "ownDeclaration": true
+        }
+      ]
+    }
+  ],
+  "corvuGraphCauseConfirmed": false,
+  "interpretation": "Shared programs redirect the second identical package installation to the first declaration. Source-first root ordering does not fix this. Separate resolution-context programs preserve both declaration identities. The actual Corvu graph transcript still needs confirmation."
+}

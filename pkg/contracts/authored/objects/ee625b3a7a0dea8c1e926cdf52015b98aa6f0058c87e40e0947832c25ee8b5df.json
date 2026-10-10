@@ -1,0 +1,281 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "da14c35c02f09cf13d07c64658989bb097640d33e87641a5f95f900a7befc741",
+            "path": "./dist/index.js",
+            "sha256": "52f06ddde9ca2a0383faffb929b31087f4d976a508cd1e45d7a8d03955bf7695"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "4a99b9a50c7f131f9fb75b14882064320253e1d7bfd13ff9e2ac73759548cbb0"
+          },
+          "exports": {
+            "createServerCookie": "open-callable",
+            "createUserTheme": "authored-createUserTheme",
+            "getCookiesString": "authored-getCookiesString",
+            "parseCookie": "authored-parseCookie"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-GXroFrNmfEupTaE7njBft67TrXoEAfommHy6B8ZrHauEF3k3Bk//LJcWpipwhSF4XURuq7YGGTCZaxCIWKnBKw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "a7bec6d713f7b95d53e69cf4030449f6fce1f1118a6d5a180ffe8f4d6918b00f"
+    },
+    "name": "@solid-primitives/cookies",
+    "version": "1.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createUserTheme": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "callbacks": [],
+        "creates": [
+          "create-theme"
+        ],
+        "computations": [
+          "cookie-effect"
+        ],
+        "reads": [
+          "cookie-compute-read"
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "theme",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "cookie-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create-theme",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "theme"
+            ]
+          },
+          {
+            "id": "cookie-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "cookie-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cookie-compute-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "cookie-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "cookie-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "theme"
+              }
+            ]
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "theme"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-getCookiesString": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-parseCookie": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

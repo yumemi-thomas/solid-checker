@@ -1,0 +1,150 @@
+scripts/verify.sh
+=== step fmt-check              2.001s
+=== step go-fmt-check           0.070s
+=== step go-vet                 0.179s
+bun install v1.4.0 (34cbb9a40)
+
+Checked 114 installs across 139 packages (no changes) [36.00ms]
+=== step bun-install            0.059s
+compiler facts identity: solid-v2 upstream 5efaf260becb, implementation c04c48779812, distribution 3ad4bbec37ae verified
+=== step compiler-identity      0.221s
+build-typefacts: /Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/bin/solid-typefacts already at source b4e7d9aa17d7212a18bb18ec241166041d0680bbf42058aa8811f09e1590be77 (build id dev)
+=== step build-typefacts        0.088s
+=== step certification-pins     0.492s
+    Checking solid-dialect v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-dialect)
+    Checking solid-reactive-ir v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-reactive-ir)
+    Checking solid-v2-rules v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/dialects/solid-v2/rules)
+    Checking solid-facts-backend v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-facts-backend)
+    Checking solid-checker-wasm v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-checker-wasm)
+    Finished `verify` profile [unoptimized] target(s) in 15.10s
+=== step clippy                 15.293s
+already provisioned v2: {"solid-js":"2.0.0-rc.9","@solidjs/signals":"2.0.0-rc.9","@solidjs/web":"2.0.0-rc.9"}
+=== step oracle-provision       0.121s
+already provisioned @solidjs/signals@2.0.0-rc.3
+already provisioned @solidjs/signals@2.0.0-rc.6
+already provisioned @solidjs/signals@2.0.0-rc.9
+already provisioned @solidjs/web@2.0.0-rc.3
+already provisioned @solidjs/web@2.0.0-rc.9
+already provisioned solid-js@2.0.0-rc.3
+already provisioned solid-js@2.0.0-rc.9
+=== step archives-provision     0.039s
+Verification test logs: /Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/target/verify-logs/run-JviPuK
+go-test-race: PASS (148.73s); /Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/target/verify-logs/run-JviPuK/go-test-race.log
+test-workspace: PASS (399.07s); /Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/target/verify-logs/run-JviPuK/test-workspace.log
+=== step go-rust-tests          399.137s
+   Compiling solid-dialect v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-dialect)
+   Compiling solid-reactive-ir v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-reactive-ir)
+   Compiling solid-v2-rules v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/dialects/solid-v2/rules)
+   Compiling solid-facts-backend v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-facts-backend)
+    Finished `verify` profile [unoptimized] target(s) in 13.96s
+=== step build-checker          14.032s
+compared 142 fixture projects, 745 findings
+gate cache: 142 hit(s), 0 miss(es); concurrency 8
+=== step coverage               0.222s
+ownership gate: 41 cases passed; ledger 465 rows (0 pending); gate cache: 0 hit(s), 2 miss(es); safe-fix gate cache: 1 hit(s), 0 miss(es)
+=== step ownership-gate         9.950s
+   Compiling solid-dialect v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-dialect)
+   Compiling solid-reactive-ir v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-reactive-ir)
+   Compiling solid-v2-rules v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/dialects/solid-v2/rules)
+   Compiling solid-facts-backend v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-facts-backend)
+    Finished `release` profile [optimized] target(s) in 27.74s
+=== step build-session-bench    27.787s
+performance certification passed (wall-time gate: enforce): export scaling 2.00x, Type Facts 914 bytes/source, cached IR 1958 ns, best first IR 88464 ns/source (88464, 91152, 89172), incremental 49379709 ns
+=== step verify-performance     2.812s
+$ bun ./node_modules/vitest/vitest.mjs run --config vitest.config.mjs test/*.test.mjs && bun ./node_modules/typescript/bin/tsc -p test/types/tsconfig.json
+
+ RUN  v4.1.11 /Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/packages/cli
+
+
+ Test Files  8 passed (8)
+      Tests  292 passed (292)
+   Start at  13:34:05
+   Duration  3.97s (transform 315ms, setup 0ms, import 823ms, tests 6.80s, environment 1ms)
+
+=== step bun-test               4.563s
+
+ RUN  v4.1.11 /Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker
+
+
+ Test Files  19 passed (19)
+      Tests  319 passed | 1 skipped (320)
+   Start at  13:34:09
+   Duration  2.20s (transform 251ms, setup 0ms, import 858ms, tests 2.55s, environment 2ms)
+
+=== step ecosystem-runner-test  2.435s
+phase0 baseline: 418 rows and 13 fixtures verified as frozen evidence
+=== step phase0-baseline        0.035s
+checked Phase 16: 85.65% ecosystem, 94.16% Solid Primitives generatable
+=== step phase16-corpus         0.081s
+phase18 convergence: 175 stable-v1 mains, 0 byte-bound receipts, 194 independent versioned documents, 15 source owners, 1011 JSON files audited; semantic model v1 / sha256 frozen
+=== step phase18-stable-cut     0.178s
+phase19 cut: 175 stable-v1 mains, 0 policy-1 receipts, 0 policy-2 receipts; 73 retired / 0 reissued / 0 pending from 73; active policy 2 sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278; 44 authority demands audited (33 exact / 4 extensions / 7 unsupported); 52/52 complete rows attempted, 0 receipts / 0 verified exports
+=== step phase19-policy         0.125s
+checked frozen Phase 20 ledger for 418 rows
+=== step phase20-ledger         0.051s
+checked Phase 21 ledger for 30 rows
+=== step phase21-ledger         0.115s
+checked 120 stable-v1 generator fixtures: 6 exact fail-closed refusals, 20 local artifact-case refusals, 10 inapplicable artifact cases, 0 withheld claims, 244 declined closure proposals, 170 artifact cases, 777 possible operations, 2242 proof candidates, 8594 local open claims
+=== step contract-corpus        12.811s
+
+ RUN  v4.1.11 /Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker
+
+
+ Test Files  54 passed (54)
+      Tests  375 passed (375)
+   Start at  13:34:25
+   Duration  3.33s (transform 436ms, setup 0ms, import 2.49s, tests 8.46s, environment 4ms)
+
+=== step tsc-oracle-test        3.583s
+tsc oracle gate: 102 case(s) hold on both sides (TypeScript and the checker); 27 rule(s) carry a silent-tsc/reporting-rule keystone [concurrency 8; gate cache: 102 hit(s), 0 miss(es); checker gate cache: 0 hit(s), 102 miss(es)]
+=== step tsc-oracle-gate        135.189s
+obligation audit: 6 obligation(s) hold, 10 closure(s) discharge theirs, and every irreducible one carries a written reason
+=== step obligation-audit       71.905s
+validated 1 dialect assembly manifests
+=== step lint-misc              0.050s
+   Compiling solid-facts-backend v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/crates/solid-facts-backend)
+    Finished `verify` profile [unoptimized] target(s) in 0.39s
+     Running `rust/target/verify/solid-contract-bundles --root /Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/ --check`
+checked 0 receipt-issued stable-v1 bundle cases
+checked 0 active policy-2 bundle documents across both physical locations
+registry memo: 0 hit(s), 0 live lookup(s)
+verified 0 active bundled package pins against the registry; 3 manifest package target(s) remain unbundled (fail-closed)
+    Finished `verify` profile [unoptimized] target(s) in 0.08s
+     Running `rust/target/verify/solid-contract-bundles --root /Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/ --check`
+checked 0 receipt-issued stable-v1 bundle cases
+=== step conformance            0.610s
+
+=== make verify: per-step wall time ===
+  step                     seconds  % total
+  fmt-check                   2.00     0.3%
+  go-fmt-check                0.07     0.0%
+  go-vet                      0.18     0.0%
+  bun-install                 0.06     0.0%
+  compiler-identity           0.22     0.0%
+  build-typefacts             0.09     0.0%
+  certification-pins          0.49     0.1%
+  clippy                     15.29     2.2%
+  oracle-provision            0.12     0.0%
+  archives-provision          0.04     0.0%
+  go-rust-tests             399.14    56.7%
+  build-checker              14.03     2.0%
+  coverage                    0.22     0.0%
+  ownership-gate              9.95     1.4%
+  build-session-bench        27.79     3.9%
+  verify-performance          2.81     0.4%
+  bun-test                    4.56     0.6%
+  ecosystem-runner-test       2.44     0.3%
+  phase0-baseline             0.04     0.0%
+  phase16-corpus              0.08     0.0%
+  phase18-stable-cut          0.18     0.0%
+  phase19-policy              0.12     0.0%
+  phase20-ledger              0.05     0.0%
+  phase21-ledger              0.12     0.0%
+  contract-corpus            12.81     1.8%
+  tsc-oracle-test             3.58     0.5%
+  tsc-oracle-gate           135.19    19.2%
+  obligation-audit           71.91    10.2%
+  lint-misc                   0.05     0.0%
+  conformance                 0.61     0.1%
+  (sum of steps)            704.23   100.0%
+  TOTAL                     704.25   100.0%

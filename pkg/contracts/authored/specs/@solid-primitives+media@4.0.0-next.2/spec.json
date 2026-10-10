@@ -1,0 +1,316 @@
+{
+  "package": "@solid-primitives/media",
+  "version": "4.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "pairs": "../_pairs/@solid-primitives+media",
+  "identity": "identity.json",
+  "exports": {
+    "createMediaQuery": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createMediaQuery-top-level-read/node_modules/@solid-primitives/media/dist/index.js:38-45; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createMediaQuery-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createMediaQuery-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060,1942-1958,2346-2355 — Source-cited browser creates census; optional settled child production does not assert hydration or a children-capable owner at every call. Research draft, not newly probed admission evidence.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "create-media-state",
+            "kind": "create",
+            "resources": [
+              "media-state"
+            ],
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            }
+          },
+          {
+            "id": "media-listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "hydration-settle",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "hydration-settle-owner",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "media-state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "hydration-settle-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [
+          "create-media-state"
+        ],
+        "cleanups": [
+          "media-listener-cleanup"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks",
+          "creates"
+        ],
+        "reads": [],
+        "computations": [
+          "hydration-settle"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/media/dist/index.js:38-45; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:209-219,149; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 — Browser media primitive returns the hydratable signal accessor on every normal completion.",
+        "reads": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/media/dist/index.js:38-45; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:209-219,149; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 — P1: matchMedia and matches are host operations without reactive getters. utils/index.js:209-218 initializes from the fallback or mql.matches; neither branch reads a package signal. Browser window exists under P1; sharedConfig.hydrating still controls creates.",
+        "callbacks": "P1: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/packages/visual-effects/node_modules/@solid-primitives/media/dist/index.js:38-45; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:209-219,149; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9 — P1: No caller callback argument exists. The package-created update handler and hydration update thunk are internal; matchMedia conversion of a string is primitive coercion. No additional caller-code protocol.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createMediaQuery-top-level-read/node_modules/@solid-primitives/media/dist/index.js:38-45; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createMediaQuery-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createMediaQuery-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060,1942-1958,2346-2355 — One eager value signal. onSettled creates at most one child tracked computation only when a present owner admits children; otherwise it queues an unowned one-shot, creating no owner. The child is a leaf (children/cleanup forbidden). No required missing-owner claim. Hydration additionally gates that 0..1 computation."
+      },
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Listener cleanup in ordinary non-hydrating browser branch."
+        },
+        {
+          "label": "hydration-read",
+          "rule": "strict-read-untracked",
+          "why": "Exercises the hydrating initialization branch and reads its actual returned signal in the component strict-read window versus JSX. The computation production is source-cited; this pair does not independently falsify its child-owner count."
+        }
+      ]
+    },
+    "createPrefersDark": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/media/dist/index.js:38-45,58-60; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1928-1968,2346-2357,3031-3062 — Browser forwarding census, including optional hydration onSettled owner creation. Adds only createPrefersDark; existing createMediaQuery unchanged. Probes pending.",
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Browser makeEventListener/tryOnCleanup attempts cleanup registration in an onSettled leaf."
+        },
+        {
+          "label": "hydrating-read",
+          "rule": "strict-read-untracked",
+          "why": "The hydration branch still returns a signal accessor. Force only sharedConfig.hydrating during construction, restore before JSX, and compare component read with JSX read."
+        }
+      ],
+      "call": {
+        "operations": [
+          {
+            "id": "prefers-state-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "prefers-state"
+            ]
+          },
+          {
+            "id": "hydration-settle",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "hydration-settle-owner",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
+          },
+          {
+            "id": "listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "prefers-state"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "prefers-state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "hydration-settle-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [
+          "prefers-state-production"
+        ],
+        "computations": [
+          "hydration-settle"
+        ],
+        "cleanups": [
+          "listener-cleanup"
+        ],
+        "reads": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/media/dist/index.js:38-45,58-60; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1928-1968,2346-2357,3031-3062 — P1: matchMedia, MediaQueryList.matches and add/remove listener access are host operations. Fallback is boolean in real typings. Signal state is written, never read by the package, including hydration settle/update handlers.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/media/dist/index.js:38-45,58-60; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1928-1968,2346-2357,3031-3062 — All browser branches create exactly one boolean source. Hydrating additionally calls onSettled; rc.13 creates one leaf tracked owner only with a children-capable parent, otherwise queues unowned work. 0..1 covers this branch. No other signal/owner creation in the forwarding graph.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/media/dist/index.js:38-45,58-60; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1928-1968,2346-2357,3031-3062 — No caller callback exists; matchMedia receives a constant string, fallback is boolean, and hydration/update thunks are internal.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/media/dist/index.js:38-45,58-60; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1928-1968,2346-2357,3031-3062 — createPrefersDark forwards createMediaQuery's signal accessor on both normal and hydrating browser completions. Server instead returns a constant fallback closure, so no host-free claim.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/media/dist/index.js:38-45,58-60; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149,209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/media-createPrefersDark-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1928-1968,2346-2357,3031-3062 — The sole explicit registration is makeEventListener -> tryOnCleanup. Development skips it with no owner; present leaf throws. Normal successful MediaQueryList removal is platform behavior (P1). The internal onSettled thunk returns undefined."
+      }
+    }
+  }
+}

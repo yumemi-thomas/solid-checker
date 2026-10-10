@@ -1,0 +1,80 @@
+{
+  "format": "initial-read-claim-preservation",
+  "authoritative": false,
+  "rows": [
+    {
+      "probeId": "@corvu-next/popover@0.1.5|solid2|only",
+      "beforeCases": 0,
+      "afterCases": 0,
+      "identicalClaimSets": 0,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@corvu/popover@0.2.0|solid1|only",
+      "beforeCases": 0,
+      "afterCases": 0,
+      "identicalClaimSets": 0,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@6.4.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@tanstack/solid-pacer@0.22.0|solid1|only",
+      "beforeCases": 13,
+      "afterCases": 13,
+      "identicalClaimSets": 13,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "@tanstack/solid-table@9.1.2|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "beforeCases": 0,
+      "afterCases": 0,
+      "identicalClaimSets": 0,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "motion-solidjs@0.6.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "lost": [],
+      "changed": []
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "lost": [],
+      "changed": []
+    }
+  ],
+  "allPreviousArtifactSelectionsAndClaimsPreserved": true,
+  "metricChanged": false
+}

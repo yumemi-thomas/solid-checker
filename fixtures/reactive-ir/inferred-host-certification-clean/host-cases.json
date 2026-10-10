@@ -1,0 +1,7 @@
+[
+  {
+    "path": "src/main.tsx",
+    "text": "clean browser scope",
+    "browser": true
+  }
+]

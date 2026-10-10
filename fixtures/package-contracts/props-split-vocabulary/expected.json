@@ -1,0 +1,82 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "ba1d682425e6488991c36d288029d5c6615d7c6a337819c0bbe8ccc15b1725b0",
+            "path": "./index.js",
+            "sha256": "158607d8e55f4555bf0e22a76794ee723eb11b1345902a67931b66ecd3087dd2"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "158607d8e55f4555bf0e22a76794ee723eb11b1345902a67931b66ecd3087dd2"
+          },
+          "exports": {
+            "withoutEitherKey": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+            "withoutKeys": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:a31ec7766f733ba7c1a2023944f7457d19f1a472fbeb8798204c6a1993d5d8f9",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "a31ec7766f733ba7c1a2023944f7457d19f1a472fbeb8798204c6a1993d5d8f9"
+    },
+    "name": "props-split-vocabulary",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

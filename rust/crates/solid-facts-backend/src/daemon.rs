@@ -28,8 +28,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement, SourceChange, SourceFile,
-    TypeFactsSession, accepted_contract_catalog_members, bundled_first_party_contract_index,
-    discovered_contract_paths, imported_package_roots, read_accepted_contract_catalog_with_trust,
+    TypeFactsSession, accepted_contract_catalog_members, discovered_contract_paths,
+    external_package_contract_requirements, imported_package_roots,
     read_policy2_trust_configuration, semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
@@ -42,11 +42,20 @@ use crate::idle_memory;
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CheckRequest {
+    #[serde(default)]
+    implementation: String,
     project_id: String,
     #[serde(default)]
     accepted_contract_catalog: String,
     #[serde(default)]
     receipt_trust_configuration: String,
+    /// Whether the contracts compiled into this checker may be applied. One
+    /// daemon serves every client for a project, so this crosses the socket and
+    /// is part of the cached answer's identity; otherwise a
+    /// `--no-bundled-contracts` run would be served a cached answer that used
+    /// them, or the reverse.
+    #[serde(default = "bundled_by_default")]
+    bundled_contracts: bool,
     #[serde(default)]
     presets: Vec<String>,
     #[serde(default)]
@@ -55,9 +64,15 @@ struct CheckRequest {
     runtime: RuntimeEnvironment,
 }
 
+const fn bundled_by_default() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CheckHeader {
+    #[serde(default)]
+    implementation: String,
     ok: bool,
     #[serde(default)]
     status: String,
@@ -71,6 +86,14 @@ struct CheckHeader {
     analysis_ns: u64,
     #[serde(default)]
     response_bytes: u64,
+    /// The one notice the analysis would print for the catalogs it withheld
+    /// for want of trust, empty when it withheld none. The daemon selects the
+    /// catalogs, nested ones included, from the analysed files -- which the
+    /// client does not have -- so it answers the notice too. Absent from a
+    /// daemon that predates it, and then the client selects the project's own
+    /// catalogs itself, as it always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    notice: Option<String>,
 }
 
 struct Answer {
@@ -79,6 +102,7 @@ struct Answer {
     cache_hit: bool,
     generation: u64,
     analysis_ns: u64,
+    notice: Arc<str>,
 }
 
 pub fn enabled() -> bool {
@@ -100,11 +124,14 @@ pub fn eligible(request: &Request) -> bool {
         && request.emit_contract.is_empty()
         && request.declaration_probe_plan.is_empty()
         && !request.check_contracts
+        // Runtime resolution runs project code per check and is not part of
+        // the retained identity (ADR 0220).
+        && !request.runtime_resolution
         && retained_format(&request.format)
 }
 
 fn retained_format(format: &str) -> bool {
-    matches!(format, "default" | "json" | "text")
+    matches!(format, "default" | "full" | "json" | "text")
 }
 
 fn resolve_dialect(
@@ -113,14 +140,153 @@ fn resolve_dialect(
     match request.dialect.as_deref() {
         Some(id) => solid_facts_backend::dialect::by_id(id)
             .ok_or_else(|| format!("unknown dialect {id:?}").into()),
-        None => Ok(solid_facts_backend::dialect::detect(Path::new(
-            &request.project_id,
-        ))),
+        // A direct `--serve` for a project whose installed runtime this build
+        // has no dialect for refuses to start, rather than retaining a session
+        // that would answer every request under the wrong language. The
+        // ordinary CLI path never gets here: `run` refuses at the selection
+        // site, above the branch that consults this daemon at all. This is the
+        // backstop for the case that skips it.
+        None => match solid_facts_backend::dialect::detect_detailed(Path::new(&request.project_id))
+        {
+            solid_facts_backend::dialect::Detection::Installed { dialect, .. } => Ok(dialect),
+            solid_facts_backend::dialect::Detection::Unsupported {
+                installed,
+                manifest,
+                refusal,
+                ..
+            } => Err(match refusal {
+                None => format!(
+                    "solid-js {installed} at {} is a runtime this build carries no dialect for [{}]",
+                    manifest.display(),
+                    solid_facts_backend::dialect::UNSUPPORTED_RUNTIME_CODE
+                ),
+                Some(refusal) => format!(
+                    "solid-js {installed} at {} is a runtime this build refuses: {} [{}]",
+                    manifest.display(),
+                    refusal.reason,
+                    solid_facts_backend::dialect::UNSUPPORTED_RUNTIME_CODE
+                ),
+            }
+            .into()),
+            solid_facts_backend::dialect::Detection::Defaulted { .. } => {
+                Ok(solid_facts_backend::dialect::default_dialect())
+            }
+        },
     }
 }
 
-fn socket_path(project_id: &str, typefacts_executable: &str, dialect_id: &str) -> PathBuf {
+// Captured from the running image, not its replaceable pathname. This also
+// covers replacement between exec and the first socket selection/binding.
+fn implementation_identity() -> Result<&'static str, Box<dyn Error>> {
+    static IDENTITY: std::sync::OnceLock<Result<String, String>> = std::sync::OnceLock::new();
+    match IDENTITY.get_or_init(loaded_implementation_identity) {
+        Ok(identity) => Ok(identity),
+        Err(error) => Err(error.clone().into()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn loaded_implementation_identity() -> Result<String, String> {
+    // /proc/self/exe opens the executing inode even after unlink/replacement.
+    let digest = hash_file(Path::new("/proc/self/exe")).map_err(|error| error.to_string())?;
+    Ok(format!(
+        "sha256:{}",
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn loaded_implementation_identity() -> Result<String, String> {
+    // SDK mach-o/dyld.h and loader.h: image zero is the executable; LC_UUID
+    // is its linker-issued build identity, carried in the loaded image.
+    #[repr(C)]
+    struct Header {
+        magic: u32,
+        cpu_type: i32,
+        cpu_subtype: i32,
+        file_type: u32,
+        commands: u32,
+        command_bytes: u32,
+        flags: u32,
+        reserved: u32,
+    }
+    unsafe extern "C" {
+        fn _dyld_get_image_header(index: u32) -> *const Header;
+    }
+    // SAFETY: dyld owns the executable header and its mapped load commands for
+    // the process lifetime. No caller-supplied pointer or file bytes are read.
+    let header =
+        unsafe { _dyld_get_image_header(0).as_ref() }.ok_or("missing loaded executable header")?;
+    if header.magic != 0xfeed_facf || header.command_bytes > 1024 * 1024 || header.commands > 4096 {
+        return Err("unsupported loaded executable header".into());
+    }
+    // SAFETY: a validated native 64-bit Mach-O header's load commands follow
+    // the header in the same dyld mapping; their extent is provided by dyld.
+    let commands = unsafe {
+        std::slice::from_raw_parts(
+            (std::ptr::from_ref(header).cast::<u8>()).add(std::mem::size_of::<Header>()),
+            header.command_bytes as usize,
+        )
+    };
+    macho_build_identity(commands, header.commands)
+        .ok_or_else(|| "missing or ambiguous loaded executable build UUID".into())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn loaded_implementation_identity() -> Result<String, String> {
+    // A fresh one-shot check remains available; never reuse an unidentified actor.
+    Err("immutable loaded checker identity is unavailable on this platform".into())
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macho_build_identity(mut commands: &[u8], count: u32) -> Option<String> {
+    let mut uuid = None;
+    for _ in 0..count {
+        let kind = u32::from_le_bytes(commands.get(..4)?.try_into().ok()?);
+        let size = u32::from_le_bytes(commands.get(4..8)?.try_into().ok()?) as usize;
+        if size < 8 {
+            return None;
+        }
+        let command = commands.get(..size)?;
+        if kind == 0x1b {
+            if size != 24 || uuid.is_some() {
+                return None;
+            }
+            uuid = Some(format!(
+                "macho-uuid:{}",
+                command[8..24]
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            ));
+        }
+        commands = &commands[size..];
+    }
+    if !commands.is_empty() {
+        return None;
+    }
+    uuid
+}
+
+fn verify_implementation(expected: &str, actual: &str) -> Result<(), Box<dyn Error>> {
+    if expected.is_empty() || actual != expected {
+        return Err("daemon checker implementation identity mismatch".into());
+    }
+    Ok(())
+}
+
+fn socket_path(
+    project_id: &str,
+    typefacts_executable: &str,
+    dialect_id: &str,
+    implementation: &str,
+) -> PathBuf {
     let mut identity = Sha256::new();
+    identity.update(implementation.as_bytes());
+    identity.update([0]);
     identity.update(project_id.as_bytes());
     identity.update([0]);
     identity.update(typefacts_executable.as_bytes());
@@ -442,10 +608,12 @@ fn directory_stamp(path: &Path) -> Option<FileStamp> {
 }
 
 pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
+    let implementation = implementation_identity()?;
     let socket = socket_path(
         &request.project_id,
         &request.typefacts_executable,
         resolve_dialect(request)?.id,
+        implementation,
     );
     if UnixStream::connect(&socket).is_ok() {
         return Ok(0); // a live daemon already serves this project
@@ -509,6 +677,12 @@ fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<()
     let mut check: CheckRequest = serde_json::from_str(&line)?;
     normalize_enablement(&mut check);
     let mut stream = reader.into_inner();
+    if verify_implementation(implementation_identity()?, &check.implementation).is_err() {
+        return respond_error(
+            &mut stream,
+            "daemon checker implementation identity mismatch",
+        );
+    }
     if check.project_id != request.project_id {
         return respond_error(&mut stream, "daemon serves a different project");
     }
@@ -517,6 +691,7 @@ fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<()
         Ok(answer) => {
             let materialized = !answer.cache_hit;
             let header = serde_json::to_vec(&CheckHeader {
+                implementation: implementation_identity()?.to_owned(),
                 ok: true,
                 status: answer.status.to_string(),
                 error: String::new(),
@@ -524,6 +699,7 @@ fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<()
                 generation: answer.generation,
                 analysis_ns: answer.analysis_ns,
                 response_bytes: u64::try_from(answer.body.len()).unwrap_or(u64::MAX),
+                notice: Some(answer.notice.to_string()),
             })?;
             stream.write_all(&header)?;
             stream.write_all(b"\n")?;
@@ -551,6 +727,7 @@ fn normalize_enablement(check: &mut CheckRequest) {
 
 fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn Error>> {
     let header = serde_json::to_vec(&CheckHeader {
+        implementation: implementation_identity()?.to_owned(),
         ok: false,
         status: String::new(),
         error: message.into(),
@@ -558,6 +735,7 @@ fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn E
         generation: 0,
         analysis_ns: 0,
         response_bytes: 0,
+        notice: None,
     })?;
     stream.write_all(&header)?;
     stream.write_all(b"\n")?;
@@ -584,6 +762,10 @@ fn answer(
         return Ok(Answer {
             status: cached.0,
             body: cached.1,
+            notice: state
+                .last
+                .as_ref()
+                .map_or_else(|| Arc::from(""), |last| Arc::clone(&last.notice)),
             cache_hit: true,
             generation: state.session.generation(),
             analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
@@ -596,6 +778,7 @@ fn answer(
             presets: &check.presets,
             rules: &check.enable_rules,
             runtime: check.runtime.clone(),
+            feedback_facts: false,
         },
     )?;
     state
@@ -610,23 +793,71 @@ fn answer(
         .project
         .parent()
         .ok_or("tsconfig has no parent directory")?;
-    let bundled =
-        bundled_first_party_contract_index(state.dialect.id, directory, &facts, &check.runtime)?;
-    let catalog = if check.accepted_contract_catalog.is_empty() {
-        let candidate = directory.join(".solid-checker/accepted-contracts.json");
-        candidate.is_file().then_some(candidate)
-    } else {
-        Some(PathBuf::from(&check.accepted_contract_catalog))
-    };
+    let requirements = external_package_contract_requirements(directory, &facts);
     let trust = (!check.receipt_trust_configuration.is_empty())
         .then(|| read_policy2_trust_configuration(Path::new(&check.receipt_trust_configuration)))
         .transpose()?;
-    let contracts = catalog
-        .as_deref()
-        .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
-        .transpose()?
-        .unwrap_or_default()
-        .with_fallback(bundled);
+    // The same contract acquisition the one-shot path performs, and for the
+    // same reason it has to be the same: this daemon is *on by default in a
+    // release build*, so it -- not the one-shot path -- is what an ordinary
+    // user runs. It had its own, older acquisition: one
+    // `accepted-contracts.json` and no artifact admission at all. So a case
+    // set went undiscovered, an acceptance certified from another file never
+    // applied, and the compiled-in tier was invisible. Measured on a project
+    // importing a bundled `@solid-primitives/keyed@1.5.3`: the release binary
+    // answered "no receipt-accepted contract matches this exact import" with
+    // the daemon on and read the contract with it off.
+    // Withheld catalogs are reported by the client, which prints to the
+    // user's terminal; this process's stderr goes nowhere. So the notice is
+    // answered with the snapshot. See `check`.
+    let catalog_scopes = solid_facts_backend::nested_catalog_candidates(
+        directory,
+        facts.files.iter().map(|file| file.path.as_str()),
+    );
+    let selection = solid_facts_backend::select_project_catalogs_in(
+        directory,
+        &catalog_scopes,
+        &check.accepted_contract_catalog,
+        trust.is_some(),
+    )?;
+    // Capture discovery's exact input generation before it runs. A refusal
+    // needs only its witness; success retains the complete graph-input closure.
+    let mut inference_inputs = inference_inputs_for_check(state, check);
+    let (contracts, inference_note) =
+        solid_facts_backend::inferred_project_accepted_contracts_with_note(
+            directory,
+            &selection.admitted,
+            &selection.nested,
+            trust.as_ref(),
+            check.bundled_contracts,
+            &check.runtime,
+            state.dialect.vocabulary,
+            &facts,
+            requirements,
+        )?;
+    if let Some(inputs) = &mut inference_inputs
+        && let Some(hosts) = contracts.inferred_hosts()
+    {
+        // Final package admission can observe additional canonical targets.
+        // Retain the identities actually used, rather than a post-analysis
+        // rediscovery that could bless another generation of filesystem bytes.
+        inputs.extend(
+            hosts
+                .manifest
+                .inputs
+                .iter()
+                .map(|(path, identity)| (PathBuf::from(path), content_hash(identity.as_bytes()))),
+        );
+        inputs.sort();
+        inputs.dedup();
+    }
+    let notice: Arc<str> = selection
+        .notice()
+        .into_iter()
+        .chain(inference_note)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .into();
     let analysis = state
         .diagnostics
         .analyze_accepted_measured_with_enablement(
@@ -638,6 +869,7 @@ fn answer(
                 presets: &check.presets,
                 rules: &check.enable_rules,
                 runtime: check.runtime.clone(),
+                feedback_facts: false,
             },
         )?
         .0;
@@ -653,25 +885,35 @@ fn answer(
     .into();
     let status: Arc<str> = analysis.snapshot.status.as_str().into();
     let modules = imported_package_roots(&facts);
-    state.last = Some(CachedAnswer {
-        generation: state.session.generation(),
-        explicit: vec![
-            check.accepted_contract_catalog.clone(),
-            check.receipt_trust_configuration.clone(),
-        ],
-        contract_files: contract_files(
-            state,
-            &modules,
-            &check.accepted_contract_catalog,
-            &check.receipt_trust_configuration,
-        )?,
-        presets: check.presets.clone(),
-        enable_rules: check.enable_rules.clone(),
-        runtime: check.runtime.clone(),
-        modules,
-        status: Arc::clone(&status),
-        body: Arc::clone(&body),
-    });
+    let install_lookups =
+        solid_facts_backend::importer_admission_inputs(directory, &selection.nested, &facts)?;
+    // An unreadable witness, or a change while discovery/analysis ran, prevents
+    // caching. The ordinary answer still follows the existing refusal path.
+    state.last = match inference_inputs.filter(|inputs| inference_inputs_current(inputs)) {
+        Some(inference_inputs) => Some(CachedAnswer {
+            generation: state.session.generation(),
+            explicit: explicit_inputs(check),
+            contract_files: contract_files(
+                state,
+                &modules,
+                &catalog_scopes,
+                &install_lookups,
+                &check.accepted_contract_catalog,
+                &check.receipt_trust_configuration,
+            )?,
+            inference_inputs,
+            catalog_scopes,
+            install_lookups,
+            notice: Arc::clone(&notice),
+            presets: check.presets.clone(),
+            enable_rules: check.enable_rules.clone(),
+            runtime: check.runtime.clone(),
+            modules,
+            status: Arc::clone(&status),
+            body: Arc::clone(&body),
+        }),
+        None => None,
+    };
     state.diagnostics.retain_for_idle(state.cache_retention);
     Ok(Answer {
         status,
@@ -679,6 +921,7 @@ fn answer(
         cache_hit: false,
         generation: state.session.generation(),
         analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+        notice,
     })
 }
 
@@ -692,23 +935,100 @@ fn cached_answer(
     let Some(cached) = &state.last else {
         return Ok(None);
     };
+    if cached.generation != state.session.generation()
+        || cached.explicit != explicit_inputs(check)
+        || cached.presets != check.presets
+        || cached.enable_rules != check.enable_rules
+        || cached.runtime != check.runtime
+        || !inference_inputs_current(&cached.inference_inputs)
+    {
+        return Ok(None);
+    }
     let current = contract_files(
         state,
         &cached.modules,
+        &cached.catalog_scopes,
+        &cached.install_lookups,
         &check.accepted_contract_catalog,
         &check.receipt_trust_configuration,
     )?;
     Ok(cached.snapshot_if_current(
         state.session.generation(),
-        &[
-            check.accepted_contract_catalog.clone(),
-            check.receipt_trust_configuration.clone(),
-        ],
+        &explicit_inputs(check),
         &current,
         &check.presets,
         &check.enable_rules,
         &check.runtime,
     ))
+}
+
+fn inference_inputs_for_check(state: &State, check: &CheckRequest) -> Option<Vec<ContractFile>> {
+    let runtime = &check.runtime;
+    if runtime.target.is_some()
+        || !runtime.selected_conditions().is_empty()
+        || runtime.program_boundary == Some(solid_reactive_ir::ProgramBoundary::Open)
+    {
+        return Some(Vec::new());
+    }
+    let directory = state.project.parent()?;
+    let sources = state
+        .sources
+        .iter()
+        .map(|source| PathBuf::from(&source.path))
+        .collect::<Vec<_>>();
+    let mut paths = solid_facts_backend::inferred_host_input_paths_for_sources(
+        directory,
+        &state.project,
+        &sources,
+    );
+    // Nested execution boundaries are facts even without an accepted catalog.
+    paths.extend(state.sources.iter().flat_map(|source| {
+        Path::new(&source.path)
+            .parent()
+            .into_iter()
+            .flat_map(Path::ancestors)
+            .map(|ancestor| ancestor.join("package.json"))
+    }));
+    paths.sort();
+    paths.dedup();
+    paths
+        .into_iter()
+        .map(|path| {
+            Some((
+                path.clone(),
+                solid_facts_backend::inferred_host_input_digest(&path)?,
+            ))
+        })
+        .collect()
+}
+
+fn inference_inputs_current(inputs: &[ContractFile]) -> bool {
+    inputs.iter().all(|(path, expected)| {
+        solid_facts_backend::inferred_host_input_digest(path).as_ref() == Some(expected)
+    })
+}
+
+/// Every catalog the local tier holds, or the one the caller named.
+///
+/// Discovery used to be a single `accepted-contracts.json` here. `contract
+/// certify` publishes a *case set* for a package with more than one artifact
+/// case, so that spelling silently missed contracts the one-shot path reads --
+/// the same defect `discovered_catalog_paths` was written for.
+fn discovered_catalogs(directory: &Path, explicit: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    if explicit.is_empty() {
+        Ok(solid_facts_backend::discovered_catalog_paths(directory)?)
+    } else {
+        Ok(vec![PathBuf::from(explicit)])
+    }
+}
+
+/// What the client stated, as the cached answer compares it.
+fn explicit_inputs(check: &CheckRequest) -> Vec<String> {
+    vec![
+        check.accepted_contract_catalog.clone(),
+        check.receipt_trust_configuration.clone(),
+        check.bundled_contracts.to_string(),
+    ]
 }
 
 /// The current on-disk contract inputs: package manifests and discovered
@@ -717,6 +1037,8 @@ fn cached_answer(
 fn contract_files(
     state: &State,
     modules: &[String],
+    catalog_scopes: &[PathBuf],
+    install_lookups: &[(PathBuf, String)],
     accepted_catalog: &str,
     receipt_trust_configuration: &str,
 ) -> Result<Vec<ContractFile>, Box<dyn Error>> {
@@ -733,15 +1055,70 @@ fn contract_files(
     if let Some(path) = solid_facts_backend::discovered_rule_options_path(directory) {
         paths.push(path);
     }
-    let catalog = if accepted_catalog.is_empty() {
-        let candidate = directory.join(".solid-checker/accepted-contracts.json");
-        candidate.is_file().then_some(candidate)
-    } else {
-        Some(PathBuf::from(accepted_catalog))
-    };
-    if let Some(catalog) = catalog {
+    for catalog in discovered_catalogs(directory, accepted_catalog)? {
         paths.extend(accepted_contract_catalog_members(&catalog)?);
         paths.push(catalog);
+    }
+    // Every directory whose catalog could apply to an analysed file, the
+    // project's own included. Both catalog spellings are inputs whether or not
+    // they exist, so a catalog written into a `.solid-checker/` that was
+    // already there -- which changes no directory stamp -- is a change; and a
+    // nested catalog's admission reads the lockfiles above its own directory.
+    // An explicit catalog replaces discovery, and then none of these apply.
+    if accepted_catalog.is_empty() {
+        for scope in std::iter::once(directory).chain(catalog_scopes.iter().map(PathBuf::as_path)) {
+            let root = scope.join(".solid-checker");
+            paths.push(root.join("accepted-contracts.json"));
+            paths.push(root.join("accepted-contract-case-set.json"));
+            if scope == directory {
+                continue;
+            }
+            let catalogs = solid_facts_backend::discovered_catalog_paths(scope)?;
+            if catalogs.is_empty() {
+                continue;
+            }
+            for catalog in catalogs {
+                paths.extend(accepted_contract_catalog_members(&catalog)?);
+                paths.push(catalog);
+            }
+            paths.extend(solid_facts_backend::admission_input_paths(scope));
+        }
+    }
+    // Artifact admission recomputes an acceptance root from the *installed*
+    // tarball integrity, which lives in whichever lockfile the project's
+    // package manager wrote. Without these an install that repacks a dependency
+    // at the same version keeps serving the previous verdict for a whole
+    // generation.
+    paths.extend(solid_facts_backend::admission_input_paths(directory));
+    // Admission is evaluated from each importer's own install, and an import
+    // some file reaches at a sub-package's `node_modules` reads that copy's
+    // manifest and the lockfiles above *its* install directory
+    // (`importer_admission_inputs`). A monorepo root whose dependencies are
+    // installed only there otherwise kept serving the previous verdict when a
+    // sub-package's install moved.
+    for (base, module) in install_lookups {
+        paths.extend(solid_facts_backend::discovered_contract_paths(
+            base,
+            std::slice::from_ref(module),
+        )?);
+        paths.extend(solid_facts_backend::admission_input_paths(base));
+    }
+    // The installed `solid-js` manifest, and the manifest of every other
+    // package the dialect names as owning a release-dependent answer
+    // (`@solidjs/signals`, `@solidjs/web`), decide the release notice (SC9014)
+    // that `DiagnosticSession::analyze` re-reads on every run, so an install
+    // moving any of them between an audited and an unaudited release must not
+    // keep serving the previous answer for a whole generation.
+    paths.extend(solid_facts_backend::dialect::release_manifests(
+        &state.project,
+    ));
+    match solid_facts_backend::dialect::detect_detailed(&state.project) {
+        solid_facts_backend::dialect::Detection::Installed { manifest, .. }
+        | solid_facts_backend::dialect::Detection::Unsupported { manifest, .. }
+        | solid_facts_backend::dialect::Detection::Defaulted {
+            manifest: Some(manifest),
+        } => paths.push(manifest),
+        solid_facts_backend::dialect::Detection::Defaulted { manifest: None } => {}
     }
     if !receipt_trust_configuration.is_empty() {
         paths.push(PathBuf::from(receipt_trust_configuration));
@@ -750,7 +1127,21 @@ fn contract_files(
     paths.dedup();
     let mut files = Vec::with_capacity(paths.len());
     for path in paths {
-        files.push((path.clone(), hash_file(&path)?));
+        // Absence is a state, not an error. A lockfile that does not exist yet
+        // must still be an input -- creating one changes what is admitted --
+        // and a contract file deleted between runs should invalidate the cache
+        // rather than fail the check.
+        let hash = match if path.is_dir() {
+            solid_facts_backend::inferred_host_directory_digest(&path)
+                .ok_or_else(|| "cannot fingerprint inferred host directory".into())
+        } else {
+            hash_file(&path)
+        } {
+            Ok(hash) => hash,
+            Err(_) if !path.exists() => [0_u8; 32],
+            Err(error) => return Err(error),
+        };
+        files.push((path.clone(), hash));
     }
     Ok(files)
 }
@@ -763,19 +1154,23 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     // `npm install` finishing between the calls) and split the client and
     // its daemon across two dialects.
     let dialect = resolve_dialect(request)?;
+    let implementation = implementation_identity()?;
     let socket = socket_path(
         &request.project_id,
         &request.typefacts_executable,
         dialect.id,
+        implementation,
     );
     let stream = match UnixStream::connect(&socket) {
         Ok(stream) => stream,
         Err(_) => spawn_and_connect(request, &socket, dialect)?,
     };
     let payload = serde_json::to_vec(&CheckRequest {
+        implementation: implementation_identity()?.to_owned(),
         project_id: request.project_id.clone(),
         accepted_contract_catalog: request.accepted_contract_catalog.clone(),
         receipt_trust_configuration: request.receipt_trust_configuration.clone(),
+        bundled_contracts: request.bundled_contracts,
         presets: request.presets.clone(),
         enable_rules: request.enable_rules.clone(),
         runtime: request.runtime.clone(),
@@ -788,8 +1183,14 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     let mut header_line = String::new();
     reader.read_line(&mut header_line)?;
     let header: CheckHeader = serde_json::from_str(&header_line)?;
+    verify_implementation(implementation, &header.implementation)?;
     if !header.ok {
         return Err(header.error.into());
+    }
+    match &header.notice {
+        Some(notice) if !notice.is_empty() => eprintln!("{notice}"),
+        Some(_) => {}
+        None => report_withheld_catalogs(request),
     }
     if request.format == "json" {
         // The daemon caches the canonical JSON emission. Stream it directly:
@@ -820,6 +1221,30 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         u64::try_from(body.len()).unwrap_or(u64::MAX),
     );
     Ok(emission.exit_code)
+}
+
+/// The client's copy of the one-shot notice for catalogs withheld for want of
+/// trust. The daemon made the same selection from the same two inputs — the
+/// project's catalogs and whether trust was named — but its stderr is not the
+/// user's terminal, so the notice has to be printed here. It is printed only
+/// after a successful answer, so a daemon failure that falls back to one-shot
+/// does not print it twice. A selection error is left to the analysis, which
+/// already answered.
+fn report_withheld_catalogs(request: &Request) {
+    let project = Path::new(&request.project_id);
+    let directory = if project.is_dir() {
+        project
+    } else {
+        project.parent().unwrap_or_else(|| Path::new("."))
+    };
+    if let Ok(selection) = solid_facts_backend::select_project_catalogs(
+        directory,
+        &request.accepted_contract_catalog,
+        !request.receipt_trust_configuration.is_empty(),
+    ) && let Some(notice) = selection.notice()
+    {
+        eprintln!("{notice}");
+    }
 }
 
 fn report_timings(header: &CheckHeader, elapsed: Duration, received_bytes: u64) {
@@ -899,15 +1324,17 @@ mod tests {
         cell::Cell,
         ffi::OsStr,
         fs,
+        path::{Path, PathBuf},
         time::Duration,
         time::{SystemTime, UNIX_EPOCH},
     };
 
     use super::{
         CheckHeader, CheckRequest, FileRefresh, ProcessMemory, cache_retention_from, enabled_from,
-        fingerprint_file, normalize_enablement, parse_process_memory,
+        explicit_inputs, fingerprint_file, hash_file, inference_inputs_current,
+        macho_build_identity, normalize_enablement, parse_process_memory,
         process_tree_resident_bytes_from, refresh_file_with, retained_format, socket_path,
-        timing_value,
+        timing_value, verify_implementation,
     };
     use solid_reactive_ir::{CacheRetention, RuntimeEnvironment};
 
@@ -950,14 +1377,127 @@ mod tests {
         normalize_enablement(&mut absent);
         assert!(absent.presets.is_empty());
         assert!(absent.enable_rules.is_empty());
+        // An omitted switch is the on state, not `false`. `#[serde(default)]`
+        // on a bool would have turned the compiled-in tier off for every
+        // request that did not mention it.
+        assert!(absent.bundled_contracts);
+    }
+
+    #[test]
+    fn the_bundled_contract_switch_is_part_of_the_cached_answer() {
+        // One daemon serves every client for a project, and both settings are
+        // eligible for it. Without this the first `--no-bundled-contracts` run
+        // would be answered from a cache built with the tier on, or the
+        // reverse -- silently, because the two differ only in which contracts
+        // were available, not in any input file.
+        let request = |bundled: bool| CheckRequest {
+            implementation: String::from("test-checker"),
+            project_id: "project".into(),
+            accepted_contract_catalog: String::new(),
+            receipt_trust_configuration: String::new(),
+            bundled_contracts: bundled,
+            presets: Vec::new(),
+            enable_rules: Vec::new(),
+            runtime: RuntimeEnvironment::default(),
+        };
+        assert_ne!(
+            explicit_inputs(&request(true)),
+            explicit_inputs(&request(false))
+        );
+    }
+
+    #[test]
+    fn a_lockfile_is_an_admission_input_whether_or_not_it_exists() {
+        // Artifact admission reads the installed tarball integrity out of one
+        // of these. A path that does not exist yet still belongs in the set:
+        // creating a lockfile changes what is admitted, and a cache keyed only
+        // on files that already exist would not notice.
+        let paths = solid_facts_backend::admission_input_paths(Path::new("/project/app"));
+        for expected in [
+            "/project/app/package-lock.json",
+            "/project/app/node_modules/.package-lock.json",
+            "/project/app/bun.lock",
+            "/project/app/pnpm-lock.yaml",
+            "/project/app/yarn.lock",
+            "/project/package-lock.json",
+            // Where pnpm and Bun declare a patch, and where a script names
+            // patch-package's directory (ADR 0131).
+            "/project/app/package.json",
+            "/project/app/pnpm-workspace.yaml",
+            "/project/package.json",
+        ] {
+            assert!(
+                paths.iter().any(|path| path == Path::new(expected)),
+                "{expected} is not an admission input"
+            );
+        }
+    }
+
+    #[test]
+    fn retained_inference_closure_observes_content_absence_membership_and_symlinks() {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let scratch = std::env::temp_dir().join(format!(
+            "daemon-inference-inputs-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        ));
+        fs::create_dir_all(&scratch).unwrap();
+        let source = scratch.join("source.ts");
+        fs::write(&source, "one").unwrap();
+        let observed = |paths: &[PathBuf]| {
+            paths
+                .iter()
+                .map(|path| {
+                    (
+                        path.clone(),
+                        solid_facts_backend::inferred_host_input_digest(path).unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let files = observed(std::slice::from_ref(&source));
+        assert!(inference_inputs_current(&files));
+        let modified = fs::metadata(&source).unwrap().modified().unwrap();
+        fs::write(&source, "two").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(&source)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        assert!(
+            !inference_inputs_current(&files),
+            "same size/mtime/inode cannot bless new bytes"
+        );
+        let absent = scratch.join("vite.config.js");
+        let missing = observed(std::slice::from_ref(&absent));
+        fs::write(&absent, "export default {};").unwrap();
+        assert!(!inference_inputs_current(&missing));
+        let directories = observed(std::slice::from_ref(&scratch));
+        fs::write(scratch.join("excluded-server.ts"), "import './source';").unwrap();
+        assert!(!inference_inputs_current(&directories));
+        let alternate = scratch.join("alternate.ts");
+        fs::write(&alternate, "two").unwrap();
+        let link = scratch.join("linked.ts");
+        std::os::unix::fs::symlink(&source, &link).unwrap();
+        let links = observed(std::slice::from_ref(&link));
+        fs::remove_file(&link).unwrap();
+        std::os::unix::fs::symlink(&alternate, &link).unwrap();
+        assert!(
+            !inference_inputs_current(&links),
+            "equal target bytes do not imply equal link identity"
+        );
+        fs::remove_dir_all(scratch).unwrap();
     }
 
     #[test]
     fn daemon_enablement_order_and_duplicates_normalize_to_one_key() {
         let mut repeated = CheckRequest {
+            implementation: String::from("test-checker"),
             project_id: "project".into(),
             accepted_contract_catalog: String::new(),
             receipt_trust_configuration: String::new(),
+            bundled_contracts: true,
             presets: vec!["z".into(), "preferences".into(), "z".into()],
             enable_rules: vec![
                 "prefer-show".into(),
@@ -972,15 +1512,80 @@ mod tests {
     }
 
     #[test]
-    fn retained_actor_identity_includes_project_and_typefacts_build() {
-        let baseline = socket_path("/project/a/tsconfig.json", "/bin/typefacts-a", "solid-v2");
+    fn loaded_macho_identity_requires_one_complete_build_uuid() {
+        let mut command = Vec::new();
+        command.extend(0x1b_u32.to_le_bytes());
+        command.extend(24_u32.to_le_bytes());
+        command.extend([7_u8; 16]);
+        assert_eq!(
+            macho_build_identity(&command, 1).as_deref(),
+            Some("macho-uuid:07070707070707070707070707070707")
+        );
+        assert!(macho_build_identity(&command[..23], 1).is_none());
+        assert!(macho_build_identity(&command, 0).is_none());
+        assert!(macho_build_identity(&[], 0).is_none());
+        let mut duplicate = command.clone();
+        duplicate.extend(&command);
+        assert!(macho_build_identity(&duplicate, 2).is_none());
+        command[4..8].copy_from_slice(&0_u32.to_le_bytes());
+        assert!(macho_build_identity(&command, 1).is_none());
+    }
+
+    #[test]
+    fn same_path_replacement_cannot_reuse_an_older_implementation() {
+        let scratch =
+            std::env::temp_dir().join(format!("daemon-checker-identity-{}", std::process::id()));
+        fs::create_dir_all(&scratch).unwrap();
+        let path = scratch.join("checker");
+        fs::write(&path, "old checker bytes").unwrap();
+        let old = format!("{:x?}", hash_file(&path).unwrap());
+        let replacement = scratch.join("replacement");
+        fs::write(&replacement, "new checker bytes").unwrap();
+        fs::rename(&replacement, &path).unwrap();
+        let new = format!("{:x?}", hash_file(&path).unwrap());
+        assert_ne!(old, new);
         assert_ne!(
-            baseline,
-            socket_path("/project/b/tsconfig.json", "/bin/typefacts-a", "solid-v2")
+            socket_path("project", "typefacts", "solid-v2", &old),
+            socket_path("project", "typefacts", "solid-v2", &new)
+        );
+        assert!(verify_implementation(&new, &old).is_err());
+        assert!(
+            verify_implementation(&new, "").is_err(),
+            "pre-handshake daemon refused"
+        );
+        assert!(
+            verify_implementation(&old, &new).is_err(),
+            "server rejects a foreign client"
+        );
+        assert!(verify_implementation(&new, &new).is_ok());
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn retained_actor_identity_includes_project_and_typefacts_build() {
+        let baseline = socket_path(
+            "/project/a/tsconfig.json",
+            "/bin/typefacts-a",
+            "solid-v2",
+            "checker-a",
         );
         assert_ne!(
             baseline,
-            socket_path("/project/a/tsconfig.json", "/bin/typefacts-b", "solid-v2")
+            socket_path(
+                "/project/b/tsconfig.json",
+                "/bin/typefacts-a",
+                "solid-v2",
+                "checker-a"
+            )
+        );
+        assert_ne!(
+            baseline,
+            socket_path(
+                "/project/a/tsconfig.json",
+                "/bin/typefacts-b",
+                "solid-v2",
+                "checker-a"
+            )
         );
     }
 
@@ -1019,6 +1624,7 @@ mod tests {
     fn retained_timing_reports_cache_generation_and_payload() {
         let value = timing_value(
             &CheckHeader {
+                implementation: String::from("test-checker"),
                 ok: true,
                 status: "certified".into(),
                 error: String::new(),
@@ -1026,6 +1632,7 @@ mod tests {
                 generation: 7,
                 analysis_ns: 11,
                 response_bytes: 13,
+                notice: None,
             },
             Duration::from_nanos(17),
             13,

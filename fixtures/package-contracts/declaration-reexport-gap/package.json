@@ -1,0 +1,11 @@
+{
+  "name": "declaration-reexport-gap-package",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  }
+}

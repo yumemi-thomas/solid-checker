@@ -1,0 +1,145 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "85295d5999d5f6198b094f69186e974abbcebed62bb7089a9f69eb8abcd22086",
+            "path": "./dist/index.js",
+            "sha256": "feb10791ee234e0065f173287db5d02192538099ebe1fcf740f61cfa75e62742"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "7908695440392570d866cf5c841780cd9556491a831c3bf5d9b29536641eaac2"
+          },
+          "exports": {
+            "FormControlContext": "open-callable",
+            "createAnnounce": "open-callable",
+            "createFormControl": "open-callable",
+            "createFormControlInput": "open-callable",
+            "createReducedMotion": "authored-createReducedMotion",
+            "makeAnnounce": "open-callable",
+            "useFormControl": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-ohvuHYkxTNJtOPlhSHHCiLILE7KOQ3K6hcDrq4Fr69euk1Fnpct3d9VxFbgMPxBG31RJtJoD6Yh5BJNwFz84kw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "48f8d8a6471041c33217fcff8126534ab8ef29304baeddd98e665b6d5414f44c"
+    },
+    "name": "@solid-primitives/a11y",
+    "version": "1.0.0-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createReducedMotion": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "reduced-motion"
+            }
+          },
+          {
+            "id": "create-preference",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "reduced-motion"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "reduced-motion",
+            "kind": "reactive-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-preference"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "shape": "callable"
+    }
+  }
+}

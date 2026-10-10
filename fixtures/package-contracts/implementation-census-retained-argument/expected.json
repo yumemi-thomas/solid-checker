@@ -1,0 +1,106 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "45c68a3ec88a05903ed822c94f78be27f316e0de19a90a21b6cf5c4c5c587669",
+            "path": "./index.js",
+            "sha256": "3ae2845e55fcf200315ab14bbceab6534d8b291726a47beb5da2063aa903a4a8"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "2d6730b6cba7ab96f67d90a9de71b526d9eb2c3048fb3257142438113c6f9cbb"
+          },
+          "exports": {
+            "Augmented": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "Escapes": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "HandsOn": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "Keeper": "summary-3a2d7fd86cd780e4a8824472daffdce02b6ae057a09c1deef3e6e958fc969492",
+            "KeeperUnkept": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "Primed": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "PrimedUndescribed": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "Rewritten": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "RunsAtConstruction": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:00aab8498a75bcf0e19bee135296f5ebce788d8d3c8c7a75664b2f37c21cc60c",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "00aab8498a75bcf0e19bee135296f5ebce788d8d3c8c7a75664b2f37c21cc60c"
+    },
+    "name": "implementation-census-retained-argument",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-3a2d7fd86cd780e4a8824472daffdce02b6ae057a09c1deef3e6e958fc969492": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "result-access",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "trigger"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "result-access"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290": {
+      "call": {
+        "closed": [
+          "reads"
+        ],
+        "proposedClosures": [
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    }
+  }
+}

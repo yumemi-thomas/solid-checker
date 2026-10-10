@@ -25,10 +25,11 @@ use thiserror::Error;
 
 use crate::{
     contract_certification::{
-        AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, Policy2ReceiptBindings,
-        Policy2ReceiptProvenance, Policy2TrustConfiguration, authenticate_policy2_receipt,
-        canonicalize_policy2_main, decode_policy2_trust_configuration,
-        policy2_resolved_import_root,
+        AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, DependencyEnvironmentEntry,
+        Policy2ReceiptBindings, Policy2ReceiptProvenance, Policy2TrustConfiguration,
+        authenticate_policy2_receipt, canonicalize_policy2_main,
+        decode_policy2_trust_configuration, policy2_dependency_environment_root,
+        policy2_resolved_import_root, validate_dependency_environment,
     },
     contract_document,
 };
@@ -219,11 +220,11 @@ fn verify_evidence_content(
     }
 }
 
-fn sha256_digest(bytes: &[u8]) -> String {
+pub(crate) fn sha256_digest(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ContractFailure {
     #[error("contract document exceeds the {limit}-byte resource limit")]
     DocumentTooLarge { limit: usize },
@@ -287,6 +288,70 @@ struct AcceptedCatalogEntry {
     bindings: Option<Policy2ReceiptBindings>,
     status: AcceptedCatalogStatus,
     import: ResolvedImport,
+    /// The export conditions `artifactAcceptanceRoot` was computed over.
+    ///
+    /// `None` for a catalog published before this was recorded. Those fall back
+    /// to the `["import"]` guess below, which is what every consumer did
+    /// unconditionally until now — so an older catalog keeps exactly the
+    /// behaviour it had, and a newer one stops needing the guess.
+    #[serde(default)]
+    export_conditions: Option<Vec<String>>,
+    /// The entries behind the receipt's `dependencyEnvironmentRoot`. `None`
+    /// for a catalog published before the binding existed; read only where an
+    /// acceptance is applied by environment, and there only after
+    /// [`verified_dependency_environment`] reproduces the signed root.
+    #[serde(default)]
+    dependency_environment: Option<Vec<DependencyEnvironmentEntry>>,
+}
+
+/// The dependency environment a receipt's bindings state, from the entries
+/// published beside it.
+///
+/// The receipt binds only `dependencyEnvironmentRoot`; the entries travel in a
+/// catalog or bundle index, which is not authenticated. So they are admitted
+/// only when they are canonical and hash to exactly the signed root, and an
+/// entry list beside a receipt that binds no root is refused rather than read:
+/// it would be an environment nobody signed.
+///
+/// `Ok(None)` means the receipt states no environment, states one whose
+/// entries were not published, or binds the retired ambiguous empty root
+/// ([`crate::contract_certification::policy2_ambiguous_empty_dependency_environment_root`]:
+/// an older certifier's "nothing was acquired", which it could not tell apart
+/// from "nothing was read"). A caller that applies acceptances by environment
+/// must refuse all three.
+pub(crate) fn verified_dependency_environment(
+    bindings: &Policy2ReceiptBindings,
+    entries: Option<&[DependencyEnvironmentEntry]>,
+) -> Result<Option<Vec<DependencyEnvironmentEntry>>, ContractFailure> {
+    let mismatch = || ContractFailure::ReceiptMismatch {
+        field: "dependencyEnvironment",
+    };
+    if bindings.dependency_environment_root == ambiguous_empty_environment_root() {
+        return match entries {
+            None | Some([]) => Ok(None),
+            Some(_) => Err(mismatch()),
+        };
+    }
+    match (bindings.dependency_environment_root.is_empty(), entries) {
+        (_, None) => Ok(None),
+        (true, Some(_)) => Err(mismatch()),
+        (false, Some(entries)) => {
+            validate_dependency_environment(entries).map_err(|_| mismatch())?;
+            if policy2_dependency_environment_root(entries) != bindings.dependency_environment_root
+            {
+                return Err(mismatch());
+            }
+            Ok(Some(entries.to_vec()))
+        }
+    }
+}
+
+/// See [`verified_dependency_environment`]; computed once.
+pub(crate) fn ambiguous_empty_environment_root() -> &'static str {
+    static ROOT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ROOT.get_or_init(
+        crate::contract_certification::policy2_ambiguous_empty_dependency_environment_root,
+    )
 }
 
 #[derive(Deserialize)]
@@ -311,6 +376,30 @@ enum AcceptedCatalogStatus {
     ObsoletePolicy1,
     Policy2PersistentLocal,
     Policy2Portable,
+}
+
+/// Decodes and normalizes one catalog document, once per distinct
+/// `documentDigest`.
+///
+/// A digest-duplicated entry is the ordinary shape now that the catalog names
+/// every module of a package that re-exports a dependency: N entries share one
+/// document object and differ only in the importer the generation-time index
+/// is keyed by. Every entry still reads its own file and is digest-checked
+/// against it before it gets here, so nothing is admitted on a neighbour's
+/// evidence; only the decode and normalization is shared, and that is a pure
+/// function of exactly the bytes the digest pins.
+fn normalized_catalog_document<'memo>(
+    memo: &'memo mut BTreeMap<String, solid_reactive_ir::contract_semantics::NormalizedContract>,
+    document_digest: &str,
+    document: &[u8],
+) -> Result<&'memo solid_reactive_ir::contract_semantics::NormalizedContract, ContractFailure> {
+    if !memo.contains_key(document_digest) {
+        let normalized = contract_document::decode(document)?.normalize()?;
+        memo.insert(document_digest.to_owned(), normalized);
+    }
+    Ok(memo
+        .get(document_digest)
+        .expect("the entry was just inserted when absent"))
 }
 
 /// Loads open child proposals for one private graph-generation process. The
@@ -362,6 +451,7 @@ pub fn read_proposal_dependency_catalog_for_generation(
     }
     let base = path.parent().unwrap_or_else(|| Path::new("."));
     let mut projected = Vec::with_capacity(catalog.contracts.len());
+    let mut normalized_documents = BTreeMap::new();
     for mut entry in catalog.contracts {
         let document = read_boundary_file(
             &catalog_member_path(base, &entry.document)?,
@@ -375,11 +465,15 @@ pub fn read_proposal_dependency_catalog_for_generation(
             });
         }
         rebase_catalog_import(base, &mut entry.import)?;
-        let normalized = contract_document::decode(&document)?.normalize()?;
+        let normalized = normalized_catalog_document(
+            &mut normalized_documents,
+            &entry.document_digest,
+            &document,
+        )?;
         let external_targets =
             crate::artifact_resolution::resolved_external_export_targets(&entry.import)?;
         let selected = crate::artifact_resolution::select_and_bind_with_external_targets(
-            &normalized,
+            normalized,
             &entry.import,
             &external_targets,
         )?;
@@ -397,6 +491,10 @@ pub fn read_proposal_dependency_catalog_for_generation(
             importer: entry.import.importer,
             specifier: entry.import.specifier,
             contract,
+            // Unauthenticated projection material for one generation process;
+            // it carries no receipt, so there is no signed artifact identity
+            // to match and this stays importer-only.
+            artifact_identity: None,
         });
     }
     AcceptedContractIndex::new(projected).map_err(|error| ContractFailure::IdentityMismatch {
@@ -435,10 +533,36 @@ pub fn read_accepted_contract_catalog_with_trust(
     path: &Path,
     trust: Option<&Policy2TrustConfiguration>,
 ) -> Result<AcceptedContractIndex, ContractFailure> {
+    read_catalog_with_trust(path, trust, false)
+}
+
+/// Ordinary analysis does not read core documents or receipts. Their catalog
+/// entries are withheld before opening any content object; this grants no
+/// premise about what the actual import resolves to.
+pub fn read_external_contract_catalog_with_trust(
+    path: &Path,
+    trust: Option<&Policy2TrustConfiguration>,
+) -> Result<AcceptedContractIndex, ContractFailure> {
+    read_catalog_with_trust(path, trust, true)
+}
+
+fn read_catalog_with_trust(
+    path: &Path,
+    trust: Option<&Policy2TrustConfiguration>,
+    external_only: bool,
+) -> Result<AcceptedContractIndex, ContractFailure> {
     let (catalog, base) = decode_accepted_contract_catalog(path)?;
     let mut uncertifiable = Vec::with_capacity(catalog.contracts.len());
     let mut accepted = Vec::new();
     for mut entry in catalog.contracts {
+        if external_only
+            && solid_dialect::core_runtime_contract_reference(
+                &entry.import.package_name,
+                &entry.import.specifier,
+            )
+        {
+            continue;
+        }
         let document_path = catalog_member_path(&base, &entry.document)?;
         let document = read_boundary_file(
             &document_path,
@@ -505,10 +629,39 @@ pub fn read_accepted_contract_catalog_with_trust(
                     bindings,
                     provenance,
                 )?;
+                // The published entries must hash to the signed root, or the
+                // catalog states an environment nobody signed.
+                let environment = verified_dependency_environment(
+                    bindings,
+                    entry.dependency_environment.as_deref(),
+                )?;
+                // ADR 0151: an entry built on a compiled-in claim this build
+                // no longer carries is withdrawn with it. It authenticates, so
+                // it is not an error; it is simply not an acceptance here, by
+                // importer or by artifact.
+                if crate::artifact_admission::withdrawn_compiled_in_citation(
+                    &bindings.cited_acceptances,
+                )
+                .is_some()
+                {
+                    continue;
+                }
                 accepted.push(AcceptedContractInput {
                     importer: entry.import.importer.clone(),
                     specifier: entry.import.specifier.clone(),
                     contract,
+                    artifact_identity: default_condition_artifact_identity(
+                        &entry.import,
+                        bindings,
+                        entry.export_conditions.as_deref(),
+                    )
+                    .zip(environment)
+                    .map(|(root, environment)| {
+                        crate::artifact_admission::environment_acceptance_identity(
+                            &root,
+                            &environment,
+                        )
+                    }),
                 });
             }
         }
@@ -522,6 +675,889 @@ pub fn read_accepted_contract_catalog_with_trust(
                 .into_iter()
                 .map(|key| (key, UncertifiableImportReason::ObsoletePolicy1)),
         ))
+}
+
+/// One authenticated policy-2 catalog entry: what a publication merging into
+/// an existing catalog keys it by.
+struct AuthenticatedCatalogEntry {
+    bindings: Policy2ReceiptBindings,
+    import: ResolvedImport,
+}
+
+/// One catalog entry through the ordinary loader, so a merge survivor is
+/// exactly what this project would have accepted from the
+/// catalog on disk.
+fn authenticate_catalog_entry(
+    base: &Path,
+    mut entry: AcceptedCatalogEntry,
+    trust: &Policy2TrustConfiguration,
+) -> Result<AuthenticatedCatalogEntry, ContractFailure> {
+    let provenance = match entry.status {
+        AcceptedCatalogStatus::ObsoletePolicy1 => {
+            return Err(ContractFailure::ReceiptAuthenticationRequired);
+        }
+        AcceptedCatalogStatus::Policy2PersistentLocal => {
+            Policy2ReceiptProvenance::PersistentLocal {
+                trust_store: trust.trust_store(),
+                scope: trust
+                    .persistent_local_scope()
+                    .ok_or(ContractFailure::ReceiptAuthenticationRequired)?,
+            }
+        }
+        AcceptedCatalogStatus::Policy2Portable => Policy2ReceiptProvenance::Portable {
+            trust_store: trust.trust_store(),
+        },
+    };
+    let document = read_boundary_file(
+        &catalog_member_path(base, &entry.document)?,
+        MAX_CONTRACT_DOCUMENT_BYTES,
+        "contract",
+        false,
+    )?;
+    let receipt_path = entry
+        .receipt
+        .as_deref()
+        .ok_or_else(|| catalog_field("policy-2 entry has no receipt path"))
+        .and_then(|path| catalog_member_path(base, path))?;
+    let receipt = read_boundary_file(&receipt_path, MAX_RECEIPT_BYTES, "receipt", true)?;
+    let bindings = entry
+        .bindings
+        .clone()
+        .ok_or_else(|| catalog_field("policy-2 entry has no receipt bindings"))?;
+    verify_catalog_digest(
+        &document,
+        entry.document_digest.as_deref(),
+        "documentDigest",
+    )?;
+    verify_catalog_digest(&receipt, entry.receipt_digest.as_deref(), "receiptDigest")?;
+    rebase_catalog_import(base, &mut entry.import)?;
+    load_authenticated_policy2_contract(&document, &receipt, &entry.import, &bindings, provenance)?;
+    verified_dependency_environment(&bindings, entry.dependency_environment.as_deref())?;
+    Ok(AuthenticatedCatalogEntry {
+        bindings,
+        import: entry.import,
+    })
+}
+
+/// One entry of an existing project catalog that a new publication keeps, in
+/// the exact JSON it was published as, with the two keys a publication
+/// replaces by.
+pub(crate) struct RetainedCatalogEntry {
+    pub(crate) raw: serde_json::Value,
+    /// `(importer, specifier)`, rebased to absolute paths: the index key two
+    /// entries may not share (`AcceptedContractIndex::new` refuses it).
+    pub(crate) import_key: (String, String),
+    /// `(artifactAcceptanceRoot, dependencyEnvironmentRoot)` as signed, when
+    /// the receipt states an acceptance root: the artifact identity.
+    pub(crate) artifact_identity: Option<(String, String)>,
+}
+
+/// The two keys one authenticated catalog entry occupies, for a publisher
+/// deciding what a new publication replaces (see
+/// [`crate::contract_certification::publish_policy2_catalog`]).
+#[doc(hidden)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CatalogMergeKey {
+    pub importer: String,
+    pub specifier: String,
+    /// `(artifactAcceptanceRoot, dependencyEnvironmentRoot)` as signed, when
+    /// the receipt states an acceptance root.
+    pub artifact_identity: Option<(String, String)>,
+}
+
+/// [`catalog_entries_for_merge`] for a publisher outside this crate (the
+/// case-set pointer, which the CLI binary owns): the keys only.
+#[doc(hidden)]
+pub fn catalog_merge_keys(
+    path: &Path,
+    trust: &Policy2TrustConfiguration,
+) -> Result<Vec<CatalogMergeKey>, String> {
+    Ok(catalog_entries_for_merge(path, trust)?
+        .into_iter()
+        .map(|entry| CatalogMergeKey {
+            importer: entry.import_key.0,
+            specifier: entry.import_key.1,
+            artifact_identity: entry.artifact_identity,
+        })
+        .collect())
+}
+
+/// Reads the catalog a new publication is about to merge into, and refuses
+/// the merge -- naming every entry that failed -- unless every entry
+/// authenticates under `trust`, the trust configuration the new publication
+/// ships.
+///
+/// Dropping an entry that does not authenticate would lose a contract without
+/// a word; keeping it would publish a catalog whose one trust configuration
+/// cannot read it, and that fails the *whole* catalog for every consumer. So
+/// neither: the caller refuses and says which entries are in the way.
+pub(crate) fn catalog_entries_for_merge(
+    path: &Path,
+    trust: &Policy2TrustConfiguration,
+) -> Result<Vec<RetainedCatalogEntry>, String> {
+    // One read, decoded twice: the typed reader authenticates, and the raw
+    // entries are what the merged catalog carries forward unchanged.
+    let bytes = read_boundary_file(path, MAX_CATALOG_BYTES, "accepted contract catalog", false)
+        .map_err(|error| error.to_string())?;
+    let (catalog, base) =
+        decode_accepted_contract_catalog_bytes(path, &bytes).map_err(|error| error.to_string())?;
+    let raw = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .and_then(|document| {
+            document
+                .get("contracts")
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+        })
+        .filter(|raw| raw.len() == catalog.contracts.len())
+        .ok_or_else(|| "its contracts array cannot be re-read".to_owned())?;
+    let mut retained = Vec::with_capacity(raw.len());
+    let mut refused = Vec::new();
+    for (index, (entry, raw)) in catalog.contracts.into_iter().zip(raw).enumerate() {
+        let label = format!(
+            "entry {index} ({} imported from {})",
+            entry.import.specifier, entry.import.importer
+        );
+        match authenticate_catalog_entry(&base, entry, trust) {
+            Ok(entry) => retained.push(RetainedCatalogEntry {
+                raw,
+                import_key: (entry.import.importer, entry.import.specifier),
+                artifact_identity: (!entry.bindings.artifact_acceptance_root.is_empty()).then_some(
+                    (
+                        entry.bindings.artifact_acceptance_root,
+                        entry.bindings.dependency_environment_root,
+                    ),
+                ),
+            }),
+            Err(error) => refused.push(format!("{label}: {error}")),
+        }
+    }
+    if refused.is_empty() {
+        Ok(retained)
+    } else {
+        Err(format!(
+            "{} of its entries do not authenticate under the new trust configuration: {}",
+            refused.len(),
+            refused.join("; ")
+        ))
+    }
+}
+
+/// The receipt's importer-free artifact identity, but only when this
+/// acceptance was issued under the default single `import` condition.
+///
+/// This is the artifact half of the key. The reader qualifies it with the
+/// verified dependency environment ([`crate::artifact_admission::
+/// environment_acceptance_identity`]), and an entry whose receipt states no
+/// environment gets no artifact key at all: it stays importer-keyed.
+///
+/// Conditions select the artifact, and they are not written in the catalog's
+/// import record — only folded into the signed root. So the check is a
+/// recomputation: derive the identity assuming `["import"]` and keep it only if
+/// it reproduces what the receipt signed. A multi-condition acceptance does not
+/// reproduce it, yields `None`, and stays importer-only, which is the
+/// fail-closed direction — those imports keep raising the obligation they raise
+/// today rather than matching on a condition set nobody checked.
+///
+/// The narrowing exists because the analyzer has no condition facts at all
+/// (`2026-09-14-acceptance-identity-spike.md` § 5). When it has them, this
+/// becomes a comparison against the consumer's own conditions and the
+/// restriction lifts.
+fn default_condition_artifact_identity(
+    import: &crate::artifact_resolution::ResolvedImport,
+    bindings: &crate::contract_certification::Policy2ReceiptBindings,
+    export_conditions: Option<&[String]>,
+) -> Option<String> {
+    if bindings.artifact_acceptance_root.is_empty() {
+        return None;
+    }
+    // The set the catalog recorded, and only `["import"]` as a fallback for a
+    // catalog published before it was recorded. Guessing was the defect: an
+    // entry certified under `node, import` derived a root for `import`, matched
+    // nothing, and the case was unreachable however the consumer declared
+    // itself. The equality below is still the whole check — a recorded set that
+    // does not reproduce the signed root states nothing.
+    let fallback = ["import".to_owned()];
+    let conditions = export_conditions.unwrap_or(&fallback);
+    let derived =
+        crate::contract_certification::policy2_artifact_acceptance_root(import, conditions).ok()?;
+    (derived == bindings.artifact_acceptance_root).then_some(derived)
+}
+
+/// What the caller can state about a specifier's installed package: its name,
+/// its version, and the registry integrity its lockfile selected. `None` for
+/// anything the project cannot state exactly — an absent lockfile entry, or two
+/// installs that disagree.
+pub type InstalledArtifactIdentity<'a> = dyn Fn(&str) -> Option<(String, String, String)> + 'a;
+
+/// The host's declared export conditions, plus the module format the analyzer
+/// actually resolved with.
+///
+/// `--runtime-target browser` describes an *environment*; it says nothing about
+/// `import` versus `require`, and every export map splits on that first.
+/// Without this an SSR app declaring its target derived `{browser}`, no case's
+/// `["import"]` was a subset of it, and declaring the environment made things
+/// *worse* than declaring nothing — measured.
+///
+/// `import` is added only when the host named neither format itself: a project
+/// that explicitly declares `require` is describing a build whose resolution
+/// this analyzer did not perform, and overriding that would be inventing a
+/// fact. An empty declaration stays empty, because an empty set admits nothing
+/// rather than assuming a condition.
+pub(crate) fn declared_conditions(conditions: &std::collections::BTreeSet<String>) -> Vec<String> {
+    let mut declared = conditions.iter().cloned().collect::<Vec<_>>();
+    if !declared.is_empty() && !declared.iter().any(|it| it == "import" || it == "require") {
+        declared.push("import".to_owned());
+    }
+    declared.sort();
+    declared
+}
+
+/// Derives, for every specifier the project's catalogs accept, whether *this*
+/// project's installed artifact, in *this* project's installed environment, is
+/// the one the acceptance was issued for.
+///
+/// The same rule as the compiled-in tier, not a second one: the candidates go
+/// to [`crate::artifact_admission::admit_by_artifact`], which recomputes the
+/// acceptance root from the installed tree, resolves the receipt's dependency
+/// environment from the imported package's own location, and lets the host's
+/// declaration select a case. A project catalog is usually certified in the
+/// very tree it is read in, so its environment matches by construction; what
+/// this refuses is the same catalog read anywhere else — a copied
+/// `.solid-checker/`, a lockfile that moved a dependency, a nested install.
+///
+/// An entry whose receipt states no `dependencyEnvironmentRoot` (issued before
+/// ADR 0123) is never admitted by artifact. It still authenticates, and its
+/// importer-keyed acceptance still applies to the exact file it was certified
+/// from; only the project-wide reach is refused, because which environment it
+/// was proven in is not a fact it states.
+///
+/// `conditions` is the host's declaration, not a guess: the analyzer has no
+/// condition facts of its own, and conditions select the artifact.
+#[allow(clippy::too_many_arguments)]
+pub fn admitted_project_artifacts(
+    catalogs: &[PathBuf],
+    trust: Option<&Policy2TrustConfiguration>,
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &crate::artifact_admission::InstalledArtifactBytes,
+    resolved_target: &ResolvedTargetIdentity,
+    installed_environment: &crate::artifact_admission::InstalledEnvironment,
+) -> Result<Vec<(String, String)>, ContractFailure> {
+    let _ = (project_directory, trust);
+    // Every candidate, across every catalog. A case set publishes one catalog
+    // *per case*, so a per-catalog decision would never see two cases of the
+    // same package together and could not tell an unambiguous artifact from an
+    // ambiguous one -- it would admit both, which is the unsound direction.
+    let mut candidates = Vec::new();
+    for path in catalogs {
+        let (catalog, _) = decode_accepted_contract_catalog(path)?;
+        for entry in catalog.contracts {
+            if !matches!(
+                entry.status,
+                AcceptedCatalogStatus::Policy2PersistentLocal
+                    | AcceptedCatalogStatus::Policy2Portable
+            ) {
+                continue;
+            }
+            let Some(bindings) = entry
+                .bindings
+                .as_ref()
+                .filter(|bindings| !bindings.artifact_acceptance_root.is_empty())
+            else {
+                continue;
+            };
+            let Some(environment) =
+                verified_dependency_environment(bindings, entry.dependency_environment.as_deref())?
+            else {
+                continue;
+            };
+            let Some((runtime_target, declaration_target)) =
+                package_relative_targets(&entry.import)
+            else {
+                continue;
+            };
+            // The conditions the entry recorded, and `["import"]` only for a
+            // catalog published before they were. Reproducing the signed root
+            // is a statement about the *case*; whether it applies to this
+            // project is decided by the admission rule.
+            let conditions = entry
+                .export_conditions
+                .clone()
+                .unwrap_or_else(|| vec!["import".to_owned()]);
+            candidates.push(ProjectCandidate {
+                identity: crate::artifact_admission::environment_acceptance_identity(
+                    &bindings.artifact_acceptance_root,
+                    &environment,
+                ),
+                specifier: entry.import.specifier.clone(),
+                requested_entrypoint: entry.import.requested_entrypoint.clone(),
+                acceptance_root: bindings.artifact_acceptance_root.clone(),
+                snapshot_root: bindings.snapshot_root.clone(),
+                conditions,
+                runtime_target,
+                declaration_target,
+                environment,
+                citations: bindings.cited_acceptances.clone(),
+            });
+        }
+    }
+    Ok(crate::artifact_admission::admit_by_artifact(
+        candidates.iter().map(ProjectCandidate::acceptance),
+        conditions,
+        installed_integrity,
+        installed_bytes,
+        resolved_target,
+        installed_environment,
+    ))
+}
+
+/// Why each project-catalog acceptance by artifact was or was not admitted
+/// by steps 1-3 of the admission rule ([`crate::artifact_admission::
+/// admission_refusals`]), for `contract check` to say why a package with a
+/// catalog entry is still `missing`. Diagnostic only: it admits nothing, and
+/// unlike [`admitted_project_artifacts`] it keeps entries that state no
+/// environment, because that is one of the answers it exists to give.
+pub fn project_admission_refusals(
+    catalogs: &[PathBuf],
+    installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &crate::artifact_admission::InstalledArtifactBytes,
+    installed_difference: &crate::artifact_admission::InstalledEnvironmentDifference,
+) -> Result<Vec<(String, Option<crate::artifact_admission::AdmissionRefusal>)>, ContractFailure> {
+    project_admission_refusals_where(
+        catalogs,
+        installed_integrity,
+        installed_bytes,
+        installed_difference,
+        |_| true,
+    )
+}
+
+/// [`project_admission_refusals`] over only the entries whose signed bindings
+/// `keep` selects -- the receipts one certification just issued, when a catalog
+/// also holds entries earlier certifications left in it.
+pub(crate) fn project_admission_refusals_where(
+    catalogs: &[PathBuf],
+    installed_integrity: &InstalledArtifactIdentity,
+    installed_bytes: &crate::artifact_admission::InstalledArtifactBytes,
+    installed_difference: &crate::artifact_admission::InstalledEnvironmentDifference,
+    keep: impl Fn(&Policy2ReceiptBindings) -> bool,
+) -> Result<Vec<(String, Option<crate::artifact_admission::AdmissionRefusal>)>, ContractFailure> {
+    let mut candidates = Vec::new();
+    for path in catalogs {
+        let (catalog, _) = decode_accepted_contract_catalog(path)?;
+        for entry in catalog.contracts {
+            if !matches!(
+                entry.status,
+                AcceptedCatalogStatus::Policy2PersistentLocal
+                    | AcceptedCatalogStatus::Policy2Portable
+            ) {
+                continue;
+            }
+            let Some(bindings) = entry
+                .bindings
+                .as_ref()
+                .filter(|bindings| !bindings.artifact_acceptance_root.is_empty())
+                .filter(|bindings| keep(bindings))
+            else {
+                continue;
+            };
+            let environment =
+                verified_dependency_environment(bindings, entry.dependency_environment.as_deref())?;
+            let (runtime_target, declaration_target) =
+                package_relative_targets(&entry.import).unwrap_or_default();
+            candidates.push((
+                ProjectCandidate {
+                    identity: String::new(),
+                    specifier: entry.import.specifier.clone(),
+                    requested_entrypoint: entry.import.requested_entrypoint.clone(),
+                    acceptance_root: bindings.artifact_acceptance_root.clone(),
+                    snapshot_root: bindings.snapshot_root.clone(),
+                    conditions: entry
+                        .export_conditions
+                        .clone()
+                        .unwrap_or_else(|| vec!["import".to_owned()]),
+                    runtime_target,
+                    declaration_target,
+                    environment: environment.clone().unwrap_or_default(),
+                    citations: bindings.cited_acceptances.clone(),
+                },
+                environment.is_some(),
+                entry.import.package_version.clone(),
+            ));
+        }
+    }
+    Ok(crate::artifact_admission::admission_refusals(
+        candidates.iter().map(|(candidate, stated, version)| {
+            let mut acceptance = candidate.acceptance();
+            if !stated {
+                acceptance.environment = None;
+            }
+            (acceptance, version.as_str())
+        }),
+        installed_integrity,
+        installed_bytes,
+        installed_difference,
+    ))
+}
+
+/// One project-catalog entry as an admission candidate, owned because the
+/// catalog it was read from is not kept.
+struct ProjectCandidate {
+    specifier: String,
+    requested_entrypoint: String,
+    conditions: Vec<String>,
+    runtime_target: String,
+    declaration_target: String,
+    acceptance_root: String,
+    snapshot_root: String,
+    environment: Vec<DependencyEnvironmentEntry>,
+    identity: String,
+    /// The compiled-in acceptances its receipt cites (ADR 0151).
+    citations: Vec<crate::contract_certification::CitedAcceptance>,
+}
+
+impl ProjectCandidate {
+    fn acceptance(&self) -> crate::artifact_admission::ArtifactAcceptance<'_> {
+        crate::artifact_admission::ArtifactAcceptance {
+            specifier: &self.specifier,
+            requested_entrypoint: &self.requested_entrypoint,
+            export_conditions: &self.conditions,
+            runtime_target: &self.runtime_target,
+            declaration_target: &self.declaration_target,
+            acceptance_root: &self.acceptance_root,
+            snapshot_root: &self.snapshot_root,
+            patched_install: false,
+            environment: Some(&self.environment),
+            identity: &self.identity,
+            citations: &self.citations,
+        }
+    }
+}
+
+/// The runtime and declaration files an import record names, package-relative.
+///
+/// Both sides of the comparison are absolute paths on different machines, so
+/// the package-relative spelling is the only comparable part. `None` when the
+/// runtime file is not under the package root; the declaration is empty when
+/// the record names none there.
+fn package_relative_targets(
+    import: &crate::artifact_resolution::ResolvedImport,
+) -> Option<(String, String)> {
+    let relative = |path: &str| -> Option<String> {
+        let root = import.package_root.replace('\\', "/");
+        path.replace('\\', "/")
+            .strip_prefix(root.trim_end_matches('/'))
+            .map(|rest| rest.trim_start_matches('/').to_owned())
+            .filter(|rest| !rest.is_empty())
+    };
+    Some((
+        relative(&import.runtime.path)?,
+        relative(&import.declarations.path).unwrap_or_default(),
+    ))
+}
+
+/// Which acceptances can apply to this project, among those certified about a
+/// file it actually resolved.
+///
+/// Two regimes, because the honest answer differs:
+///
+/// - **A declaration** — authoritative, with Node's own selection semantics. A
+///   case applies when every condition it was certified under is one this host
+///   declares, and the most specific such case wins, so exactly one comes back.
+///   Set *equality* would be wrong in both directions: a host declaring
+///   `node, import, development` must still match a case certified under
+///   `node, import`, and a host declaring `require` must not match one
+///   certified under `import` however many declaration files the two branches
+///   share.
+/// - **No declaration** — the linter case. ESLint and Oxlint hosts do not know
+///   their export conditions, and a wrong guess is worse than none: the guess
+///   this replaced was the constant `["import"]`, which refused every project
+///   that declared its real conditions and admitted only ones that declared
+///   that exact set. So **every** reaching candidate comes back, and the
+///   acceptance index decides — see
+///   [`AcceptedContractIndex::with_admitted_artifacts`].
+///
+/// That second regime used to decide here, by admitting when every candidate
+/// was proven about the same *runtime file*, on the ground that they then
+/// describe the same bytes. They do not: a contract describes an entry file's
+/// export surface, but its semantics depend on the whole module closure, and
+/// conditions select that closure. The rule compared where a case came from
+/// rather than what it says, and nothing available here can say it — this
+/// module reads catalog metadata and never opens a document. The index holds
+/// the semantics, so the index is where the comparison belongs, and handing it
+/// the candidates is all this can soundly do.
+///
+/// **And a case is certified for one host, or for none (ADR 0140).** A case
+/// certified under a host-target condition ([`solid_dialect::HostTargetCondition`]:
+/// `browser`, `node`, `deno`, `worker`) describes the closure that host
+/// resolves: `solid-js`' own bodies differ by host (`createSignal` and
+/// `createMemo` perform no `create` in `dist/solid.js` and reach
+/// `ctx.serialize` in `dist/server.js`), a scoped dialect row may have closed a
+/// domain on the browser reading alone, and any dependency's `exports` map may
+/// select a different file per host. So the host partition is decided before
+/// the subset rule, and it is equality, never inclusion:
+///
+/// - **A host that declared no host condition** — every ESLint and Oxlint run,
+///   and a declaration naming only `import`, `solid`, `development` and the
+///   like — receives only the host-free cases, whatever it declared besides. It
+///   does not know whether the code it checks runs in a browser or renders on
+///   a server, so it is handed no host's case at all, before
+///   `agreed_admissions` compares what is left: agreement with a host-free case
+///   must not smuggle a host's claim in.
+/// - **A host that declared host conditions** (`--runtime-target browser`, or
+///   the condition itself) receives only cases certified under exactly those
+///   hosts, and then the subset rule below applies unchanged. A host-free case
+///   is **not** admitted to it, even where its conditions are a subset of the
+///   declaration: `["import"]` resolved the closure the way no real host does
+///   (`solid-js`' `default` arm, the browser bundle, beside every dependency's
+///   default target), so for a declared host it is a guess, and a host with no
+///   case certified for it gets no contract rather than that guess.
+///
+/// The consumer's declaration is the only source of truth for its host: the
+/// checker reads no `tsconfig` `customConditions`, bundler configuration or
+/// compiler target to infer one, and a host it cannot state exactly is the
+/// undeclared host above.
+pub(crate) fn admissible_cases<'a>(
+    reaching: &[&'a AuthenticCase],
+    declared: &[String],
+) -> Vec<&'a AuthenticCase> {
+    let declared_hosts = host_targets(declared);
+    let same_hosts = reaching
+        .iter()
+        .copied()
+        .filter(|case| host_targets(&case.conditions) == declared_hosts)
+        .collect::<Vec<_>>();
+    if declared.is_empty() {
+        return same_hosts;
+    }
+    select_declared_cases(&same_hosts, declared)
+}
+
+/// The host-target conditions a condition set names (ADR 0140).
+fn host_targets(
+    conditions: &[String],
+) -> std::collections::BTreeSet<solid_dialect::HostTargetCondition> {
+    conditions
+        .iter()
+        .filter_map(|condition| solid_dialect::HostTargetCondition::from_condition(condition))
+        .collect()
+}
+
+/// The most specific applicable case. Two equally specific cases under
+/// *different* condition sets is not something a declaration can resolve, so
+/// that refuses (empty).
+///
+/// Several under the *same* set are not a declaration question (ADR 0187).
+/// Each is a certification of this artifact case whose whole dependency
+/// environment this tree installs, as when several projects certified one
+/// package version in equivalent trees, so each one's claims were proven for
+/// exactly what is installed here, and any of them is sound. They may still
+/// state different claims (certified by different builds, or closing
+/// different domains), so they are not merged. The one kept is the one whose
+/// certification checked the most environment premises against this tree,
+/// then the smallest identity, so every run keeps the same one.
+fn select_declared_cases<'a>(
+    reaching: &[&'a AuthenticCase],
+    declared: &[String],
+) -> Vec<&'a AuthenticCase> {
+    let applicable = reaching
+        .iter()
+        .copied()
+        .filter(|case| case.conditions.iter().all(|it| declared.contains(it)))
+        .collect::<Vec<_>>();
+    let Some(best) = applicable.iter().map(|case| case.conditions.len()).max() else {
+        return Vec::new();
+    };
+    let most_specific = applicable
+        .into_iter()
+        .filter(|case| case.conditions.len() == best)
+        .collect::<Vec<_>>();
+    let condition_set = |case: &AuthenticCase| {
+        case.conditions
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<String>>()
+    };
+    if !most_specific
+        .iter()
+        .all(|case| condition_set(case) == condition_set(most_specific[0]))
+    {
+        return Vec::new();
+    }
+    most_specific
+        .into_iter()
+        .max_by(|left, right| {
+            left.environment_entries
+                .cmp(&right.environment_entries)
+                .then_with(|| right.identity.cmp(&left.identity))
+        })
+        .into_iter()
+        .collect()
+}
+
+/// One acceptance that reproduced its signed artifact root against this
+/// project's installed bytes.
+pub(crate) struct AuthenticCase {
+    pub(crate) identity: String,
+    /// The runtime file the contract was proven about, package-relative.
+    runtime_target: String,
+    /// The declaration file paired with it, package-relative. Empty when the
+    /// entry names none.
+    declaration_target: String,
+    conditions: Vec<String>,
+    /// How many entries the acceptance's dependency environment states: the
+    /// premises its certification checked against this tree (ADR 0187).
+    environment_entries: usize,
+}
+
+impl AuthenticCase {
+    /// A case whose package-relative targets the caller already holds: the
+    /// shape `admit_by_artifact` receives from every supply (an authored entry
+    /// records them; a catalog entry's are stripped of its package root
+    /// first).
+    pub(crate) fn from_relative(
+        identity: String,
+        runtime_target: String,
+        declaration_target: String,
+        conditions: Vec<String>,
+        environment_entries: usize,
+    ) -> Self {
+        Self {
+            identity,
+            runtime_target,
+            declaration_target,
+            conditions,
+            environment_entries,
+        }
+    }
+
+    /// Whether this project's resolved file is one this case was certified
+    /// about. The analyzer resolves TypeScript's answer, which is the
+    /// declaration file; the runtime spelling is accepted too, so a host that
+    /// resolves the runtime target directly is not excluded.
+    pub(crate) fn reaches(&self, target: &str) -> bool {
+        self.runtime_target == target || self.declaration_target == target
+    }
+}
+
+/// What the caller can state about a specifier's *resolved runtime file*,
+/// relative to the installed package root. `None` when the project cannot state
+/// one exactly — an unresolved import, or two importers that disagree.
+pub type ResolvedTargetIdentity<'a> = dyn Fn(&str) -> Option<String> + 'a;
+
+/// The project's local accepted-contract tier: every catalog it holds.
+///
+/// Discovery has always opened exactly one path,
+/// `.solid-checker/accepted-contracts.json`. Certification does not always
+/// write that path. When a package resolves to more than one artifact case —
+/// which `@solid-primitives/debounce@1.3.0` already does, on its two export
+/// conditions — `contract certify` publishes a **case set** instead: a pointer
+/// at `.solid-checker/accepted-contract-case-set.json`, a content-addressed
+/// case-set document, and one ordinary single-contract catalog per case.
+///
+/// The producer and the consumer of the same tier therefore disagreed on the
+/// filename, and the whole delivery path ended there: a correctly signed,
+/// correctly trusted contract sat on disk and nothing ever opened it. Measured
+/// on a lockfile-pinned project importing `createDebounce` — certification
+/// succeeded, published, and `contract check` still answered "none of the 1
+/// exact imported artifact case(s) has a matching receipt" and told the user to
+/// start over with `contract generate`.
+///
+/// Every hop is digest-verified, because a case set is three files rather than
+/// one and each is a place to substitute bytes: the pointer names the case-set
+/// document's digest, and the document names each case catalog's. Member paths
+/// go through [`catalog_member_path`], so a case cannot name `../` out of the
+/// case-set directory.
+///
+/// Both spellings are read, not one or the other, and a plain
+/// `accepted-contracts.json` only takes *precedence* — it is first in the
+/// returned order, so it wins a conflict over the same import. Treating it as
+/// exclusive was a defect with an immediate symptom: certifying a second
+/// package writes the plain catalog, which then hid the first package's case
+/// set entirely. Measured — `debounce: missing`, `scheduled: certified`, in a
+/// project where both had just been certified. A real project has many
+/// dependencies, so the exclusive reading loses a contract per certification
+/// after the first.
+pub fn discovered_catalog_paths(directory: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
+    catalog_paths_in(&directory.join(".solid-checker"))
+}
+
+/// [`discovered_catalog_paths`] for a catalog root named directly -- the
+/// directory `contract certify --catalog` published into, which need not be a
+/// project's `.solid-checker/`.
+pub fn catalog_paths_in(catalog_root: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
+    let mut paths = Vec::new();
+    let catalog = catalog_root.join("accepted-contracts.json");
+    if catalog.is_file() {
+        paths.push(catalog);
+    }
+    let pointer_path = catalog_root.join("accepted-contract-case-set.json");
+    if !pointer_path.is_file() {
+        return Ok(paths);
+    }
+    let pointer_bytes = read_boundary_file(
+        &pointer_path,
+        MAX_CATALOG_BYTES,
+        "accepted contract case-set pointer",
+        false,
+    )?;
+    let pointer: CaseSetPointerDocument = decode_case_set_json(&pointer_bytes)?;
+    // Version 1 names one case set; version 2 names every case set the
+    // project holds, one per package, so a second certification no longer
+    // replaces the first.
+    let references = match (
+        pointer.case_set_version,
+        pointer.document,
+        pointer.document_digest,
+    ) {
+        (1, Some(document), Some(document_digest)) if pointer.case_sets.is_empty() => {
+            vec![CaseSetReference {
+                document,
+                document_digest,
+            }]
+        }
+        (2, None, None) if pointer.case_sets.len() >= 2 => pointer.case_sets,
+        _ => {
+            return Err(catalog_field(
+                "accepted contract case-set pointer has an unsupported format",
+            ));
+        }
+    };
+    if pointer.format != "solid-checker-accepted-contract-case-set-pointer" {
+        return Err(catalog_field(
+            "accepted contract case-set pointer has an unsupported format",
+        ));
+    }
+    let pointer_base = pointer_path
+        .parent()
+        .ok_or_else(|| catalog_field("accepted contract case-set pointer has no directory"))?;
+    for reference in &references {
+        paths.extend(case_set_catalog_paths(pointer_base, reference)?);
+    }
+    Ok(paths)
+}
+
+/// The packages whose entries in the catalog at `path` ordinary analysis can
+/// only admit by authenticating a policy-2 receipt, sorted and deduplicated.
+///
+/// Empty means the catalog is readable with no trust configuration at all:
+/// every entry is an obsolete policy-1 marker, or a core-runtime entry that
+/// [`read_external_contract_catalog_with_trust`] withholds before it would ask
+/// for trust. The same two exclusions, so this answers exactly whether that
+/// reader would refuse for want of trust.
+pub fn catalog_packages_needing_receipt_trust(path: &Path) -> Result<Vec<String>, ContractFailure> {
+    let (catalog, _) = decode_accepted_contract_catalog(path)?;
+    let mut packages = catalog
+        .contracts
+        .into_iter()
+        .filter(|entry| {
+            matches!(
+                entry.status,
+                AcceptedCatalogStatus::Policy2PersistentLocal
+                    | AcceptedCatalogStatus::Policy2Portable
+            ) && !solid_dialect::core_runtime_contract_reference(
+                &entry.import.package_name,
+                &entry.import.specifier,
+            )
+        })
+        .map(|entry| entry.import.package_name)
+        .collect::<Vec<_>>();
+    packages.sort();
+    packages.dedup();
+    Ok(packages)
+}
+
+/// The case catalogs one digest-verified case-set document names.
+fn case_set_catalog_paths(
+    pointer_base: &Path,
+    reference: &CaseSetReference,
+) -> Result<Vec<PathBuf>, ContractFailure> {
+    let mut paths = Vec::new();
+    let document_path = catalog_member_path(pointer_base, &reference.document)?;
+    let document_bytes = read_boundary_file(
+        &document_path,
+        MAX_CATALOG_BYTES,
+        "accepted contract case set",
+        false,
+    )?;
+    verify_catalog_digest(
+        &document_bytes,
+        Some(reference.document_digest.as_str()),
+        "caseSetDocumentDigest",
+    )?;
+    let document: CaseSetDocument = decode_case_set_json(&document_bytes)?;
+    if document.format != "solid-checker-accepted-contract-case-set"
+        || document.case_set_version != 1
+    {
+        return Err(catalog_field(
+            "accepted contract case set has an unsupported format",
+        ));
+    }
+    let base = document_path
+        .parent()
+        .ok_or_else(|| catalog_field("accepted contract case set has no directory"))?;
+    paths.reserve(document.cases.len());
+    for case in &document.cases {
+        let path = catalog_member_path(base, &case.catalog)?;
+        let bytes =
+            read_boundary_file(&path, MAX_CATALOG_BYTES, "accepted contract catalog", false)?;
+        verify_catalog_digest(&bytes, Some(case.catalog_digest.as_str()), "catalogDigest")?;
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+fn decode_case_set_json<T: serde::de::DeserializeOwned>(
+    bytes: &[u8],
+) -> Result<T, ContractFailure> {
+    crate::bounded_json::decode(
+        bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_CATALOG_BYTES,
+            depth: MAX_BOUNDARY_DEPTH,
+            nodes: MAX_CATALOG_NODES,
+            string_bytes: MAX_BOUNDARY_STRING_BYTES,
+        },
+    )
+    .map_err(|message| ContractFailure::DocumentDecode { message })
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CaseSetPointerDocument {
+    format: String,
+    case_set_version: u16,
+    #[serde(default)]
+    document: Option<String>,
+    #[serde(default)]
+    document_digest: Option<String>,
+    #[serde(default)]
+    case_sets: Vec<CaseSetReference>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CaseSetReference {
+    document: String,
+    document_digest: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CaseSetDocument {
+    format: String,
+    case_set_version: u16,
+    #[serde(default)]
+    cases: Vec<CaseSetCase>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CaseSetCase {
+    catalog: String,
+    catalog_digest: String,
 }
 
 fn catalog_field(message: impl Into<String>) -> ContractFailure {
@@ -543,12 +1579,19 @@ fn verify_catalog_digest(
     Ok(())
 }
 
-/// Returns every exact document and receipt referenced by the catalog so a
+/// Returns external documents and receipts referenced by the catalog so a
 /// retained analyzer cache cannot survive a content-object replacement.
+/// Core objects are not ordinary-analysis inputs and are not opened or watched.
 pub fn accepted_contract_catalog_members(path: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
     let (catalog, base) = decode_accepted_contract_catalog(path)?;
     let mut paths = Vec::with_capacity(catalog.contracts.len());
     for entry in catalog.contracts {
+        if solid_dialect::core_runtime_contract_reference(
+            &entry.import.package_name,
+            &entry.import.specifier,
+        ) {
+            continue;
+        }
         paths.push(catalog_member_path(&base, &entry.document)?);
         if let Some(receipt) = entry.receipt {
             paths.push(catalog_member_path(&base, &receipt)?);
@@ -563,8 +1606,15 @@ fn decode_accepted_contract_catalog(
     path: &Path,
 ) -> Result<(AcceptedCatalogDocument, PathBuf), ContractFailure> {
     let bytes = read_boundary_file(path, MAX_CATALOG_BYTES, "accepted contract catalog", false)?;
+    decode_accepted_contract_catalog_bytes(path, &bytes)
+}
+
+fn decode_accepted_contract_catalog_bytes(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(AcceptedCatalogDocument, PathBuf), ContractFailure> {
     let catalog: AcceptedCatalogDocument = crate::bounded_json::decode(
-        &bytes,
+        bytes,
         crate::bounded_json::Limits {
             bytes: MAX_CATALOG_BYTES,
             depth: MAX_BOUNDARY_DEPTH,
@@ -631,7 +1681,7 @@ fn read_boundary_file(
 }
 
 fn rebase_catalog_import(base: &Path, import: &mut ResolvedImport) -> Result<(), ContractFailure> {
-    import.importer = catalog_absolute_path(base, &import.importer)?;
+    import.importer = catalog_importer_path(base, &import.importer)?;
     import.package_root = catalog_absolute_path(base, &import.package_root)?;
     if let Some(real_root) = &mut import.package_real_root {
         *real_root = catalog_absolute_path(base, real_root)?;
@@ -657,13 +1707,50 @@ fn rebase_catalog_file(base: &Path, file: &mut ResolvedFile) -> Result<(), Contr
     Ok(())
 }
 
-fn catalog_absolute_path(base: &Path, value: &str) -> Result<String, ContractFailure> {
-    let path = Path::new(value);
-    let path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        catalog_member_path(base, value)?
+/// The importer an entry is keyed on, canonicalized as a *path identity*: the
+/// file itself when it exists, and otherwise its canonical directory joined
+/// with its file name. The certification importer `contract certify` binds a
+/// receipt to lives only for the duration of certification -- certify removes
+/// it so nothing is left in the user's installed tree -- and it is spelled at
+/// certification time as the real path of a regular file it has just created,
+/// which is exactly its canonical directory joined with its name. Requiring
+/// the file to exist here would make every published project catalog
+/// unreadable the moment certify cleaned up after itself.
+fn catalog_importer_path(base: &Path, value: &str) -> Result<String, ContractFailure> {
+    let path = catalog_path(base, value)?;
+    if let Ok(canonical) = path.canonicalize() {
+        return Ok(canonical.to_string_lossy().into_owned());
+    }
+    let (Some(directory), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(ContractFailure::DocumentDecode {
+            message: format!(
+                "accepted contract catalog importer {} names no file",
+                path.display()
+            ),
+        });
     };
+    directory
+        .canonicalize()
+        .map(|directory| directory.join(name).to_string_lossy().into_owned())
+        .map_err(|error| ContractFailure::DocumentDecode {
+            message: format!(
+                "accepted contract catalog importer directory {}: {error}",
+                directory.display()
+            ),
+        })
+}
+
+fn catalog_path(base: &Path, value: &str) -> Result<PathBuf, ContractFailure> {
+    let path = Path::new(value);
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        catalog_member_path(base, value)
+    }
+}
+
+fn catalog_absolute_path(base: &Path, value: &str) -> Result<String, ContractFailure> {
+    let path = catalog_path(base, value)?;
     path.canonicalize()
         .map(|path| path.to_string_lossy().into_owned())
         .map_err(|error| ContractFailure::DocumentDecode {
@@ -881,11 +1968,24 @@ pub fn load_accepted_contract_index<'a>(
             importer: source.import.importer.clone(),
             specifier: source.import.specifier.clone(),
             contract: load_accepted_contract(source.document, source.receipt, source.import)?,
+            artifact_identity: None,
         });
     }
     AcceptedContractIndex::new(inputs).map_err(|error| ContractFailure::IdentityMismatch {
         reason: error.to_string(),
     })
+}
+
+/// Host/WASM counterpart of external-only native catalog discovery.
+pub fn load_external_contract_index<'a>(
+    sources: impl IntoIterator<Item = AcceptedContractSource<'a>>,
+) -> Result<AcceptedContractIndex, ContractFailure> {
+    load_accepted_contract_index(sources.into_iter().filter(|source| {
+        !solid_dialect::core_runtime_contract_reference(
+            &source.import.package_name,
+            &source.import.specifier,
+        )
+    }))
 }
 
 pub(crate) fn invalid_identity(reason: impl Into<String>) -> ContractFailure {
@@ -897,6 +1997,546 @@ pub(crate) fn invalid_identity(reason: impl Into<String>) -> ContractFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Builds the three files `contract certify` publishes for a package with
+    /// more than one artifact case, and returns the project directory.
+    fn published_case_set(label: &str, cases: usize) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-case-set-{label}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let catalog_root = root.join(".solid-checker");
+        let mut entries = Vec::new();
+        let mut case_dirs = Vec::new();
+        for index in 0..cases {
+            let catalog = serde_json::json!({
+                "format": "solid-checker-accepted-contract-catalog",
+                "catalogVersion": 2,
+                "contracts": [],
+                "case": index,
+            });
+            let bytes = serde_json::to_vec(&catalog).unwrap();
+            let digest = sha256_digest(&bytes);
+            let name = digest.trim_start_matches("sha256:").to_owned();
+            case_dirs.push((name.clone(), bytes.clone()));
+            entries.push(serde_json::json!({
+                "catalog": format!("cases/{name}/accepted-contracts.json"),
+                "catalogDigest": digest,
+            }));
+        }
+        let document = serde_json::to_vec(&serde_json::json!({
+            "format": "solid-checker-accepted-contract-case-set",
+            "caseSetVersion": 1,
+            "cases": entries,
+        }))
+        .unwrap();
+        let document_digest = sha256_digest(&document);
+        let key = document_digest.trim_start_matches("sha256:").to_owned();
+        let case_set_dir = catalog_root.join("case-sets").join(&key);
+        for (name, bytes) in case_dirs {
+            let dir = case_set_dir.join("cases").join(name);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("accepted-contracts.json"), bytes).unwrap();
+        }
+        fs::create_dir_all(&case_set_dir).unwrap();
+        fs::write(
+            case_set_dir.join("accepted-contract-case-set.json"),
+            &document,
+        )
+        .unwrap();
+        fs::write(
+            catalog_root.join("accepted-contract-case-set.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "format": "solid-checker-accepted-contract-case-set-pointer",
+                "caseSetVersion": 1,
+                "document": format!("case-sets/{key}/accepted-contract-case-set.json"),
+                "documentDigest": document_digest,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        root
+    }
+
+    /// The gap this closes: certification publishes a case set, discovery only
+    /// ever opened `accepted-contracts.json`, and a correctly signed contract
+    /// was therefore written and never read.
+    #[test]
+    fn discovery_opens_the_case_set_certification_actually_publishes() {
+        let project = published_case_set("published", 2);
+        let found = discovered_catalog_paths(&project).expect("the case set resolves");
+        assert_eq!(
+            found.len(),
+            2,
+            "both case catalogs are discovered: {found:?}"
+        );
+        for path in &found {
+            assert!(path.is_file(), "{path:?} is a real catalog");
+        }
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    /// Pointer version 2 names every case set the project holds, so a second
+    /// package's case set no longer replaces the first; version 1 still reads.
+    #[test]
+    fn discovery_reads_every_case_set_a_version_2_pointer_names() {
+        let project = published_case_set("pointer-v2", 2);
+        let catalog_root = project.join(".solid-checker");
+        let pointer_path = catalog_root.join("accepted-contract-case-set.json");
+        let v1: serde_json::Value =
+            serde_json::from_slice(&fs::read(&pointer_path).unwrap()).unwrap();
+        let document = v1["document"].as_str().unwrap().to_owned();
+        let digest = v1["documentDigest"].as_str().unwrap().to_owned();
+        // A second case set: the same verified bytes under another key.
+        let first = catalog_root.join(&document);
+        let second_dir = catalog_root.join("case-sets/second");
+        fs::create_dir_all(&second_dir).unwrap();
+        fs::copy(&first, second_dir.join("accepted-contract-case-set.json")).unwrap();
+        let cases = first.parent().unwrap().join("cases");
+        for case in fs::read_dir(&cases).unwrap() {
+            let case = case.unwrap();
+            let target = second_dir.join("cases").join(case.file_name());
+            fs::create_dir_all(&target).unwrap();
+            fs::copy(
+                case.path().join("accepted-contracts.json"),
+                target.join("accepted-contracts.json"),
+            )
+            .unwrap();
+        }
+        let write = |value: serde_json::Value| {
+            fs::write(&pointer_path, serde_json::to_vec(&value).unwrap()).unwrap();
+        };
+        write(serde_json::json!({
+            "format": "solid-checker-accepted-contract-case-set-pointer",
+            "caseSetVersion": 2,
+            "caseSets": [
+                { "document": document, "documentDigest": digest },
+                { "document": "case-sets/second/accepted-contract-case-set.json", "documentDigest": digest },
+            ],
+        }));
+        let found = discovered_catalog_paths(&project).expect("a version-2 pointer resolves");
+        assert_eq!(
+            found.len(),
+            4,
+            "both case sets' catalogs are discovered: {found:?}"
+        );
+        // Version 2 with one case set is not a spelling this writer produces.
+        write(serde_json::json!({
+            "format": "solid-checker-accepted-contract-case-set-pointer",
+            "caseSetVersion": 2,
+            "caseSets": [{ "document": document, "documentDigest": digest }],
+        }));
+        assert!(discovered_catalog_paths(&project).is_err());
+        // A tampered member is refused, whichever set names it.
+        write(serde_json::json!({
+            "format": "solid-checker-accepted-contract-case-set-pointer",
+            "caseSetVersion": 2,
+            "caseSets": [
+                { "document": document, "documentDigest": digest },
+                { "document": "case-sets/second/accepted-contract-case-set.json", "documentDigest": sha256_digest(b"other") },
+            ],
+        }));
+        assert!(discovered_catalog_paths(&project).is_err());
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    /// A project with neither spelling discovers nothing, rather than erroring.
+    #[test]
+    fn discovery_of_a_project_with_no_local_tier_is_empty() {
+        let project = std::env::temp_dir().join(format!(
+            "solid-checker-case-set-absent-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&project);
+        fs::create_dir_all(&project).unwrap();
+        assert!(
+            discovered_catalog_paths(&project).unwrap().is_empty(),
+            "no local tier discovers nothing"
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    fn case(identity: &str, runtime: &str, conditions: &[&str]) -> AuthenticCase {
+        AuthenticCase {
+            identity: identity.to_owned(),
+            runtime_target: runtime.to_owned(),
+            declaration_target: "dist/index.d.ts".to_owned(),
+            conditions: conditions.iter().map(|it| (*it).to_owned()).collect(),
+            environment_entries: 0,
+        }
+    }
+
+    fn admissible(cases: &[AuthenticCase], declared: &[&str]) -> Vec<String> {
+        let reaching = cases.iter().collect::<Vec<_>>();
+        let declared = declared
+            .iter()
+            .map(|it| (*it).to_owned())
+            .collect::<Vec<_>>();
+        admissible_cases(&reaching, &declared)
+            .into_iter()
+            .map(|case| case.identity.clone())
+            .collect()
+    }
+
+    /// A declaration narrows to one case, so the old single-answer shape is
+    /// still the right one to assert against.
+    fn selected(cases: &[AuthenticCase], declared: &[&str]) -> Option<String> {
+        let mut admissible = admissible(cases, declared);
+        assert!(
+            admissible.len() <= 1,
+            "a declaration must narrow to at most one case: {admissible:?}"
+        );
+        admissible.pop()
+    }
+
+    /// The defect this replaced: `artifactAcceptanceRoot` is a digest over a
+    /// condition set the catalog never recorded, so a consumer could only guess
+    /// it, and the guess was the constant `["import"]`. A project declaring its
+    /// real conditions was refused; one declaring that exact set was admitted.
+    /// Declaring honestly broke it.
+    ///
+    /// Measured against `@solid-primitives/debounce@1.3.0`, whose two certified
+    /// cases reach the same `dist/index.js` through `/exports/./import` and
+    /// `/exports/./node/import`.
+    #[test]
+    fn a_declaration_selects_by_node_condition_semantics() {
+        let cases = [
+            case("root-import", "dist/index.js", &["import"]),
+            case("root-node", "dist/index.js", &["node", "import"]),
+        ];
+        // A superset of a case's conditions selects it, and the most specific
+        // applicable case wins.
+        assert_eq!(
+            selected(&cases, &["import"]).as_deref(),
+            Some("root-import")
+        );
+        assert_eq!(
+            selected(&cases, &["node", "import"]).as_deref(),
+            Some("root-node"),
+            "the most specific applicable case wins, not the first"
+        );
+        assert_eq!(
+            selected(&cases, &["import", "development"]).as_deref(),
+            Some("root-import"),
+            "a host declaring more than a case needs still matches it"
+        );
+        // ADR 0140: a declared host is handed only cases certified for it. A
+        // browser host matches neither a host-free case nor a node one.
+        assert_eq!(
+            selected(&cases, &["browser", "import", "development"]),
+            None,
+            "a browser host has no case certified for it here"
+        );
+        // A host whose conditions contain none of a case's is not that case.
+        assert_eq!(selected(&cases, &["require"]), None);
+        assert_eq!(selected(&cases, &["solid"]), None);
+    }
+
+    /// ADR 0187: several certifications of one artifact case under the same
+    /// condition set are not a declaration ambiguity. Each is an acceptance
+    /// whose whole environment this tree installs (several projects certified
+    /// the same version in equivalent trees), so one is kept: the one that
+    /// checked the most environment premises, then the smallest identity.
+    /// Equally specific cases under different sets still refuse.
+    #[test]
+    fn same_set_certifications_keep_the_most_premised_one() {
+        let premised = |identity: &str, entries: usize| AuthenticCase {
+            environment_entries: entries,
+            ..case(identity, "dist/esm/index.js", &["browser", "import"])
+        };
+        let same = [premised("b", 9), premised("a", 12), premised("c", 12)];
+        assert_eq!(
+            admissible(&same, &["browser", "csr", "development", "import"]),
+            ["a"]
+        );
+        let different = [
+            case("browser-import", "dist/index.js", &["browser", "import"]),
+            case("browser-solid", "dist/index.js", &["browser", "solid"]),
+        ];
+        assert!(admissible(&different, &["browser", "import", "solid"]).is_empty());
+    }
+
+    /// The linter case. ESLint and Oxlint hosts do not know their export
+    /// conditions, so requiring a declaration would make delivery a no-op for
+    /// them -- silently, which is the worst failure mode a linter can have.
+    ///
+    /// With nothing declared this yields **every** candidate the project could
+    /// have resolved and decides nothing. It used to decide, by admitting when
+    /// all candidates named the same runtime file; that compared where a case
+    /// came from rather than what it says, and this module cannot say what a
+    /// case says -- it reads catalog metadata and never opens a document.
+    /// `AcceptedContractIndex::with_admitted_artifacts` holds both contracts
+    /// and makes the call; see
+    /// `an_undeclared_host_admits_only_when_the_candidates_agree`.
+    #[test]
+    fn no_declaration_hands_every_reachable_candidate_to_the_index() {
+        let same = [
+            case("root-import", "dist/index.js", &["import"]),
+            case("root-node", "dist/index.js", &["node", "import"]),
+        ];
+        // A node case is a host's case, so it does not travel (ADR 0140).
+        assert_eq!(admissible(&same, &[]), ["root-import"]);
+        // One `.d.ts` shared by branches that run *different* files. Both are
+        // still candidates here: whether they can both apply depends on whether
+        // they claim the same thing, which is not knowable from these records.
+        let differing = [
+            case("root-import", "dist/index.js", &["import"]),
+            case("root-require", "dist/index.cjs", &["require"]),
+        ];
+        assert_eq!(admissible(&differing, &[]), ["root-import", "root-require"]);
+        // With a declaration the same pair is decided here, and exactly.
+        assert_eq!(
+            selected(&differing, &["require"]).as_deref(),
+            Some("root-require")
+        );
+    }
+
+    /// The shape a Solid app with SSR actually has: one `.d.ts`, two runtime
+    /// files, and *both* of them real — the server bundle runs one and the
+    /// browser bundle the other. There is no single answer for such a project,
+    /// which is why the environment is declared per analysis run rather than
+    /// derived, and why declaring nothing has to refuse instead of picking.
+    #[test]
+    fn an_ssr_package_is_selected_by_the_declared_environment() {
+        let cases = [
+            case("server", "dist/server.js", &["node", "import"]),
+            case("client", "dist/index.js", &["browser", "import"]),
+        ];
+        assert_eq!(
+            selected(&cases, &["import", "node"]).as_deref(),
+            Some("server"),
+            "the server pass selects the artifact the server actually runs"
+        );
+        assert_eq!(
+            selected(&cases, &["browser", "import"]).as_deref(),
+            Some("client")
+        );
+        // `--runtime-target node --rendering string-ssr` folds to this.
+        assert_eq!(
+            selected(&cases, &["import", "node", "string-ssr"]).as_deref(),
+            Some("server"),
+            "a host declaring more than the case needs still matches it"
+        );
+        // Two real artifacts and no declaration is not something *this* can
+        // decide, and neither case may travel: each describes one host's
+        // closure (ADR 0140), so an undeclared host receives neither.
+        assert!(admissible(&cases, &[]).is_empty());
+    }
+
+    /// The owner's rule for a host-scoped case: an undeclared host never
+    /// receives one, whether it is the only candidate or one of several, and a
+    /// host that declares the condition receives it by the subset rule.
+    #[test]
+    fn a_browser_scoped_case_needs_a_declared_browser_host() {
+        let lone = [case("client", "dist/index.js", &["browser", "import"])];
+        assert!(admissible(&lone, &[]).is_empty());
+        assert_eq!(
+            selected(&lone, &["browser", "import"]).as_deref(),
+            Some("client")
+        );
+        assert_eq!(
+            selected(&lone, &["browser", "development", "import"]).as_deref(),
+            Some("client"),
+            "a host declaring more than the case needs still matches it"
+        );
+        assert!(selected(&lone, &["import"]).is_none());
+        assert!(selected(&lone, &["import", "node"]).is_none());
+
+        // Beside the unscoped case the tier's `["import"]` shape: dropped
+        // before any comparison, so agreement with it cannot smuggle a scoped
+        // claim in; the unscoped case is what an undeclared host still sees.
+        let pair = [
+            case("client", "dist/index.js", &["browser", "import"]),
+            case("plain", "dist/index.js", &["import"]),
+        ];
+        assert_eq!(admissible(&pair, &[]), ["plain"]);
+        assert_eq!(
+            selected(&pair, &["browser", "import"]).as_deref(),
+            Some("client"),
+            "the most specific applicable case wins for a browser host"
+        );
+        assert_eq!(selected(&pair, &["import"]).as_deref(), Some("plain"));
+        // Every host condition is dropped for an undeclared host, `node`
+        // included (ADR 0140); a `solid` case is host-free and still travels.
+        let unscoped = [
+            case("solid", "dist/index.js", &["import", "solid"]),
+            case("server", "dist/index.js", &["import", "node"]),
+            case("edge", "dist/index.js", &["import", "worker"]),
+        ];
+        assert_eq!(admissible(&unscoped, &[]), ["solid"]);
+    }
+
+    /// ADR 0140: a case is certified for one host or for none, and a host is
+    /// handed only the cases certified for exactly its hosts. Host-free cases
+    /// go to hosts that declared no host; a declared host never falls back to
+    /// one, and a host no certification covered gets no contract.
+    #[test]
+    fn a_declared_host_receives_only_cases_certified_for_it() {
+        let cases = [
+            case("plain", "dist/index.js", &["import"]),
+            case("plain-solid", "dist/index.js", &["import", "solid"]),
+            case("client", "dist/index.js", &["browser", "import"]),
+            case(
+                "client-solid",
+                "dist/index.js",
+                &["browser", "import", "solid"],
+            ),
+            case("server", "dist/index.js", &["import", "node"]),
+        ];
+        assert_eq!(
+            selected(&cases, &["browser", "import"]).as_deref(),
+            Some("client")
+        );
+        assert_eq!(
+            selected(&cases, &["browser", "development", "import", "solid"]).as_deref(),
+            Some("client-solid"),
+            "the subset rule still picks the most specific case within the host"
+        );
+        assert_eq!(
+            selected(&cases, &["import", "node", "string-ssr"]).as_deref(),
+            Some("server")
+        );
+        assert_eq!(
+            selected(&cases, &["import", "solid"]).as_deref(),
+            Some("plain-solid"),
+            "a declaration naming no host is the host-free partition"
+        );
+        // Hosts nothing was certified for: no contract, never a fallback.
+        assert_eq!(selected(&cases, &["deno", "import"]), None);
+        assert_eq!(selected(&cases, &["import", "worker"]), None);
+        let host_free_only = [case("plain", "dist/index.js", &["import"])];
+        assert_eq!(selected(&host_free_only, &["browser", "import"]), None);
+        assert_eq!(selected(&host_free_only, &["import", "node"]), None);
+        // Two hosts at once is a declaration no single-host case answers.
+        assert_eq!(selected(&cases, &["browser", "import", "node"]), None);
+    }
+
+    /// Nothing resolved, or nothing certified about what was resolved.
+    #[test]
+    fn no_candidate_admits_nothing() {
+        assert!(admissible(&[], &[]).is_empty());
+        assert!(admissible(&[], &["import"]).is_empty());
+    }
+
+    /// Both spellings are read. The older one only takes *precedence*.
+    ///
+    /// Exclusivity was a defect with an immediate symptom: `contract certify`
+    /// writes the plain catalog for a single-case package and a case set for a
+    /// multi-case one, so certifying a second dependency hid the first.
+    #[test]
+    fn a_plain_catalog_takes_precedence_without_hiding_a_case_set() {
+        let project = published_case_set("precedence", 2);
+        let plain = project.join(".solid-checker/accepted-contracts.json");
+        fs::write(&plain, b"{\"contracts\":[]}").unwrap();
+        let found = discovered_catalog_paths(&project).unwrap();
+        assert_eq!(
+            found.len(),
+            3,
+            "the plain catalog and both cases: {found:?}"
+        );
+        assert_eq!(found[0], plain, "the plain catalog is consulted first");
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    /// Both digest-verified hops refuse a substitution, and neither refusal is
+    /// silent.
+    ///
+    /// The pointer itself is deliberately *not* on this list: nothing above it
+    /// names its digest, because it is the root of the local tier. Its
+    /// authority comes from the receipt each catalog carries, not from a hash
+    /// chain that would have to terminate in the same directory an attacker
+    /// already wrote to.
+    #[test]
+    fn every_digest_bound_case_set_hop_refuses_a_substitution() {
+        // The case-set document, named by the pointer's `documentDigest`.
+        let project = published_case_set("tamper-document", 1);
+        let pointer: serde_json::Value = serde_json::from_slice(
+            &fs::read(project.join(".solid-checker/accepted-contract-case-set.json")).unwrap(),
+        )
+        .unwrap();
+        let document = project
+            .join(".solid-checker")
+            .join(pointer["document"].as_str().unwrap());
+        let mut body: serde_json::Value =
+            serde_json::from_slice(&fs::read(&document).unwrap()).unwrap();
+        body["tampered"] = serde_json::json!(true);
+        fs::write(&document, serde_json::to_vec(&body).unwrap()).unwrap();
+        assert!(
+            matches!(
+                discovered_catalog_paths(&project),
+                Err(ContractFailure::ReceiptMismatch {
+                    field: "caseSetDocumentDigest"
+                })
+            ),
+            "a substituted case-set document must refuse"
+        );
+        let _ = fs::remove_dir_all(&project);
+
+        // A case catalog, named by the document's `catalogDigest`.
+        let project = published_case_set("tamper-catalog", 1);
+        let catalog = discovered_catalog_paths(&project).unwrap()[0].clone();
+        let mut body: serde_json::Value =
+            serde_json::from_slice(&fs::read(&catalog).unwrap()).unwrap();
+        body["tampered"] = serde_json::json!(true);
+        fs::write(&catalog, serde_json::to_vec(&body).unwrap()).unwrap();
+        assert!(
+            matches!(
+                discovered_catalog_paths(&project),
+                Err(ContractFailure::ReceiptMismatch {
+                    field: "catalogDigest"
+                })
+            ),
+            "a substituted case catalog must refuse"
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    /// A case may not name its way out of the case-set directory.
+    #[test]
+    fn a_case_cannot_escape_the_case_set_directory() {
+        let project = published_case_set("escape", 1);
+        let pointer = project.join(".solid-checker/accepted-contract-case-set.json");
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&fs::read(&pointer).unwrap()).unwrap();
+        document["document"] = serde_json::json!("../../../etc/passwd");
+        fs::write(&pointer, serde_json::to_vec(&document).unwrap()).unwrap();
+        assert!(
+            discovered_catalog_paths(&project).is_err(),
+            "a traversing member path must refuse"
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn host_core_contract_payloads_are_withheld_without_decoding() {
+        let catalog: serde_json::Value = serde_json::from_slice(include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/reactive-ir/package-return-consumer/.solid-checker/accepted-contracts.json"
+        ))).unwrap();
+        let mut import: ResolvedImport =
+            serde_json::from_value(catalog["contracts"][0]["import"].clone()).unwrap();
+        import.specifier = "aliased-core".into();
+        for package in ["solid-js", "@solidjs/signals", "@solidjs/web"] {
+            import.package_name = package.into();
+            let index = load_external_contract_index([AcceptedContractSource {
+                document: b"not JSON",
+                receipt: b"not a receipt",
+                import: &import,
+            }])
+            .unwrap();
+            assert!(index.semantic_identity().is_empty());
+        }
+        import.package_name = "@solidjs/web-extra".into();
+        assert!(
+            load_external_contract_index([AcceptedContractSource {
+                document: b"not JSON",
+                receipt: b"not a receipt",
+                import: &import,
+            }])
+            .is_err()
+        );
+    }
 
     #[test]
     fn policy1_receipts_are_obsolete_at_the_active_boundary() {
@@ -912,5 +2552,30 @@ mod tests {
     #[test]
     fn policy2_receipts_require_authenticated_provenance() {
         assert!(require_policy2_receipt(br#"{"receiptVersion":2}"#).is_ok());
+    }
+
+    #[test]
+    fn one_document_digest_normalizes_once_for_every_catalog_entry() {
+        const DOCUMENT: &[u8] = br#"{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test","manifest":{"path":"package.json","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"summaries":{"plain":{"shape":"plain"}},"entrypoints":{".":{"artifact":{"path":"dist/solid.js","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","closureSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"declarations":{"path":"types/index.d.ts","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},"exports":{"version":"plain"}}},"sidecars":{}}"#;
+        let digest = sha256_digest(DOCUMENT);
+        let mut memo = BTreeMap::new();
+        let first = normalized_catalog_document(&mut memo, &digest, DOCUMENT)
+            .unwrap()
+            .clone();
+        assert_eq!(memo.len(), 1);
+        // Two catalog entries naming one document object -- the shape every
+        // multi-module re-export now produces.
+        let second = normalized_catalog_document(&mut memo, &digest, DOCUMENT)
+            .unwrap()
+            .clone();
+        assert_eq!(
+            memo.len(),
+            1,
+            "a repeated documentDigest must not decode and normalize again"
+        );
+        assert_eq!(
+            first, second,
+            "both entries bind the same normalized document"
+        );
     }
 }

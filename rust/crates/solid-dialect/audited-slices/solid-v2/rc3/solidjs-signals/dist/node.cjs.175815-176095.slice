@@ -1,0 +1,9 @@
+function createSignal(e, t) {
+    if (typeof e === "function") {
+        const n = computed(e, t);
+        n.P &= ~CONFIG_AUTO_DISPOSE;
+        return [ accessor(n), setMemo.bind(null, n) ];
+    }
+    const n = signal(e, t);
+    return [ accessor(n), setSignal.bind(null, n) ];
+}

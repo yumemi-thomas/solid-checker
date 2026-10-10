@@ -16,7 +16,179 @@ use typefacts::{
 };
 
 use super::{SymbolId, SymbolName};
-use crate::owners::{function_binding_name, jsx_element_is_loading};
+use crate::owners::function_binding_name;
+
+/// The string a computed key names when it is a `const` bound to a string
+/// literal in the same file (`const key = "run"; c[key] = f`).
+fn constant_string_key(file: &FileFacts, key: Span) -> Option<String> {
+    let key = file.ast.peel_ts_sugar_span(key);
+    let declaration = file.ast.reference_declaration(key)?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .names
+                .first()
+                .is_some_and(|name| name.span == declaration)
+    })?;
+    if binding.initializer_value_kind != solid_facts::ast::RuntimeValueKind::Primitive {
+        return None;
+    }
+    let text = file.source_text(file.ast.peel_ts_sugar_span(binding.initializer?))?;
+    let unquoted = text
+        .strip_prefix('"')
+        .and_then(|text| text.strip_suffix('"'))
+        .or_else(|| {
+            text.strip_prefix('\'')
+                .and_then(|text| text.strip_suffix('\''))
+        })?;
+    (!unquoted.contains('\\')).then(|| unquoted.to_string())
+}
+
+/// Whether the binding declared at `declaration` is written anywhere in its
+/// file after its declaration: as an assignment target or inside one (a
+/// destructuring pattern), or as a loop head (`for (x of …)`). A write of a
+/// member of it (`x.y = …`) does not rebind it.
+/// Whether some function in `file` returns a bare identifier: the only shape
+/// whose callee syntax a returned-source proof (ADR 0222) reads beyond the
+/// summaries and Type Facts the caches compare.
+pub(crate) fn returns_bare_identifier(file: &FileFacts) -> bool {
+    file.ast
+        .returns
+        .iter()
+        .chain(
+            file.ast
+                .functions
+                .iter()
+                .filter_map(|function| function.expression_return.as_ref()),
+        )
+        .filter_map(|returned| returned.argument)
+        .any(|argument| {
+            let argument = file.ast.peel_ts_sugar_span(argument);
+            file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == argument
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            })
+        })
+}
+
+pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
+    // A redeclaration (`var xs = …` over a parameter, a second `function f`)
+    // writes the same binding without any reference. Any other declaration
+    // of the same name in the scope counts, a shadowing one included.
+    let name = file.source_text(declaration);
+    let scope = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| function.span.contains(declaration))
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map_or(Span::new(0, u32::MAX), |function| function.span);
+    let redeclared = file.ast.bindings.iter().any(|binding| {
+        scope.contains(binding.declaration)
+            && binding
+                .names
+                .iter()
+                .any(|other| other.span != declaration && file.source_text(other.span) == name)
+    }) || file.ast.functions.iter().any(|function| {
+        scope.contains(function.span)
+            && function.kind == solid_facts::ast::FunctionKind::Declaration
+            && function.name.as_ref().is_some_and(|other| {
+                other.span != declaration && file.source_text(other.span) == name
+            })
+    });
+    if redeclared {
+        return true;
+    }
+    let targets = file
+        .ast
+        .assignments
+        .iter()
+        .map(|assignment| assignment.target)
+        .chain(file.ast.iteration_targets.iter().copied())
+        .collect::<Vec<_>>();
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, declared)| *declared == declaration)
+        .any(|(reference, _)| {
+            targets.iter().any(|target| target.contains(*reference))
+                && !file
+                    .ast
+                    .members
+                    .iter()
+                    .any(|member| member.object == *reference)
+        })
+}
+
+/// ADR 0211: what a value's origin proves about the object it evaluates to.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum ValueOrigin<'a> {
+    /// A fresh object of a reviewed standard-library value class: an array
+    /// literal, `new Date(…)`, `Array.from(…)`. Its members are its built-in
+    /// prototype's, none of which reads reactive state.
+    Builtin,
+    /// An instance of exactly this project class.
+    ProjectClass(&'a FileFacts, &'a solid_facts::ast::ClassFact),
+}
+
+/// The standard-library constructors whose instances are plain values: their
+/// built-in methods read and write the instance and call only the callbacks
+/// they are handed. `Proxy`, `Function`, `Promise` and every event target are
+/// left out: their members run user code that was registered elsewhere.
+const BUILTIN_VALUE_CONSTRUCTORS: &[&str] = &[
+    "ArrayConstructor.construct",
+    "DateConstructor.construct",
+    "MapConstructor.construct",
+    "SetConstructor.construct",
+    "WeakMapConstructor.construct",
+    "WeakSetConstructor.construct",
+    "RegExpConstructor.construct",
+    "ArrayBufferConstructor.construct",
+    "DataViewConstructor.construct",
+    "Int8ArrayConstructor.construct",
+    "Uint8ArrayConstructor.construct",
+    "Uint8ClampedArrayConstructor.construct",
+    "Int16ArrayConstructor.construct",
+    "Uint16ArrayConstructor.construct",
+    "Int32ArrayConstructor.construct",
+    "Uint32ArrayConstructor.construct",
+    "Float32ArrayConstructor.construct",
+    "Float64ArrayConstructor.construct",
+    "BigInt64ArrayConstructor.construct",
+    "BigUint64ArrayConstructor.construct",
+];
+
+/// Static standard-library functions that return a fresh array, when called on
+/// the global they are declared for.
+const FRESH_ARRAY_STATICS: &[&str] = &[
+    "ArrayConstructor.from",
+    "ArrayConstructor.of",
+    "ObjectConstructor.keys",
+    "ObjectConstructor.values",
+    "ObjectConstructor.entries",
+];
+
+/// Members of a proven built-in receiver that return the receiver itself.
+const RECEIVER_RETURNING_METHODS: &[&str] = &["sort", "reverse", "fill", "copyWithin"];
+
+/// Members of a proven built-in receiver that return a fresh built-in value:
+/// on an array, one built by its species; on a typed array, buffer or string,
+/// one of its own class. No reviewed value class has a member of these names
+/// that returns anything else.
+const FRESH_VALUE_METHODS: &[&str] = &[
+    "map",
+    "filter",
+    "slice",
+    "concat",
+    "flat",
+    "flatMap",
+    "toSorted",
+    "toReversed",
+    "toSpliced",
+    "with",
+    "split",
+];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ComponentStatus {
@@ -256,12 +428,11 @@ enum SymbolFunction {
     Aborted,
 }
 
-/// Whether any JSX call site renders a function, and whether one of those
-/// call sites is wrapped in a Loading boundary in its caller file.
+/// Whether any JSX call site renders a function. Boundary placement above a
+/// render is resolved transitively by `owners::read_loading_cover`.
 #[derive(Clone, Copy, Default)]
 pub(super) struct CallSiteLoading {
     pub(super) any: bool,
-    pub(super) loading_wrapped: bool,
 }
 
 #[derive(Clone)]
@@ -285,6 +456,24 @@ struct FunctionCallSite {
 
 type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
 
+/// Render sites by rendered function: `(file index, rendered argument span)`
+/// per site ([`SemanticLookup::function_render_call_sites`]).
+type RenderCallSites<'a> = HashMap<(&'a str, Span), Vec<(usize, Span)>>;
+
+/// Rendering-prop flows by value reference: the render sites each reaches
+/// ([`SemanticLookup::prop_render_sites_at`]).
+type PropRenderSites<'a> = HashMap<(&'a str, Span), Vec<Span>>;
+
+/// One argument a project wrapper forwards into a result-access slot
+/// ([`SemanticLookup::result_access_forwarded_arguments`]).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ResultAccessForwarded {
+    /// The argument at the wrapper's call site.
+    pub(super) argument: Span,
+    /// The primitive whose slot the wrapper forwards it into.
+    pub(super) primitive: solid_dialect::Primitive,
+}
+
 /// Lazy project-wide lookups that replace repeated whole-project scans.
 ///
 /// Every map is built at most once per build, on first use, in the exact
@@ -305,6 +494,9 @@ pub(super) struct SemanticLookup<'a> {
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     resolved_contracts: &'a crate::contracts::ResolvedContracts,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
+    /// ADR 0209: the property names some assignment in the project writes
+    /// (`x.name = …`), and whether any writes through a `prototype`.
+    assigned_member_names: OnceLock<(HashSet<String>, bool)>,
     entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
@@ -314,6 +506,8 @@ pub(super) struct SemanticLookup<'a> {
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
     function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
+    render_call_sites: OnceLock<RenderCallSites<'a>>,
+    prop_render_sites: OnceLock<PropRenderSites<'a>>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
@@ -325,6 +519,7 @@ pub(super) struct SemanticLookup<'a> {
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: OnceLock<bool>,
     component_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    result_access_forwarded: OnceLock<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
     cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
 }
 
@@ -381,6 +576,18 @@ fn member_at(file: &FileFacts, span: Span) -> Option<&solid_facts::ast::MemberFa
         .map(|index| &file.ast.members[index])
 }
 
+/// Whether `path` lies inside an installation of one of `packages`: its
+/// components contain the package name as consecutive directory names
+/// (`solid-js`, or `@solidjs` then `web`). Exact components, never a
+/// substring, so `my-solid-js-tools/` and `@solidjs/router/` are neither.
+fn declared_in_package(path: &str, packages: &[&str]) -> bool {
+    let components = path.split(['/', '\\']).collect::<Vec<_>>();
+    packages.iter().any(|package| {
+        let name = package.split('/').collect::<Vec<_>>();
+        components.windows(name.len()).any(|window| window == name)
+    })
+}
+
 /// Resolved Solid primitive names for one file's calls and JSX elements,
 /// index-aligned with `file.ast.calls` / `file.ast.jsx_elements`. Computed
 /// once per file per build so per-call classifier scans stop re-resolving
@@ -417,6 +624,7 @@ impl<'a> SemanticLookup<'a> {
             symbol_names,
             resolved_contracts,
             functions_by_symbol: OnceLock::new(),
+            assigned_member_names: OnceLock::new(),
             entities_by_location: OnceLock::new(),
             contained_entities_by_path: OnceLock::new(),
             descriptors_by_symbol: OnceLock::new(),
@@ -426,6 +634,8 @@ impl<'a> SemanticLookup<'a> {
             jsx_call_sites: OnceLock::new(),
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
+            render_call_sites: OnceLock::new(),
+            prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
@@ -437,16 +647,235 @@ impl<'a> SemanticLookup<'a> {
             returned_callback_proof_digest: OnceLock::new(),
             project_has_component_type: OnceLock::new(),
             component_functions: OnceLock::new(),
+            result_access_forwarded: OnceLock::new(),
             cross_file_proof_digest: OnceLock::new(),
         }
     }
 
-    pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<&[super::ContractCallback]> {
+    /// Whether an exact whole-function graph was actually installed.
+    pub(super) fn returned_callable_is_bound(&self, symbol: &str) -> bool {
+        self.resolved_contracts
+            .returned_callable_bindings
+            .contains(symbol)
+    }
+
+    /// Whether this exact function-object member callee has a binding.
+    pub(super) fn returned_member_is_bound(&self, file: &FileFacts, callee: Span) -> bool {
+        self.resolved_contracts
+            .callee_bindings
+            .contains_key(&crate::location(
+                file.path.shared(),
+                file.ast.peel_ts_sugar_span(callee),
+            ))
+    }
+
+    /// The known callback rows of the contract bound to `symbol` that invoke
+    /// the argument as a callable. A non-call row (a property read or
+    /// coercion of the argument, `ContractCallback::is_invocation`) is not an
+    /// invocation any caller of this lookup models, and is left out; so is a
+    /// member-path row (item B of ways-to-improve § 3.3), which invokes a
+    /// member of the argument rather than the argument, and whose execution
+    /// or owner is no claim about the function written at the slot. `Some`
+    /// still means the enumeration is known, even when it holds only such
+    /// rows.
+    pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<Vec<&super::ContractCallback>> {
         self.resolved_contracts
             .by_symbol
             .get(symbol)
             .and_then(|binding| binding.summary.callbacks.known())
-            .map(Vec::as_slice)
+            .map(|callbacks| {
+                callbacks
+                    .iter()
+                    .filter(|callback| callback.invokes_argument())
+                    .collect()
+            })
+    }
+
+    /// Exact admitted factory return; callers do not inspect contract storage.
+    pub(super) fn contract_return_at_call(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<(&crate::ContractReturn, &str, &Location)> {
+        let binding = self
+            .resolved_contracts
+            .by_symbol
+            .get(self.callee_symbol(file, call.callee)?)?;
+        Some((
+            self.resolved_contracts
+                .direct_returns
+                .get(&binding.symbol)?,
+            binding.local_name.as_str(),
+            &binding.contract_location,
+        ))
+    }
+
+    pub(super) fn contract_callback_results(
+        &self,
+        symbol: &str,
+    ) -> Option<&[crate::ContractCallbackResult]> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.callback_results.as_slice())
+    }
+
+    pub(super) fn captured_argument(
+        &self,
+        symbol: &str,
+        slot: usize,
+    ) -> Option<&solid_facts::ast::ArgumentFact> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)?
+            .summary
+            .captured_arguments
+            .get(&slot)
+    }
+
+    pub(super) fn captured_arguments(
+        &self,
+        symbol: &str,
+    ) -> Option<&std::collections::BTreeMap<usize, solid_facts::ast::ArgumentFact>> {
+        Some(
+            &self
+                .resolved_contracts
+                .by_symbol
+                .get(symbol)?
+                .summary
+                .captured_arguments,
+        )
+    }
+
+    pub(super) fn returned_capture_sources(
+        &self,
+        symbol: &str,
+    ) -> Option<&std::collections::BTreeMap<usize, crate::contract_semantics::ValueSource>> {
+        Some(
+            &self
+                .resolved_contracts
+                .by_symbol
+                .get(symbol)?
+                .summary
+                .returned_callable_effects
+                .as_ref()?
+                .capture_sources,
+        )
+    }
+
+    /// Exact literals retained by a successfully bound returned instance,
+    /// with no factory-time callback invocation of that argument. Their reads
+    /// belong to invocation replay, not to the factory argument's lexical site.
+    pub(super) fn bound_capture_literal_bodies(&self, file: &FileFacts) -> Vec<Span> {
+        let mut bodies = Vec::new();
+        for binding in &file.ast.bindings {
+            let Some(root) = binding
+                .names
+                .first()
+                .and_then(|name| self.entities.at(file.path.as_str(), name.span))
+            else {
+                continue;
+            };
+            if !self.returned_callable_is_bound(root.as_str()) {
+                continue;
+            }
+            let Some(captures) = self.captured_arguments(root.as_str()) else {
+                continue;
+            };
+            if captures.is_empty() {
+                continue;
+            }
+            let Some(factory) = binding.initializer.and_then(|initializer| {
+                file.ast.calls.iter().find(|call| call.span == initializer)
+            }) else {
+                continue;
+            };
+            let Some(callbacks) = self
+                .callee_symbol(file, factory.callee)
+                .and_then(|symbol| self.contract_callbacks(symbol))
+            else {
+                continue;
+            };
+            for argument in captures.values() {
+                let Some(index) = factory
+                    .arguments
+                    .iter()
+                    .position(|input| input.span == argument.span)
+                else {
+                    continue;
+                };
+                if callbacks.iter().any(|callback| callback.parameter == index) {
+                    continue;
+                }
+                if let Some(function) = file
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|function| function.span == argument.span)
+                {
+                    bodies.push(function.body);
+                }
+            }
+        }
+        bodies
+    }
+
+    pub(super) fn contract_result_census_is_closed(&self, symbol: &str) -> bool {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .is_some_and(|binding| {
+                !binding
+                    .summary
+                    .open_claims
+                    .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
+                    && !binding
+                        .summary
+                        .open_claims
+                        .contains(&crate::contract_semantics::ClaimDomain::Returns)
+            })
+    }
+
+    /// ADR 0207: the `event-handler-props` items of the accepted contract
+    /// bound to `symbol`.
+    pub(super) fn contract_event_handler_props(
+        &self,
+        symbol: &str,
+    ) -> Option<&[super::EventHandlerPropsClaim]> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.event_handler_props.as_slice())
+    }
+
+    pub(super) fn contract_inline_accessor_invocation(
+        &self,
+        symbol: &str,
+        parameter: usize,
+    ) -> Option<bool> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .and_then(|binding| {
+                binding
+                    .summary
+                    .inline_accessor_invocations
+                    .get(&parameter)
+                    .copied()
+            })
+    }
+
+    /// ADR 0152: the argument slots the value the contract export bound to
+    /// `symbol` returns invokes on its own invoker's stack, or `None` when no
+    /// contract is bound to it.
+    pub(super) fn contract_returned_invocations(
+        &self,
+        symbol: &str,
+    ) -> Option<&std::collections::BTreeSet<usize>> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| &binding.summary.returned_invocations)
     }
 
     /// The package and imported export name a symbol's contract binding
@@ -484,6 +913,91 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    /// Whether the accepted contract bound to `symbol` closes `creates` with
+    /// no item, or `None` when no contract is bound to it at all.
+    ///
+    /// `Some(false)` is the counterexample the generator's `creates` proposal
+    /// walk refuses on: an open domain and a domain carrying a `create` item
+    /// are both reasons not to propose that the calling export publishes none.
+    /// `None` means this callee is not a contracted dependency export, which is
+    /// not a counterexample this walk can name — see
+    /// [`crate::CreatesProposalWalk`].
+    pub(super) fn contract_creates_closed_empty(&self, symbol: &str) -> Option<bool> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.creates_closed_empty)
+    }
+
+    /// The exact compiler symbol demanded at one span of one file, if any.
+    ///
+    /// Deliberately narrower than [`Self::callee_symbol`]: no wrapper peeling
+    /// and no member fallback, because the callers are spans that *are* a
+    /// binding name (an import's local name) rather than an arbitrary callee
+    /// expression.
+    pub(super) fn entity_symbol(&self, file: &FileFacts, span: Span) -> Option<&'a str> {
+        self.entities
+            .at(file.path.as_str(), span)
+            .map(SymbolId::as_str)
+    }
+
+    /// The module specifier the compiler resolved this callee's declaration to
+    /// originate from, or `None` when the build has no resolved declaration for
+    /// it (or the producer recorded no origin).
+    ///
+    /// An exact resolved fact and nothing weaker: it is the callee's own
+    /// `ResolvedDeclaration::origin_module`, never derived from the callee's
+    /// spelling or from an import statement standing nearby.
+    ///
+    /// **Exact, and frequently absent** — measured 2026-09-17, and worth
+    /// knowing before trusting it. Probed against the audited rc.3 install,
+    /// every `solid-js` primitive callee answered `None` here, so the caller
+    /// that names the package half of a
+    /// [`crate::CreatesDeclineKind::DialectSilent`] record reached its
+    /// import-statement fallback instead. That record's package is therefore
+    /// usually the *written specifier's* package rather than this one, which is
+    /// weaker than it reads: for `solid-js` it cannot tell a re-export of
+    /// `@solidjs/signals`' declaration from `solid-js`' own re-declaration.
+    ///
+    /// Nothing decides an audit on it. The proposal-side denial lookup moved to
+    /// [`Self::callee_declaration_source_file`] for exactly that reason, and the
+    /// census that proves a claim binds an archive. What remains is that the
+    /// decline record — an instrument for ranking *which primitive to audit
+    /// next* — can name a package coarser than the one whose bytes the call
+    /// reached.
+    /// The file the callee's resolved declaration is written in.
+    ///
+    /// Distinct from [`Self::callee_origin_module`], and the distinction is the
+    /// point: `origin_module` is the module the *specifier* resolved to, so it
+    /// cannot tell a re-export from a re-declaration. This resolves through the
+    /// re-export to the file that actually declares the name, which is the only
+    /// thing that identifies the package whose audited bytes a call reaches.
+    ///
+    /// Measured against the audited rc.3 install: a `solid-js` import of
+    /// `untrack` answers `@solidjs/signals/.../core/core.d.ts`, while a
+    /// `solid-js` import of `createSignal` answers
+    /// `solid-js/types/client/hydration.d.ts` -- 2.0 re-exports the first and
+    /// re-declares the second.
+    pub(super) fn callee_declaration_source_file(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a str> {
+        let declaration = self
+            .resolved_callee_call(file, callee)?
+            .declaration
+            .as_ref()?;
+        (!declaration.source_file.is_empty()).then_some(declaration.source_file.as_ref())
+    }
+
+    pub(super) fn callee_origin_module(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
+        let declaration = self
+            .resolved_callee_call(file, callee)?
+            .declaration
+            .as_ref()?;
+        (!declaration.origin_module.is_empty()).then_some(declaration.origin_module.as_ref())
+    }
+
     pub(super) fn contract_owner_requirements(
         &self,
         symbol: &str,
@@ -495,8 +1009,90 @@ impl<'a> SemanticLookup<'a> {
             .map(Vec::as_slice)
     }
 
+    /// ADR 0179: see [`super::ContractExport::leaf_forbidden_operations`].
+    pub(super) fn contract_leaf_forbidden_operations(
+        &self,
+        symbol: &str,
+    ) -> Option<&[super::ContractOwnerRequirement]> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.leaf_forbidden_operations.as_slice())
+    }
+
+    /// Every use of this exact callback slot is a tracked invocation under
+    /// a created owner. Closure proves the universal context; no lower bound
+    /// or schedule is inferred. This is a read-only consumer proof.
+    pub(super) fn contract_callback_reads_are_tracked(
+        &self,
+        symbol: &str,
+        parameter: usize,
+    ) -> bool {
+        let Some(binding) = self.resolved_contracts.by_symbol.get(symbol) else {
+            return false;
+        };
+        if binding
+            .summary
+            .open_claims
+            .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
+        {
+            return false;
+        }
+        // A returned argument/opaque member can expose this same function
+        // to another invoker. This slice handles a closed accessor return
+        // only; broader result shapes need their own escape/use proof.
+        if binding
+            .summary
+            .open_claims
+            .contains(&crate::contract_semantics::ClaimDomain::Returns)
+            || !binding.summary.returns.known().is_some_and(|returned| {
+                returned.as_ref().is_some_and(|returned| {
+                    returned.kind == "accessor"
+                        && returned.parameter.is_none()
+                        && returned.elements.is_empty()
+                        && returned.properties.is_empty()
+                })
+            })
+        {
+            return false;
+        }
+        let Some(callbacks) = binding.summary.callbacks.known() else {
+            return false;
+        };
+        let mut rows = callbacks
+            .iter()
+            .filter(|row| row.parameter == parameter)
+            .peekable();
+        rows.peek().is_some()
+            && rows.all(|row| {
+                row.invokes_argument()
+                    && row.execution == "tracked"
+                    && row.owner.as_deref() == Some("created")
+            })
+    }
+
+    /// ADR 0183: the parameters an accepted contract states are invoked, on
+    /// every call and during it, as the tracked compute of an owned
+    /// computation the export creates.
+    pub(super) fn contract_guaranteed_callback_parameters(
+        &self,
+        symbol: &str,
+    ) -> Option<&std::collections::BTreeSet<usize>> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| &binding.summary.guaranteed_callback_parameters)
+    }
+
     pub(super) fn has_contract_binding(&self, symbol: &SymbolId) -> bool {
         self.resolved_contracts.by_symbol.contains_key(symbol)
+    }
+
+    /// Successful receiver-specific binding of this exact, unwrapped callee.
+    pub(super) fn contract_member_call_is_bound(&self, file: &FileFacts, callee: Span) -> bool {
+        self.resolved_contracts
+            .callee_bindings
+            .contains_key(&crate::location(file.path.shared(), callee))
     }
 
     /// Every primitive this build can resolve at a call site.
@@ -648,6 +1244,71 @@ impl<'a> SemanticLookup<'a> {
             component_keys.sort_unstable();
             let mut hasher = Sha256::new();
             hasher.update(b"components\0");
+            // Scalar-result admission vetoes writes/escapes in any configured
+            // file. Bind that census when a callback-result contract can use
+            // it: a mutation elsewhere must invalidate a cached clean result.
+            if self
+                .resolved_contracts
+                .by_symbol
+                .values()
+                .any(|binding| !binding.summary.callback_results.is_empty())
+            {
+                let mut scalar_inputs = self.files().iter().collect::<Vec<_>>();
+                scalar_inputs.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+                hasher.update(b"scalar-result-inputs\0");
+                for file in scalar_inputs {
+                    let path = file.path.as_str();
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    hasher.update(file.source_hash.as_str().as_bytes());
+                }
+            }
+            // Captured lookup admission reads a project-wide runtime-hazard
+            // census. Bind its resolved instances: an import-only setup edit
+            // can withdraw a graph without changing the using file's sources,
+            // compiler facts or TypeScript source-discovery dependencies.
+            if self.resolved_contracts.by_symbol.values().any(|binding| {
+                binding
+                    .summary
+                    .returned_callable_effects
+                    .as_ref()
+                    .is_some_and(|summary| summary.captured_lookup.is_some())
+            }) {
+                hasher.update(b"captured-lookup-instances\0");
+                let mut instances = self
+                    .resolved_contracts
+                    .returned_callable_bindings
+                    .iter()
+                    .collect::<Vec<_>>();
+                instances.sort_unstable();
+                for instance in instances {
+                    let symbol = instance.as_str();
+                    hasher.update(
+                        u64::try_from(symbol.len())
+                            .unwrap_or(u64::MAX)
+                            .to_le_bytes(),
+                    );
+                    hasher.update(symbol.as_bytes());
+                }
+            }
+            // Returned-source proofs inspect callee syntax and binding facts,
+            // even when its public type and read summary do not change. Bind
+            // the byte identity of every file that can hold such a proof (a
+            // bare identifier return, ADR 0222); a file gaining or losing one
+            // enters or leaves the digest, so the set itself is bound too.
+            let mut source_inputs = self
+                .files()
+                .iter()
+                .filter(|file| returns_bare_identifier(file))
+                .collect::<Vec<_>>();
+            source_inputs.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+            hasher.update(b"returned-source-inputs\0");
+            for file in source_inputs {
+                let path = file.path.as_str();
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(file.source_hash.as_str().as_bytes());
+            }
             for (path, span) in component_keys {
                 hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
                 hasher.update(path.as_bytes());
@@ -658,7 +1319,120 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(b"returned-callbacks\0");
                 hasher.update(returned);
             }
+            // A wrapper in one file decides the role of a callback written in
+            // another. Hashed only when present, so a project with no such
+            // wrapper keeps the digest it had.
+            let forwarded = self.result_access_forwarded_index();
+            if !forwarded.is_empty() {
+                let mut paths = forwarded.keys().copied().collect::<Vec<_>>();
+                paths.sort_unstable();
+                hasher.update(b"result-access-forwarded\0");
+                for path in paths {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    for entry in &forwarded[path] {
+                        hasher.update(entry.argument.start.to_le_bytes());
+                        hasher.update(entry.argument.end.to_le_bytes());
+                    }
+                }
+            }
             Some(hasher.finalize().into())
+        })
+    }
+
+    /// The arguments in `path` that a project function forwards, unchanged,
+    /// into a slot the dialect says runs when the call's returned object is
+    /// read ([`solid_dialect::Dialect::callback_runs_on_result_access`]).
+    ///
+    /// `function hideBy(props, hidden) { return omit(props, hidden); }` makes
+    /// the second argument of every in-project `hideBy(…)` call such a
+    /// callback: its code runs on reads of the view, wherever those happen,
+    /// exactly as if it were written at `omit`. One level of forwarding, by
+    /// exact parameter identity (a single-name parameter binding the
+    /// argument's declaration resolves to) and exact call-site resolution
+    /// ([`Self::function_call_sites`]); a wrapper of a wrapper, a parameter
+    /// renamed through a local, or a destructured parameter is not followed.
+    pub(super) fn result_access_forwarded_arguments(&self, path: &str) -> &[ResultAccessForwarded] {
+        self.result_access_forwarded_index()
+            .get(path)
+            .map_or(&[], Vec::as_slice)
+    }
+
+    fn result_access_forwarded_index(&self) -> &HashMap<&'a str, Vec<ResultAccessForwarded>> {
+        self.result_access_forwarded.get_or_init(|| {
+            let mut forwarded = HashMap::<&'a str, Vec<ResultAccessForwarded>>::new();
+            // Most dialect variants answer no slot at all; skip the walk.
+            let answered = self.project_primitives().iter().any(|primitive| {
+                (0..PROBED_ARGUMENTS).any(|count| {
+                    (0..count).any(|argument| {
+                        self.dialect
+                            .callback_runs_on_result_access(*primitive, argument, count)
+                    })
+                })
+            });
+            if !answered {
+                return forwarded;
+            }
+            let facts: &'a ProjectFacts = self.facts;
+            for file in &facts.files {
+                for call in &file.ast.calls {
+                    let Some(primitive) = self.primitive_at_call(file, call.span) else {
+                        continue;
+                    };
+                    let count = call.arguments.len();
+                    for (index, argument) in call.arguments.iter().enumerate() {
+                        if argument.spread
+                            || argument.value != solid_facts::ast::ArgumentValueKind::Identifier
+                            || !self
+                                .dialect
+                                .callback_runs_on_result_access(primitive, index, count)
+                        {
+                            continue;
+                        }
+                        let Some(declaration) = argument.binding_declaration else {
+                            continue;
+                        };
+                        for function in file.ast.functions_body_containing(call.span) {
+                            let Some(parameter) = function.parameters.iter().position(|binding| {
+                                binding.names.len() == 1 && binding.names[0].span == declaration
+                            }) else {
+                                continue;
+                            };
+                            for (caller, callee) in
+                                self.function_call_sites(file.path.as_str(), function.span)
+                            {
+                                let Some(site) =
+                                    caller.ast.calls.iter().find(|site| site.callee == callee)
+                                else {
+                                    continue;
+                                };
+                                // A spread up to the slot moves arguments into it.
+                                if site
+                                    .arguments
+                                    .iter()
+                                    .take(parameter.saturating_add(1))
+                                    .any(|candidate| candidate.spread)
+                                {
+                                    continue;
+                                }
+                                if let Some(forwarded_argument) = site.arguments.get(parameter) {
+                                    forwarded.entry(caller.path.as_str()).or_default().push(
+                                        ResultAccessForwarded {
+                                            argument: forwarded_argument.span,
+                                            primitive,
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for entries in forwarded.values_mut() {
+                entries.sort_unstable_by_key(|entry| (entry.argument.start, entry.argument.end));
+                entries.dedup_by_key(|entry| entry.argument);
+            }
+            forwarded
         })
     }
 
@@ -743,10 +1517,9 @@ impl<'a> SemanticLookup<'a> {
                     .calls
                     .iter()
                     .map(|call| {
-                        super::primitive_name(
-                            file.path.as_str(),
-                            call.callee,
-                            call.static_callee(&file.source),
+                        super::call_primitive_name(
+                            file,
+                            call,
                             self.entities,
                             self.symbol_names,
                             self.dialect,
@@ -797,15 +1570,45 @@ impl<'a> SemanticLookup<'a> {
             .map(|index| &self.facts.files[*index])
     }
 
+    /// A missing symbol is missing reference evidence, not an empty census.
+    pub(super) fn symbol_references_if_present(&self, symbol: &str) -> Option<Vec<Location>> {
+        self.symbols_by_id()
+            .get(symbol)
+            .map(|candidate| candidate.references().cloned().collect())
+    }
+
+    /// The compiler's attested resolution of the project's import specifiers,
+    /// when the analysis carries it.
+    pub(super) fn resolved_imports(&self) -> Option<&'a solid_facts::AttestedImportIndex> {
+        self.facts.resolved_imports.as_ref()
+    }
+
+    /// The project bundler's resolution of each module load, when the host
+    /// asked for it (ADR 0220).
+    pub(super) fn runtime_resolutions(
+        &self,
+    ) -> Option<&'a solid_facts::runtime_resolution::RuntimeResolutionIndex> {
+        self.facts.runtime_resolutions.as_ref()
+    }
+
+    /// The files declaring the module a namespace binding at `span` names:
+    /// its symbol's alias target's declarations. `None` when Type Facts does
+    /// not resolve it.
+    pub(super) fn namespace_module_paths(&self, path: &str, span: Span) -> Option<Vec<&'a str>> {
+        let symbol = self.entities.at(path, span)?;
+        let symbols = self.symbols_by_id();
+        let target = symbols.get(symbol.as_str())?.alias_target();
+        let paths = symbols
+            .get(target)?
+            .declarations()
+            .iter()
+            .map(|declaration| declaration.location.path.as_ref())
+            .collect::<Vec<&'a str>>();
+        (!paths.is_empty()).then_some(paths)
+    }
+
     pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
-        self.symbols_by_id
-            .get_or_init(|| {
-                self.facts
-                    .typescript
-                    .symbols()
-                    .map(|candidate| (candidate.id(), candidate))
-                    .collect()
-            })
+        self.symbols_by_id()
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
             .unwrap_or_default()
@@ -817,6 +1620,840 @@ impl<'a> SemanticLookup<'a> {
     /// they are called. Building this reverse index once keeps that proof
     /// linear in project facts instead of rescanning every binding for every
     /// call site.
+    /// ADR 0209: the project class `symbol` declares: its one declaration is a
+    /// class declaration, written at the name of a class in an analyzed file.
+    /// A symbol with several declarations (a class merged with an interface or
+    /// a namespace) names no exact class.
+    pub(super) fn class_for_symbol(
+        &self,
+        symbol: &str,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::ClassFact)> {
+        let [declaration] = self.symbols_by_id().get(symbol)?.declarations() else {
+            return None;
+        };
+        if &*declaration.kind != "class" {
+            return None;
+        }
+        let file = self
+            .facts
+            .files
+            .iter()
+            .find(|file| *declaration.location.path == *file.path.as_str())?;
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(declaration.location.start_byte),
+            u32::try_from(declaration.location.end_byte),
+        ) else {
+            return None;
+        };
+        let at = Span::new(start, end);
+        let class = file.ast.classes.iter().find(|class| {
+            class
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == at || class.span == at)
+        })?;
+        Some((file, class))
+    }
+
+    /// ADR 0209: whether some assignment in the project writes a property
+    /// named `name` on any object, or writes through any `prototype`.
+    pub(super) fn member_name_may_be_reassigned(&self, name: &str) -> bool {
+        let (names, prototype) = self.assigned_member_names.get_or_init(|| {
+            let facts: &'a ProjectFacts = self.facts;
+            let mut names = HashSet::new();
+            let mut prototype = false;
+            for file in &facts.files {
+                let targets = file
+                    .ast
+                    .assignments
+                    .iter()
+                    .map(|assignment| assignment.target)
+                    .chain(file.ast.iteration_targets.iter().copied());
+                for target in targets {
+                    let target = file.ast.peel_ts_sugar_span(target);
+                    let text = file.source_text(target).unwrap_or_default();
+                    // Every member written by the target: the target itself,
+                    // or a leaf of a destructuring pattern (`[c.run] = …`) or
+                    // loop head (`for (c.run of …)`).
+                    // A member that is another written member's object
+                    // (`C.prototype` in `C.prototype.m = f`) is read, not
+                    // written.
+                    let inside = file
+                        .ast
+                        .members
+                        .iter()
+                        .filter(|member| target.contains(member.span))
+                        .collect::<Vec<_>>();
+                    let mut written = inside
+                        .iter()
+                        .copied()
+                        .filter(|member| {
+                            !inside.iter().any(|outer| {
+                                file.ast.peel_ts_sugar_span(outer.object) == member.span
+                            })
+                        })
+                        .peekable();
+                    if written.peek().is_none() && text.contains("prototype") {
+                        prototype = true;
+                    }
+                    for member in written {
+                        if file
+                            .ast
+                            .computed_members
+                            .binary_search(&member.span)
+                            .is_ok()
+                        {
+                            // A computed write names its key only when the key is
+                            // a literal, or a `const` bound to a string literal.
+                            // Any other key, on a prototype, may be any member.
+                            if let Some(literal) = file
+                                .ast
+                                .literal_computed_members
+                                .iter()
+                                .find(|literal| literal.span == member.span)
+                            {
+                                names.insert(literal.key.to_string());
+                                if literal.key.as_str() == "prototype" {
+                                    prototype = true;
+                                }
+                            } else if let Some(key) = constant_string_key(file, member.property) {
+                                if key == "prototype" {
+                                    prototype = true;
+                                }
+                                names.insert(key);
+                            } else if file
+                                .source_text(member.object)
+                                .unwrap_or_default()
+                                .contains("prototype")
+                            {
+                                prototype = true;
+                            }
+                        } else if let Some(property) = file.source_text(member.property) {
+                            names.insert(property.to_string());
+                            if property == "prototype" {
+                                prototype = true;
+                            }
+                        }
+                    }
+                    // A dynamic key not spelled through a prototype (`c[key] = f`
+                    // with `key: keyof C`, or through a prototype alias) is not
+                    // modeled. Like `Object.defineProperty`, it is a reflective
+                    // write this trust boundary leaves out (ADR 0215): vetoing
+                    // every dynamic write would refuse every `xs[i] = v`.
+                }
+            }
+            (names, prototype)
+        });
+        *prototype || names.contains(name)
+    }
+
+    /// ADR 0211: what the origin of the value at `value` proves about the
+    /// object it evaluates to, followed through `const` bindings.
+    ///
+    /// `kind` is the value's syntactic runtime kind where the fact supplies
+    /// one (an argument's, a binding initializer's), `Unknown` elsewhere.
+    pub(super) fn value_origin(
+        &self,
+        file: &FileFacts,
+        value: Span,
+        kind: solid_facts::ast::RuntimeValueKind,
+        depth: usize,
+    ) -> Option<ValueOrigin<'a>> {
+        self.value_origin_assuming(file, value, kind, depth, None)
+    }
+
+    /// [`Self::value_origin`], with one parameter -- a setter updater's
+    /// previous value -- assumed to hold a built-in value already. The
+    /// assumption is the induction step: a signal every write of which keeps a
+    /// built-in value built-in, from a built-in initial value, only ever holds
+    /// one.
+    fn value_origin_assuming(
+        &self,
+        file: &FileFacts,
+        value: Span,
+        kind: solid_facts::ast::RuntimeValueKind,
+        depth: usize,
+        assumed: Option<(&str, Span)>,
+    ) -> Option<ValueOrigin<'a>> {
+        use solid_facts::ast::RuntimeValueKind;
+        if depth == 0 {
+            return None;
+        }
+        // A fresh array: its members are `Array.prototype`'s. A primitive's
+        // are its wrapper prototype's, and a nullish value has none to run.
+        if matches!(
+            kind,
+            RuntimeValueKind::Array | RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
+        ) {
+            return Some(ValueOrigin::Builtin);
+        }
+        let value = file.ast.peel_ts_sugar_span(value);
+        if file.ast.array_literals.binary_search(&value).is_ok() {
+            return Some(ValueOrigin::Builtin);
+        }
+        // `null`, and an `undefined` no local declaration shadows: nothing.
+        match file.source_text(value) {
+            Some("null") => return Some(ValueOrigin::Builtin),
+            Some("undefined") if file.ast.reference_declaration(value).is_none() => {
+                return Some(ValueOrigin::Builtin);
+            }
+            _ => {}
+        }
+        if let Some(call) = file.ast.call_at(value) {
+            return self.call_origin(file, call, depth, assumed);
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == value)
+        {
+            let arm = |span| {
+                matches!(
+                    self.value_origin_assuming(
+                        file,
+                        span,
+                        RuntimeValueKind::Unknown,
+                        depth - 1,
+                        assumed
+                    ),
+                    Some(ValueOrigin::Builtin)
+                )
+            };
+            return (arm(conditional.consequent) && arm(conditional.alternate))
+                .then_some(ValueOrigin::Builtin);
+        }
+        // `a ?? b`, `a || b`, `a && b`: the value is one operand or the other.
+        if let Some(logical) = file
+            .ast
+            .logical_expressions
+            .iter()
+            .find(|logical| logical.span == value)
+        {
+            let operand = |span| {
+                matches!(
+                    self.value_origin_assuming(
+                        file,
+                        span,
+                        RuntimeValueKind::Unknown,
+                        depth - 1,
+                        assumed
+                    ),
+                    Some(ValueOrigin::Builtin)
+                )
+            };
+            return (operand(logical.left) && operand(logical.right))
+                .then_some(ValueOrigin::Builtin);
+        }
+        if let Some((path, parameter)) = assumed
+            && path == file.path.as_str()
+            && file.ast.reference_declaration(value) == Some(parameter)
+        {
+            return Some(ValueOrigin::Builtin);
+        }
+        let (binding_file, binding, _) = self.binding_at_reference(file.path.as_str(), value)?;
+        if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
+            return None;
+        }
+        self.value_origin_assuming(
+            binding_file,
+            binding.initializer?,
+            binding.initializer_value_kind,
+            depth - 1,
+            assumed,
+        )
+    }
+
+    fn call_origin(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        depth: usize,
+        assumed: Option<(&str, Span)>,
+    ) -> Option<ValueOrigin<'a>> {
+        if !call.construct
+            && call.arguments.is_empty()
+            && let Some(origin) = self.accessor_origin(file, call, depth)
+        {
+            return Some(origin);
+        }
+        // A plain call of an exact project function returns what its body
+        // returns. A method call is not followed: its receiver selects it.
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if !call.construct
+            && !self.is_member_span(file, callee)
+            && file.ast.computed_members.binary_search(&callee).is_err()
+            && let Some((function_file, function)) = self
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| self.function_for_symbol(symbol))
+                .filter(|(function_file, function)| {
+                    self.function_value_is_current(function_file, function)
+                })
+        {
+            return self
+                .returns_builtin(function_file, function, None, depth)
+                .then_some(ValueOrigin::Builtin);
+        }
+        if call.construct {
+            if let Some((class_file, class)) = self
+                .callee_symbol(file, call.callee)
+                .and_then(|symbol| self.class_for_symbol(symbol))
+            {
+                return Some(ValueOrigin::ProjectClass(class_file, class));
+            }
+            let declaration =
+                self.standard_library_declaration(file, call, typefacts::CallKind::Construct)?;
+            return BUILTIN_VALUE_CONSTRUCTORS
+                .contains(&declaration.qualified_name.as_ref())
+                .then_some(ValueOrigin::Builtin);
+        }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let member = file.ast.members.iter().find(|member| member.span == callee);
+        // A member of a proven built-in receiver is that receiver's own: its
+        // class's prototype selects it, so no declaration is needed. An
+        // unproven receiver falls through to the declaration below.
+        // `split` defers to its separator's `Symbol.split`, user code unless
+        // the separator is a primitive (or a RegExp literal).
+        let separator_is_primitive = call.arguments.first().is_none_or(|separator| {
+            !separator.spread
+                && separator.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Primitive
+        });
+        if let Some(member) = member
+            && let Some(method) = file.source_text(member.property)
+            && (RECEIVER_RETURNING_METHODS.contains(&method) || FRESH_VALUE_METHODS.contains(&method))
+            && (method != "split" || separator_is_primitive)
+            && !self.member_name_may_be_reassigned(method)
+            // A species-built result follows the receiver's `constructor`.
+            && (RECEIVER_RETURNING_METHODS.contains(&method)
+                || !self.member_name_may_be_reassigned("constructor"))
+            && matches!(
+                self.value_origin_assuming(
+                    file,
+                    member.object,
+                    solid_facts::ast::RuntimeValueKind::Unknown,
+                    depth - 1,
+                    assumed,
+                ),
+                Some(ValueOrigin::Builtin)
+            )
+        {
+            return Some(ValueOrigin::Builtin);
+        }
+        let declaration =
+            self.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+        let name = declaration.qualified_name.as_ref();
+        if FRESH_ARRAY_STATICS.contains(&name) {
+            // `Array.from` called through a subclass (`List.from`) builds that
+            // subclass, under the same declaration.
+            let owner = name.split('.').next().unwrap_or_default();
+            let global = owner.strip_suffix("Constructor").unwrap_or(owner);
+            // The receiver must be that global, not a local of its name.
+            return member
+                .is_some_and(|member| {
+                    let receiver = file.ast.peel_ts_sugar_span(member.object);
+                    file.source_text(receiver) == Some(global)
+                        && file.ast.reference_declaration(receiver).is_none()
+                })
+                .then_some(ValueOrigin::Builtin);
+        }
+        if name == "String.split" {
+            return separator_is_primitive.then_some(ValueOrigin::Builtin);
+        }
+        None
+    }
+
+    /// ADR 0211, phase 2: the value an accessor call `items()` returns, when
+    /// every value the accessor can hold is proven.
+    ///
+    /// - `const [items, setItems] = createSignal(initial)` declared in a
+    ///   function: the initial value, and every value written through the
+    ///   setter, whose every reference in its file is the callee of a call --
+    ///   a setter handed anywhere else may write anything. An updater's
+    ///   returns are proven with its previous value assumed.
+    /// - `const sorted = createMemo(() => …)`: every value its compute, a
+    ///   synchronous function literal, returns.
+    fn accessor_origin(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        depth: usize,
+    ) -> Option<ValueOrigin<'a>> {
+        use solid_dialect::Primitive;
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let (binding_file, binding, _) = self.binding_at_reference(file.path.as_str(), callee)?;
+        if !binding.immutable {
+            return None;
+        }
+        let initializer_span = binding_file
+            .ast
+            .peel_ts_sugar_span(binding.call_initializer?);
+        let index = binding_file
+            .ast
+            .calls
+            .iter()
+            .position(|candidate| candidate.span == initializer_span)?;
+        let initializer = &binding_file.ast.calls[index];
+        let primitive = self.primitives(binding_file).calls[index]
+            .as_ref()
+            .and_then(super::PrimitiveName::primitive)?;
+        let builtin = |file: &FileFacts, argument: &solid_facts::ast::ArgumentFact, assumed| {
+            !argument.spread
+                && matches!(
+                    self.value_origin_assuming(
+                        file,
+                        argument.span,
+                        argument.runtime_value_kind,
+                        depth - 1,
+                        assumed,
+                    ),
+                    Some(ValueOrigin::Builtin)
+                )
+        };
+        match (binding.shape, primitive) {
+            (solid_facts::ast::BindingShape::Array, Primitive::CreateSignal) => {
+                // The accessor is the tuple's first slot, read in its own file.
+                let accessor = binding.array_slots.first()?.as_ref()?;
+                if binding_file.path != file.path
+                    || file.ast.reference_declaration(callee) != Some(accessor.span)
+                    || !binding_file
+                        .ast
+                        .functions
+                        .iter()
+                        .any(|function| function.body.contains(binding.declaration))
+                {
+                    return None;
+                }
+                // `createSignal(fn)` is a writable memo; its value is `fn`'s.
+                if let Some(initial) = initializer.arguments.first()
+                    && (matches!(
+                        initial.value,
+                        solid_facts::ast::ArgumentValueKind::Function
+                            | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                    ) || !builtin(binding_file, initial, None))
+                {
+                    return None;
+                }
+                if let Some(Some(setter)) = binding.array_slots.get(1)
+                    && !self.setter_writes_builtin(binding_file, setter.span, depth)
+                {
+                    return None;
+                }
+                Some(ValueOrigin::Builtin)
+            }
+            (solid_facts::ast::BindingShape::Identifier, Primitive::CreateMemo) => {
+                // Options can supply a value no compute returns
+                // (`loadingValue`), so only the bare form is followed.
+                let [compute] = initializer.arguments.as_slice() else {
+                    return None;
+                };
+                let function =
+                    crate::cleanup::callback_argument_literal(binding_file, compute.span)?;
+                self.returns_builtin(binding_file, function, None, depth)
+                    .then_some(ValueOrigin::Builtin)
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether every write through the setter declared at `setter` is proven
+    /// a built-in value: each reference to it in its file is a call's callee,
+    /// and each call writes nothing, a built-in value, or an updater whose
+    /// returns are built-in given a built-in previous value.
+    fn setter_writes_builtin(&self, file: &FileFacts, setter: Span, depth: usize) -> bool {
+        file.ast
+            .reference_declarations
+            .iter()
+            .filter(|(_, declaration)| *declaration == setter)
+            .all(|(reference, _)| {
+                let Some(call) = self
+                    .call_by_callee(file, *reference)
+                    .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == *reference)
+                else {
+                    return false;
+                };
+                let Some(written) = call.arguments.first() else {
+                    return true;
+                };
+                if written.spread {
+                    return false;
+                }
+                if matches!(
+                    written.value,
+                    solid_facts::ast::ArgumentValueKind::Function
+                        | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                ) {
+                    let Some(updater) =
+                        crate::cleanup::callback_argument_literal(file, written.span)
+                    else {
+                        return false;
+                    };
+                    let previous = updater
+                        .parameters
+                        .first()
+                        // A default replaces `undefined` with a value nothing
+                        // proves, so a defaulted previous value is not assumed.
+                        .filter(|parameter| {
+                            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                                && parameter.initializer.is_none()
+                        })
+                        .and_then(|parameter| parameter.names.first())
+                        .map(|name| name.span)
+                        .filter(|name| !binding_written(file, *name));
+                    return self.returns_builtin(
+                        file,
+                        updater,
+                        previous.map(|name| (file.path.as_str(), name)),
+                        depth,
+                    );
+                }
+                matches!(
+                    self.value_origin(file, written.span, written.runtime_value_kind, depth - 1),
+                    Some(ValueOrigin::Builtin)
+                )
+            })
+    }
+
+    /// Whether every value the synchronous `function` returns is proven a
+    /// built-in value, with `assumed` (a parameter's name) taken as one.
+    fn returns_builtin(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+        assumed: Option<(&str, Span)>,
+        depth: usize,
+    ) -> bool {
+        if function.r#async || function.generator {
+            return false;
+        }
+        let proven = |returned: &solid_facts::ast::ReturnFact| {
+            returned.argument.is_none_or(|argument| {
+                matches!(
+                    self.value_origin_assuming(
+                        file,
+                        argument,
+                        returned.runtime_value_kind,
+                        depth - 1,
+                        assumed,
+                    ),
+                    Some(ValueOrigin::Builtin)
+                )
+            })
+        };
+        if function.expression_body {
+            return function.expression_return.as_ref().is_some_and(proven);
+        }
+        crate::returns_walk::own_returns(&file.ast, function).all(proven)
+    }
+
+    /// A reviewed ECMAScript primitive return, not a TypeScript return type.
+    /// Positive library identity is required for both member and receiver.
+    /// The deliberately short table uses members declared beside their global
+    /// in the same default-library source; split/augmented declarations refuse.
+    pub(super) fn scalar_builtin_call_result(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        use solid_facts::ast::IdentifierRole;
+        if call.construct
+            || call.arguments.iter().any(|argument| argument.spread)
+            // This positive fact also excludes optional calls/member chains.
+            || !file.ast.straight_line_calls.contains(&call.span)
+        {
+            return false;
+        }
+        let Some(declaration) =
+            self.standard_library_declaration(file, call, typefacts::CallKind::Call)
+        else {
+            return false;
+        };
+        let (global, property) = match declaration.qualified_name.as_ref() {
+            "DateConstructor.now" if call.arguments.is_empty() => ("Date", "now"),
+            "Math.abs" => ("Math", "abs"),
+            "Math.ceil" => ("Math", "ceil"),
+            "Math.floor" => ("Math", "floor"),
+            "Math.round" => ("Math", "round"),
+            _ => return false,
+        };
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some(member) = file.ast.members.iter().find(|member| {
+            member.span == callee
+                && file
+                    .ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_err()
+                && file.source_text(member.property) == Some(property)
+        }) else {
+            return false;
+        };
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        if !file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == receiver && identifier.role == IdentifierRole::Reference
+        }) {
+            return false;
+        }
+        let Some(entity) = self.entity_at(file.path.as_str(), receiver) else {
+            return false;
+        };
+        if entity.symbol_unresolved
+            || entity.symbol.is_empty()
+            || declaration.source_file.is_empty()
+        {
+            return false;
+        }
+        let Some(symbol) = self.symbols_by_id().get(entity.symbol.as_ref()).copied() else {
+            return false;
+        };
+        // Date/Math merge their global variable with interfaces. Those type
+        // declarations do not replace the positive runtime binding premise.
+        // A configured-project augmentation is withheld, irrespective of kind.
+        let mut bindings = symbol
+            .declarations()
+            .iter()
+            .filter(|binding| binding.kind.as_ref() == "variable");
+        let Some(binding) = bindings.next() else {
+            return false;
+        };
+        if !symbol.alias_target().is_empty()
+            || bindings.next().is_some()
+            || symbol.declarations().iter().any(|declaration| {
+                self.file_by_path(declaration.location.path.as_ref())
+                    .is_some()
+            })
+            || binding.name.as_ref() != global
+            || binding.location.path != declaration.source_file
+            || declaration.location.path != declaration.source_file
+        {
+            return false;
+        }
+        if self.member_name_may_be_reassigned(property)
+            || self.member_name_may_be_reassigned(global)
+        {
+            return false;
+        }
+        // Veto writes, deletes and escapes throughout the configured project.
+        // Check exact symbols even for escaped identifier spellings. A missing
+        // fact for an unbound runtime reference withholds the proof.
+        self.files().iter().all(|other| {
+            other.ast.identifiers.iter().all(|identifier| {
+                if identifier.role != IdentifierRole::Reference
+                    // A binder-resolved local shadow is unrelated to this global.
+                    || other.ast.reference_declaration(identifier.span).is_some()
+                    || other.ast.type_queries.iter().any(|query| query.contains(identifier.span))
+                {
+                    return true;
+                }
+                let Some(reference) = self.entity_at(other.path.as_str(), identifier.span) else {
+                    return false;
+                };
+                if reference.symbol_unresolved || reference.symbol.is_empty() {
+                    return false;
+                }
+                if reference.symbol != entity.symbol {
+                    return true;
+                }
+                // Calling/constructing the global does not hand its object
+                // out. Member reads (including computed/optional reads) do
+                // not hand the receiver out either; target admission above
+                // still refuses computed or optional scalar calls.
+                if other
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| other.ast.peel_ts_sugar_span(call.callee) == identifier.span)
+                {
+                    return true;
+                }
+                let Some(access) =
+                    other.ast.members.iter().find(|access| {
+                        other.ast.peel_ts_sugar_span(access.object) == identifier.span
+                    })
+                else {
+                    return false;
+                };
+                !other
+                    .ast
+                    .assignments
+                    .iter()
+                    .map(|assignment| assignment.target)
+                    .chain(other.ast.iteration_targets.iter().copied())
+                    .chain(other.ast.deleted_targets.iter().copied())
+                    .any(|target| target.contains(access.span))
+            })
+        })
+    }
+
+    fn standard_library_declaration(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        kind: typefacts::CallKind,
+    ) -> Option<&'a typefacts::ResolvedDeclaration> {
+        self.resolved_callee_call(file, call.callee)
+            .filter(|resolved| {
+                resolved.validity == ResolvedCallValidity::Valid
+                    && resolved.kind == kind
+                    && resolved.targets.is_none()
+            })
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .filter(|declaration| declaration.standard_library)
+    }
+
+    /// ADR 0211: the instance method `property` of exactly `class`, declared
+    /// in its own body: one plain method, not static, not an accessor.
+    pub(super) fn class_method_symbol(
+        &self,
+        class_file: &'a FileFacts,
+        class: &'a solid_facts::ast::ClassFact,
+        property: &str,
+    ) -> Option<&'a SymbolId> {
+        use solid_facts::ast::ClassElementKind;
+        if !self.class_instance_is_exact(class_file, class, property, 4) {
+            return None;
+        }
+        let mut methods = class.elements.iter().filter(|element| {
+            !element.r#static
+                && element.key.and_then(|key| class_file.source_text(key)) == Some(property)
+        });
+        let method = methods.next()?;
+        if methods.next().is_some() || method.kind != ClassElementKind::Method {
+            return None;
+        }
+        let function = class_file
+            .ast
+            .functions
+            .iter()
+            .find(|function| Some(function.span) == method.value)?;
+        self.entities.at(
+            class_file.path.as_str(),
+            function.method_name.as_ref()?.span,
+        )
+    }
+
+    /// Whether the value a project function's symbol names now is that
+    /// function: a declaration whose name nothing writes, a method, or the
+    /// direct initializer of a `const`. A `let` that is reassigned, or a
+    /// binding initialized by a call that merely contains the function
+    /// (`const f = wrap(() => …)`), proves nothing.
+    pub(super) fn function_value_is_current(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        // A class element's or an object literal method's own function. A
+        // function nested inside a method inherits its `method_name`, so that
+        // field alone says nothing.
+        let element_function = file.ast.classes.iter().any(|class| {
+            class
+                .elements
+                .iter()
+                .any(|element| element.value == Some(function.span))
+        }) || file.ast.object_properties.iter().any(|property| {
+            !property.data && file.ast.peel_ts_sugar_span(property.value) == function.span
+        });
+        if element_function {
+            return true;
+        }
+        if function.kind == solid_facts::ast::FunctionKind::Declaration {
+            return function
+                .name
+                .as_ref()
+                .is_some_and(|name| !binding_written(file, name.span));
+        }
+        file.ast.bindings.iter().any(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.initializer.is_some_and(|initializer| {
+                    file.ast.peel_ts_sugar_span(initializer) == function.span
+                })
+        })
+    }
+
+    /// Whether `new C(…)` of this class evaluates to an instance whose
+    /// `property` is found on its prototype chain (ADR 0209, 0211 as
+    /// amended): no constructor in the chain returns another object, and no
+    /// class in the chain defines `property` as an own field, a parameter
+    /// property, or under a computed key. Every ancestor must be a project
+    /// class this resolves; an unresolved `extends` proves nothing.
+    pub(super) fn class_instance_is_exact(
+        &self,
+        file: &'a FileFacts,
+        class: &'a solid_facts::ast::ClassFact,
+        property: &str,
+        depth: usize,
+    ) -> bool {
+        use solid_facts::ast::ClassElementKind;
+        if depth == 0 {
+            return false;
+        }
+        for element in &class.elements {
+            if element.r#static {
+                continue;
+            }
+            match element.kind {
+                ClassElementKind::Constructor => {
+                    let Some(constructor) = file
+                        .ast
+                        .functions
+                        .iter()
+                        .find(|function| Some(function.span) == element.value)
+                    else {
+                        return false;
+                    };
+                    let returns_value = crate::returns_walk::own_returns(&file.ast, constructor)
+                        .any(|returned| returned.argument.is_some());
+                    let parameter_property = file.ast.parameter_properties.iter().any(|name| {
+                        constructor.span.contains(*name)
+                            && file.source_text(*name) == Some(property)
+                    });
+                    if returns_value || parameter_property {
+                        return false;
+                    }
+                }
+                ClassElementKind::Field
+                    if element.computed
+                        || element.key.and_then(|key| file.source_text(key)) == Some(property) =>
+                {
+                    return false;
+                }
+                ClassElementKind::Method | ClassElementKind::Getter | ClassElementKind::Setter
+                    if element.computed =>
+                {
+                    return false;
+                }
+                _ => {}
+            }
+        }
+        let Some(heritage) = class.heritage else {
+            return true;
+        };
+        let heritage = file.ast.peel_ts_sugar_span(heritage);
+        let base = file
+            .ast
+            .reference_declaration(heritage)
+            .and_then(|declaration| {
+                file.ast
+                    .classes
+                    .iter()
+                    .find(|candidate| {
+                        candidate
+                            .name
+                            .as_ref()
+                            .is_some_and(|name| name.span == declaration)
+                    })
+                    .map(|base| (file, base))
+            })
+            .or_else(|| {
+                self.entities
+                    .at(file.path.as_str(), heritage)
+                    .and_then(|symbol| self.class_for_symbol(symbol))
+            });
+        base.is_some_and(|(base_file, base)| {
+            self.class_instance_is_exact(base_file, base, property, depth - 1)
+        })
+    }
+
     pub(super) fn binding_at_reference(
         &self,
         path: &str,
@@ -990,6 +2627,10 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    pub(super) fn ast_file_index(&self, path: &str) -> Option<&'a CachedAstFileIndex> {
+        self.ast_indexes.get(path)
+    }
+
     pub(super) fn function_called_at(
         &self,
         path: &str,
@@ -1004,6 +2645,44 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| declaration_symbols(&self.facts.typescript))
             .get(&(path, u64::from(span.start), u64::from(span.end)))
             .copied()
+    }
+
+    /// A static member of an actual namespace import names its exported
+    /// value, not a structurally compatible method. Resolve the property
+    /// symbol itself; a selected call signature need not name that value.
+    pub(super) fn namespace_member_function(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        if file.ast.computed_members.binary_search(&callee).is_ok() {
+            return None;
+        }
+        let member = file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == callee)?;
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        let declaration = file.ast.reference_declaration(receiver)?;
+        let namespace = file.ast.imports.iter().any(|import| {
+            !import.type_only
+                && import.bindings.iter().any(|binding| {
+                    !binding.type_only
+                        && binding.kind == solid_facts::ast::ImportKind::Namespace
+                        && binding.local.span == declaration
+                })
+        });
+        if !namespace {
+            return None;
+        }
+        let symbol = self.entities.at(file.path.as_str(), member.property)?;
+        self.function_for_symbol(symbol)
+            .filter(|(target_file, function)| {
+                function.method_name.is_none()
+                    && self.function_value_is_current(target_file, function)
+            })
     }
 
     pub(super) fn function_for_symbol(
@@ -1035,7 +2714,35 @@ impl<'a> SemanticLookup<'a> {
     /// inherit the identity of `i` or `wrapper` when the complete callee has no
     /// semantic fact.
     pub(super) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
+        let written_callee = callee;
+        if let Some(symbol) = self
+            .resolved_contracts
+            .callee_bindings
+            .get(&crate::location(file.path.shared(), callee))
+        {
+            return Some(symbol.as_str());
+        }
         let callee = file.ast.peel_ts_sugar_span(callee);
+        if self
+            .resolved_contracts
+            .callee_bindings
+            .contains_key(&crate::location(file.path.shared(), callee))
+        {
+            return None;
+        }
+        if written_callee != callee
+            && self
+                .entities
+                .at(file.path.as_str(), callee)
+                .is_some_and(|symbol| {
+                    self.resolved_contracts
+                        .by_symbol
+                        .get(symbol)
+                        .is_some_and(|binding| binding.contract_location.path.ends_with(']'))
+                })
+        {
+            return None;
+        }
         let member_property = self
             .ast_indexes
             .get(file.path.as_str())
@@ -1073,7 +2780,35 @@ impl<'a> SemanticLookup<'a> {
     /// property spelling into a project-wide method lookup. Callers must
     /// compare the returned candidates' summaries before using more than one.
     pub(super) fn callee_symbols(&self, file: &FileFacts, callee: Span) -> Vec<SymbolId> {
+        let written_callee = callee;
+        if let Some(symbol) = self
+            .resolved_contracts
+            .callee_bindings
+            .get(&crate::location(file.path.shared(), callee))
+        {
+            return vec![symbol.clone()];
+        }
         let callee = file.ast.peel_ts_sugar_span(callee);
+        if self
+            .resolved_contracts
+            .callee_bindings
+            .contains_key(&crate::location(file.path.shared(), callee))
+        {
+            return vec![];
+        }
+        if written_callee != callee
+            && self
+                .entities
+                .at(file.path.as_str(), callee)
+                .is_some_and(|symbol| {
+                    self.resolved_contracts
+                        .by_symbol
+                        .get(symbol)
+                        .is_some_and(|binding| binding.contract_location.path.ends_with(']'))
+                })
+        {
+            return vec![];
+        }
         let member_property = self
             .ast_indexes
             .get(file.path.as_str())
@@ -1090,6 +2825,12 @@ impl<'a> SemanticLookup<'a> {
             }
             let mut visited = HashSet::new();
             let aliases = self.direct_value_symbols(file, callee, &mut visited);
+            if aliases
+                .iter()
+                .any(|alias| self.returned_callable_is_bound(alias.as_str()))
+            {
+                return vec![symbol.clone()];
+            }
             if !aliases.is_empty() {
                 return aliases;
             }
@@ -2084,6 +3825,221 @@ impl<'a> SemanticLookup<'a> {
             .collect()
     }
 
+    /// Call sites that **render** the project function at `(path, function)`
+    /// through a dialect renderer: `createComponent(Panel, props)` invokes
+    /// `Panel` exactly as the tag `<Panel/>` does (ADR 0136). Each site's span
+    /// is the rendered argument, the function's own reference.
+    ///
+    /// Kept apart from [`Self::function_call_sites`] on purpose. That map
+    /// feeds component identity (a function called directly is not a
+    /// component) and execution-role inheritance (the role at the callee
+    /// span), and neither question is the same for an argument of a Solid
+    /// call; the call graph in `attribution` is the one consumer, and it asks
+    /// only who can enter a function.
+    ///
+    /// Exact or nothing, at both ends:
+    ///
+    /// - the callee resolves to a symbol one of whose declarations sits in one
+    ///   of the dialect's primitive-defining packages under a name the dialect
+    ///   says renders an argument
+    ///   ([`solid_dialect::Dialect::renders_component_argument`]); a project
+    ///   function that happens to be called `createComponent` is not one;
+    /// - the argument at that position is a bare identifier, no spread up to
+    ///   it, whose symbol is one project function. A parameter, a computed
+    ///   value, `options.Wrap || Fallback`, or an unresolved import resolves
+    ///   to no function and adds no edge, so the reference stays the value
+    ///   escape it was.
+    pub(super) fn function_render_call_sites(
+        &self,
+        path: &str,
+        function: Span,
+    ) -> Vec<(&'a FileFacts, Span)> {
+        self.render_call_sites()
+            .get(&(path, function))
+            .into_iter()
+            .flatten()
+            .map(|(file, argument)| (&self.facts.files[*file], *argument))
+            .collect()
+    }
+
+    fn render_call_sites(&self) -> &RenderCallSites<'a> {
+        self.render_call_sites.get_or_init(|| {
+            let mut map = RenderCallSites::new();
+            let facts: &'a ProjectFacts = self.facts;
+            for (file_index, file) in facts.files.iter().enumerate() {
+                for call in &file.ast.calls {
+                    let Some(index) = self
+                        .callee_symbol(file, call.callee)
+                        .and_then(|symbol| self.rendered_argument_of(symbol))
+                    else {
+                        continue;
+                    };
+                    if call
+                        .arguments
+                        .iter()
+                        .take(index.saturating_add(1))
+                        .any(|argument| argument.spread)
+                    {
+                        continue;
+                    }
+                    let Some(argument) = call.arguments.get(index) else {
+                        continue;
+                    };
+                    if argument.value != solid_facts::ast::ArgumentValueKind::Identifier {
+                        continue;
+                    }
+                    let Some((target_file, target)) =
+                        self.function_called_at(file.path.as_str(), argument.span)
+                    else {
+                        continue;
+                    };
+                    map.entry((target_file.path.as_str(), target.span))
+                        .or_default()
+                        .push((file_index, argument.span));
+                }
+            }
+            map
+        })
+    }
+
+    /// The argument a call of `symbol` renders, when `symbol` is declared by
+    /// one of the dialect's own packages under a rendering name.
+    fn rendered_argument_of(&self, symbol: &str) -> Option<usize> {
+        let packages = self.dialect.primitive_defining_packages();
+        self.symbols_by_id()
+            .get(symbol)?
+            .declarations()
+            .iter()
+            .filter(|declaration| declared_in_package(declaration.location.path.as_ref(), packages))
+            .find_map(|declaration| {
+                self.dialect
+                    .renders_component_argument(declaration.name.as_ref())
+            })
+    }
+
+    /// The render sites a value reference reaches, when its value reaches
+    /// only a dialect component's rendering prop:
+    /// `createComponent(Dynamic, { get component() { return Selected(); } })`
+    /// with `const Selected = createMemo(() => cond() ? Panel : Other)`
+    /// invokes the value `Panel` holds as a component, from computations that
+    /// render creates and nowhere else (ADR 0138). The sites are in the
+    /// reference's file; `None` for any other reference.
+    ///
+    /// Keyed by the reference, not by a function: the call graph asks it of
+    /// each compiler-resolved reference of a function's symbols, the walk its
+    /// escape test already makes, so *which* function the value is comes from
+    /// those references and never from a name or a demanded entity. Kept
+    /// beside [`Self::function_render_call_sites`] and apart from
+    /// [`Self::function_call_sites`] for the same reason: only the attribution
+    /// call graph asks who can enter a function, and neither component
+    /// identity nor execution-role inheritance has this answer for a value.
+    ///
+    /// The syntax fact ([`solid_facts::ast::component_value_flows`]) says
+    /// only where the value can go. Every span it hands back must resolve
+    /// here, or the reference has no entry:
+    ///
+    /// - each site's component is declared in one of the dialect's
+    ///   primitive-defining packages under a name the dialect says renders
+    ///   that prop ([`solid_dialect::Dialect::component_prop_renderers`]),
+    ///   and a call form's callee renders its first argument
+    ///   ([`solid_dialect::Dialect::renders_component_argument`]);
+    /// - each holder call is a primitive whose accessor yields only its
+    ///   compute ([`solid_dialect::Dialect::accessor_yields_only_its_compute`]).
+    pub(super) fn prop_render_sites_at(&self, path: &str, reference: Span) -> Option<Vec<Span>> {
+        self.prop_render_sites().get(&(path, reference)).cloned()
+    }
+
+    fn prop_render_sites(&self) -> &PropRenderSites<'a> {
+        self.prop_render_sites.get_or_init(|| {
+            let mut map = PropRenderSites::new();
+            let renderers = self.dialect.component_prop_renderers();
+            if renderers.is_empty() {
+                return map;
+            }
+            let mut props = renderers.iter().map(|(_, prop)| *prop).collect::<Vec<_>>();
+            props.sort_unstable();
+            props.dedup();
+            let facts: &'a ProjectFacts = self.facts;
+            for file in &facts.files {
+                // Only a module that spells a rendering component and its prop
+                // can hold one of these flows; the rest are not parsed again.
+                if !renderers.iter().any(|(component, prop)| {
+                    file.source.contains(component) && file.source.contains(prop)
+                }) {
+                    continue;
+                }
+                let Some(flows) = solid_facts::ast::component_value_flows(
+                    std::path::Path::new(file.path.as_str()),
+                    &file.source,
+                    &props,
+                ) else {
+                    continue;
+                };
+                for flow in flows {
+                    if flow
+                        .holder_calls
+                        .iter()
+                        .all(|call| self.holder_call_is_exact(file, *call))
+                        && flow.sites.iter().all(|site| self.renders_prop(file, site))
+                    {
+                        map.insert(
+                            (file.path.as_str(), flow.reference),
+                            flow.sites.iter().map(|site| site.site).collect(),
+                        );
+                    }
+                }
+            }
+            map
+        })
+    }
+
+    /// Whether the call at `call` is a primitive whose accessor hands its
+    /// compute's results to nothing but its own reads.
+    fn holder_call_is_exact(&self, file: &FileFacts, call: Span) -> bool {
+        self.primitive_at_call(file, call)
+            .is_some_and(|primitive| self.dialect.accessor_yields_only_its_compute(primitive))
+    }
+
+    /// Whether `site` renders its component with the dialect's semantics for
+    /// its prop: the component is exactly a dialect export that renders that
+    /// prop, and a call form's callee is exactly a dialect renderer of its
+    /// first argument.
+    fn renders_prop(&self, file: &FileFacts, site: &solid_facts::ast::ComponentPropSite) -> bool {
+        if let Some(renderer) = site.renderer
+            && self
+                .callee_symbol(file, renderer)
+                .and_then(|symbol| self.rendered_argument_of(symbol))
+                != Some(0)
+        {
+            return false;
+        }
+        let Some(component) = self.entities.at(file.path.as_str(), site.component) else {
+            return false;
+        };
+        let packages = self.dialect.primitive_defining_packages();
+        let renderers = self.dialect.component_prop_renderers();
+        self.symbols_by_id()
+            .get(component.as_str())
+            .into_iter()
+            .flat_map(|symbol| symbol.declarations().iter())
+            .filter(|declaration| declared_in_package(declaration.location.path.as_ref(), packages))
+            .any(|declaration| {
+                renderers.iter().any(|(name, prop)| {
+                    *name == declaration.name.as_ref() && *prop == site.prop.as_str()
+                })
+            })
+    }
+
+    fn symbols_by_id(&self) -> &HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>> {
+        self.symbols_by_id.get_or_init(|| {
+            self.facts
+                .typescript
+                .symbols()
+                .map(|candidate| (candidate.id(), candidate))
+                .collect()
+        })
+    }
+
     fn smallest_contained(
         &self,
         path: &str,
@@ -2240,24 +4196,11 @@ impl<'a> SemanticLookup<'a> {
     fn jsx_call_sites(&self) -> &HashMap<(&'a str, Span), CallSiteLoading> {
         self.jsx_call_sites.get_or_init(|| {
             let mut map = HashMap::<(&'a str, Span), CallSiteLoading>::new();
-            for (_, caller_file, element, target_file, target) in self.jsx_rendered_functions() {
+            for (_, _, _, target_file, target) in self.jsx_rendered_functions() {
                 let entry = map
                     .entry((target_file.path.as_str(), target.span))
                     .or_default();
                 entry.any = true;
-                if !entry.loading_wrapped {
-                    entry.loading_wrapped = caller_file.ast.jsx_elements.iter().any(|boundary| {
-                        boundary.span.contains(element.span)
-                            && boundary.span != element.span
-                            && jsx_element_is_loading(
-                                caller_file,
-                                boundary,
-                                self.entities,
-                                self.symbol_names,
-                                self.dialect,
-                            )
-                    });
-                }
             }
             map
         })
@@ -2407,6 +4350,7 @@ mod tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
         }
     }
@@ -2442,6 +4386,9 @@ mod tests {
         let contracts = crate::contracts::ResolvedContracts {
             bindings: Vec::new(),
             by_symbol: HashMap::new(),
+            direct_returns: HashMap::new(),
+            callee_bindings: HashMap::new(),
+            returned_callable_bindings: HashSet::new(),
             missing_exports: Vec::new(),
             counts: crate::ContractBindingCounts::default(),
         };
@@ -2455,6 +4402,244 @@ mod tests {
             false,
         );
         body(&lookup)
+    }
+
+    #[test]
+    fn capture_literal_bodies_require_bound_instances_and_no_factory_invocation() {
+        let source = "const captured = make(() => read()); const other = make(() => 0);";
+        let facts = project(source);
+        let file = &facts.files[0];
+        let captured_name = span_of(source, "captured", 0);
+        let entities = entity_symbols(&[
+            (captured_name, "captured-instance"),
+            (span_of(source, "other", 0), "other-instance"),
+            (span_of(source, "make", 0), "factory"),
+            (span_of(source, "make", 1), "factory"),
+        ]);
+        let factory = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| call.callee == span_of(source, "make", 0))
+            .unwrap();
+        let argument = factory.arguments[0].clone();
+        let body = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == argument.span)
+            .unwrap()
+            .body;
+        let binding = |symbol: &str, summary| crate::contracts::ResolvedContractBinding {
+            local_name: symbol.into(),
+            imported_name: symbol.into(),
+            package_name: "fixture-package".into(),
+            symbol: SymbolId::from(symbol),
+            runtime_identity: String::new(),
+            contract_location: crate::location(file.path.shared(), factory.callee),
+            summary,
+        };
+        let ast_indexes = HashMap::new();
+        let symbol_names = HashMap::new();
+        let dialect = solid_dialect::Solid2;
+        for (bound, callbacks, expected) in [
+            (true, crate::ContractClaim::Known(vec![]), vec![body]),
+            (false, crate::ContractClaim::Known(vec![]), vec![]),
+            (true, crate::ContractClaim::Open, vec![]),
+            (
+                true,
+                crate::ContractClaim::Known(vec![crate::ContractCallback {
+                    parameter: 0,
+                    execution: "inline".into(),
+                    schedule: None,
+                    arguments: vec![],
+                    owner: None,
+                    clears_tracking: false,
+                    protocol: crate::contract_semantics::InvokeProtocol::Call,
+                    path: vec![],
+                }]),
+                vec![],
+            ),
+        ] {
+            let factory_summary = crate::ContractExport {
+                callbacks,
+                ..crate::ContractExport::default()
+            };
+            let returned_summary = crate::ContractExport {
+                captured_arguments: std::collections::BTreeMap::from([(
+                    usize::MAX,
+                    argument.clone(),
+                )]),
+                ..crate::ContractExport::default()
+            };
+            let factory_binding = binding("factory", factory_summary);
+            let returned_binding = binding("captured-instance", returned_summary);
+            let contracts = crate::contracts::ResolvedContracts {
+                bindings: vec![],
+                direct_returns: HashMap::new(),
+                by_symbol: HashMap::from([
+                    (factory_binding.symbol.clone(), factory_binding),
+                    (returned_binding.symbol.clone(), returned_binding),
+                ]),
+                callee_bindings: HashMap::new(),
+                returned_callable_bindings: if bound {
+                    HashSet::from([SymbolId::from("captured-instance")])
+                } else {
+                    HashSet::new()
+                },
+                missing_exports: vec![],
+                counts: crate::ContractBindingCounts::default(),
+            };
+            let lookup = SemanticLookup::new(
+                &facts,
+                &ast_indexes,
+                &entities,
+                &symbol_names,
+                &dialect,
+                &contracts,
+                false,
+            );
+            assert_eq!(lookup.bound_capture_literal_bodies(file), expected);
+        }
+    }
+
+    #[test]
+    fn returned_member_callee_bindings_are_exact_and_instance_local() {
+        let source = "const first = make(); const second = make(); first.clear(); second.clear();";
+        let facts = project(source);
+        let entities = entity_symbols(&[]);
+        let ast_indexes = facts
+            .files
+            .iter()
+            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+            .collect::<HashMap<_, _>>();
+        let symbol_names = HashMap::new();
+        let dialect = solid_dialect::Solid2;
+        let first = span_of(source, "first.clear", 0);
+        let second = span_of(source, "second.clear", 0);
+        let contracts = crate::contracts::ResolvedContracts {
+            bindings: vec![],
+            direct_returns: HashMap::new(),
+            by_symbol: HashMap::new(),
+            callee_bindings: HashMap::from([
+                (
+                    crate::location(facts.files[0].path.shared(), first),
+                    SymbolId::from("first-instance"),
+                ),
+                (
+                    crate::location(facts.files[0].path.shared(), second),
+                    SymbolId::from("second-instance"),
+                ),
+            ]),
+            returned_callable_bindings: HashSet::new(),
+            missing_exports: vec![],
+            counts: crate::ContractBindingCounts::default(),
+        };
+        let lookup = SemanticLookup::new(
+            &facts,
+            &ast_indexes,
+            &entities,
+            &symbol_names,
+            &dialect,
+            &contracts,
+            false,
+        );
+        assert_eq!(
+            lookup.callee_symbol(&facts.files[0], first),
+            Some("first-instance")
+        );
+        assert_eq!(
+            lookup.callee_symbols(&facts.files[0], first),
+            vec![SymbolId::from("first-instance")]
+        );
+        assert_eq!(
+            lookup.callee_symbol(&facts.files[0], second),
+            Some("second-instance")
+        );
+        assert_eq!(
+            lookup.callee_symbols(&facts.files[0], second),
+            vec![SymbolId::from("second-instance")]
+        );
+        assert_eq!(
+            lookup.callee_symbol(&facts.files[0], span_of(source, "make", 0)),
+            None
+        );
+    }
+
+    #[test]
+    fn object_member_stability_uses_every_binder_reference() {
+        let returned = crate::ContractReturn {
+            kind: "object".into(),
+            properties: std::collections::BTreeMap::from([(
+                "member".into(),
+                crate::ContractReturn {
+                    kind: crate::contracts::EFFECTFUL_MEMBER.into(),
+                    prototype: None,
+                    ..crate::ContractReturn::default()
+                },
+            )]),
+            prototype: None,
+            ..crate::ContractReturn::default()
+        };
+        for (source, stable) in [
+            ("const obj = make(); obj.member();", true),
+            (
+                "const obj = make(); const other = make(); other.member(); obj.member();",
+                true,
+            ),
+            ("const obj = make(); keep([obj]); obj.member();", false),
+            ("const obj = make(); keep({obj}); obj.member();", false),
+            (
+                "const obj = make(); keep(obj as unknown); obj.member();",
+                false,
+            ),
+            (
+                "const obj = make(); const alias = obj; obj.member();",
+                false,
+            ),
+            ("const obj = make(); keep(obj); obj.member();", false),
+            ("function f() { const obj = make(); return obj; }", false),
+            ("export const obj = make(); obj.member();", false),
+            ("const obj = make(); export {obj}; obj.member();", false),
+            (
+                "const obj = make(); const view = <View value={obj}/>; obj.member();",
+                false,
+            ),
+            ("const obj = make(); (obj as any).member();", false),
+            (
+                "const obj = make(); obj.member = replacement; obj.member();",
+                false,
+            ),
+            (
+                "const obj = make(); delete obj.member; obj.member();",
+                false,
+            ),
+            (
+                "const obj = make(); for (obj.member of values) {} obj.member();",
+                false,
+            ),
+        ] {
+            let facts = project(source);
+            let file = &facts.files[0];
+            let root = file
+                .ast
+                .bindings
+                .iter()
+                .find(|binding| {
+                    binding
+                        .names
+                        .iter()
+                        .any(|name| file.source_text(name.span) == Some("obj"))
+                })
+                .unwrap()
+                .names[0]
+                .span;
+            assert_eq!(
+                crate::contracts::returned_object_members_are_stable(file, root, &returned),
+                stable,
+                "{source}"
+            );
+        }
     }
 
     /// Call sites keyed by target function span, as `(callee start, end)`.
@@ -2710,6 +4895,9 @@ mod tests {
         let contracts = crate::contracts::ResolvedContracts {
             bindings: Vec::new(),
             by_symbol: HashMap::new(),
+            direct_returns: HashMap::new(),
+            callee_bindings: HashMap::new(),
+            returned_callable_bindings: HashSet::new(),
             missing_exports: Vec::new(),
             counts: crate::ContractBindingCounts::default(),
         };
@@ -2941,5 +5129,25 @@ mod tests {
             None,
             "`handlers[i]()` must never be read as a property named `i`"
         );
+    }
+
+    #[test]
+    fn a_renderer_declaration_must_sit_in_a_dialect_package() {
+        let packages = ["solid-js", "@solidjs/signals", "@solidjs/web"];
+        for inside in [
+            "/p/node_modules/solid-js/types/client/component.d.ts",
+            "/p/node_modules/@solidjs/web/types/client.d.ts",
+            r"C:\p\node_modules\@solidjs\web\types\client.d.ts",
+        ] {
+            assert!(declared_in_package(inside, &packages), "{inside}");
+        }
+        for outside in [
+            "/p/my-solid-js-tools/component.d.ts",
+            "/p/node_modules/@solidjs/router/dist/index.d.ts",
+            "/p/node_modules/web/solid.d.ts",
+            "/p/node_modules/not-@solidjs/web/index.d.ts",
+        ] {
+            assert!(!declared_in_package(outside, &packages), "{outside}");
+        }
     }
 }

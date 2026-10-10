@@ -1,0 +1,239 @@
+import { test } from "vitest";
+import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { buildDialectAuthorityCoverage, loadAuditedArchives } from "./lib/dialect-authority.mjs";
+
+// Hand-built pins in the shape the module expects. Two dialects, one of which
+// audited nothing: the asymmetry the corpus had until 2026-09-12 (solid-v1's
+// authority was empty) and the one that makes "audited nothing" distinguishable
+// from "no such dialect". The checked-in file is tested separately below.
+const PINS = {
+  schemaVersion: 1,
+  dialects: [
+    { id: "solid-v1", archives: [], negativeRowCount: 0 },
+    {
+      id: "solid-v2",
+      archives: [
+        {
+          name: "solid-js",
+          version: "2.0.0-rc.3",
+          integrity: "sha512-pin",
+          manifestSha256: "digest"
+        }
+      ],
+      negativeRowCount: 47
+    }
+  ]
+};
+
+function makeRow(overrides) {
+  return {
+    probeId: overrides.probeId,
+    status: overrides.status ?? "official",
+    solidTarget: overrides.solidTarget,
+    installedVersions: overrides.installedVersions ?? {}
+  };
+}
+
+test("the checked-in pins load and name the archives the Rust tables audit", () => {
+  const document = loadAuditedArchives();
+  assert.equal(document.schemaVersion, 1);
+  const solid2 = document.dialects.find(dialect => dialect.id === "solid-v2");
+  // The mirror carries one entry per dialect the Rust tables define, so
+  // retiring the 1.x dialect (ADR 0110) removed its entry here too. Asserting
+  // the whole id list rather than only the surviving entry is deliberate: an
+  // entry appearing or vanishing is exactly what this pin exists to catch,
+  // and a `find` that silently returns `undefined` would not.
+  assert.deepEqual(
+    document.dialects.map(dialect => dialect.id).sort(),
+    ["solid-v2"]
+  );
+  assert.deepEqual(
+    solid2.archives.map(archive => `${archive.name}@${archive.version}`).sort(),
+    [
+      "@solidjs/signals@2.0.0-rc.13",
+      "@solidjs/signals@2.0.0-rc.3",
+      "@solidjs/signals@2.0.0-rc.6",
+      "@solidjs/signals@2.0.0-rc.9",
+      "@solidjs/web@2.0.0-rc.13",
+      "@solidjs/web@2.0.0-rc.3",
+      "@solidjs/web@2.0.0-rc.9",
+      "solid-js@2.0.0-rc.13",
+      "solid-js@2.0.0-rc.3",
+      "solid-js@2.0.0-rc.9"
+    ]
+  );
+  // 74 every-condition rows and, since 2026-09-25, one scoped to the browser
+  // host target: `solid-js@2.0.0-rc.3` `createSignal` `creates`. The count is
+  // what the report prints; the scope lives in the Rust table alone, which is
+  // the only place a row is ever read as authority. Since 2026-09-26, five
+  // more every-condition rows on `@solidjs/signals@2.0.0-rc.9`, and since
+  // 2026-09-27 nineteen more there (rc.9 then carries rc.6's 24).
+  // Withdrawn since 2026-09-27 on rc.3's own bytes: `solid-js@2.0.0-rc.3`
+  // `Show` `reads`, `Show` `creates`, `Loading` `creates`,
+  // `@solidjs/web@2.0.0-rc.3` `render` `reads`, `hydrate` `reads`.
+  // Since 2026-09-27, also 14 every-condition rows and one scoped to the
+  // browser host target on `solid-js`/`@solidjs/web@2.0.0-rc.9`. Since
+  // 2026-09-28, `@solidjs/signals@2.0.0-rc.9` `omit` `creates` and
+  // `solid-js@2.0.0-rc.9` `createMemo` `creates` scoped to the browser host.
+  // Since 2026-09-30 (ADR 0168), seven rc.9 `reads` rows: three every-condition
+  // (`getOwner`, `onCleanup`, `solid-js` `useContext`) and four argument-scoped.
+  // Since 2026-10-05 (ADR 0197), the rc.9 rows re-read on the rc.13 archives:
+  // 47 of 48 (`@solidjs/signals` `reconcile` `reads` withheld).
+  assert.equal(solid2.negativeRowCount, 118 + 47);
+});
+
+test("a pin file that parses but pins nothing is refused, not read as full coverage", () => {
+  const directory = mkdtempSync(join(tmpdir(), "solid-checker-authority-"));
+  const write = (name, body) => {
+    const path = join(directory, name);
+    writeFileSync(path, JSON.stringify(body));
+    return path;
+  };
+  assert.throws(
+    () => loadAuditedArchives(write("version.json", { schemaVersion: 2, dialects: [] })),
+    /unsupported schemaVersion 2/
+  );
+  assert.throws(
+    () => loadAuditedArchives(write("empty.json", { schemaVersion: 1, dialects: [] })),
+    /no dialects/
+  );
+  assert.throws(
+    () =>
+      loadAuditedArchives(
+        write("unnamed.json", { schemaVersion: 1, dialects: [{ id: "solid-v2" }] })
+      ),
+    /has no archives array/
+  );
+  assert.throws(
+    () =>
+      loadAuditedArchives(
+        write("untupled.json", {
+          schemaVersion: 1,
+          dialects: [{ id: "solid-v2", archives: [{ name: "solid-js" }] }]
+        })
+      ),
+    /no name@version/
+  );
+});
+
+test("coverage counts a row only when its own dialect audited the version installed", () => {
+  const results = [
+    makeRow({
+      probeId: "covered",
+      solidTarget: "solid2",
+      installedVersions: { "solid-js": "2.0.0-rc.3", corvu: "0.7.0" }
+    }),
+    makeRow({
+      probeId: "unaudited-prerelease",
+      solidTarget: "solid2",
+      installedVersions: { "solid-js": "2.0.0-rc.0" }
+    }),
+    // The pinned tuple, installed under a dialect whose own authority does not
+    // carry it. The identity gate refuses exactly this, so the coverage number
+    // must too -- otherwise a 1.x row would be counted as answerable by rows
+    // that can never be consulted for it.
+    makeRow({
+      probeId: "right-version-wrong-dialect",
+      solidTarget: "solid1",
+      installedVersions: { "solid-js": "2.0.0-rc.3" }
+    }),
+    makeRow({
+      probeId: "solid-1",
+      solidTarget: "solid1",
+      installedVersions: { "solid-js": "1.9.14" }
+    }),
+    // Reported but never mixed in, exactly as every other corpus figure treats
+    // a fork or lookalike.
+    makeRow({
+      probeId: "supplemental",
+      status: "supplemental",
+      solidTarget: "solid2",
+      installedVersions: { "solid-js": "2.0.0-rc.3" }
+    })
+  ];
+
+  const coverage = buildDialectAuthorityCoverage(results, PINS);
+  assert.equal(coverage.rows, 4);
+  assert.equal(coverage.rowsCovered, 1);
+  assert.equal(coverage.coveragePercentage, 25);
+  assert.equal(coverage.rowsWithoutDialect, 0);
+  assert.deepEqual(coverage.byDialect, [
+    { id: "solid-v1", auditedArchives: 0, negativeRowCount: 0, rows: 2, rowsCovered: 0 },
+    { id: "solid-v2", auditedArchives: 1, negativeRowCount: 47, rows: 2, rowsCovered: 1 }
+  ]);
+  // Only audited *names* are listed -- an install tree's other packages say
+  // nothing about the authority's reach -- and each says whether it is the pin.
+  assert.deepEqual(coverage.installedVersions, [
+    { package: "solid-js", version: "2.0.0-rc.3", rows: 2, audited: true },
+    { package: "solid-js", version: "1.9.14", rows: 1, audited: false },
+    { package: "solid-js", version: "2.0.0-rc.0", rows: 1, audited: false }
+  ]);
+  assert.deepEqual(coverage.archives, [
+    { dialect: "solid-v2", package: "solid-js", version: "2.0.0-rc.3" }
+  ]);
+});
+
+// The regression this guards is the one a hardcoded target map produced when
+// the 1.x dialect was retired: `solid1` still mapped to `solid-v1`, an id with
+// no entry left in the pins, so 564 benchmark rows were skipped by
+// `rowsWithoutDialect` *and* added to no dialect's `rows`. The report read as
+// though every row were attributed. A target is attributable only while the
+// pins carry its dialect.
+test("a target whose dialect the pins no longer carry is unattributed, not invisible", () => {
+  const withoutV1 = {
+    schemaVersion: 1,
+    dialects: PINS.dialects.filter(dialect => dialect.id !== "solid-v1")
+  };
+  const rows = [
+    makeRow({
+      probeId: "retired-target",
+      solidTarget: "solid1",
+      installedVersions: { "solid-js": "2.0.0-rc.3" }
+    })
+  ];
+
+  // With the dialect pinned, the row is attributed to it and counted there.
+  const attributed = buildDialectAuthorityCoverage(rows, PINS);
+  assert.equal(attributed.rowsWithoutDialect, 0);
+  assert.equal(
+    attributed.byDialect.find(dialect => dialect.id === "solid-v1").rows,
+    1
+  );
+
+  // With it gone, the row must land in the visible bucket -- and in no
+  // dialect's row count, which is what "never given a default" means.
+  const unattributed = buildDialectAuthorityCoverage(rows, withoutV1);
+  assert.equal(unattributed.rows, 1);
+  assert.equal(unattributed.rowsWithoutDialect, 1);
+  assert.equal(unattributed.rowsCovered, 0);
+  assert.equal(
+    unattributed.byDialect.reduce((total, dialect) => total + dialect.rows, 0),
+    0,
+    "no dialect may absorb a row whose authority this build does not have"
+  );
+});
+
+test("a solid target no dialect claims is counted apart, never given a default", () => {
+  const coverage = buildDialectAuthorityCoverage(
+    [
+      makeRow({
+        probeId: "unknown-target",
+        solidTarget: "solid3",
+        installedVersions: { "solid-js": "2.0.0-rc.3" }
+      })
+    ],
+    PINS
+  );
+  assert.equal(coverage.rows, 1);
+  assert.equal(coverage.rowsCovered, 0);
+  assert.equal(coverage.rowsWithoutDialect, 1);
+  assert.equal(
+    coverage.installedVersions.length,
+    0,
+    "a row attributed to no dialect contributes no install evidence either"
+  );
+});

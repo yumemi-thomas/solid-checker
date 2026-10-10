@@ -1,0 +1,20 @@
+{
+  "name": "creates-decline-records-package",
+  "version": "1.0.0",
+  "type": "module",
+  "peerDependencies": {
+    "solid-js": "^2.0.0-rc.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
+    "./clean": {
+      "types": "./clean.d.ts",
+      "import": "./clean.js",
+      "default": "./clean.js"
+    }
+  }
+}

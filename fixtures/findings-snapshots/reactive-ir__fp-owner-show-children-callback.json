@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-owner-show-children-callback/App.tsx",
+      "start": 349,
+      "end": 353,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-owner-show-children-callback/App.tsx",
+      "start": 577,
+      "end": 581,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-owner-show-children-callback/App.tsx",
+      "start": 1589,
+      "end": 1594,
+      "fixes": 0
+    }
+  ]
+}

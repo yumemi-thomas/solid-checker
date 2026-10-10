@@ -79,12 +79,12 @@ pub(crate) fn collect_project<'facts>(
         server_rendering: crate::source_discovery::project_server_rendering(
             ctx.facts,
             &ctx.rule_options.runtime,
+            ctx.dialect,
         ),
         source_declarations,
         contract_reads: &source.contract_reads,
         contract_parameter_reads: &source.contract_parameter_reads,
         contract_returns: &source.contract_returns,
-        bundled_returns: &source.bundled_returns,
         source_kinds: ctx.source_kinds,
         prop_sources: ctx.prop_sources,
         uncertain_prop_sources: ctx.uncertain_prop_sources,
@@ -133,8 +133,6 @@ pub(crate) fn collect_project<'facts>(
         contract_parameter_reads: &source.contract_parameter_reads,
         contract_callbacks: &source.contract_callbacks,
         contract_returns: &source.contract_returns,
-        bundled_returns: &source.bundled_returns,
-        source_primitives: &source.source_primitives,
         entities: ctx.entities,
         references_by_source: &references_by_source,
         symbol_names: ctx.symbol_names,
@@ -236,6 +234,8 @@ pub(crate) fn collect_project<'facts>(
     timings.local_access_reused_files = local_access.reused_files;
     timings.local_access_recomputed_files = local_access.recomputed_files;
     let LocalAccessResult {
+        prototype_recipes_observed: _,
+        prototype_leaf_operations,
         reads,
         writes,
         action_invocations,
@@ -244,6 +244,7 @@ pub(crate) fn collect_project<'facts>(
         write_action_obligations,
         dispatch_obligations,
     } = local_access.result;
+    draft.leaf_operations.extend(prototype_leaf_operations);
     draft.reads = reads
         .into_iter()
         .map(|read| (*read).clone())
@@ -272,14 +273,55 @@ pub(crate) fn collect_project<'facts>(
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.strict_read_obligations += interprocedural.reads.len();
     draft.reads.extend(interprocedural.reads.iter().cloned());
+    // Recompute after both cache merges. A consumer in another file can change
+    // while the literal's local read row is reused; a cached true is never proof.
+    let mut consumers = crate::execution_role::ReadConsumerSummaries::new(ctx.semantic_lookup);
+    for read in &mut draft.reads {
+        read.project_consumer_non_strict = false;
+        if !read.callee_callback_timing
+            || !read.execution.reports_untracked_read()
+            || read.summary_attributed
+            || read.package_internal
+            || read.missing_jsx_census
+            || read.host_callback_timing
+            || read.callback_invocation_unproven
+        {
+            continue;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(read.location.start_byte),
+            u32::try_from(read.location.end_byte),
+        ) else {
+            continue;
+        };
+        if let Some(file) = ctx
+            .semantic_lookup
+            .file_by_path(read.location.path.as_ref())
+        {
+            read.project_consumer_non_strict =
+                consumers.proves_non_strict(file, solid_facts::core::Span::new(start, end));
+        }
+    }
     for obligation in interprocedural.dispatch_obligations.iter() {
         draft.push_defect(obligation.clone());
     }
     static_rules::component_returns_conditionally(ctx, draft);
+    // After every read, write and action table is merged: the rule's
+    // negative proof is that none of them lies inside the predicate.
+    static_rules::result_access_callbacks(ctx, draft);
     draft.contract_exports = interprocedural.exports.clone();
     draft.contract_generation_obligations =
         interprocedural.contract_generation_obligations.to_vec();
-    for obligation in interprocedural.contract_generation_obligations.iter() {
+    // ADR 0202: these obligations say a project export's contract could not
+    // state when it runs a callback parameter. They matter to a consumer of
+    // that contract. A closed program (an application, ADR 0193) has none, so
+    // there they stay available to contract generation and are not reported.
+    let report_generation_obligations = !ctx.rule_options.runtime.program_is_closed();
+    for obligation in interprocedural
+        .contract_generation_obligations
+        .iter()
+        .filter(|_| report_generation_obligations)
+    {
         draft.push_defect(crate::StaticDefect {
             kind: crate::StaticDefectKind::UnknownCallbackExecution {
                 package: obligation.package.clone(),
@@ -332,6 +374,8 @@ mod tests {
                 module: "reactive-package".into(),
                 export: "mapValue".into(),
                 reexported: false,
+                site: crate::ContractDefectSite::Argument,
+                admission_refusal: None,
             },
             location: location.clone(),
             analysis_context: "unbound-contract-claims:callback arguments".into(),
@@ -380,6 +424,8 @@ mod tests {
             module: "partial-package".into(),
             export: "withValue".into(),
             reexported: false,
+            site: crate::ContractDefectSite::Argument,
+            admission_refusal: None,
         };
         assert_eq!(
             generation.family(),

@@ -1,0 +1,9 @@
+{
+  "name": "composed-operation-shadowed-target",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "solid-js": "2.0.0-rc.3"
+  },
+  "exports": "./index.js"
+}

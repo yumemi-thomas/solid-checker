@@ -16,12 +16,13 @@ The expected contract therefore records `runtimeArrow`, `renamedArrow`, and
 - the original and renamed arrow bindings are callable;
 - the namespace exotic object and `plainValue` are plain values; and
 - no kind is inferred from `const`, export-name spelling, or declaration text
-  alone. An open or mixed runtime binding remains an artifact-case refusal.
+  alone. An open or mixed runtime binding retains explicit unknown knowledge.
 
 The `./mixed` and `./unknown` subpaths pin that last boundary independently.
 `mixedBinding` has exact callable and non-callable writes, while
 `unknownBinding` reads an ambient host value with no authenticated runtime
-definition. Neither subpath may publish a kind.
+definition. Both subpaths publish `shape: "unknown"` and an empty call object;
+neither may assert callability, non-callability, or closed behavior (ADR 0011).
 
 The fixture has no library dependency, so its `tsc --noEmit` oracle checks only
 the real TypeScript standard library and does not rely on a permissive stub.

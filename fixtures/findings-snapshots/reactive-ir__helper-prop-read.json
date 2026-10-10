@@ -1,0 +1,275 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 420,
+      "end": 428,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 480,
+      "end": 488,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 754,
+      "end": 764,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 913,
+      "end": 921,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 1037,
+      "end": 1045,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 1100,
+      "end": 1108,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 1692,
+      "end": 1700,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 1873,
+      "end": 1881,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 2162,
+      "end": 2172,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 2595,
+      "end": 2603,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 2783,
+      "end": 2791,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 2988,
+      "end": 2996,
+      "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 3134,
+      "end": 3145,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 3206,
+      "end": 3214,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 3396,
+      "end": 3403,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 3453,
+      "end": 3461,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 3688,
+      "end": 3696,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 3860,
+      "end": 3868,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 4422,
+      "end": 4430,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 4666,
+      "end": 4674,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 4902,
+      "end": 4910,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 6947,
+      "end": 6955,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 8256,
+      "end": 8267,
+      "fixes": 0
+    },
+    {
+      "rule": "components-return-once",
+      "code": "SC1004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 9449,
+      "end": 9457,
+      "fixes": 0
+    },
+    {
+      "rule": "components-return-once",
+      "code": "SC1004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 9652,
+      "end": 9660,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 10398,
+      "end": 10406,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/ForwardedHelper.tsx",
+      "start": 111,
+      "end": 119,
+      "fixes": 0
+    }
+  ]
+}

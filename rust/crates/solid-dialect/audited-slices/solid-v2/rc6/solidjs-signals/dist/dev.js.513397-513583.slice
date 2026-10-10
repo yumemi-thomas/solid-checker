@@ -1,0 +1,4 @@
+function createStore(first, second, third) {
+  if (typeof first === "function") return createStoreDerivedNext(first, second, third);
+  return createStoreNext(first, !!second?.shallow);
+}

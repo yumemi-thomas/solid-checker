@@ -6,8 +6,162 @@ pub(super) fn semantic_digest(
     package: &PackageIdentity,
     artifact_cases: &[ArtifactCase],
 ) -> Digest {
+    // Two disjoint digest families, separated by their domain string.
+    //
+    // `composed_from` is written through `option`, which stamps a
+    // discriminator whether or not the field is set — so folding it into the
+    // one stream unconditionally would move the digest of every contract that
+    // carries any operation at all, and with it every already-issued policy-2
+    // receipt for such a contract, while `schemaVersion` and
+    // `semanticModelVersion` both stay 1. That is a receipt-compatibility
+    // break, which version 1 does not get to make.
+    //
+    // Omitting the `None` encoding inside a single family is not the
+    // alternative: a streaming hash carries no descriptor, so a field written
+    // only when present is self-delimiting merely by argument about how the
+    // neighbouring fields happen to encode. Domain separation gets both
+    // properties honestly. A contract with no composed operation emits the
+    // legacy stream **byte for byte** and keeps its digest and its receipts; a
+    // contract with at least one emits the provenance stream under a different
+    // domain. Each family is injective on its own, and the two cannot collide
+    // because the domain is the length-prefixed first thing written. The
+    // family is a function of the contract, so it is not a mode a caller can
+    // choose.
+    //
+    // `proposed_closures` is the same shape one field later, and the two
+    // features are independent, so the families are the four combinations
+    // rather than three. A proposed closure is not knowledge about the
+    // package — the domain it names stays open — but it *is* what the
+    // certifier's candidate universe is derived from, so a document that
+    // proposes one plans a different demand graph and must not share the
+    // identity a receipt binds with one that proposes nothing.
+    let composed = artifact_cases.iter().any(|case| {
+        case.exports.values().any(|export| {
+            export
+                .call
+                .operations
+                .iter()
+                .any(|operation| operation.composed_from.is_some())
+        })
+    });
+    let proposed_closure = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| !export.call.proposed_closures().is_empty())
+    });
+    // ADR 0114's domain is a family of its own for the same reason: a
+    // contract that states no `computations` item emits the stream it always
+    // did, byte for byte, and keeps its digest and its receipts.
+    let computations = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| !export.call.claims.computations.items().is_empty())
+    });
+    // The invoke-protocol family (item A of ways-to-improve § 3.3) is the same
+    // shape once more: a contract in which no operation states a non-call
+    // protocol emits the stream it always did, byte for byte, and keeps its
+    // digest and its receipts; one that states any writes the marker first
+    // and the protocol of every operation.
+    let invoke_protocols = artifact_cases.iter().any(|case| {
+        case.exports.values().any(|export| {
+            export
+                .call
+                .operations
+                .iter()
+                .any(|operation| operation.protocol.is_some())
+        })
+    });
+    // ADR 0139's `result-access` event is one family more, on the same
+    // argument: a contract none of whose operations happens at the event emits
+    // the stream it always did. Its operations are encoded by the ordinary
+    // event encoding, which gives the new event a code of its own; the marker
+    // separates the family so no document that predates the event can share
+    // an identity with one that states it.
+    let result_access = artifact_cases.iter().any(|case| {
+        case.exports.values().any(|export| {
+            export
+                .call
+                .operations
+                .iter()
+                .any(Operation::is_result_access)
+        })
+    });
+    let strict_reads = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| has_strict_read(&export.call))
+    });
+    let callback_results = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| has_callback_results(&export.call))
+    });
     let mut writer = CanonicalWriter::new();
-    writer.text(SEMANTIC_DIGEST_DOMAIN);
+    writer.captures = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| has_captures(&export.call))
+    });
+    if writer.captures {
+        writer.text("solid-checker:semantic-captures:v1");
+    }
+    if callback_results {
+        writer.text("solid-checker:semantic-callback-results:v1");
+    }
+    writer.callback_results = callback_results;
+    if strict_reads {
+        writer.text("solid-checker:semantic-strict-read:v1");
+    }
+    writer.strict_reads = strict_reads;
+    if result_access {
+        writer.text(SEMANTIC_RESULT_ACCESS_MARKER);
+    }
+    if invoke_protocols {
+        writer.text(SEMANTIC_INVOKE_PROTOCOL_MARKER);
+    }
+    writer.invoke_protocols = invoke_protocols;
+    if computations {
+        writer.text("solid-checker:semantic-computations:v1");
+    }
+    // ADR 0153 part 3's premises are a family of their own on the same
+    // argument: a contract no export of which states one emits the stream it
+    // always did, byte for byte, and keeps its digest and receipts.
+    let context_premises = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| !export.call.context_premises().is_empty())
+    });
+    if context_premises {
+        writer.text(SEMANTIC_CONTEXT_PREMISES_MARKER);
+    }
+    writer.context_premises = context_premises;
+    // ADR 0153 item C's bounds, on the same argument: a contract stating none
+    // hashes as it always did.
+    let accessor_bounds = artifact_cases.iter().any(|case| {
+        case.exports
+            .values()
+            .any(|export| !export.call.accessor_bounds().is_empty())
+    });
+    if accessor_bounds {
+        writer.text(SEMANTIC_ACCESSOR_BOUNDS_MARKER);
+    }
+    writer.accessor_bounds = accessor_bounds;
+    let initialization = artifact_cases
+        .iter()
+        .any(|case| case.initialization.is_some());
+    if initialization {
+        writer.text("solid-checker:semantic-module-initialization:v1");
+    }
+    writer.text(match (composed, proposed_closure) {
+        (false, false) => SEMANTIC_DIGEST_DOMAIN,
+        (true, false) => SEMANTIC_DIGEST_DOMAIN_COMPOSED,
+        (false, true) => SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE,
+        (true, true) => SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE,
+    });
+    writer.composed_provenance = composed;
+    writer.proposed_closure = proposed_closure;
+    writer.initialization = initialization;
+    writer.computations = computations;
     writer.u16(SEMANTIC_MODEL_VERSION);
     writer.package(package);
     writer.sequence(artifact_cases, CanonicalWriter::artifact_case);
@@ -31,21 +185,275 @@ pub(super) fn semantic_claim_id(
     SemanticClaimId::from_sha256(writer.finish())
 }
 
-struct CanonicalWriter(Sha256);
+/// The byte-only identity of one artifact case: everything
+/// [`CanonicalWriter::artifact_case_subject_identity`] writes *except* the case
+/// id and the dependency closure digest, both of which hash every accepted
+/// dependency edge's contract digest, plus the caller's byte-only identity of
+/// that closure.
+///
+/// Nothing here is claim identity. It feeds [`recipe_address`] only.
+pub(super) fn artifact_case_byte_identity(
+    package: &PackageIdentity,
+    artifact_case: &ArtifactCase,
+    closure_bytes: &str,
+) -> Digest {
+    let mut writer = CanonicalWriter::new();
+    writer.text("solid-checker:artifact-case-bytes");
+    writer.u16(ARTIFACT_CASE_BYTES_VERSION);
+    writer.package(package);
+    writer.text(&artifact_case.entrypoint);
+    writer.sequence(&artifact_case.resolution_trace, |writer, step| {
+        writer.text(&step.condition);
+        writer.text(&step.target);
+    });
+    writer.artifact(&artifact_case.runtime);
+    writer.artifact(&artifact_case.declarations);
+    writer.option(artifact_case.transform.as_ref(), CanonicalWriter::artifact);
+    writer.text(closure_bytes);
+    Digest::from_sha256(writer.finish())
+}
+
+/// The second address of a probe recipe: artifact bytes plus the claim's value.
+///
+/// A [`semantic_claim_id`] binds the artifact case id, which hashes every
+/// accepted dependency edge's contract digest, so a dependency that certifies
+/// something different moves every dependent's claim id. This address is the
+/// same subject stated without that: `case_bytes` is the byte-only case
+/// identity, the claim path and every operation or resource id in the stream is
+/// written with its artifact-case prefix removed (`local:` + the part after the
+/// last `:operation:` or `:resource:`), and an `artifact-case` guard atom naming
+/// the addressed case is written as `local:artifact-case`.
+///
+/// The claim's *value* is part of the address, so a recipe written for one
+/// claim never addresses a broadened or narrowed one: a call domain writes its
+/// knowledge set and then the full encoding of each operation its items name,
+/// in item order; an operation subject writes that operation. Composed
+/// provenance is part of an operation's value here, so the address stream
+/// always writes it (the id it names is normalized the same way). Every other
+/// subject has no address.
+pub(super) fn recipe_address(
+    artifact_case: &ArtifactCase,
+    export: &ExportSemantics,
+    path: &SemanticClaimPath,
+    case_bytes: &Digest,
+) -> Result<RecipeAddress, ModelError> {
+    let referenced = |operation: &OperationId| {
+        export
+            .operation(&operation.0)
+            .ok_or_else(|| ModelError::Unaddressable {
+                reason: format!("the claim references missing operation {}", operation.0),
+            })
+    };
+    // The operations this claim's value writes, in the order it writes them.
+    let operations = match path {
+        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)) => export
+            .call
+            .claims
+            .callbacks
+            .items()
+            .iter()
+            .map(|callback| referenced(&callback.operation))
+            .collect::<Result<Vec<_>, _>>()?,
+        SemanticClaimPath::Domain(ClaimPath::Call(domain)) => export
+            .call
+            .claims
+            .operation_claim(*domain)
+            .expect("every non-callback call domain is an operation set")
+            .items()
+            .iter()
+            .map(referenced)
+            .collect::<Result<Vec<_>, _>>()?,
+        SemanticClaimPath::Operation(operation) => vec![referenced(operation)?],
+        SemanticClaimPath::Domain(_) => {
+            return Err(ModelError::Unaddressable {
+                reason: "only call-domain and operation subjects carry a recipe address".into(),
+            });
+        }
+    };
+    let mut writer = CanonicalWriter::new();
+    // The result-access family (ADR 0139), per claim, the same way.
+    if operations
+        .iter()
+        .any(|operation| operation.is_result_access())
+    {
+        writer.text(SEMANTIC_RESULT_ACCESS_MARKER);
+    }
+    // The invoke-protocol family, per claim: a claim none of whose operations
+    // states a non-call protocol writes exactly the stream it wrote before the
+    // field existed, so every address already in a recipe corpus still binds.
+    if operations
+        .iter()
+        .any(|operation| operation.protocol.is_some())
+    {
+        writer.text(SEMANTIC_INVOKE_PROTOCOL_MARKER);
+        writer.invoke_protocols = true;
+    }
+    if operations.iter().any(|operation| {
+        operation.strict_read.is_some()
+            || operation.output.as_ref().is_some_and(value_has_strict_read)
+    }) {
+        writer.text("solid-checker:semantic-strict-read:v1");
+        writer.strict_reads = true;
+    }
+    if has_callback_results(&export.call) {
+        writer.text("solid-checker:semantic-callback-results:v1");
+        writer.callback_results = true;
+    }
+    if has_captures(&export.call) {
+        writer.text("solid-checker:semantic-captures:v1");
+        writer.captures = true;
+    }
+    writer.local_ids = true;
+    writer.address_case = Some(artifact_case.id.clone());
+    if writer.callback_results || writer.captures {
+        // A producer recipe must also bind its consumers' timing, context,
+        // paths and data edges. Bind the complete new graph conservatively;
+        // pre-extension recipes keep their exact historical stream.
+        writer.strict_reads = true;
+        writer.composed_provenance = true;
+        writer.proposed_closure = true;
+        writer.computations = true;
+        writer.invoke_protocols = true;
+        writer.context_premises = true;
+        writer.accessor_bounds = true;
+        writer.call(&export.call);
+    }
+    writer.composed_provenance = true;
+    writer.text("solid-checker:recipe-address");
+    writer.u16(RECIPE_ADDRESS_VERSION);
+    writer.u16(SEMANTIC_MODEL_VERSION);
+    writer.digest(case_bytes);
+    writer.export_identity(&export.identity);
+    writer.semantic_claim_path(path);
+    match path {
+        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)) => {
+            writer.knowledge(&export.call.claims.callbacks, CanonicalWriter::callback);
+        }
+        SemanticClaimPath::Domain(ClaimPath::Call(domain)) => {
+            let set = export
+                .call
+                .claims
+                .operation_claim(*domain)
+                .expect("every non-callback call domain is an operation set");
+            writer.knowledge(set, CanonicalWriter::operation_id);
+        }
+        _ => {}
+    }
+    for operation in operations {
+        writer.operation(operation);
+    }
+    Ok(RecipeAddress::from_sha256(writer.finish()))
+}
+
+/// `local:` + the part after the last `marker`, or the id verbatim.
+fn local_id(value: &str, marker: &str) -> String {
+    match value.rfind(marker) {
+        Some(index) => format!("local:{}", &value[index + marker.len()..]),
+        None => value.to_owned(),
+    }
+}
+
+// Normalization admits effectful calls only as direct returned members, but
+// recursively visit their containers here so no nested operation escapes the
+// digest-family selection. The operation encoder uses the same writer.
+fn has_strict_read(call: &CallSemantics) -> bool {
+    call.operations.iter().any(|operation| {
+        operation.strict_read.is_some()
+            || operation.output.as_ref().is_some_and(value_has_strict_read)
+    })
+}
+
+fn value_has_strict_read(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::EffectfulCallable(call) => has_strict_read(call),
+        ValueShape::ReturnedCallable { call, members } => {
+            call.as_deref().is_some_and(has_strict_read)
+                || members
+                    .iter()
+                    .any(|member| value_has_strict_read(&member.value))
+        }
+        ValueShape::Tuple(items) => items.items().iter().any(value_has_strict_read),
+        ValueShape::Object(properties) => properties
+            .items()
+            .iter()
+            .any(|property| value_has_strict_read(&property.value)),
+        _ => false,
+    }
+}
+
+struct CanonicalWriter {
+    hash: Sha256,
+    /// A separate family: contracts and recipe values with no strict-read
+    /// assertion retain their previous byte stream, including absent fields.
+    strict_reads: bool,
+    callback_results: bool,
+    captures: bool,
+    /// Whether operation and resource ids are written with their artifact-case
+    /// prefix removed. Set only by [`recipe_address`]; false everywhere else,
+    /// so every other digest writes every id verbatim, byte for byte.
+    local_ids: bool,
+    /// The artifact case a [`recipe_address`] stream addresses: an
+    /// `artifact-case` guard atom naming it is written as
+    /// `local:artifact-case`. `None` everywhere else.
+    address_case: Option<String>,
+    /// Whether this stream belongs to the provenance digest family.
+    ///
+    /// Set once, from the contract, by [`semantic_digest`], and always by
+    /// [`recipe_address`] (a claim value includes its provenance); false for
+    /// every other entry point, all of which encode identities rather than
+    /// operations and so cannot reach the field it gates. When false the
+    /// operation encoding is the legacy one byte for byte.
+    composed_provenance: bool,
+    /// Whether this stream belongs to a proposed-closure digest family. Set
+    /// the same way, from the contract, and false for every other entry point.
+    proposed_closure: bool,
+    /// Separate digest family: legacy cases retain their exact old stream.
+    initialization: bool,
+    /// Whether this stream belongs to the `computations` family (ADR 0114).
+    /// Set from the contract by [`semantic_digest`], false everywhere else.
+    computations: bool,
+    /// Whether this stream belongs to the invoke-protocol family: set from
+    /// the contract by [`semantic_digest`] and from the claim by
+    /// [`recipe_address`], false everywhere else. When false an operation's
+    /// encoding is the one it had before the field existed, byte for byte.
+    invoke_protocols: bool,
+    /// Whether this stream belongs to the context-premise family (ADR 0153
+    /// part 3): set from the contract by [`semantic_digest`], false
+    /// everywhere else.
+    context_premises: bool,
+    /// Whether this stream belongs to the accessor-bound family (ADR 0153
+    /// item C): set from the contract by [`semantic_digest`], false everywhere
+    /// else.
+    accessor_bounds: bool,
+}
 
 impl CanonicalWriter {
     fn new() -> Self {
-        Self(Sha256::new())
+        Self {
+            hash: Sha256::new(),
+            strict_reads: false,
+            callback_results: false,
+            captures: false,
+            local_ids: false,
+            address_case: None,
+            composed_provenance: false,
+            proposed_closure: false,
+            initialization: false,
+            computations: false,
+            invoke_protocols: false,
+            context_premises: false,
+            accessor_bounds: false,
+        }
     }
 
     fn finish(self) -> [u8; 32] {
-        self.0.finalize().into()
+        self.hash.finalize().into()
     }
 
     fn bytes(&mut self, bytes: &[u8]) {
-        self.0
+        self.hash
             .update(u64::try_from(bytes.len()).unwrap_or(u64::MAX).to_be_bytes());
-        self.0.update(bytes);
+        self.hash.update(bytes);
     }
 
     fn text(&mut self, value: &str) {
@@ -53,23 +461,23 @@ impl CanonicalWriter {
     }
 
     fn bool(&mut self, value: bool) {
-        self.0.update([u8::from(value)]);
+        self.hash.update([u8::from(value)]);
     }
 
     fn u8(&mut self, value: u8) {
-        self.0.update([value]);
+        self.hash.update([value]);
     }
 
     fn u16(&mut self, value: u16) {
-        self.0.update(value.to_be_bytes());
+        self.hash.update(value.to_be_bytes());
     }
 
     fn u32(&mut self, value: u32) {
-        self.0.update(value.to_be_bytes());
+        self.hash.update(value.to_be_bytes());
     }
 
     fn usize(&mut self, value: usize) {
-        self.0
+        self.hash
             .update(u64::try_from(value).unwrap_or(u64::MAX).to_be_bytes());
     }
 
@@ -126,6 +534,12 @@ impl CanonicalWriter {
 
     fn artifact_case(&mut self, case: &ArtifactCase) {
         self.artifact_case_subject_identity(case);
+        if self.initialization {
+            self.u8(match case.initialization {
+                None => 0,
+                Some(ModuleInitializationClaim::Inert) => 1,
+            });
+        }
         self.stability(case.stability);
         self.usize(case.exports.len());
         for (name, export) in &case.exports {
@@ -211,6 +625,7 @@ impl CanonicalWriter {
             ClaimDomain::Returns => 6,
             ClaimDomain::Cleanups => 7,
             ClaimDomain::Disposals => 8,
+            ClaimDomain::Computations => 9,
         });
     }
 
@@ -298,8 +713,66 @@ impl CanonicalWriter {
         });
     }
 
+    fn callback_result(&mut self, result: &CallbackResult) {
+        self.operation_id(&result.producer);
+        self.value(&result.shape);
+        self.knowledge(&result.uses, Self::operation_id);
+        self.usize(result.callable_only.len());
+        for id in &result.callable_only {
+            self.operation_id(id);
+        }
+    }
+
     fn call(&mut self, call: &CallSemantics) {
+        // Required captures already bind the entire returned graph in recipe
+        // addresses. Omission emits no byte: pre-extension digests stay exact.
+        if let Some(lookup) = call.captured_lookup() {
+            self.text("solid-checker:semantic-captured-own-string-lookup:v1");
+            self.text(&lookup.dictionary);
+            self.u16(lookup.key);
+            self.sequence(&lookup.default_arguments, |writer, index| {
+                writer.u16(*index)
+            });
+            self.bool(lookup.strip_leading_dot);
+        }
+        if self.captures {
+            self.sequence(call.captures(), |writer, capture| {
+                writer.text(&capture.id);
+                writer.value_source(&capture.from);
+            });
+        }
+        if self.callback_results {
+            self.sequence(call.callback_results(), Self::callback_result);
+        }
         self.call_claims(&call.claims);
+        // Written only in the proposed-closure families, so a contract that
+        // proposes nothing hashes the legacy stream byte for byte. The set is
+        // a `BTreeSet`, so the order is the vocabulary's own.
+        if self.proposed_closure {
+            let proposed = call.proposed_closures();
+            self.usize(proposed.len());
+            for domain in proposed {
+                self.claim_domain(*domain);
+            }
+        }
+        // Written only in the context-premise family (ADR 0153 part 3). The
+        // set is a `BTreeSet`, so the order is the export names'.
+        if self.context_premises {
+            let premises = call.context_premises();
+            self.usize(premises.len());
+            for premise in premises {
+                self.text(&premise.export);
+            }
+        }
+        // Written only in the accessor-bound family (ADR 0153 item C), in the
+        // `BTreeSet`'s order.
+        if self.accessor_bounds {
+            let bounds = call.accessor_bounds();
+            self.usize(bounds.len());
+            for source in bounds {
+                self.text(source);
+            }
+        }
         self.sequence(&call.operations, Self::operation);
         self.sequence(&call.edges, Self::edge);
         self.sequence(&call.resources, Self::resource);
@@ -316,6 +789,9 @@ impl CanonicalWriter {
         self.knowledge(&claims.returns, Self::operation_id);
         self.knowledge(&claims.cleanups, Self::operation_id);
         self.knowledge(&claims.disposals, Self::operation_id);
+        if self.computations {
+            self.knowledge(&claims.computations, Self::operation_id);
+        }
     }
 
     fn callback(&mut self, callback: &CallbackInvocation) {
@@ -323,8 +799,27 @@ impl CanonicalWriter {
         self.operation_id(&callback.operation);
     }
 
+    /// ADR 0152: a nested item, in the encodings an `invoke` operation's own
+    /// fields use, in the same order.
+    fn described_callback(&mut self, callback: &super::DescribedCallback) {
+        self.value_source(&callback.from);
+        self.option(callback.trigger.as_ref(), Self::trigger);
+        self.option(callback.at.as_ref(), |writer, event| writer.event(*event));
+        self.option(callback.schedule.as_ref(), |writer, schedule| {
+            writer.schedule(*schedule);
+        });
+        self.tracking(callback.tracking);
+        self.owner(&callback.owner);
+        self.cardinality(&callback.cardinality);
+    }
+
     fn value_source(&mut self, source: &ValueSource) {
         match source {
+            ValueSource::Capture { capture, path } => {
+                self.u8(4);
+                self.text(capture);
+                self.sequence(path, |writer, value| writer.text(value));
+            }
             ValueSource::Parameter { index, path } => {
                 self.u8(0);
                 self.u16(*index);
@@ -340,15 +835,31 @@ impl CanonicalWriter {
                 self.resource_id(resource);
                 self.sequence(path, |writer, value| writer.text(value));
             }
+            // ADR 0207: a tag of its own, so no document that states a member
+            // class hashes like one that does not.
+            ValueSource::ParameterMembers { index, path, class } => {
+                self.u8(3);
+                self.u16(*index);
+                self.sequence(path, |writer, value| writer.text(value));
+                self.text(class.wire());
+            }
         }
     }
 
     fn operation_id(&mut self, id: &OperationId) {
-        self.text(&id.0);
+        if self.local_ids {
+            self.text(&local_id(&id.0, ":operation:"));
+        } else {
+            self.text(&id.0);
+        }
     }
 
     fn resource_id(&mut self, id: &ResourceId) {
-        self.text(&id.0);
+        if self.local_ids {
+            self.text(&local_id(&id.0, ":resource:"));
+        } else {
+            self.text(&id.0);
+        }
     }
 
     fn operation(&mut self, operation: &Operation) {
@@ -361,6 +872,13 @@ impl CanonicalWriter {
             writer.schedule(*schedule);
         });
         self.tracking(operation.tracking);
+        if self.strict_reads {
+            self.option(operation.strict_read.as_ref(), |writer, strict_read| {
+                writer.u8(match strict_read {
+                    StrictRead::Cleared => 0,
+                });
+            });
+        }
         self.owner(&operation.owner);
         self.cardinality(&operation.cardinality);
         self.sequence(&operation.inputs, Self::value);
@@ -369,6 +887,46 @@ impl CanonicalWriter {
         for resource in &operation.resources {
             self.resource_id(resource);
         }
+        // Provenance is part of the operation's claim, so it is part of the
+        // operation's identity: "this export reads that accessor" and "this
+        // export reads that accessor through its call to `createPolled`" are
+        // two different claims about the same row, and a digest that could not
+        // tell them apart would let a receipt for one authenticate the other.
+        //
+        // Written only in the provenance family, and there through `option`,
+        // which stamps its discriminator either way. In the legacy family this
+        // whole encoding is absent, so a contract with no composed operation
+        // hashes exactly the bytes it hashed before the field existed. See
+        // [`semantic_digest`] for why the families are separated rather than
+        // merged.
+        if self.composed_provenance {
+            self.option(operation.composed_from.as_ref(), Self::composed_from);
+        }
+        // Written only in the invoke-protocol family, through `option`, so a
+        // call (`None`) and each protocol are distinct inside it and the
+        // family itself is absent from every stream that states none.
+        if self.invoke_protocols {
+            self.option(operation.protocol.as_ref(), |writer, protocol| {
+                writer.invoke_protocol(*protocol);
+            });
+        }
+    }
+
+    fn invoke_protocol(&mut self, protocol: InvokeProtocol) {
+        self.u8(match protocol {
+            InvokeProtocol::Call => 0,
+            InvokeProtocol::Get => 1,
+            InvokeProtocol::Iterate => 2,
+            InvokeProtocol::Coerce => 3,
+            InvokeProtocol::HasInstance => 4,
+            InvokeProtocol::GetEnumerableStringValues => 5,
+            InvokeProtocol::GetOwnEnumerableValues => 6,
+        });
+    }
+
+    fn composed_from(&mut self, composed: &ComposedFrom) {
+        self.text(&composed.export);
+        self.operation_id(&composed.operation);
     }
 
     fn operation_kind(&mut self, kind: OperationKind) {
@@ -381,6 +939,7 @@ impl CanonicalWriter {
             OperationKind::Create => 5,
             OperationKind::Cleanup => 6,
             OperationKind::Dispose => 7,
+            OperationKind::Compute => 8,
         });
     }
 
@@ -396,6 +955,7 @@ impl CanonicalWriter {
             Event::External => 7,
             Event::Request => 8,
             Event::ResponseCommitment => 9,
+            Event::ResultAccess => 10,
         });
     }
 
@@ -650,6 +1210,17 @@ impl CanonicalWriter {
                 self.text(name);
                 self.option(callable.as_ref(), |writer, callable| writer.bool(*callable));
             }
+            GuardAtom::OwnDataKeys {
+                argument,
+                path,
+                names,
+            } => {
+                // Append a tag: every pre-existing guard retains its bytes.
+                self.u8(8);
+                self.u16(*argument);
+                self.sequence(path, |writer, value| writer.text(value));
+                self.sequence(names, |writer, value| writer.text(value));
+            }
             GuardAtom::TupleAlternative {
                 argument,
                 alternative,
@@ -664,7 +1235,11 @@ impl CanonicalWriter {
             }
             GuardAtom::ArtifactCase(case) => {
                 self.u8(7);
-                self.text(case);
+                if self.address_case.as_deref() == Some(case.as_str()) {
+                    self.text("local:artifact-case");
+                } else {
+                    self.text(case);
+                }
             }
         }
     }
@@ -777,6 +1352,124 @@ impl CanonicalWriter {
                 self.u8(16);
                 self.option(resource.as_ref(), Self::resource_id);
             }
+            // Appended, never inserted: a discriminant is part of the semantic
+            // digest, so renumbering an existing shape would move every receipt
+            // that ever described one.
+            ValueShape::MergedProps { from } => {
+                self.u8(17);
+                self.u16(*from);
+            }
+            // ADR 0115. Appended for the same reason, and it needs no digest
+            // family: no document before it can carry the tag.
+            ValueShape::ArgumentArray { items } => {
+                self.u8(18);
+                self.sequence(items, |writer, index| writer.u16(*index));
+            }
+            // ADR 0116. Appended, and no document before it carries the tag.
+            ValueShape::InvocationResult { parameter } => {
+                self.u8(19);
+                self.u16(*parameter);
+            }
+            // Item B round 2 of ways-to-improve § 3.3. Appended, and no
+            // document before it carries the tag, so it needs no digest family.
+            ValueShape::Undefined => self.u8(20),
+            // ADR 0145. Appended, and no document before it carries the tag,
+            // so it needs no digest family. Both lists are canonically sorted
+            // by normalization before this runs.
+            // ADR 0152: a described callable that invokes a callable its
+            // export was handed takes tag 23, appended, with the items after
+            // the two lists. One that invokes none keeps tag 21 and ADR
+            // 0145's stream byte for byte, so no document stating one before
+            // the items existed moves its digest or a receipt.
+            ValueShape::DescribedCallable(call) => {
+                self.u8(if call.callbacks.is_empty() { 21 } else { 23 });
+                self.sequence(&call.reads, |writer, read| {
+                    writer.u8(match read {
+                        super::DescribedRead::OwnedSignal => 0,
+                        // ADR 0162. Appended; no document before it carries it.
+                        super::DescribedRead::OwnedMemo => 1,
+                    });
+                });
+                self.sequence(&call.returns, Self::value);
+                if !call.callbacks.is_empty() {
+                    self.sequence(&call.callbacks, Self::described_callback);
+                }
+            }
+            // ADR 0146. Appended; no document before it carries the tag.
+            ValueShape::ReadValue => self.u8(22),
+            // Appended; no old shape or optional-field stream changes.
+            ValueShape::PrototypeInstance {
+                members,
+                population,
+            } => {
+                // Appended tag: all preexisting values retain their byte stream.
+                self.u8(27);
+                self.u8(match population {
+                    super::PrototypePopulation::Opaque => 0,
+                    super::PrototypePopulation::Values => 1,
+                    super::PrototypePopulation::Entries => 2,
+                });
+                self.sequence(members, |writer, member| {
+                    writer.text(&member.name);
+                    writer.u8(match member.kind {
+                        super::PrototypeMemberKind::Method => 0,
+                        super::PrototypeMemberKind::Getter => 1,
+                        super::PrototypeMemberKind::Iterator => 2,
+                    });
+                    writer.sequence(&member.tracks, |writer, track| {
+                        writer.text(&track.cache);
+                        writer.option(track.argument.as_ref(), |writer, index| writer.u16(*index));
+                        writer.option(track.shared.as_ref(), |writer, key| writer.text(key));
+                    });
+                });
+            }
+            ValueShape::LazyGetterObject { keys, from } => {
+                self.u8(26);
+                self.sequence(keys, |writer, key| writer.text(key));
+                self.option(from.as_ref(), |writer, index| writer.u16(*index));
+            }
+            // ADR 0235. Appended; no document before it carries the tag.
+            ValueShape::EffectfulCallable(call) => {
+                self.u8(24);
+                self.call(call);
+            }
+            // Appended. No preexisting value changes its canonical stream.
+            ValueShape::ReturnedCallable { call, members } => {
+                self.u8(25);
+                // Nested graphs encode every optional axis, even when the
+                // factory selected the legacy family. This local switch is
+                // scoped to tag 25 and cannot change any older document.
+                let flags = (
+                    self.strict_reads,
+                    self.composed_provenance,
+                    self.proposed_closure,
+                    self.computations,
+                    self.invoke_protocols,
+                    self.context_premises,
+                    self.accessor_bounds,
+                );
+                self.strict_reads = true;
+                self.composed_provenance = true;
+                self.proposed_closure = true;
+                self.computations = true;
+                self.invoke_protocols = true;
+                self.context_premises = true;
+                self.accessor_bounds = true;
+                self.option(call.as_deref(), Self::call);
+                self.sequence(members, |writer, member| {
+                    writer.text(&member.name);
+                    writer.value(&member.value);
+                });
+                (
+                    self.strict_reads,
+                    self.composed_provenance,
+                    self.proposed_closure,
+                    self.computations,
+                    self.invoke_protocols,
+                    self.context_premises,
+                    self.accessor_bounds,
+                ) = flags;
+            }
         }
     }
 
@@ -792,4 +1485,56 @@ impl CanonicalWriter {
             writer.option(claim.resource.as_ref(), Self::resource_id);
         });
     }
+}
+
+fn has_captures(call: &CallSemantics) -> bool {
+    fn value_has_captures(value: &ValueShape) -> bool {
+        match value {
+            ValueShape::ReturnedCallable { call, members } => {
+                call.as_deref().is_some_and(has_captures)
+                    || members
+                        .iter()
+                        .any(|member| value_has_captures(&member.value))
+            }
+            ValueShape::EffectfulCallable(call) => has_captures(call),
+            ValueShape::Tuple(items) => items.items().iter().any(value_has_captures),
+            ValueShape::Object(properties) => properties
+                .items()
+                .iter()
+                .any(|property| value_has_captures(&property.value)),
+            _ => false,
+        }
+    }
+    !call.captures().is_empty()
+        || call
+            .operations
+            .iter()
+            .any(|operation| operation.output.as_ref().is_some_and(value_has_captures))
+}
+
+fn has_callback_results(call: &CallSemantics) -> bool {
+    fn value_has(value: &ValueShape) -> bool {
+        match value {
+            ValueShape::EffectfulCallable(call) => has_callback_results(call),
+            ValueShape::ReturnedCallable { call, members } => {
+                call.as_deref().is_some_and(has_callback_results)
+                    || members.iter().any(|member| value_has(&member.value))
+            }
+            ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+                items.items().iter().any(value_has)
+            }
+            ValueShape::Object(items) => {
+                items.items().iter().any(|member| value_has(&member.value))
+            }
+            ValueShape::Array { element, .. }
+            | ValueShape::Promise(element)
+            | ValueShape::AsyncIterable(element) => value_has(element),
+            _ => false,
+        }
+    }
+    !call.callback_results().is_empty()
+        || call
+            .operations
+            .iter()
+            .any(|operation| operation.output.as_ref().is_some_and(value_has))
 }

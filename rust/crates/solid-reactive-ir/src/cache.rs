@@ -34,6 +34,7 @@ use typefacts::{Declaration, Location};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct BuildIdentity {
+    pub(crate) runtime_configuration: crate::RuntimeConfigurationPremise,
     pub(crate) dialect: solid_dialect::Version,
     pub(crate) project_id: String,
     pub(crate) generation: u64,
@@ -183,6 +184,8 @@ pub(crate) struct SourceDiscoveryContribution {
 
 pub(crate) struct CachedSourceDiscovery {
     pub(crate) identity: SourceDiscoveryIdentity,
+    /// Includes project source hashes for exact returned-source proofs;
+    /// unchanged caller types alone cannot retain a callee's return identity.
     pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
     pub(crate) contribution: SourceDiscoveryContribution,
 }
@@ -213,20 +216,42 @@ pub(crate) struct InterproceduralGraphContribution {
     /// behavior and make an ambiguous call look certified.
     pub(crate) dispatches: Vec<(Span, Vec<SymbolId>)>,
     pub(crate) invoked_parameters: Vec<(Span, usize)>,
+    /// `(owner, parameter index)` for a parameter the owner calls *itself*,
+    /// directly, in its own body -- `function f(cb) { cb() }` -- which is the
+    /// one `callbacks` row the implementation census can confirm site for
+    /// site (ADR 0100). Recorded beside the row rather than in it: the wire
+    /// spells this and a primitive's inline position with the same word.
+    pub(crate) direct_callback_parameters: Vec<(Span, usize)>,
+    /// ADR 0183: `(owner, parameter)` for a parameter written directly as an
+    /// eager owned-computation slot (`createMemo(fn)`) by a call that covers
+    /// every normal completion of the owner's body. A proposal input only.
+    pub(crate) guaranteed_callback_parameters: Vec<(Span, usize)>,
+    /// `(owner, protocol, parameter index)` for a property read (`Get`) or a
+    /// coercion (`Coerce`) of a parameter's own value written directly in the
+    /// owner's body (item A of ways-to-improve § 3.3): the proposal input the
+    /// generator describes as a non-call `callbacks` item. Never evidence.
+    pub(crate) direct_protocol_parameters:
+        Vec<(Span, crate::contract_semantics::InvokeProtocol, usize)>,
+    /// `(owner, parameter index, member path)` for a call of a literal-keyed
+    /// member of a parameter's own unwritten binding written directly in the
+    /// owner's body -- `handler[0](…)` (item B of ways-to-improve § 3.3): the
+    /// proposal input beside the member-path `inline` row the pass writes.
+    /// Never evidence.
+    pub(crate) direct_member_callback_parameters: Vec<(Span, usize, Vec<String>)>,
     /// `(owner, parameter index)` for a parameter whose caller-supplied value
     /// this function neither invokes nor observes inertly — it stores it, hands
     /// it on, or returns it. See
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(crate) escaped_parameters: Vec<(Span, usize)>,
-    /// A member invoked on a parameter: `(owner, parameter index, access
-    /// path)` for `function invoke(reader) { reader.read() }`. The path is the
+    /// A member invoked on a parameter, with its owner and execution context,
+    /// for `function invoke(reader) { reader.read() }`. The path is the
     /// whole chain from the parameter -- `reader.source.read()` records
     /// `["source", "read"]`, not `["read"]` -- and is empty when the
     /// parameter's own value is read, or when no segment could be named
     /// exactly. The implementation is not a property of the owner -- each call
     /// site supplies it -- so this records the obligation and leaves
     /// resolution to the site.
-    pub(crate) invoked_parameter_members: Vec<(Span, usize, Vec<String>)>,
+    pub(crate) invoked_parameter_members: Vec<(Span, crate::interproc::ParameterMemberInvocation)>,
     pub(crate) callbacks: Vec<(Span, ContractCallback)>,
     pub(crate) callback_forwardings: Vec<(
         Span,
@@ -260,7 +285,7 @@ pub(crate) enum InterproceduralResultDependencyState {
         name: Option<String>,
         summary: Vec<SummaryRead>,
         invoked_parameters: Vec<usize>,
-        invoked_parameter_members: Vec<(usize, Vec<String>)>,
+        invoked_parameter_members: Vec<crate::interproc::ParameterMemberInvocation>,
     },
     Returned(Vec<SummaryRead>),
     Inline(Vec<SummaryRead>),
@@ -271,6 +296,9 @@ pub(crate) struct CachedInterproceduralResultFile {
     pub(crate) reads: Vec<ReactiveRead>,
     pub(crate) dispatch_obligations: Vec<StaticDefect>,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
+    /// Whether this file, as analyzed, held syntax a caller's call-role proof
+    /// reads beyond its summaries (`interproc::call_role_syntax`).
+    pub(crate) call_role_syntax: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -302,6 +330,16 @@ pub(crate) struct ContractExportFragment {
     pub(crate) direct: Vec<(String, ContractExport)>,
     pub(crate) syntax: Vec<(String, ContractExport, bool)>,
     pub(crate) dependencies: HashSet<ContractNodeKey>,
+    /// The export name to summary-node symbol bindings this file publishes.
+    ///
+    /// It answers the one question a per-node projection cannot: under which
+    /// exported name is the node that discovered a composed read published?
+    /// Aggregation inverts these, and a node exported under more than one
+    /// name — or under none — publishes no provenance at all. This is a
+    /// nomination for aggregation to resolve, never authority: the certifier
+    /// re-derives the same binding from the compiler's own authenticated
+    /// export table before it discharges anything.
+    pub(crate) owners: Vec<(String, SymbolId)>,
 }
 
 #[derive(Default)]
@@ -501,6 +539,8 @@ pub(crate) struct LateStageFileInput {
 
 #[derive(Clone, Default)]
 pub(crate) struct LocalAccessResult {
+    pub(crate) prototype_recipes_observed: bool,
+    pub(crate) prototype_leaf_operations: Vec<crate::LeafOwnerOperation>,
     pub(crate) reads: Vec<Arc<ReactiveRead>>,
     pub(crate) writes: Vec<Arc<ReactiveWrite>>,
     pub(crate) action_invocations: Vec<Arc<ActionInvocation>>,
@@ -529,8 +569,8 @@ pub(crate) struct LocalAccessSymbolState {
     /// proof folded into `ssr_client_bare` / `server_rendering_unresolved`, so
     /// a fixed import elsewhere invalidates every file reading this source.
     pub(crate) async_options: crate::source_discovery::AsyncSourceOptions,
-    pub(crate) contract_reads: Option<Vec<(String, String, Location, String)>>,
-    pub(crate) contract_parameter_reads: Option<Vec<(usize, String, String, Location)>>,
+    pub(crate) contract_reads: Option<Vec<crate::ContractReadSite>>,
+    pub(crate) contract_parameter_reads: Option<Vec<crate::ContractParameterReadSite>>,
     pub(crate) source_kind: Option<ReactiveSourceKind>,
     pub(crate) prop_source: Option<(
         SymbolId,

@@ -46,8 +46,12 @@ pub fn package_contract_finding(issue: &PackageContractIssue) -> Finding {
 // untracked in a proven tracking context, so Solid provably warns there — the
 // flat "Solid warns ... here in dev" claim is earned. An uncertifiable read is
 // not: it rests on unenumerable callers (`ReactiveRead::uncertain`), a census
-// hole (`ReactiveRead::missing_jsx_census`), and in either case the flat claim
-// asserts a runtime behavior the finding's own message says cannot be proven.
+// hole (`ReactiveRead::missing_jsx_census`), a host callback whose
+// invocation window is not proven (`ReactiveRead::host_callback_timing`), or a
+// callback handed to a callee not proven to invoke it during the call
+// (`ReactiveRead::callee_callback_timing`), and
+// in each case the flat claim asserts a runtime behavior the finding's own
+// message says cannot be proven.
 // The conditional phrasing stays true regardless of which uncertainty caused
 // the finding.
 const STRICT_READ_UNTRACKED_WARNS: &str = "Solid warns STRICT_READ_UNTRACKED here in dev.";
@@ -278,7 +282,89 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
     ])
 }
 
+/// ADR 0179: the wording for a registration a package export's accepted
+/// contract states it makes on its caller's owner on every call. It names the
+/// export and what the contract states, and not a runtime code: which
+/// forbidden-scope error the runtime raises first depends on the export's
+/// internals, of which the contract states only the guaranteed registration.
+fn leaf_contract_registration_wording(
+    operation: &solid_reactive_ir::LeafOwnerOperation,
+    export: &str,
+) -> FindingWording {
+    let registration = match operation.kind {
+        LeafOwnerOperationKind::Cleanup => "a cleanup",
+        _ => "a reactive computation",
+    };
+    let mut message = if operation.possible {
+        format!(
+            "{export}() may register {registration} on its caller's owner at this call, which is inside {}, a leaf owner that forbids it; its accepted contract states the registration on some calls, not every call, so where it happens Solid throws in dev and the finding is a proof obligation",
+            operation.owner
+        )
+    } else {
+        format!(
+            "{export}() registers {registration} on its caller's owner at this call, which is inside {}, a leaf owner that forbids it; Solid throws here in dev",
+            operation.owner
+        )
+    };
+    let hint = format!(
+        "Call {export}() in the component body (or another owning scope) instead of inside {}.",
+        operation.owner
+    );
+    let mut evidence = vec![
+        EvidenceStep {
+            message: format!(
+                "the accepted contract for {export} states {registration} on the caller's owner, at the call, {}",
+                if operation.possible {
+                    "on some calls (min 0)"
+                } else {
+                    "on every call"
+                }
+            ),
+            location: Some(operation.location.clone()),
+        },
+        EvidenceStep {
+            message: format!(
+                "the call is in the synchronous extent of the {} callback",
+                operation.owner
+            ),
+            location: Some(operation.location.clone()),
+        },
+    ];
+    if operation.uncertain {
+        message.push_str(
+            "; solid-checker cannot prove this call runs under a live children-capable owner (out-of-band the callback is a plain queued function and this does not throw), so the finding is a proof obligation",
+        );
+        evidence.push(EvidenceStep {
+            message: format!(
+                "the {} call site's owner context cannot be proven (exported helper or conditional owner)",
+                operation.owner
+            ),
+            location: operation.call_site_gate.clone(),
+        });
+    }
+    FindingWording::new(Rule::LeafOwnerForbiddenCall.metadata(), message, hint)
+        .with_evidence(evidence)
+}
+
 fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> FindingWording {
+    if matches!(
+        operation.kind,
+        LeafOwnerOperationKind::ObserverCacheTracking
+    ) {
+        let member = operation.via.as_deref().unwrap_or("prototype member");
+        return FindingWording::new(Rule::LeafOwnerForbiddenCall.metadata(),
+            format!("{member} performs observer-cache tracking inside {}; a missing per-key signal requires child creation and a retained signal requires cleanup registration, and this leaf owner forbids both paths, so Solid throws in dev", operation.owner),
+            format!("Read the collection in JSX or a children-capable tracked computation instead of inside {}.", operation.owner))
+            .with_evidence(vec![EvidenceStep {
+                message: "the exact new-instance contract states a getObserver-gated per-key cache recipe; the observer is present at this synchronous invocation".into(),
+                location: Some(operation.location.clone()),
+            }]);
+    }
+    if operation.through_contract
+        && let Some(export) = &operation.via
+    {
+        return leaf_contract_registration_wording(operation, export);
+    }
     let (rule, mut message, hint) = match &operation.kind {
         LeafOwnerOperationKind::Cleanup => (
             Rule::LeafOwnerForbiddenCall,
@@ -313,6 +399,7 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
                 operation.owner
             ),
         ),
+        LeafOwnerOperationKind::ObserverCacheTracking => unreachable!("handled above"),
         LeafOwnerOperationKind::UnresolvedCallback => (
             Rule::ReactiveDispatchUnresolved,
             format!(
@@ -365,6 +452,37 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
 }
 
 fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
+    if read.invocation_context_unproven {
+        return FindingWording::new(
+            Rule::PendingAsyncUnsuspendableRead.metadata(),
+            format!("async accessor {:?} is read in a stored or nested callback whose invocation during the component's strict-read window is unproven; this does not establish that the read throws", read.accessor),
+            "Establish when the callback runs and how pending values are handled. Use a tracking scope when the result needs suspension and retry.".to_owned(),
+        );
+    }
+    if read.callee_callback_timing {
+        let mut metadata = Rule::PendingAsyncUnsuspendableRead.metadata();
+        if read.leaf_owner.is_some() {
+            metadata.severity = "warning";
+        }
+        return FindingWording::new(
+            metadata,
+            format!(
+                "async accessor {:?} is read in a callback whose callee's invocation context and pending handling are unproven; this does not establish that the read throws",
+                read.accessor
+            ),
+            "Inspect when the callee invokes this callback and whether it handles pending values. Read async values in a tracking scope when the callback needs suspension and retry.".to_owned(),
+        )
+        .with_evidence(vec![
+            EvidenceStep {
+                message: "the source's computation is async; the callback's callee does not prove an unhandled pending read".to_owned(),
+                location: Some(read.declaration.clone()),
+            },
+            EvidenceStep {
+                message: "callback invocation remains an open obligation".to_owned(),
+                location: Some(read.location.clone()),
+            },
+        ]);
+    }
     // Declared first paint (probed against rc.0): a loadingValue /
     // seedLoadingValue node is born committed, so its *first flight* cannot
     // throw anywhere — but once the first real answer lands, a pending
@@ -398,7 +516,12 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
         match read.execution {
             ExecutionRole::ModuleInitialization | ExecutionRole::UntrackedRendering => (
                 Rule::PendingAsyncUnsuspendableRead,
-                if declared {
+                if read.host_callback_timing {
+                    format!(
+                        "async accessor {:?} may be read here while pending, in a callback a host API retains; if the host invokes the callback inside the component body's strict-read window the read cannot suspend or retry and throws PENDING_ASYNC_UNTRACKED_READ in dev, and if it invokes it later the read throws a plain NotReadyError, and nothing here proves which",
+                        read.accessor
+                    )
+                } else if declared {
                     format!(
                         "async accessor {:?} declares a loadingValue, so this untracked read serves the declared value during the first flight, but after the first real answer lands a pending re-ask (input change or refresh) makes it throw PENDING_ASYNC_UNTRACKED_READ in dev",
                         read.accessor
@@ -476,6 +599,14 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             "; the source's options argument cannot be read statically, so a loadingValue declaration (which would make the first flight safe) can be neither proven nor ruled out — this finding is a proof obligation, not a proven throw",
         );
     }
+    if read.host_callback_timing
+        && rule == Rule::PendingAsyncUnsuspendableRead
+        && read.leaf_owner.is_none()
+    {
+        provenance.push_str(
+            "; the read sits in a callback a host API retains (an event listener, a bound argument, a thenable callback or a Geolocation callback), which the host may invoke inside the component body's strict-read window, where a pending read throws PENDING_ASYNC_UNTRACKED_READ in dev, or after it, where it throws a plain NotReadyError — this finding is a proof obligation, not a proven throw",
+        );
+    }
     let mut metadata = rule.metadata();
     if read.leaf_owner.is_some() {
         metadata.severity = "warning";
@@ -508,22 +639,20 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::ResolveInReactiveScope => {
             "the resolve() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
         }
+        Rule::UntilInTrackedScope => {
+            "the until() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
+        }
+        Rule::FlushInAction => {
+            "the flush() call runs directly in an action body, inside a step, where the installed @solidjs/signals throws FLUSH_IN_ACTION in dev"
+        }
+        Rule::StaticDynamicAsyncSource => {
+            "the static-form dynamic() source is proven to return a Promise, which the dev builds reject at the call and the production builds render as nothing"
+        }
         Rule::HttpResponseAfterFlush => {
             "the call's scope renders below a Loading boundary, but request-time ordering does not prove whether the boundary settles before or after the response head commits"
         }
         Rule::ServerFunctionModuleDirective => {
             "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"
-        }
-        // The nested claim is about a value the argument *holds*, not the
-        // argument's own resolved type, so it cannot borrow the top-level
-        // sentence: that one would assert a fact the analysis never proved.
-        Rule::ServerFunctionRichArgument
-            if violation.analysis_context == "nested-rich-argument" =>
-        {
-            "the callee carries a \"use server\" directive, a closed object literal reaching it holds a value in the JSON-unsafe set, and nothing in the project installs an argument serializer"
-        }
-        Rule::ServerFunctionRichArgument => {
-            "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
         }
         Rule::JsxNoDuplicateProps => {
             "the intrinsic element uses more than one competing source of DOM child content"
@@ -547,7 +676,18 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
-        | Rule::PackageContractIncomplete => panic!(
+        | Rule::PackageContractIncomplete
+        // Moved to the static-defect channel, where the analysis states which
+        // of the four transport proofs it made and this catalog names the
+        // serializer that fixes it.
+        | Rule::ServerFunctionRichArgument
+        // Never reaches any wording channel: dialect detection emits it
+        // directly, with the message built at the refusal site because the
+        // manifest path and installed version are what it has to say.
+        | Rule::UnsupportedSolidRuntime
+        // Likewise: the backend builds it beside the analysis from the
+        // detected release and the dialect's review of it.
+        | Rule::UnauditedSolidRelease => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
@@ -580,6 +720,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ExpectedFunctionGotExpression => Rule::ExpectedFunctionGotExpression,
         StaticDefectFamily::UncalledAccessor => Rule::UncalledAccessor,
         StaticDefectFamily::DirectMutation => Rule::NoDirectMutation,
+        StaticDefectFamily::ServerFunctionRichArgument => Rule::ServerFunctionRichArgument,
     };
     let text = solid_reactive_ir::static_defect_text(defect, &V2_STATIC_TERMS);
     let mut message = text.message;
@@ -595,8 +736,14 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
             StaticDefectKind::MissingEffectFunction
                 | StaticDefectKind::ReactiveDispatchUnresolved { .. }
                 | StaticDefectKind::ReactiveCallbackUnresolved { .. }
+                | StaticDefectKind::ResultAccessCallbackUnplaced { .. }
                 | StaticDefectKind::StructuredReturnUnresolved { .. }
                 | StaticDefectKind::HandlerValueUnresolved { .. }
+                // The open transport proof names its own reason in the
+                // message; there is no component whose call sites could be
+                // enumerated, so the props sentence would describe a
+                // different obligation than the one raised.
+                | StaticDefectKind::ServerFunctionRichArgument { .. }
         )
     {
         if defect.analysis_context == "draggable-default-uncertain" {
@@ -623,6 +770,11 @@ const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
         missing_effect_hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
         store_mutation_hint: v2_store_mutation_hint,
         removed_export_hint: v2_removed_export_hint,
+        rich_argument_transport_throw: "Server function arguments are sent as JSON by default and these arguments are not JSON-serializable",
+        rich_argument_resolved_hint: "Call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup to send Dates, Maps, Sets, and typed arrays through the codec (~5 KB gz), or convert the argument to a JSON-safe shape at the call site (date.toISOString(), Array.from(set)).",
+        rich_argument_nested_hint: "Convert the nested value to a JSON-safe shape where the object is built (date.toISOString(), Array.from(set)), or call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup.",
+        rich_argument_primitive_hint: "Convert the argument to a JSON value at the call site, or install the rich-argument serializer once at client startup.",
+        rich_argument_unresolved_hint: "Resolve the argument type and configure the serializer through the exact @solidjs/web server-functions API, or pass a JSON-safe value explicitly.",
     };
 
 fn v2_store_mutation_hint(name: &str) -> String {

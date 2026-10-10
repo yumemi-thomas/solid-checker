@@ -1,0 +1,15 @@
+{
+  "status": "hand-stated, unrun; compare before recording a findings snapshot",
+  "browserUpgrade": true,
+  "violations": [
+    "browser-only contract: mandatory module registration"
+  ],
+  "noTarget": [
+    "src/Document.tsx",
+    "src/server.ts"
+  ],
+  "explicitTarget": null,
+  "rule": "missing-owner",
+  "code": "SC4001",
+  "kind": "violation"
+}

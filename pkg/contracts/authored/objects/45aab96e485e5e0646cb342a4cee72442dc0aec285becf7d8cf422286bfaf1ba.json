@@ -1,0 +1,156 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "e0902ff968f3775c32ccde1d89ef5cccc43d785b31213841e84f1fa5b88001be",
+            "path": "./dist/index.js",
+            "sha256": "928b6b259edd2bd74498c04bd3cab85a0f2f0d268a5caacd1d84c9e8de690bb7"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "040c9d37c13f978bf8e4b4f7c67a33a4843c3e0cf5e1e5afe8bc44cff05d5696"
+          },
+          "exports": {
+            "captureStoreUpdates": "open-callable",
+            "deepTrack": "authored-deepTrack",
+            "trackDeep": "authored-trackDeep",
+            "trackStore": "authored-trackStore"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-PYus+PGfzKxLlumt7x25MvDh3vFrfcoUrus8byeboJEQcD+KTFHwi4Jt4ZmKHDJD+ZjtM3S81z3Ibt50LP5fuA==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "d8dce665830da982593c5a7ce88177c754f8c4ccbc004aed1b1e16a8b9c9c4e6"
+    },
+    "name": "@solid-primitives/deep",
+    "version": "1.0.0-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-deepTrack": {
+      "call": {
+        "closed": [
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-trackDeep": {
+      "call": {
+        "closed": [
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-trackStore": {
+      "call": {
+        "closed": [
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

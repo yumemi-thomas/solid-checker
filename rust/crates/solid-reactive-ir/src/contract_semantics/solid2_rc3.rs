@@ -233,6 +233,7 @@ impl Authority {
             ),
         };
         ArtifactCase {
+            initialization: None,
             id: id.into(),
             entrypoint: entrypoint.into(),
             resolution_trace: trace
@@ -362,6 +363,7 @@ fn operation(id: &str, kind: OperationKind, event: Event, min: u32) -> Operation
         at: Some(event),
         schedule: Some(Schedule::SameStack),
         tracking: Tracking::Untracked,
+        strict_read: None,
         owner: owner_none(),
         cardinality: Cardinality {
             scope: Some(CardinalityScope::Call),
@@ -371,6 +373,8 @@ fn operation(id: &str, kind: OperationKind, event: Event, min: u32) -> Operation
         inputs: vec![],
         output: None,
         resources: BTreeSet::new(),
+        composed_from: None,
+        protocol: None,
     }
 }
 
@@ -486,6 +490,7 @@ fn semantic_export(
             ids(&operations, OperationKind::Dispose),
             open(ClaimDomain::Disposals),
         ),
+        computations: KnowledgeSet::Unknown,
     };
     ExportSemantics {
         identity: ExportIdentity {
@@ -1951,10 +1956,16 @@ mod tests {
         assert_eq!(artifact.exports.keys().collect::<Vec<_>>(), vec!["isEqual"]);
         let export = &artifact.exports["isEqual"];
         assert_eq!(export.shape, ValueShape::Plain);
+        // Every domain a document can close is closed empty; `computations`
+        // (ADR 0114) has no closure, and states nothing here.
         assert!(
-            ClaimDomain::ALL
+            ClaimDomain::CLOSABLE
                 .into_iter()
                 .all(|domain| { export.claim_state(domain) == KnowledgeState::CompleteNegative })
+        );
+        assert_eq!(
+            export.claim_state(ClaimDomain::Computations),
+            KnowledgeState::Unknown
         );
         assert!(export.unresolved_claims().is_empty());
     }

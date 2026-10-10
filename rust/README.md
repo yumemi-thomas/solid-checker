@@ -22,11 +22,12 @@ Fact ownership is deliberately split:
   instead of knowing;
 - `crates/solid-reactive-ir`: native analysis, producing the reactive program
   IR and the dialect-neutral `Finding` model;
-- `dialects/solid-v2/rules` and `dialects/solid-v1/rules`: each version's
-  rule catalog and finding construction (32 rules for 2.0, 22 for 1.x);
-- `dialects/solid-v2/compiler` and `dialects/solid-v1/compiler`: the Solid
-  compiler's semantic-only fork and the separate Solid 1.x compiler fork, each adapted to the
-  `CompilerFactsProvider` seam.
+- `dialects/solid-v2/rules`: the dialect's rule catalog and finding
+  construction. One dialect ships today; Solid 1.x was retired in 2026-09
+  (ADR 0110) and `dialects/` stays plural because the seam is what a second
+  dialect re-enters through;
+- `dialects/solid-v2/compiler`: the Solid compiler's semantic-only fork,
+  adapted to the `CompilerFactsProvider` seam.
 
 The AST package contains no regular expressions. TypeScript facts contain no
 syntax-discovery fallback. Both choices are architectural constraints: Oxc owns
@@ -105,11 +106,11 @@ Implemented rule slices are:
   identities.
 
 The slices above are the engine's analyses under Solid 2.0 vocabulary and
-the `solid-v2-rules` catalog. The Solid 1.x dialect projects the same IR
-onto its own 22-rule catalog (`v1/<rule>` names): the engine slices under
-1.x vocabulary plus the eslint-plugin-solid file-local surface (imports, JSX
-hygiene, structural preferences, and the decomposed `reactivity` rules). The
-dialect is auto-detected from the project's resolved `solid-js` version;
+the `solid-v2-rules` catalog, which is the only catalog this build ships. The
+eslint-plugin-solid file-local surface it inherited (imports, JSX hygiene,
+structural preferences, and the decomposed `reactivity` rules) now runs
+unconditionally rather than under a 1.x gate. The dialect is auto-detected from
+the project's resolved `solid-js` version;
 `--dialect` overrides it.
 
 Oxc discovers bindings, options, calls, callback nesting, and function graphs;

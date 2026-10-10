@@ -1,0 +1,692 @@
+{
+  "package": "@solid-primitives/pointer",
+  "version": "1.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createPointerPosition": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/index.js:130-154 \u2014 Return accessor only; transitive listener/callback/owner behavior stays open.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "pointer-state"
+            }
+          },
+          {
+            "id": "pointer-state-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "pointer-state"
+            ]
+          },
+          {
+            "id": "pointer-listeners",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 3,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "pointer-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "pointer-target",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "pointer-listener-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "pointer-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "target"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "pointer-state-compute",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "pointer-state-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "value"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "pointer-initial-value",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "pointer-state-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "pointer-state-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "value"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates"
+        ],
+        "reads": [],
+        "creates": [
+          "pointer-state-production"
+        ],
+        "computations": [
+          "pointer-listeners",
+          "pointer-state-compute"
+        ],
+        "resources": [
+          {
+            "id": "pointer-state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "pointer-listener-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "pointer-state-owner",
+            "kind": "owner"
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "target"
+              ]
+            },
+            "operation": "pointer-target"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "value"
+              ]
+            },
+            "operation": "pointer-initial-value"
+          }
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/index.js:130-154 \u2014 In the browser the function returns exactly createSignal's state accessor; no alternate browser return.",
+        "reads": "P1/P2: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/index.js:30-39,130-154; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/helpers.js:20-24,38-55 \u2014 No package-owned reactive accessor is read in construction or the pointer handlers; state is only written. Config/property traversal is P2 data, host event fields are P1. A callable config.target runs in the separately stated tracked listener compute; a callable object-shaped config.value runs in the separately stated tracked state compute. Both bodies are caller code.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/pointer/dist/index.js:130-154,30-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solidjs/signals/dist/dev.js:1723-1758,2346-2357; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerPosition-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 \u2014 Browser creates one reactive state node and the listener computations. config.value can legally be a function decorated with all PointerStateWithActive fields (structural published type); rc.13 createSignal then creates the guarded optional-parent pointer-state-compute and invokes that callable under its tracked owner. The state production denotes the reactive source in either branch, not a promise of a non-computed signal. pointer-initial-value records the caller invocation. Injected enter/move/leave handlers guarantee at least three listener effects; structurally supplied extra config keys can add more (including a truthy value key). Each is one render effect for a plain target or one user effect for a callable target, with the same ambient required-owner / child capability. Effect apply returns host removals; no extra onCleanup on the constructor owner. Do not change 3..many into exactly 3."
+      },
+      "probes": [
+        {
+          "label": "state-read",
+          "rule": "strict-read-untracked",
+          "why": "Read the produced state untracked in the component for misuse; only JSX reads it in correct. Existing return behavior is retained."
+        },
+        {
+          "label": "listener-owner",
+          "rule": "missing-owner",
+          "why": "Construct with runWithOwner(null) for misuse and component owner for correct. Browser listener effect construction must emit NO_OWNER_EFFECT only in misuse."
+        },
+        {
+          "label": "target-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Both target accessors read source; only misuse writes a separate ordinary signal from tracked listener compute.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "initial-value-owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A published-type-compatible callable decorated with state fields selects function-form createSignal. In a leaf it throws PRIMITIVE_IN_FORBIDDEN_SCOPE before any listener constructor; normal component creation is clean."
+        },
+        {
+          "label": "initial-value-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Decorated callable initial state reads source under derived signal tracking. Only misuse writes sink there; correct writes in the button handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "createPointerListeners": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39. Server line 31 returns undefined before config traversal, handlers or target evaluation. Browser listener-effects, config-get, target and external handlers already have minimum zero; the new closed-map-listener-effect is weakened to min zero. The undefined return is unchanged. callbacks stays open for arbitrary config handler keys. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 (server listener return); Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  The closed-map-listener-effect browser witness must be weakened to min zero at the server early return.",
+        "minZero": [
+          "closed-map-listener-effect"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39. Server line 31 returns undefined before config traversal, handlers or target evaluation. Browser listener-effects, config-get, target and external handlers already have minimum zero; the new closed-map-listener-effect is weakened to min zero. The undefined return is unchanged. callbacks stays open for arbitrary config handler keys. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 (server listener return); Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39. Server line 31 returns undefined before config traversal, handlers or target evaluation. Browser listener-effects, config-get, target and external handlers already have minimum zero; the new closed-map-listener-effect is weakened to min zero. The undefined return is unchanged. callbacks stays open for arbitrary config handler keys. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 (server listener return); Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain. The guarded closed-map listener witness is also min zero on the server.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39. Server line 31 returns undefined before config traversal, handlers or target evaluation. Browser listener-effects, config-get, target and external handlers already have minimum zero; the new closed-map-listener-effect is weakened to min zero. The undefined return is unchanged. callbacks stays open for arbitrary config handler keys. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26 (server listener return); Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain returns: Every normal completion has the same browser-stated output shape/identity; no server replacement accessor, inert control or returned setter is admitted."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/helpers.js:20-24; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/immutable/object.js:32-45; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/immutable/copy.js:6; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88-93 \u2014 Honest partial claim: all listener owner creations are enumerated with 0..many; callbacks stays open because arbitrary remaining enumerable keys are dispatched after substring(2). Declared onDown/ondown are positive items only; collisions prevent guaranteed construction. Browser probes pending. Guard audit: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/helpers.js:19-24 \u2014 BLOCKED: Property(onDown,callable=true) alone is not a sufficient lower-bound guard. parseHandlersMap lowercases aliases and the later ondown entry can overwrite callable onDown with undefined. Published Partial<OnEventRecord> accepts this input. Keep listener-effects min:0; do not promote the census suggestion to min:1 without an exact post-normalization/closed-map premise. Narrow closed-map refinement: Browser only: dist/index.js:30-39, helpers.js:20-24, utils/dist/immutable/copy.js:6, utils/dist/immutable/object.js:32-45, event-listener/dist/eventListener.js:10-26. A fresh own-data map with exactly target/onDown and callable onDown has one surviving down handler and enters one listener effect. Additional keys, alias collisions, getters, spreads, proxies and unknown handler values do not establish the premise. Keep the unconditional 0..many row and callbacks open. Standard built-ins/prototypes are assumed unpatched.",
+      "rule": "missing-owner",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A known plain onDown config creates a render effect forbidden in a leaf, though the package-wide minimum remains zero."
+        },
+        {
+          "label": "target-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Legal target accessor runs in tracked listener compute.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "host-dispatch",
+          "rule": "missing-owner",
+          "why": "Native pointerdown dispatch calls the supplied onDown without restoring registration owner.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "closed-map-owner",
+          "rule": "missing-owner",
+          "why": "Browser only: dist/index.js:30-39, helpers.js:20-24, utils/dist/immutable/copy.js:6, utils/dist/immutable/object.js:32-45, event-listener/dist/eventListener.js:10-26. A fresh own-data map with exactly target/onDown and callable onDown has one surviving down handler and enters one listener effect. Additional keys, alias collisions, getters, spreads, proxies and unknown handler values do not establish the premise. Keep the unconditional 0..many row and callbacks open. Standard built-ins/prototypes are assumed unpatched. The correct twin erases down via the later legal ondown alias."
+        },
+        {
+          "label": "closed-map-leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Browser only: dist/index.js:30-39, helpers.js:20-24, utils/dist/immutable/copy.js:6, utils/dist/immutable/object.js:32-45, event-listener/dist/eventListener.js:10-26. A fresh own-data map with exactly target/onDown and callable onDown has one surviving down handler and enters one listener effect. Additional keys, alias collisions, getters, spreads, proxies and unknown handler values do not establish the premise. Keep the unconditional 0..many row and callbacks open. Standard built-ins/prototypes are assumed unpatched. The leaf correct twin erases down before construction."
+        }
+      ],
+      "call": {
+        "operations": [
+          {
+            "id": "config-get",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "protocol": "get"
+          },
+          {
+            "id": "listener-effects",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "pointer-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "closed-map-listener-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "pointer-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "ownDataKeys": [
+                    "onDown",
+                    "target"
+                  ]
+                },
+                {
+                  "arg": 0,
+                  "path": [],
+                  "property": "onDown",
+                  "callable": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "target",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "pointer-listener-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "pointer-listener-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "target"
+                  ],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "target",
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          },
+          {
+            "id": "handler-onDown",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "onDown"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "handler-ondown",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "ondown"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "pointer-listener-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [],
+        "computations": [
+          "listener-effects",
+          "closed-map-listener-effect"
+        ],
+        "reads": [],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "config-get"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "target"
+              ]
+            },
+            "operation": "target"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "onDown"
+              ]
+            },
+            "operation": "handler-onDown"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "ondown"
+              ]
+            },
+            "operation": "handler-ondown"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/helpers.js:20-24; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/immutable/object.js:32-45; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/immutable/copy.js:6; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88-93 \u2014 P1/P2: event pointerType and host targets are platform fields, pointerTypes array is plain data; target accessor and config getters are explicit caller invocations. No package reactive source is created or read.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/helpers.js:20-24; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/immutable/object.js:32-45; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/immutable/copy.js:6; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88-93 \u2014 No reactive source is created. Each truthy mapped remaining config value yields one listener effect; config may have any number of extra enumerable keys, so 0..many is exhaustive. Effect owner resources cover the createEffect/createRenderEffect branch. Duplicate mapped names can suppress otherwise present handler entries. Lower-bound limit: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/helpers.js:19-24 \u2014 Alias overwrites prevent strengthening the global lower bound using only Property(onDown,callable=true); the existing optional row remains sound. Narrow guarded lower bound: Browser only: dist/index.js:30-39, helpers.js:20-24, utils/dist/immutable/copy.js:6, utils/dist/immutable/object.js:32-45, event-listener/dist/eventListener.js:10-26. A fresh own-data map with exactly target/onDown and callable onDown has one surviving down handler and enters one listener effect. Additional keys, alias collisions, getters, spreads, proxies and unknown handler values do not establish the premise. Keep the unconditional 0..many row and callbacks open. Standard built-ins/prototypes are assumed unpatched.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/index.js:30-39; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/pointer/dist/helpers.js:20-24; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/immutable/object.js:32-45; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/immutable/copy.js:6; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:10-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pointer-createPointerListeners-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88-93 \u2014 Browser normal completion is implicitly undefined (index.js:39); no returned removal wrapper exists despite stale declaration prose."
+      }
+    }
+  }
+}

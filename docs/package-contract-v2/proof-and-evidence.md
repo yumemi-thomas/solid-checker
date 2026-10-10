@@ -90,8 +90,51 @@ cycles are refused before receipt use. Probe consistency is not a proof-witness
 family: every proposed closure gets a mandatory veto gate, a contradiction
 rejects that closure, and successful finite non-observation cannot close it.
 Policy-2 receipt authentication is implemented behind the internal native/WASM
-seam. These schedules still remain unsatisfied in the active product until the
-receipt cut and directly launched probe-harness identity are complete.
+seam.
+
+The probe harness is now directly launched and authority-bearing. Rust resolves
+and hashes the Node executable and the harness image against digests compiled
+into the verifier, writes *the bytes it hashed* plus the claim-addressed recipe
+into a private 0700 directory alongside a private copy of the artifact
+snapshot, and launches the worker itself in its own process group. It binds the
+process id it observed and a per-launch nonce carrying the verifier pid, the
+launch epoch, and a monotonic counter; the worker's startup frame has to echo
+the protocol, that whole nonce, and the Node version, platform, and
+architecture the verifier established, or the process group is killed. Both
+frames arrive on a dedicated descriptor rather than on a stream package code is
+expected to hold — package top-level code runs in the worker's realm and can
+replace `process.stdout.write`, but it cannot reach the harness's own write
+binding by name. The descriptor number itself is not a secret: in-realm code
+can name it, and a native addon or an fd-inheriting child inherits it. What
+refuses a forged frame is that a frame has to carry this launch's nonce and
+name the pid Rust launched, and that anything other than exactly one startup
+frame and one run frame is refused rather than chosen between.
+
+Which *file* the probe ran against is checked too, and not against a declared
+condition set: the worker reports what the plan's own specifier resolves to —
+by ESM import and by `createRequire`, before the recipe and therefore the
+package is imported — and the gate refuses unless the answer for the recipe's
+declared import kind names the exact runtime target the Type Facts witness read
+for the selected export conditions. The conditions the interpreter actually
+applies are measured from the pinned bytes rather than assumed, and recorded
+tagged beside the ones the artifact case was selected under.
+
+An empty veto schedule authenticates on its own and keeps the canonical empty
+authority root; a nonempty one authenticates only against the harness identity
+that ran it, and its receipt root binds the gate ids, that identity, and the
+exact recipe bytes. Stage 1 write isolation is detect-and-refuse rather than
+OS-level denial, and network access is not denied — see
+`docs/adr/0006-probe-harness-binding.md` for what that does and does not
+establish.
+
+A bound harness is not a closed claim domain, and the two limits are
+independent. Closure is discharged by the Type Facts `DomainExhaustiveness`
+witness, which is a census of the *declaration*: it can close the exported
+value's root choice alternatives and a guard partition, and it refuses every
+behavioral call domain — `creates`, `reads`, `writes`, `callbacks`, and the
+rest — for want of an implementation census. What remains unsatisfied in the
+active product is therefore the receipt cut, that implementation-census premise,
+and a recipe corpus for the closed claim domains real packages propose.
 
 Receipt v2 requires the canonical compact stable-v1 main and authenticates a
 domain-separated binary payload over the complete artifact, certification,

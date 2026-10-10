@@ -1,0 +1,51 @@
+frontier cases: 65 published of 173 across 51 rows
+ 18 unrecovered  refused/published-graph  corvu@0.7.2|solid1|only
+      solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification f
+ 11 unrecovered  certified/reused-proposal  @solidjs/web@2.0.0-rc.3|solid2|only
+      entrypoint recovery prepares 35 artifact cases, above the 32-case graph budget
+ 11 unrecovered  certified/reused-proposal  solid-js@1.9.14|solid1|only
+      entrypoint recovery prepares 42 artifact cases, above the 32-case graph budget
+  7 unrecovered  certified/reused-proposal  @tanstack/solid-start@1.168.47|solid1|only
+      published dependency graph would drop 3 retained artifact case(s) the proposal already covers, starting at ./plugin/rsbuild [import]: runtime-library-policy-required: nod
+  7 unrecovered  certified/reused-proposal  @tanstack/solid-start@2.0.0-rc.2|solid2|floor
+      published dependency graph would drop 3 retained artifact case(s) the proposal already covers, starting at ./plugin/rsbuild [import]: runtime-library-policy-required: nod
+  7 unrecovered  certified/reused-proposal  @tanstack/solid-start@2.0.0-rc.2|solid2|head
+      published dependency graph would drop 3 retained artifact case(s) the proposal already covers, starting at ./plugin/rsbuild [import]: runtime-library-policy-required: nod
+  6 unrecovered  certified/reused-proposal  @tanstack/solid-router@1.170.30|solid1|only
+      solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification f
+  5 unrecovered  certified/published-graph  solid-js@2.0.0-rc.3|solid2|only
+  4 unrecovered  certified/reused-proposal  @kobalte/core@2.0.0-alpha.0|solid2|only
+      entrypoint recovery prepares 122 artifact cases, above the 32-case graph budget
+  4 unrecovered  certified/reused-proposal  @tanstack/solid-router@2.0.0-rc.2|solid2|floor
+      solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification f
+  4 unrecovered  certified/reused-proposal  @tanstack/solid-router@2.0.0-rc.2|solid2|head
+      solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification f
+  3 unrecovered  certified/reused-proposal  solid-devtools@0.34.5|solid1|only
+      published dependency graph would drop 2 retained artifact case(s) the proposal already covers, starting at ./babel [import]: local closure module ./babel-7-helpers.cjs fr
+  2 unrecovered  refused/published-graph  @corvu-next/popover@0.1.5|solid2|only
+      solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification f
+  2 unrecovered  refused/published-graph  @corvu/popover@0.2.0|solid1|only
+      solid-checker-rust: published graph case-set finalization failed: Type Facts certification failed for published graph published-graph-case-set: Type Facts certification f
+  2 unrecovered  certified/reused-proposal  @kobalte/solidbase@0.6.13|solid1|only
+      entrypoint recovery prepares 68 artifact cases, above the 32-case graph budget
+  2 unrecovered  certified/reused-proposal  @solidjs/start@2.0.3|solid1|only
+      published dependency graph would drop 10 retained artifact case(s) the proposal already covers, starting at . [import]: crossws is not installed above /private/var/folder
+  2 unrecovered  none/-  @tanstack/ai-solid-ui@0.7.20|solid1|only
+  2 unrecovered  certified/published-graph  @tanstack/solid-table@9.1.2|solid1|only
+  1 unrecovered  refused/published-graph  @solid-primitives/intersection-observer@3.0.0-next.3|solid2|floor
+      solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:bf9f0e6e1ddadbfe22c39987c15b7f7a2ad858bdf6e4254e6878de
+  1 unrecovered  refused/published-graph  @solid-primitives/intersection-observer@3.0.0-next.3|solid2|head
+      solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:ee2d6f0cd3091a8c2cd108868e97b69362c04ed9023fc2d293d29e
+  1 unrecovered  refused/generated-proposal  @solidjs/testing-library@0.8.10|solid1|only
+      published dependency graph prepared no artifact case: graph node aria-query@5.3.0 . [import] refused: published dependency graph node aria-query@5.3.0 . [import] refused:
+  1 unrecovered  refused/generated-proposal  @tanstack/ai-solid@0.19.1|solid1|only
+      published dependency graph prepared no artifact case: graph node partial-json@0.1.7 . [import] refused: published dependency graph node partial-json@0.1.7 . [import] refu
+  1 unrecovered  refused/published-graph  @tanstack/solid-db@0.2.40|solid1|only
+      solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:008df4ca37db772442a97ce0e3b0283322f7c7cd5bffc9597a985f
+  1 unrecovered  certified/published-graph  @tanstack/solid-pacer@0.22.0|solid1|only
+  1 unrecovered  refused/generated-proposal  @tanstack/solid-start-server@1.167.36|solid1|only
+      published dependency graph prepared no artifact case: runtime-library-policy-required: node:stream is not a package receipt
+  1 unrecovered  refused/generated-proposal  @tanstack/solid-start-server@2.0.0-rc.2|solid2|floor
+      published dependency graph prepared no artifact case: runtime-library-policy-required: node:stream is not a package receipt
+  1 unrecovered  refused/generated-proposal  @tanstack/solid-start-server@2.0.0-rc.2|solid2|head
+      published dependency graph prepared no artifact case: runtime-library-policy-required: node:stream is not a package receipt

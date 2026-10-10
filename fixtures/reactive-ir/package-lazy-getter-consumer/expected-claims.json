@@ -1,0 +1,26 @@
+{
+  "observed": false,
+  "findingKind": "uncertifiable",
+  "rule": "reactive-dispatch-unresolved",
+  "zeroProvenViolations": true,
+  "clean": [
+    "TrackedJsx",
+    "MemoRead",
+    "StaticLiteral",
+    "TransparentReceiver"
+  ],
+  "obligations": [
+    "UnprimedRead",
+    "PrimedRead",
+    "Escaped",
+    "ComputedKey",
+    "MutatedBinding",
+    "StaticFunctionValue",
+    "RetainedSetter",
+    "ClearedUntrack",
+    "DeferredAlias",
+    "wrapSize",
+    "GenericInput"
+  ],
+  "wrapperReturnMustRemainOpen": true
+}

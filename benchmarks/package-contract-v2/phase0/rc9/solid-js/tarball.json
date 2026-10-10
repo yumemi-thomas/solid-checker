@@ -1,0 +1,24 @@
+{
+  "name": "solid-js",
+  "version": "2.0.0-rc.9",
+  "tarball": "https://registry.npmjs.org/solid-js/-/solid-js-2.0.0-rc.9.tgz",
+  "gitHead": "9a29b1a07aa3e06ee32afd1fc4c18414b4a558bb",
+  "registryIntegrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+  "registryShasum": "f07125cee1149da629326beed94afdf71c6188b9",
+  "registryFileCount": 33,
+  "registryUnpackedSize": 539689,
+  "downloaded": {
+    "date": "2026-09-27",
+    "by": "npm pack solid-js@2.0.0-rc.9",
+    "bytes": 130124,
+    "sha512": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+    "sha1": "f07125cee1149da629326beed94afdf71c6188b9",
+    "sha256": "157da22e4103c09b34b59d9c687bebd601ab988186b5d5870d6963b50d6d6080",
+    "extractedFileCount": 33,
+    "extractedTreeEqualsLockfileInstall": true
+  },
+  "lockfileIntegrity": {
+    "source": "solid-primitives (next) pnpm-lock.yaml, line 9038",
+    "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g=="
+  }
+}

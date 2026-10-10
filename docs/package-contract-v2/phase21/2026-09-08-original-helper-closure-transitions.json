@@ -1,0 +1,28 @@
+{
+  "diagnostic": true,
+  "measurement": "docs/package-contract-v2/phase21/2026-09-08-original-helper-full-measurement.json",
+  "unchangedLocalClosureEntriesHazardsAndPackageIdentities": true,
+  "unchangedDependencySpecifierCensus": true,
+  "transitions": [],
+  "added": [
+    {
+      "probeId": "@tanstack/solid-db@0.2.40|solid1|only",
+      "entrypoint": ".",
+      "selection": {
+        "artifact": {
+          "closureSha256": "175a9c7c7ee6090ace27eede2e69533dd313da6b0c5f8d96c98e4522ef024977",
+          "path": "./dist/esm/index.js",
+          "sha256": "7853679165fcf30ebc30694ede9b94b14da0e53b497532b13eb185de0e17d7d1"
+        },
+        "declarations": {
+          "path": "./dist/esm/index.d.ts",
+          "sha256": "7c94383399b431420239d8fe0739ac77ec67b7c2c188be5cd1e05c75a97a50e4"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/./import/default",
+          "typesBranch": "/exports/./import/types"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "documentKind": "solid-checker-solid2-compiler-facts-identity",
+  "repository": "https://github.com/yumemi-thomas/solid",
+  "branch": "solid-checker/compiler-facts-v3",
+  "upstreamRevision": "8cfa2724f893e07b03e977bd2902c6d0e6019ca7",
+  "implementationRevision": "c58f531a7707529273a23f343a087036e493f12d",
+  "distributionRevision": "16f0988e0313c9ce1a06ed479799b45262eaca43",
+  "semanticTraceVersion": 3,
+  "compilerFactsProtocol": 2
+}
+

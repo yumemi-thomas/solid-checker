@@ -12,6 +12,7 @@
         "browser"
       ],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "unavailable-published-target",
       "reason": "resolved target <package-root>/missing-browser.js is not a file"
     }
@@ -26,5 +27,7 @@
       "class": "unpublished-conditional-target",
       "reason": "runtime target is unpublished behind private namespaced export condition(s) \"unpublished-conditional-target/source\""
     }
-  ]
+  ],
+  "withheldClaims": [],
+  "declinedClosures": []
 }

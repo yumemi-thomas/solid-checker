@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs, io,
     path::{Path, PathBuf},
     sync::Arc,
@@ -20,6 +20,8 @@ use crate::{BackendError, SemanticDemandOptions, SourceFile};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub feedback_facts: Vec<solid_reactive_ir::DevelopmentFile>,
     pub status: String,
     pub findings: Vec<SnapshotFinding>,
     pub package_summaries: Vec<PackageSummary>,
@@ -40,6 +42,11 @@ pub struct SnapshotFinding {
     pub analysis_context: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub subject_kind: String,
+    /// ADR 0205: the analysis-coverage family and subject this gap groups by.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coverage_family: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coverage_subject: String,
     pub primary_location: SourceLocation,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related_locations: Vec<SourceLocation>,
@@ -90,7 +97,14 @@ pub struct PackageSummary {
     pub version: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub contract_hash: String,
+    /// `accepted` when an import this analysis read binds the contract;
+    /// `refused` when a project catalog holds an acceptance for the package
+    /// that no import was admitted to, with `detail` saying why. Presence in a
+    /// catalog is never enough for `accepted`.
     pub evidence: String,
+    /// Why a `refused` acceptance was not admitted. Empty for `accepted`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub detail: String,
     pub exports_analyzed: usize,
 }
 
@@ -121,10 +135,12 @@ pub struct RequestedRuleEnablement<'a> {
     pub presets: &'a [String],
     pub rules: &'a [String],
     pub runtime: RuntimeEnvironment,
+    pub feedback_facts: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct DiagnosticIdentity {
+    runtime_configuration: solid_reactive_ir::RuntimeConfigurationPremise,
     /// Which dialect's catalog and compiler produced the retained analysis;
     /// a retained result never answers for a different dialect.
     dialect: &'static str,
@@ -135,6 +151,10 @@ struct DiagnosticIdentity {
     /// edited `.solid-checker/rule-options.json` invalidates a retained
     /// diagnostic even within one generation.
     rule_options: RuleOptions,
+    /// The installed-release notice is re-read from disk on every analysis
+    /// too: an install that moves `solid-js` between an audited and an
+    /// unaudited release changes the result without changing a source file.
+    release_notice: Option<dialect::ReleaseNotice>,
 }
 
 struct RetainedDiagnostic {
@@ -155,6 +175,49 @@ impl Default for DiagnosticSession {
     fn default() -> Self {
         Self::new(dialect::default_dialect())
     }
+}
+
+/// Preserve every baseline violation; a stronger host can replace its proof,
+/// but a clean browser view cannot erase a defect of another execution.
+fn merge_host_findings(
+    baseline: &[SnapshotFinding],
+    browser: &[SnapshotFinding],
+    eligible: &impl Fn(&SnapshotFinding) -> bool,
+    reason: &str,
+) -> Vec<SnapshotFinding> {
+    let selected = browser
+        .iter()
+        .filter(|finding| eligible(finding))
+        .collect::<Vec<_>>();
+    let same_claim = |left: &SnapshotFinding, right: &SnapshotFinding| {
+        left.id == right.id
+            && left.rule == right.rule
+            && left.kind == right.kind
+            && left.primary_location.path == right.primary_location.path
+            && left.primary_location.start_byte == right.primary_location.start_byte
+            && left.primary_location.end_byte == right.primary_location.end_byte
+            && left.analysis_context == right.analysis_context
+            && left.subject_kind == right.subject_kind
+    };
+    let mut result = baseline
+        .iter()
+        .filter(|finding| {
+            !eligible(finding)
+                || (finding.kind == "violation"
+                    && !selected
+                        .iter()
+                        .any(|selected| same_claim(finding, selected)))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    result.extend(selected.into_iter().cloned().map(|mut finding| {
+        finding.evidence.push(SnapshotEvidence {
+            message: reason.into(),
+            location: None,
+        });
+        finding
+    }));
+    result
 }
 
 impl DiagnosticSession {
@@ -195,6 +258,105 @@ impl DiagnosticSession {
         contracts: &AcceptedContractIndex,
         enablement: RequestedRuleEnablement<'_>,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        self.analyze_accepted_inner(project, sources, facts, contracts, enablement, true)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn analyze_accepted_inner(
+        &mut self,
+        project: &Path,
+        sources: &[SourceFile],
+        facts: &ProjectFacts,
+        contracts: &AcceptedContractIndex,
+        enablement: RequestedRuleEnablement<'_>,
+        validate_host_inputs: bool,
+    ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        if let Some((baseline, browser)) = contracts.execution_views() {
+            let hosts = contracts
+                .inferred_hosts()
+                .expect("execution views carry hosts");
+            crate::inferred_host::validate_inputs(hosts)?;
+            // The outer transaction validates the complete input generation
+            // before and after both views; nested checks add no new boundary.
+            let (ordinary, mut timings) = self.analyze_accepted_inner(
+                project,
+                sources,
+                facts,
+                &baseline,
+                enablement.clone(),
+                false,
+            )?;
+            // A separate builder/solver owns the browser view. No summary or
+            // admission from this run can replace the ordinary program handed
+            // to certification or the findings of a no-target function body.
+            let (selected, selected_timings) = DiagnosticSession::new(self.dialect)
+                .analyze_accepted_inner(project, sources, facts, &browser, enablement, false)?;
+            let browser_site = |location: &SourceLocation| {
+                hosts.browser_proof_site(&location.path, location.start_byte, location.end_byte)
+            };
+            let browser_proof = |finding: &SnapshotFinding| {
+                browser_site(&finding.primary_location)
+                    && finding
+                        .related_locations
+                        .iter()
+                        .chain(
+                            finding
+                                .evidence
+                                .iter()
+                                .filter_map(|step| step.location.as_ref()),
+                        )
+                        .filter(|location| {
+                            !Path::new(&location.path)
+                                .components()
+                                .any(|part| part.as_os_str() == "node_modules")
+                                && (facts
+                                    .files
+                                    .iter()
+                                    .any(|file| file.path.as_str() == location.path)
+                                    || project.parent().is_some_and(|directory| {
+                                        Path::new(&location.path).starts_with(directory)
+                                    }))
+                        })
+                        .all(browser_site)
+            };
+            let projection = crate::inferred_host::HostStage::new("projection");
+            let mut snapshot = ordinary.snapshot.clone();
+            snapshot.findings = merge_host_findings(
+                &ordinary.snapshot.findings,
+                &selected.snapshot.findings,
+                &browser_proof,
+                &hosts.manifest.reason,
+            );
+            // Inference changes findings only. Even a clean browser execution
+            // cannot certify the server execution or an explicit target premise.
+            snapshot.status = if snapshot
+                .findings
+                .iter()
+                .any(|finding| finding.kind == "violation")
+            {
+                "violation"
+            } else {
+                "uncertifiable"
+            }
+            .into();
+            drop(projection);
+            crate::inferred_host::validate_inputs(hosts)?;
+            timings.reactive_ir += selected_timings.reactive_ir;
+            timings.solve_and_snapshot += selected_timings.solve_and_snapshot;
+            timings.reused = false;
+            return Ok((
+                Arc::new(DiagnosticAnalysis {
+                    program: Arc::clone(&ordinary.program),
+                    snapshot,
+                }),
+                timings,
+            ));
+        }
+        let external_contracts = contracts.external_packages();
+        let contracts = external_contracts.as_ref();
+        if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
+            crate::inferred_host::validate_inputs(hosts)?;
+        }
         let ir_started = Instant::now();
         let mut rule_options = discover_rule_options(project)?;
         rule_options.request_presets(enablement.presets.iter().cloned());
@@ -204,13 +366,35 @@ impl DiagnosticSession {
             .validate()
             .map_err(BackendError::Contract)?;
         rule_options.runtime = enablement.runtime;
+        if rule_options.runtime.program_boundary.is_none() {
+            rule_options.runtime.program_boundary = Some(default_program_boundary(project));
+        }
+        rule_options.development_feedback = enablement.feedback_facts;
+        // Scoped to this generation's facts: a gap about named exports is due
+        // only where the project reaches one (`release_scope`), so the answer
+        // moves with the sources as well as the install.
+        let release_notice = dialect::release_notice(self.dialect, project)
+            .and_then(|notice| notice.scoped_to(facts));
+        // Consult the builder before a diagnostic hit: its identity includes
+        // ADR 0266's visible veto even when fact generation is unchanged.
+        let (program, _) = self.builder.build_with_accepted_contracts_shared(
+            facts,
+            self.dialect.vocabulary,
+            contracts,
+            &rule_options,
+        )?;
         let identity = DiagnosticIdentity {
+            runtime_configuration: program.runtime_configuration.clone(),
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
             contracts: vec![contracts.cache_fingerprint()],
             rule_options: rule_options.clone(),
+            release_notice: release_notice.clone(),
         };
+        if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
+            crate::inferred_host::validate_inputs(hosts)?;
+        }
         if let Some(retained) = &self.retained
             && retained.identity == identity
         {
@@ -223,24 +407,27 @@ impl DiagnosticSession {
                 },
             ));
         }
-        let (program, _) = self.builder.build_with_accepted_contracts_shared(
-            facts,
-            self.dialect.vocabulary,
-            contracts,
-            &rule_options,
-        )?;
         let reactive_ir = ir_started.elapsed();
         let solve_started = Instant::now();
         let mut findings = self.dialect.solve(&program);
         retain_enabled(self.dialect, &rule_options, &mut findings)?;
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
+        // After enablement, like the refusal: the notice is about the installed
+        // runtime, not a site, so there is nothing to suppress it at.
+        if let Some(notice) = &release_notice {
+            findings.push(unaudited_release_finding(notice));
+        }
         let metrics = analysis_metrics(facts, &program, contracts);
-        let snapshot = snapshot_with_package_summaries(
+        if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
+            crate::inferred_host::validate_inputs(hosts)?;
+        }
+        let mut snapshot = snapshot_with_package_summaries(
             sources,
-            accepted_package_summaries(contracts),
+            accepted_package_summaries(facts, contracts),
             metrics,
             findings,
         );
+        snapshot.feedback_facts = program.development_feedback.clone();
         let analysis = Arc::new(DiagnosticAnalysis { program, snapshot });
         self.retained = Some(RetainedDiagnostic {
             identity,
@@ -306,6 +493,295 @@ fn retain_enabled(
     })
 }
 
+/// The `SC9014` notice: the analysis beside it ran, under a vocabulary that was
+/// not audited on the installed release, so the result cannot certify.
+///
+/// Uncertifiable rather than a violation for SC9013's reason -- the claim is
+/// about the installed runtime, never the project's source -- and located at
+/// the deciding manifest, as a project-scoped finding, for the same reason.
+/// Unlike SC9013 it *accompanies* the analysis: the vocabulary is the one the
+/// review measured to hold for everything except the gaps it names.
+#[must_use]
+pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
+    let manifest: Arc<str> = notice.manifest.display().to_string().into();
+    let location = typefacts::Location {
+        path: Arc::clone(&manifest),
+        start_byte: 0,
+        end_byte: 0,
+    };
+    let found = english_list(
+        &notice
+            .releases
+            .iter()
+            .map(|release| match &release.version {
+                Some(version) => format!("{} {version}", release.package),
+                None => format!("no {}", release.package),
+            })
+            .collect::<Vec<_>>(),
+    );
+    let audited = notice
+        .audited
+        .iter()
+        .map(|(package, _)| *package)
+        .collect::<Vec<_>>();
+    let audited_versions = notice
+        .audited
+        .iter()
+        .map(|(_, version)| *version)
+        .collect::<std::collections::BTreeSet<_>>();
+    let audited_release = match audited_versions.iter().collect::<Vec<_>>().as_slice() {
+        [single] => format!("{single}, the audited release of each"),
+        _ => english_list(
+            &notice
+                .audited
+                .iter()
+                .map(|(package, version)| format!("{package} {version}"))
+                .collect::<Vec<_>>(),
+        ),
+    };
+    let mut reviews = notice
+        .gaps
+        .iter()
+        .filter_map(|gap| gap.review)
+        .collect::<Vec<_>>();
+    reviews.sort_unstable();
+    reviews.dedup();
+    let message = format!(
+        "{found} {} installed; this build's Solid 2 vocabulary was audited on {}, and {} in what it knows about this installation {} still open, so the analysis ran and cannot certify the project",
+        if notice.releases.len() == 1 {
+            "is"
+        } else {
+            "are"
+        },
+        if audited.is_empty() {
+            "no installation".to_owned()
+        } else {
+            english_list(
+                &notice
+                    .audited
+                    .iter()
+                    .map(|(package, version)| format!("{package} {version}"))
+                    .collect::<Vec<_>>(),
+            )
+        },
+        match notice.gaps.len() {
+            1 => "1 gap".to_owned(),
+            count => format!("{count} gaps"),
+        },
+        if notice.gaps.len() == 1 { "is" } else { "are" },
+    );
+    let pin = if audited.is_empty() {
+        "Use a checker release that has reviewed this installation to certify.".to_owned()
+    } else {
+        format!(
+            "To certify, pin {} to {audited_release}, a transitive one with an overrides or resolutions entry, because a dependency's own range can admit later releases; this project resolves {found}.",
+            english_list(
+                &audited
+                    .iter()
+                    .map(|package| (*package).to_owned())
+                    .collect::<Vec<_>>()
+            )
+        )
+    };
+    let hint = if reviews.is_empty() {
+        format!("Findings beside this notice stand; certification waits on the gaps. {pin}")
+    } else {
+        format!(
+            "Findings beside this notice stand; certification waits on the gaps. {pin} The {} {}.",
+            if reviews.len() == 1 {
+                "review is"
+            } else {
+                "reviews are"
+            },
+            english_list(
+                &reviews
+                    .iter()
+                    .map(|review| (*review).to_owned())
+                    .collect::<Vec<_>>()
+            )
+        )
+    };
+    let mut evidence = notice
+        .releases
+        .iter()
+        .map(|release| solid_reactive_ir::EvidenceStep {
+            message: match &release.version {
+                Some(version) => format!(
+                    "{} resolves here, and names version {version}",
+                    release.package
+                ),
+                None => format!("{} does not resolve", release.package),
+            },
+            location: release
+                .manifest
+                .as_ref()
+                .map(|manifest| typefacts::Location {
+                    path: manifest.display().to_string().into(),
+                    start_byte: 0,
+                    end_byte: 0,
+                }),
+        })
+        .collect::<Vec<_>>();
+    evidence.extend(
+        notice
+            .gaps
+            .iter()
+            .map(|gap| solid_reactive_ir::EvidenceStep {
+                message: format!("known gap {}", gap.gap),
+                location: None,
+            }),
+    );
+    evidence.extend(
+        notice
+            .reaches
+            .iter()
+            .map(|reach| solid_reactive_ir::EvidenceStep {
+                message: reach.message.clone(),
+                location: Some(typefacts::Location {
+                    path: reach.path.as_str().into(),
+                    start_byte: u64::from(reach.span.start),
+                    end_byte: u64::from(reach.span.end),
+                }),
+            }),
+    );
+    let metadata = solid_reactive_ir::RuleMetadata {
+        code: dialect::UNAUDITED_RELEASE_CODE,
+        name: dialect::UNAUDITED_RELEASE_RULE,
+        severity: "warning",
+        uncertifiable: true,
+        default_enabled: true,
+        presets: &[],
+    };
+    let mut finding = Finding::new(metadata, message, location);
+    finding.hint = hint;
+    finding.analysis_context = "dialect-detection".into();
+    finding.subject_kind = "project".into();
+    finding.evidence = evidence;
+    finding
+}
+
+/// `a`, `a and b`, `a, b and c`.
+fn english_list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [only] => only.clone(),
+        [init @ .., last] => format!("{} and {last}", init.join(", ")),
+    }
+}
+
+/// An audited installation as one release, `2.0.0-rc.3`, when every package
+/// shares it, and otherwise as `solid-js 2.0.0-rc.3 and …`. `None` for a
+/// vocabulary audited on none.
+fn audited_spelling(audited: &[(&str, &str)]) -> Option<String> {
+    let versions = audited
+        .iter()
+        .map(|(_, version)| *version)
+        .collect::<std::collections::BTreeSet<_>>();
+    match versions.iter().collect::<Vec<_>>().as_slice() {
+        [] => None,
+        [single] => Some((**single).to_owned()),
+        _ => Some(english_list(
+            &audited
+                .iter()
+                .map(|(package, version)| format!("{package} {version}"))
+                .collect::<Vec<_>>(),
+        )),
+    }
+}
+
+/// The whole result for a project whose installed Solid runtime this build has
+/// no dialect for.
+///
+/// Not produced by the rules engine, and deliberately not reachable from it:
+/// there is no analysis behind it, so there is nothing for a rule to run on.
+/// Dialect detection builds this directly and hands it to the emission path.
+///
+/// **One finding, and never any others.** The refusal's entire claim is that
+/// the checker cannot model this project; a second finding beside it would be
+/// an assertion about source that was never analyzed under the language it
+/// actually runs. `metrics` is all zeroes for the same reason -- nothing was
+/// read, and reporting otherwise would overstate what happened.
+///
+/// `refusal` is `Some` when the major is carried and its vocabulary refuses the
+/// release line (the pre-beta `2.0.0-experimental.x`): the message then states
+/// the vocabulary's reason instead of "carries no dialect for it", which would
+/// be false.
+#[must_use]
+pub fn unsupported_runtime_snapshot(
+    installed: &str,
+    manifest: &Path,
+    refusal: Option<&solid_dialect::RefusedRelease>,
+) -> Snapshot {
+    let manifest = manifest.display().to_string();
+    let (message, hint) = match refusal {
+        None => (
+            format!(
+                "solid-js {installed} is installed, and this build of solid-checker carries no dialect for it; the project was not analyzed"
+            ),
+            "Upgrade the project to Solid 2.0, or use a checker release carrying the dialect for this runtime. Passing --dialect analyzes the project anyway, under a language it does not run."
+                .to_owned(),
+        ),
+        Some(refusal) => (
+            format!(
+                "solid-js {installed} is installed, and this build of solid-checker refuses the {} line: {}; the project was not analyzed",
+                refusal.line, refusal.reason
+            ),
+            format!(
+                "Upgrade the project to a Solid 2.0 release candidate{}. Passing --dialect analyzes the project anyway, under a runtime it does not run. The measurement is in {}.",
+                audited_spelling(refusal.audited)
+                    .map(|audited| format!(" (the audited one is {audited})"))
+                    .unwrap_or_default(),
+                refusal.review
+            ),
+        ),
+    };
+    Snapshot {
+        feedback_facts: Vec::new(),
+        status: "uncertifiable".into(),
+        findings: vec![SnapshotFinding {
+            id: dialect::UNSUPPORTED_RUNTIME_CODE.into(),
+            rule: dialect::UNSUPPORTED_RUNTIME_RULE.into(),
+            kind: "uncertifiable".into(),
+            severity: "error".into(),
+            message,
+            hint,
+            analysis_context: "dialect-detection".into(),
+            subject_kind: "project".into(),
+            coverage_family: String::new(),
+            coverage_subject: String::new(),
+            primary_location: SourceLocation {
+                path: manifest.clone(),
+                start_byte: 0,
+                end_byte: 0,
+                line: 1,
+                column: 1,
+            },
+            related_locations: Vec::new(),
+            evidence: vec![SnapshotEvidence {
+                message: format!(
+                    "the nearest node_modules/solid-js above the project resolves here, and names version {installed}"
+                ),
+                location: Some(SourceLocation {
+                    path: manifest,
+                    start_byte: 0,
+                    end_byte: 0,
+                    line: 1,
+                    column: 1,
+                }),
+            }],
+            fixes: Vec::new(),
+        }],
+        package_summaries: Vec::new(),
+        metrics: Metrics {
+            files_analyzed: 0,
+            functions_analyzed: 0,
+            proof_obligations: 0,
+            cached_summaries: 0,
+            unresolved_obligations: 0,
+        },
+    }
+}
+
 fn snapshot_with_package_summaries(
     sources: &[SourceFile],
     package_summaries: Vec<PackageSummary>,
@@ -334,6 +810,8 @@ fn snapshot_with_package_summaries(
             hint: finding.hint,
             analysis_context: finding.analysis_context,
             subject_kind: finding.subject_kind,
+            coverage_family: finding.coverage_family,
+            coverage_subject: finding.coverage_subject,
             primary_location: source_location(&finding.primary_location, sources),
             related_locations: finding
                 .related_locations
@@ -370,6 +848,7 @@ fn snapshot_with_package_summaries(
         })
         .collect();
     Snapshot {
+        feedback_facts: Vec::new(),
         status: status.into(),
         findings,
         package_summaries,
@@ -377,29 +856,127 @@ fn snapshot_with_package_summaries(
     }
 }
 
-fn accepted_package_summaries(contracts: &AcceptedContractIndex) -> Vec<PackageSummary> {
-    let mut summaries = contracts
-        .semantic_identity()
+/// The value of [`PackageSummary::evidence`] for a contract an import binds.
+pub const PACKAGE_EVIDENCE_ACCEPTED: &str = "accepted";
+/// The value of [`PackageSummary::evidence`] for a project-catalog acceptance
+/// no import of this analysis was admitted to.
+pub const PACKAGE_EVIDENCE_REFUSED: &str = "refused";
+
+/// Said of a refused acceptance whose package the admission rule's steps 1-3
+/// did not refuse: the receipt, artifact and environment hold, and still no
+/// import this analysis read selected it.
+const NOT_SELECTED_BY_ANY_IMPORT: &str = "a project catalog entry exists for this package and \
+     was not admitted: no import this analysis read selected it (resolved file, export \
+     conditions or case agreement)";
+
+/// What the analysis read, and what it was offered and refused.
+///
+/// `accepted` is decided by binding, the way the analysis decides it: an
+/// import (or `export … from`) in a project file whose exact importer and
+/// specifier, or whose specifier admitted by artifact, selects a contract.
+/// Presence in the index is not that. A project catalog's entries are keyed on
+/// the certification importer `contract certify` writes beside the package,
+/// which is never a project file, so every one of them sits in the index
+/// whether or not this tree admitted it -- and listing the index said
+/// `accepted` of an acceptance whose receipt states no environment, and of one
+/// carried into a tree whose installs differ. Measured on kobalte core
+/// (phase22, 2026-09-26): `vite-plugin-solid`, and `@solid-primitives/form`
+/// under signals rc.6.
+///
+/// Every such catalog entry that nothing bound is reported `refused`, with
+/// the admission rule's own sentence when it names the package
+/// ([`admission_refusal_details`], carried on the index by specifier), and a
+/// plain statement that no import selected it otherwise.
+fn accepted_package_summaries(
+    facts: &ProjectFacts,
+    contracts: &AcceptedContractIndex,
+) -> Vec<PackageSummary> {
+    let summary = |package: &solid_reactive_ir::contract_semantics::PackageIdentity,
+                   digest: &str,
+                   evidence: &str,
+                   detail: &str| PackageSummary {
+        name: package.name.clone(),
+        version: package.version.clone(),
+        contract_hash: digest.into(),
+        evidence: evidence.into(),
+        detail: detail.into(),
+        exports_analyzed: 0,
+    };
+    let mut summaries = Vec::new();
+    for file in &facts.files {
+        let modules = file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .map(|import| import.module.as_str())
+            .chain(
+                file.ast
+                    .exports
+                    .iter()
+                    .filter(|export| !export.type_only)
+                    .filter_map(|export| export.module.as_deref()),
+            );
+        for module in modules {
+            if let Ok(contract) = contracts.contract(file.path.as_str(), module) {
+                summaries.push(summary(
+                    contract.package(),
+                    contract.semantic_identity().semantic_digest.as_str(),
+                    PACKAGE_EVIDENCE_ACCEPTED,
+                    "",
+                ));
+            }
+        }
+    }
+    let accepted = summaries
         .iter()
-        .map(|binding| PackageSummary {
-            name: binding.semantics.package.name.clone(),
-            version: binding.semantics.package.version.clone(),
-            contract_hash: binding.semantics.semantic_digest.as_str().into(),
-            evidence: "accepted".into(),
-            exports_analyzed: 0,
+        .map(|row| {
+            (
+                row.name.clone(),
+                row.version.clone(),
+                row.contract_hash.clone(),
+            )
         })
-        .collect::<Vec<_>>();
+        .collect::<std::collections::BTreeSet<_>>();
+    for (binding, refusal) in contracts.all_semantic_identities() {
+        let semantics = &binding.semantics;
+        let key = (
+            semantics.package.name.clone(),
+            semantics.package.version.clone(),
+            semantics.semantic_digest.as_str().to_owned(),
+        );
+        if accepted.contains(&key) {
+            continue;
+        }
+        summaries.push(summary(
+            &semantics.package,
+            semantics.semantic_digest.as_str(),
+            PACKAGE_EVIDENCE_REFUSED,
+            refusal.unwrap_or(NOT_SELECTED_BY_ANY_IMPORT),
+        ));
+    }
     summaries.sort_by(|left, right| {
-        (&left.name, &left.version, &left.contract_hash).cmp(&(
-            &right.name,
-            &right.version,
-            &right.contract_hash,
-        ))
+        (
+            &left.name,
+            &left.version,
+            &left.contract_hash,
+            &left.evidence,
+            &left.detail,
+        )
+            .cmp(&(
+                &right.name,
+                &right.version,
+                &right.contract_hash,
+                &right.evidence,
+                &right.detail,
+            ))
     });
     summaries.dedup_by(|left, right| {
         left.name == right.name
             && left.version == right.version
             && left.contract_hash == right.contract_hash
+            && left.evidence == right.evidence
+            && left.detail == right.detail
     });
     summaries
 }
@@ -654,6 +1231,15 @@ pub struct PackageContractStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remedy: Option<String>,
     pub contract_path: String,
+    /// The analysed files whose imports of this package resolve to this row's
+    /// installed artifact, relative to the project directory. Present only
+    /// when the name alone does not identify the artifact: the package is
+    /// installed as more than one artifact across the importing files (one row
+    /// each), or its importers find it somewhere other than the project
+    /// directory's own lookup -- a sub-package's `node_modules` in a monorepo
+    /// analysed from its root. A single-package project never carries it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub importers: Vec<String>,
 }
 
 impl PackageContractStatus {
@@ -669,121 +1255,448 @@ impl PackageContractStatus {
     pub fn needs_action(&self) -> bool {
         matches!(
             self.status.as_str(),
-            "missing" | "unverified" | "stale" | "unbound"
+            "missing" | "unverified" | "stale" | "unbound" | "unsupported-runtime"
         )
     }
 }
 
-/// Reports stable-v1 receipt coverage for every imported package that is
-/// either first-party to the selected dialect or declares a Solid dependency.
+/// Why acceptances for each package were not admitted, replayed from one
+/// directory; see [`accepted_package_contract_statuses`].
+pub type RefusalReplay<'a> = dyn Fn(&Path) -> Result<BTreeMap<String, String>, BackendError> + 'a;
+
+/// Reports external receipt coverage and the separately identified built-in
+/// runtime foundation. Built-in model selection is not artifact certification.
 /// Coverage is complete only when every exact imported specifier binds in the
 /// already receipt-validated normalized index.
+///
+/// An external package has one row per installed artifact its importers
+/// resolve to, each looked up from the importing files ([`imported_artifacts`])
+/// and counted over those files' import rows only.
+///
+/// `refusals` names, per installed package, why an acceptance that exists for
+/// it in a project catalog or the compiled-in tier was not admitted
+/// ([`admission_refusal_details`]), replayed from the directory it is handed:
+/// the project directory for a row whose importers reach the project
+/// directory's own install, and the install directory of the row's artifact
+/// otherwise, because that is where its admission was replayed from. It only
+/// adds to the detail of a status that is not `certified`, and never changes
+/// a status.
 pub fn accepted_package_contract_statuses(
     dialect: &'static Dialect,
     project: &Path,
     facts: &ProjectFacts,
     contracts: &AcceptedContractIndex,
+    refusals: &RefusalReplay,
 ) -> Result<Vec<PackageContractStatus>, BackendError> {
     let project_directory = project
         .parent()
         .ok_or_else(|| BackendError::Contract("tsconfig has no parent".into()))?;
-    let first_party = match dialect.id {
-        "solid-v1" => &[
-            "solid-js",
-            "@solid-primitives/scheduled",
-            "@solid-primitives/debounce",
-            "@solid-primitives/rootless",
-        ][..],
-        "solid-v2" => &["solid-js", "@solidjs/web", "@solidjs/signals"][..],
-        _ => &[][..],
+    let mut replayed = BTreeMap::<PathBuf, BTreeMap<String, String>>::new();
+    let mut refusals_from = |directory: &Path| -> Result<BTreeMap<String, String>, BackendError> {
+        if let Some(refusals) = replayed.get(directory) {
+            return Ok(refusals.clone());
+        }
+        let answer = refusals(directory)?;
+        replayed.insert(directory.to_path_buf(), answer.clone());
+        Ok(answer)
     };
+    // Asking the vocabulary rather than matching the id. The list was the same
+    // three names written out again, and the `_ => &[]` arm a third dialect
+    // would have landed in reports "no package needs a contract" for exactly
+    // the packages that dialect ships -- a silent wrong answer, not a gap.
+    let first_party = dialect.vocabulary.primitive_defining_packages();
     let resolved = facts.resolved_imports.as_ref();
     let mut statuses = Vec::new();
     for module in imported_package_roots(facts) {
-        let installed = installed_package_manifest(project_directory, &module)?;
-        let manifest = installed.as_ref().map(|(_, manifest)| manifest);
-        if !first_party.contains(&module.as_str()) && !manifest.is_some_and(manifest_uses_solid) {
+        if let Some(core_package) = core_runtime_package_for_status(&module, facts) {
+            let modeled = dialect
+                .vocabulary
+                .primitive_defining_packages()
+                .contains(&core_package);
+            statuses.push(PackageContractStatus {
+                name: module,
+                // `unsupported-runtime` is retained deliberately although a
+                // build carrying only the Solid 2 vocabulary cannot produce
+                // it: v2's `primitive_defining_packages` is the whole union
+                // across dialects, so every core package it can see is
+                // modelled. It is kept for the same reason `Version::V1` is --
+                // the seam has to exist before the next dialect needs it, and
+                // a status silently dropped from `--check-contracts` output
+                // and from the certification-blocking set is harder to
+                // reinstate than one that was never removed. See ADR 0110 and
+                // the retirement plan's step-3 notes.
+                status: if modeled { "builtin" } else { "unsupported-runtime" }.into(),
+                installed_integrity: None,
+                detail: Some(if modeled {
+                    format!("built-in runtime model {}; no package receipt is required; model selection is not installed-artifact authentication", dialect.vocabulary.runtime_model_identity())
+                } else {
+                    format!("this core package is outside the {} runtime model", dialect.id)
+                }),
+                remedy: (!modeled).then(|| "select a compatible Solid dialect and runtime; a core package contract cannot extend the built-in model".into()),
+                contract_path: String::new(),
+                importers: Vec::new(),
+            });
             continue;
         }
-        let package_directory = installed.as_ref().map(|(directory, _)| directory.as_path());
-        let installed_integrity = package_directory
-            .map(|directory| installed_package_integrity(project_directory, directory))
-            .transpose()?
-            .flatten();
-        let imports = resolved
-            .into_iter()
-            .flat_map(|imports| imports.iter())
-            .filter(|(_, import)| {
-                import
-                    .resolver_package_name
-                    .as_deref()
-                    .or(import.package_name.as_deref())
-                    == Some(module.as_str())
-            })
-            .collect::<Vec<_>>();
-        let bound = imports
-            .iter()
-            .filter(|(importer, import)| contracts.contract(importer, &import.text).is_ok())
-            .count();
-        let (status, detail, remedy, contract_path) = if !imports.is_empty()
-            && bound == imports.len()
-        {
-            (
-                "certified".into(),
-                None,
-                None,
-                "receipt-issued stable-v1 index".into(),
-            )
-        } else {
-            let status = if bound == 0 { "missing" } else { "unbound" };
-            let detail = if imports.is_empty() {
-                Some("exact import identity facts are unavailable".into())
-            } else if bound == 0 {
-                Some(format!(
-                    "none of the {} exact imported artifact case(s) has a matching receipt",
-                    imports.len()
-                ))
+        let artifacts = imported_artifacts(project_directory, facts, &module)?;
+        // The artifact the project directory's own lookup finds. A row whose
+        // importers find exactly that one is the row this report always
+        // printed, so it names no importers and a single-package project reads
+        // byte-identically.
+        let project_artifact = discover_package_directory(project_directory, &module)?
+            .map(|directory| artifact_key(&directory));
+        let split = artifacts.len() > 1;
+        for artifact in artifacts {
+            let installed = artifact
+                .directory
+                .as_deref()
+                .map(read_installed_manifest)
+                .transpose()?
+                .flatten();
+            let manifest = installed.as_ref().map(|(_, manifest)| manifest);
+            if !first_party.contains(&module.as_str()) && !manifest.is_some_and(manifest_uses_solid)
+            {
+                continue;
+            }
+            let importers = if split || artifact.key != project_artifact {
+                artifact
+                    .importers
+                    .iter()
+                    .map(|importer| {
+                        Path::new(importer)
+                            .strip_prefix(project_directory)
+                            .map_or_else(|_| importer.clone(), |path| path.display().to_string())
+                    })
+                    .collect()
             } else {
-                Some(format!(
-                    "{bound} of {} exact imported artifact case(s) have matching receipts",
-                    imports.len()
-                ))
+                Vec::new()
             };
-            let root = package_directory.map_or_else(
-                || format!("node_modules/{module}"),
-                |path| {
-                    path.strip_prefix(project_directory)
-                        .unwrap_or(path)
-                        .display()
-                        .to_string()
-                },
-            );
-            let remedy = installed_integrity.as_ref().map_or_else(
-                || {
-                    Some(
-                        "the package manager supplied no exact registry integrity; linked or local packages remain uncertifiable"
-                            .into(),
-                    )
-                },
-                |integrity| {
-                    Some(format!(
-                        "solid-checker contract generate --package-root {root} --integrity {integrity} --output .solid-checker/contracts/{module}/solid-reactivity.json, then verify the proposal and add its receipt to .solid-checker/accepted-contracts.json"
-                    ))
-                },
-            );
-            (status.into(), detail, remedy, String::new())
-        };
-        statuses.push(PackageContractStatus {
-            name: module,
-            status,
-            installed_integrity,
-            detail,
-            remedy,
-            contract_path,
-        });
+            // Where this artifact's admission was evaluated from: the project
+            // directory when its importers reach the project directory's own
+            // install, which keeps a single-package project byte-identical,
+            // and otherwise the directory whose `node_modules` holds it, where
+            // the lockfile governing that copy is found.
+            let admission_directory = match &artifact.base {
+                Some(base) if artifact.key != project_artifact => base.as_path(),
+                _ => project_directory,
+            };
+            let refusals = refusals_from(admission_directory)?;
+            let mut status = artifact_contract_status(
+                project_directory,
+                admission_directory,
+                &module,
+                installed.as_ref(),
+                resolved,
+                &artifact.importers,
+                contracts,
+                &refusals,
+            )?;
+            status.importers = importers;
+            statuses.push(status);
+        }
     }
+    // Stable: the rows of one name keep their artifact order.
     statuses.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(statuses)
+}
+
+/// One installed artifact of a package name, with the analysed files whose
+/// imports find it.
+struct ImportedArtifact {
+    /// [`artifact_key`] of `directory`; `None` when no importer finds the
+    /// package installed at all.
+    key: Option<PathBuf>,
+    /// The package directory as the first importer's lookup spells it.
+    directory: Option<PathBuf>,
+    /// The directory whose `node_modules` holds `directory`.
+    base: Option<PathBuf>,
+    importers: std::collections::BTreeSet<String>,
+}
+
+/// What identifies an installed artifact across lookup spellings: two
+/// sub-packages' `node_modules/<name>` links into one package-manager store
+/// directory are one artifact.
+fn artifact_key(directory: &Path) -> PathBuf {
+    fs::canonicalize(directory).unwrap_or_else(|_| directory.to_path_buf())
+}
+
+/// The installed artifacts `module` resolves to from the analysed files that
+/// import it, each looked up from the importing file's own location -- the
+/// `node_modules` walk the analysis's resolution performs per file, not one
+/// lookup from the project directory. A monorepo root analyses sub-packages
+/// whose dependencies are installed under their own `node_modules` and nowhere
+/// at the root; looking only from the project directory left those packages
+/// out of `contract check` while the analysis raised obligations for them.
+///
+/// The importers are the files that name the package in an import and the
+/// files an attested import row resolves into the package (an aliased
+/// specifier), which is every file whose rows the status counts. Sorted by
+/// artifact key, so the output is deterministic.
+fn imported_artifacts(
+    project_directory: &Path,
+    facts: &ProjectFacts,
+    module: &str,
+) -> Result<Vec<ImportedArtifact>, BackendError> {
+    let mut importers = std::collections::BTreeSet::new();
+    for file in &facts.files {
+        if file
+            .ast
+            .imports
+            .iter()
+            .any(|import| package_root(&import.module) == module)
+        {
+            importers.insert(file.path.to_string());
+        }
+    }
+    if let Some(resolved) = &facts.resolved_imports {
+        for (importer, import) in resolved.iter() {
+            if resolved_package_name(import) == Some(module) {
+                importers.insert(importer.to_owned());
+            }
+        }
+    }
+    let mut lookups = HashMap::<PathBuf, Option<(PathBuf, PathBuf)>>::new();
+    let mut artifacts = BTreeMap::<Option<PathBuf>, ImportedArtifact>::new();
+    for importer in importers {
+        let from = Path::new(&importer)
+            .parent()
+            .unwrap_or(project_directory)
+            .to_path_buf();
+        let install = match lookups.get(&from) {
+            Some(install) => install.clone(),
+            None => {
+                let install = discover_package_install(&from, module)?;
+                lookups.insert(from, install.clone());
+                install
+            }
+        };
+        let (base, directory) = install.unzip();
+        let key = directory.as_deref().map(artifact_key);
+        artifacts
+            .entry(key.clone())
+            .or_insert_with(|| ImportedArtifact {
+                key,
+                directory,
+                base,
+                importers: std::collections::BTreeSet::new(),
+            })
+            .importers
+            .insert(importer);
+    }
+    Ok(artifacts.into_values().collect())
+}
+
+/// The package an attested import resolved into, as `contract check` and the
+/// obligation discovery both name it: the resolver's own identity first.
+fn resolved_package_name(import: &solid_facts::AttestedImport) -> Option<&str> {
+    import
+        .resolver_package_name
+        .as_deref()
+        .or(import.package_name.as_deref())
+}
+
+/// The status of one installed artifact of `module`, counted over the
+/// attested import rows of `importers` only. Its lockfile integrity is read
+/// from `admission_directory`, where its admission was evaluated from.
+#[allow(clippy::too_many_arguments)]
+fn artifact_contract_status(
+    project_directory: &Path,
+    admission_directory: &Path,
+    module: &str,
+    installed: Option<&(PathBuf, PackageManifest)>,
+    resolved: Option<&solid_facts::AttestedImportIndex>,
+    importers: &std::collections::BTreeSet<String>,
+    contracts: &AcceptedContractIndex,
+    refusals: &BTreeMap<String, String>,
+) -> Result<PackageContractStatus, BackendError> {
+    let module = module.to_owned();
+    let package_directory = installed.map(|(directory, _)| directory.as_path());
+    let installed_integrity = package_directory
+        .map(|directory| installed_package_integrity(admission_directory, directory))
+        .transpose()?
+        .flatten();
+    let imports = resolved
+        .into_iter()
+        .flat_map(|imports| imports.iter())
+        .filter(|(importer, import)| {
+            resolved_package_name(import) == Some(module.as_str()) && importers.contains(*importer)
+        })
+        .collect::<Vec<_>>();
+    let bound = imports
+        .iter()
+        .filter(|(importer, import)| contracts.contract(importer, &import.text).is_ok())
+        .count();
+    let (status, detail, remedy, contract_path) = if !imports.is_empty() && bound == imports.len() {
+        (
+            "certified".into(),
+            None,
+            None,
+            "receipt-issued stable-v1 index".into(),
+        )
+    } else {
+        let status = if bound == 0 { "missing" } else { "unbound" };
+        let detail = if imports.is_empty() {
+            "exact import identity facts are unavailable".to_owned()
+        } else if bound == 0 {
+            format!(
+                "none of the {} exact imported artifact case(s) has a matching receipt",
+                imports.len()
+            )
+        } else {
+            format!(
+                "{bound} of {} exact imported artifact case(s) have matching receipts",
+                imports.len()
+            )
+        };
+        let detail = Some(match refusals.get(&module) {
+            Some(refusal) => format!("{detail}; {refusal}"),
+            None => detail,
+        });
+        let root = package_directory.map_or_else(
+            || format!("node_modules/{module}"),
+            |path| {
+                path.strip_prefix(project_directory)
+                    .unwrap_or(path)
+                    .display()
+                    .to_string()
+            },
+        );
+        let remedy = installed_integrity.as_ref().map_or_else(
+            || {
+                Some(
+                    "the package manager supplied no exact registry integrity; linked or local packages remain uncertifiable"
+                        .into(),
+                )
+            },
+            |integrity| {
+                Some(format!(
+                    "solid-checker contract certify --package-root {root} --integrity {integrity} --catalog .solid-checker/accepted-contracts.json --issuer-configuration <issuer.json> --trust-configuration-output <trust.json>, run from this project; it adds the package to the project catalog, which `solid-checker contract check --receipt-trust-configuration <trust.json>` then reads"
+                ))
+            },
+        );
+        (status.into(), detail, remedy, String::new())
+    };
+    Ok(PackageContractStatus {
+        name: module,
+        status,
+        installed_integrity,
+        detail,
+        remedy,
+        contract_path,
+        importers: Vec::new(),
+    })
+}
+
+/// Why an acceptance that exists for an installed package was not admitted by
+/// artifact, one sentence per package, for `contract check` to append to a
+/// status that is not `certified`.
+///
+/// Every acceptance is replayed through steps 1-3 of the one admission rule
+/// ([`crate::artifact_admission::admission_refusals`]); a package is named only
+/// when *every* acceptance for it failed one of those steps, because otherwise
+/// the refusal lies in the resolved file or case selection, which this does not
+/// explain. The most specific refusal wins: an environment that differs (the
+/// artifact matched) over a receipt that states none, over an artifact that is
+/// not the certified one.
+pub fn admission_refusal_details(
+    project_directory: &Path,
+    catalogs: &[PathBuf],
+) -> Result<BTreeMap<String, String>, BackendError> {
+    use crate::artifact_admission::AdmissionRefusal;
+    let patches = crate::installed_patches::InstalledPatches::read(project_directory);
+    let snapshots = InstalledSnapshots::default();
+    let installed = |specifier: &str| installed_artifact_identity(project_directory, specifier);
+    let bytes = |specifier: &str, patched: bool| {
+        installed_artifact_bytes(project_directory, specifier, patched, &patches, &snapshots)
+    };
+    let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+        installed_environment_difference(project_directory, specifier, environment, &patches)
+    };
+    let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
+    let tiers = [(
+        "a project catalog entry",
+        crate::contract_interface::project_admission_refusals(
+            catalogs,
+            &installed,
+            &bytes,
+            &difference,
+        )
+        .map_err(contract)?,
+    )];
+    let rank = |refusal: &AdmissionRefusal| match refusal {
+        AdmissionRefusal::EnvironmentDiffers(_) => 0,
+        AdmissionRefusal::InstalledBytesDiffer(_) => 1,
+        AdmissionRefusal::NoEnvironmentStated => 2,
+        AdmissionRefusal::AcceptanceRootNotReproduced { .. } => 3,
+        AdmissionRefusal::CitationWithdrawn(_) => 4,
+    };
+    let mut details = BTreeMap::new();
+    for (tier, refusals) in tiers {
+        let mut by_package = BTreeMap::<String, Vec<Option<AdmissionRefusal>>>::new();
+        for (specifier, refusal) in refusals {
+            if let Some(module) = package_name_of_specifier(&specifier) {
+                by_package.entry(module).or_default().push(refusal);
+            }
+        }
+        for (module, refusals) in by_package {
+            if details.contains_key(&module) || refusals.iter().any(Option::is_none) {
+                continue;
+            }
+            if let Some(refusal) = refusals
+                .iter()
+                .flatten()
+                .min_by_key(|refusal| rank(refusal))
+            {
+                details.insert(
+                    module,
+                    format!("{tier} exists for this package and was not admitted: {refusal}"),
+                );
+            }
+        }
+    }
+    Ok(details)
+}
+
+/// Reporting-only classification. An alias counts as core only when every
+/// exact import occurrence resolves to the same defining package. This does
+/// not authenticate its bytes or grant semantics to the source program.
+fn core_runtime_package_for_status<'a>(
+    module: &'a str,
+    facts: &'a ProjectFacts,
+) -> Option<&'a str> {
+    if solid_dialect::primitive_defining_package(module) {
+        return Some(module);
+    }
+    let resolved = facts.resolved_imports.as_ref()?;
+    let mut selected = None;
+    for file in &facts.files {
+        for import in file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| package_root(&import.module) == module)
+        {
+            let solid_facts::SpecifierAttestation::Attested(answer) =
+                resolved.specifier(file.path.as_str(), import.span, &import.module)
+            else {
+                return None;
+            };
+            if answer.resolution != solid_facts::ImportResolution::NodeModules {
+                return None;
+            }
+            let package = answer
+                .resolver_package_name
+                .as_deref()
+                .or(answer.package_name.as_deref())?;
+            if !solid_dialect::primitive_defining_package(package)
+                || selected.is_some_and(|other| other != package)
+            {
+                return None;
+            }
+            selected = Some(package);
+        }
+    }
+    selected
 }
 
 #[derive(Deserialize)]
@@ -804,6 +1717,1539 @@ struct PackageManifest {
 /// Ambient-module and virtual test projects have no installed package and no
 /// manifest; both cases yield `None`, which every caller reads as "there is no
 /// installed version to disagree with".
+/// The specifiers this project may import under an existing acceptance,
+/// because the installed artifact their importers reach is the one that
+/// acceptance names.
+///
+/// Lives here rather than beside the catalog reader because the answer depends
+/// on the installed tree, which is this module's business: the package the
+/// specifier resolves to, its version, and the registry integrity its lockfile
+/// selected. A package whose installs disagree yields no integrity at all
+/// (`installed_package_integrity` returns `None`), so a project with two
+/// versions of one dependency admits neither — which is the nested-install case
+/// the importer key used to guard.
+///
+/// Evaluated from each importer's own install ([`ImporterInstalls`]): a
+/// specifier every importer reaches at the project directory's own install is
+/// admitted project-wide, exactly as before; one that some importer reaches
+/// elsewhere is admitted per install, for the importers reaching it.
+pub fn admitted_project_artifacts(
+    catalogs: &[PathBuf],
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+) -> Result<ArtifactAdmissions, BackendError> {
+    let installs = importer_installs(project_directory, facts, None)?;
+    admitted_catalog_artifacts(
+        catalogs,
+        trust,
+        project_directory,
+        conditions,
+        facts,
+        None,
+        &installs,
+    )
+}
+
+/// [`admitted_project_artifacts`] with the resolved-file fact taken only from
+/// the importers `within` a directory -- a nested catalog's, whose admission
+/// speaks for those files alone. `None` is every importer.
+fn admitted_catalog_artifacts(
+    catalogs: &[PathBuf],
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+    within: Option<&Path>,
+    installs: &ImporterInstalls,
+) -> Result<ArtifactAdmissions, BackendError> {
+    // The same environment check as the compiled-in tier (ADR 0123): a project
+    // catalog certified in this tree reproduces it by construction, and one
+    // carried into a tree whose installs differ does not.
+    admitted_by_install(
+        project_directory,
+        facts,
+        within,
+        installs,
+        &|installed, bytes, resolved_target, environment| {
+            crate::contract_interface::admitted_project_artifacts(
+                catalogs,
+                trust,
+                project_directory,
+                conditions,
+                installed,
+                bytes,
+                resolved_target,
+                environment,
+            )
+        },
+    )
+}
+
+/// Where the analysed files' imports reach an installed package other than
+/// the one the admission directory's own lookup finds.
+///
+/// Artifact admission asks whether *the installed copy an import resolves to*
+/// is the artifact an acceptance was proven about. It used to ask that of the
+/// copy the project directory's own `node_modules` walk finds, which is the
+/// right copy only when every importer finds that one too. A monorepo root
+/// analysing `packages/*`, whose dependencies are installed under each
+/// sub-package's `node_modules` and nowhere at the root, found none, and every
+/// acceptance was refused with "the installed package has no exact lockfile
+/// integrity" -- while the same files analysed from their sub-package were
+/// admitted (measured on kobalte, 2026-09-26).
+///
+/// A file's install is found from its own directory with the same walk
+/// [`imported_artifacts`] performs for `contract check`, and is identified by
+/// its canonical directory. A specifier none of whose importers reaches an
+/// install other than the directory's own is not recorded, so a
+/// single-package project has nothing here and is admitted byte-identically.
+/// A specifier some importer reaches elsewhere is *split*: nothing admits it
+/// project-wide, and each install context below admits it for the importers
+/// that reach it.
+#[derive(Debug, Default)]
+struct ImporterInstalls {
+    /// The bare specifiers some attested import reaches at an install other
+    /// than the admission directory's own.
+    split: std::collections::BTreeSet<String>,
+    /// Per install directory -- the directory whose `node_modules` holds the
+    /// copy, where its lookup, its lockfile walk and its environment replay
+    /// start -- each split specifier and the importers reaching it there.
+    /// Importers of a split specifier that reach the admission directory's own
+    /// copy (or none at all) are recorded under the admission directory.
+    contexts: BTreeMap<PathBuf, BTreeMap<String, std::collections::BTreeSet<String>>>,
+}
+
+impl ImporterInstalls {
+    /// The install directories other than `directory`, each with the modules
+    /// looked up there. A host caching an admission verdict hashes their
+    /// manifests and lockfiles.
+    fn elsewhere<'a>(&'a self, directory: &'a Path) -> impl Iterator<Item = (&'a Path, String)> {
+        self.contexts
+            .iter()
+            .filter(move |(base, _)| base.as_path() != directory)
+            .flat_map(|(base, specifiers)| {
+                specifiers
+                    .keys()
+                    .filter_map(|specifier| package_name_of_specifier(specifier))
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .map(move |module| (base.as_path(), module))
+            })
+    }
+}
+
+/// The installs artifact admission reads for the analysed files besides the
+/// ones `directory`'s own lookup finds: `(install directory, module)` for
+/// every import some file reaches at another install ([`ImporterInstalls`]),
+/// the project's and each nested catalog scope's, sorted. A host caching an
+/// admission verdict hashes the manifest `module` resolves to from there and
+/// [`admission_input_paths`] of the install directory, which is where that
+/// copy's identity, lockfile integrity and environment replay are read.
+/// Empty for a project whose importers all reach its own installs.
+pub fn importer_admission_inputs(
+    directory: &Path,
+    nested: &[NestedCatalogs],
+    facts: &solid_facts::ProjectFacts,
+) -> Result<Vec<(PathBuf, String)>, BackendError> {
+    let mut inputs = std::collections::BTreeSet::new();
+    let installs = importer_installs(directory, facts, None)?;
+    inputs.extend(
+        installs
+            .elsewhere(directory)
+            .map(|(base, module)| (base.to_path_buf(), module)),
+    );
+    for scope in nested {
+        let scope = scope.directory.as_path();
+        let installs = importer_installs(scope, facts, Some(scope))?;
+        inputs.extend(
+            installs
+                .elsewhere(scope)
+                .map(|(base, module)| (base.to_path_buf(), module)),
+        );
+    }
+    Ok(inputs.into_iter().collect())
+}
+
+/// A specifier naming an installed package, as opposed to a relative,
+/// absolute or `node:` one, which no `node_modules` walk answers.
+fn names_installed_package(specifier: &str) -> bool {
+    !specifier.starts_with('.') && !specifier.starts_with('/') && !specifier.starts_with("node:")
+}
+
+/// [`ImporterInstalls`] for the attested imports of the files `within` a
+/// directory (every file when `None`), relative to `directory`'s own lookup.
+fn importer_installs(
+    directory: &Path,
+    facts: &solid_facts::ProjectFacts,
+    within: Option<&Path>,
+) -> Result<ImporterInstalls, BackendError> {
+    use std::collections::hash_map::Entry;
+    type Reached = Option<(PathBuf, PathBuf)>;
+    let mut installs = ImporterInstalls::default();
+    let Some(attested) = facts.resolved_imports.as_ref() else {
+        return Ok(installs);
+    };
+    let mut lookups = HashMap::<(PathBuf, String), Reached>::new();
+    let mut rows = BTreeMap::<String, Vec<(String, Reached)>>::new();
+    for (importer, import) in attested.iter() {
+        let specifier = import.text.as_str();
+        if import.resolution == solid_facts::ImportResolution::Unresolved
+            || !names_installed_package(specifier)
+            || within.is_some_and(|within| !Path::new(importer).starts_with(within))
+        {
+            continue;
+        }
+        let Some(module) = package_name_of_specifier(specifier) else {
+            continue;
+        };
+        let from = Path::new(importer)
+            .parent()
+            .unwrap_or(directory)
+            .to_path_buf();
+        let reached = match lookups.entry((from, module)) {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => {
+                let (from, module) = entry.key();
+                let reached = discover_package_install(from, module)?
+                    .map(|(base, package)| (base, artifact_key(&package)));
+                entry.insert(reached).clone()
+            }
+        };
+        rows.entry(specifier.to_owned())
+            .or_default()
+            .push((importer.to_owned(), reached));
+    }
+    let mut own = HashMap::<String, Option<PathBuf>>::new();
+    for (specifier, rows) in rows {
+        let Some(module) = package_name_of_specifier(&specifier) else {
+            continue;
+        };
+        let own_key = match own.entry(module) {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => {
+                let key = discover_package_directory(directory, entry.key())?
+                    .map(|package| artifact_key(&package));
+                entry.insert(key).clone()
+            }
+        };
+        let elsewhere = |reached: &Reached| {
+            reached
+                .as_ref()
+                .filter(|(_, key)| own_key.as_ref() != Some(key))
+                .map(|(base, _)| base.clone())
+        };
+        if !rows.iter().any(|(_, reached)| elsewhere(reached).is_some()) {
+            continue;
+        }
+        installs.split.insert(specifier.clone());
+        for (importer, reached) in rows {
+            let base = elsewhere(&reached).unwrap_or_else(|| directory.to_path_buf());
+            installs
+                .contexts
+                .entry(base)
+                .or_default()
+                .entry(specifier.clone())
+                .or_default()
+                .insert(importer);
+        }
+    }
+    Ok(installs)
+}
+
+/// One tier's artifact admission (ADR 0123) over the installed-tree facts it
+/// is handed: [`crate::authored_contracts::admitted_authored_artifacts`] or
+/// [`crate::contract_interface::admitted_project_artifacts`].
+type TierAdmission<'a> = dyn Fn(
+        &crate::contract_interface::InstalledArtifactIdentity,
+        &crate::artifact_admission::InstalledArtifactBytes,
+        &crate::contract_interface::ResolvedTargetIdentity,
+        &crate::artifact_admission::InstalledEnvironment,
+    ) -> Result<Vec<(String, String)>, crate::ContractFailure>
+    + 'a;
+
+/// The importers of each specifier in one install context.
+type ContextImporters = BTreeMap<String, std::collections::BTreeSet<String>>;
+
+/// What one tier admits by artifact: `(specifier, artifact identity)` pairs
+/// for the whole project, and per install context the pairs it admitted there
+/// with the importers they apply to ([`ImporterInstalls`]).
+#[derive(Debug, Default)]
+pub struct ArtifactAdmissions {
+    project_wide: Vec<(String, String)>,
+    installs: Vec<(Vec<(String, String)>, ContextImporters)>,
+}
+
+impl ArtifactAdmissions {
+    /// Folds these admissions into `contracts`: project-wide by specifier,
+    /// the rest by importer. Admitting nothing leaves the index unchanged.
+    #[must_use]
+    pub fn admit_into(self, contracts: AcceptedContractIndex) -> AcceptedContractIndex {
+        let mut contracts = contracts;
+        if !self.project_wide.is_empty() {
+            contracts = contracts.with_admitted_artifacts(self.project_wide);
+        }
+        let mut by_importer = Vec::new();
+        for (admitted, importers) in self.installs {
+            for (specifier, identity) in admitted {
+                for importer in importers.get(&specifier).into_iter().flatten() {
+                    by_importer.push((importer.clone(), specifier.clone(), identity.clone()));
+                }
+            }
+        }
+        if !by_importer.is_empty() {
+            contracts = contracts.with_admitted_artifacts_for(by_importer);
+        }
+        contracts
+    }
+
+    /// Whether nothing was admitted anywhere.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.project_wide.is_empty() && self.installs.is_empty()
+    }
+
+    /// [`agreed_admissions`] within each context: candidates for one
+    /// specifier are compared only with candidates from the same install.
+    fn agreed(self, contracts: &AcceptedContractIndex) -> Self {
+        Self {
+            project_wide: agreed_admissions(contracts, self.project_wide),
+            installs: self
+                .installs
+                .into_iter()
+                .map(|(admitted, importers)| (agreed_admissions(contracts, admitted), importers))
+                .collect(),
+        }
+    }
+}
+
+/// Runs one tier's admission from every install its importers reach: once
+/// from `directory` for the specifiers no importer reaches elsewhere, and once
+/// per install context for the split ones, each context's facts -- identity,
+/// lockfile integrity, environment replay and resolved file -- read from its
+/// own install directory and its own importers only.
+fn admitted_by_install(
+    directory: &Path,
+    facts: &solid_facts::ProjectFacts,
+    within: Option<&Path>,
+    installs: &ImporterInstalls,
+    tier: &TierAdmission,
+) -> Result<ArtifactAdmissions, BackendError> {
+    let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
+    let counted =
+        |importer: &str| within.is_none_or(|within| Path::new(importer).starts_with(within));
+    let installed = |specifier: &str| {
+        (!installs.split.contains(specifier))
+            .then(|| installed_artifact_identity(directory, specifier))
+            .flatten()
+    };
+    // Read once per install directory, not once per acceptance: the tier
+    // offers many acceptances of one package, and each would otherwise hash
+    // its files and re-read every lockfile above it again.
+    let snapshots = InstalledSnapshots::default();
+    let patches = crate::installed_patches::InstalledPatches::read(directory);
+    let bytes = |specifier: &str, patched: bool| {
+        installed_artifact_bytes(directory, specifier, patched, &patches, &snapshots)
+    };
+    let resolved_target =
+        |specifier: &str| resolved_target_identity(directory, facts, specifier, &counted);
+    let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+        installed_environment_matches_in(directory, specifier, environment, &patches)
+    };
+    let mut admissions = ArtifactAdmissions {
+        project_wide: tier(&installed, &bytes, &resolved_target, &environment).map_err(contract)?,
+        installs: Vec::new(),
+    };
+    for (base, specifiers) in &installs.contexts {
+        let installed = |specifier: &str| {
+            specifiers
+                .contains_key(specifier)
+                .then(|| installed_artifact_identity(base, specifier))
+                .flatten()
+        };
+        let patches = crate::installed_patches::InstalledPatches::read(base);
+        let bytes = |specifier: &str, patched: bool| {
+            installed_artifact_bytes(base, specifier, patched, &patches, &snapshots)
+        };
+        let resolved_target = |specifier: &str| {
+            let importers = specifiers.get(specifier)?;
+            resolved_target_identity(base, facts, specifier, &|importer| {
+                importers.contains(importer)
+            })
+        };
+        let environment = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+            installed_environment_matches_in(base, specifier, environment, &patches)
+        };
+        let admitted =
+            tier(&installed, &bytes, &resolved_target, &environment).map_err(contract)?;
+        if !admitted.is_empty() {
+            admissions.installs.push((admitted, specifiers.clone()));
+        }
+    }
+    Ok(admissions)
+}
+
+/// The project catalogs one analysis may read, and the discovered ones it
+/// withheld because nothing was configured to authenticate them.
+#[derive(Clone, Debug, Default)]
+pub struct ProjectCatalogSelection {
+    /// The catalogs to read, in discovery order.
+    pub admitted: Vec<PathBuf>,
+    /// Discovered catalogs holding policy-2 entries, withheld because no
+    /// `--receipt-trust-configuration` was supplied -- the project's own and
+    /// every nested one.
+    pub unauthenticated: Vec<UnauthenticatedCatalog>,
+    /// The catalogs of directories inside the project, each applying to that
+    /// directory's files only. Always empty for an explicit
+    /// `--accepted-contracts`, which names the whole local tier.
+    pub nested: Vec<NestedCatalogs>,
+}
+
+/// The catalogs found in one directory strictly inside the analysed project:
+/// its `.solid-checker/`, read for the analysed files below that directory.
+///
+/// A file's applicable project catalogs are those of its ancestor directories
+/// up to and including the analysed project's: a monorepo's root
+/// `tsconfig.json` analyses `packages/core/src/**` exactly as
+/// `packages/core/tsconfig.json` does, and until this it never saw
+/// `packages/core/.solid-checker/` (measured on kobalte:
+/// docs/package-contract-v2/phase22/2026-09-26-project-side-certification-on-kobalte-core.md,
+/// defect 5). The nearest catalog answers per specifier and a farther one is
+/// the fallback, so the project's own catalog -- the farthest -- answers what
+/// no nested one does, and a project with no nested catalog is analysed
+/// exactly as before.
+///
+/// Nothing is trusted for being found: a nested catalog's acceptances go
+/// through the same authentication and the same admission as the project's,
+/// replayed from this directory.
+#[derive(Clone, Debug)]
+pub struct NestedCatalogs {
+    pub directory: PathBuf,
+    /// The catalogs to read, in discovery order.
+    pub admitted: Vec<PathBuf>,
+}
+
+/// A discovered project catalog that was not read for want of trust.
+#[derive(Clone, Debug)]
+pub struct UnauthenticatedCatalog {
+    pub path: PathBuf,
+    /// The packages its policy-2 entries accept.
+    pub packages: Vec<String>,
+}
+
+impl UnauthenticatedCatalog {
+    /// The sentence `contract check` appends to such a package's status.
+    fn refusal(&self) -> String {
+        format!(
+            "a project catalog entry exists for this package and was not read: {} needs --receipt-trust-configuration <trust.json> to authenticate its policy-2 receipt",
+            self.path.display()
+        )
+    }
+}
+
+impl ProjectCatalogSelection {
+    /// Whether any catalog was found or named at all, admitted or not.
+    pub fn is_empty(&self) -> bool {
+        self.admitted.is_empty() && self.unauthenticated.is_empty() && self.nested.is_empty()
+    }
+
+    /// The one non-fatal notice an analysis prints when it withheld catalogs,
+    /// naming every withheld path, the packages they accept, and the remedy.
+    pub fn notice(&self) -> Option<String> {
+        if self.unauthenticated.is_empty() {
+            return None;
+        }
+        let paths = self
+            .unauthenticated
+            .iter()
+            .map(|catalog| catalog.path.display().to_string())
+            .collect::<Vec<_>>();
+        let mut packages = self
+            .unauthenticated
+            .iter()
+            .flat_map(|catalog| catalog.packages.iter().cloned())
+            .collect::<Vec<_>>();
+        packages.sort();
+        packages.dedup();
+        let (noun, verb) = if paths.len() == 1 {
+            ("catalog", "was")
+        } else {
+            ("catalogs", "were")
+        };
+        Some(format!(
+            "solid-checker: note: project {noun} {} {verb} not read: policy-2 receipts need a trusted issuer and no trust configuration was supplied, so the contracts for {} are not admitted and the analysis proceeds as if the {noun} {verb} absent; pass --receipt-trust-configuration <trust.json> (the file `contract certify --trust-configuration-output` wrote) to admit them",
+            paths.join(", "),
+            packages.join(", ")
+        ))
+    }
+
+    /// `contract check`'s explanation for each package a withheld catalog
+    /// accepts. It replaces a compiled-in tier's refusal for the same package:
+    /// project catalogs take precedence over that tier, so the withheld one is
+    /// what would have answered.
+    pub fn extend_refusals(&self, refusals: &mut BTreeMap<String, String>) {
+        for catalog in &self.unauthenticated {
+            for package in &catalog.packages {
+                refusals.insert(package.clone(), catalog.refusal());
+            }
+        }
+    }
+}
+
+/// Selects the project catalogs an analysis reads.
+///
+/// `explicit` is `--accepted-contracts`; empty means discovery under
+/// `directory`. `trust_supplied` is whether `--receipt-trust-configuration`
+/// was given; the configuration itself is read and validated by the caller,
+/// so a named but missing or undecodable trust file still fails there.
+///
+/// A policy-2 entry can only be admitted by authenticating its receipt against
+/// separately configured trust, and a project cannot nominate its own issuer.
+/// So a discovered catalog holding one is unreadable without that
+/// configuration, and it used to take the whole analysis down with it: exit 2
+/// and no findings at all, on every run after the first `contract certify`
+/// that forgot `--receipt-trust-configuration`. Measured on `@kobalte/core`
+/// (docs/package-contract-v2/phase22/2026-09-26-project-side-certification-on-kobalte-core.md).
+///
+/// Such a catalog is now withheld whole, exactly as if it were absent: every
+/// import it would have covered falls back to the compiled-in tier or to the
+/// acceptance-gate obligation, and the caller reports
+/// [`ProjectCatalogSelection::notice`]. Nothing is admitted on the way, so this
+/// can only lose acceptances, never add one.
+///
+/// A catalog the user *named* is different. `--accepted-contracts <path>` is a
+/// request for that catalog's contracts, and answering it silently without
+/// them would report a run that did not do what was asked; it stays a hard
+/// error, now naming the path and the remedy.
+pub fn select_project_catalogs(
+    directory: &Path,
+    explicit: &str,
+    trust_supplied: bool,
+) -> Result<ProjectCatalogSelection, BackendError> {
+    let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
+    if !explicit.is_empty() {
+        let path = PathBuf::from(explicit);
+        if !trust_supplied {
+            let packages = crate::contract_interface::catalog_packages_needing_receipt_trust(&path)
+                .map_err(contract)?;
+            if !packages.is_empty() {
+                return Err(BackendError::Contract(format!(
+                    "--accepted-contracts {}: {}; pass --receipt-trust-configuration <trust.json> naming the issuer that certified it",
+                    path.display(),
+                    crate::ContractFailure::ReceiptAuthenticationRequired
+                )));
+            }
+        }
+        return Ok(ProjectCatalogSelection {
+            admitted: vec![path],
+            unauthenticated: Vec::new(),
+            nested: Vec::new(),
+        });
+    }
+    let mut selection = ProjectCatalogSelection::default();
+    selection.admitted = selected_in(directory, trust_supplied, &mut selection.unauthenticated)?;
+    Ok(selection)
+}
+
+/// [`select_project_catalogs`], and the catalogs of every directory in
+/// `candidates` -- from [`nested_catalog_candidates`] -- each selected by the
+/// same trust rule. A withheld nested catalog is named in the one notice with
+/// the project's own. An explicit `--accepted-contracts` still names the whole
+/// local tier: no nested catalog is read beside it.
+pub fn select_project_catalogs_in(
+    directory: &Path,
+    candidates: &[PathBuf],
+    explicit: &str,
+    trust_supplied: bool,
+) -> Result<ProjectCatalogSelection, BackendError> {
+    let mut selection = select_project_catalogs(directory, explicit, trust_supplied)?;
+    if !explicit.is_empty() {
+        return Ok(selection);
+    }
+    for candidate in candidates {
+        if !candidate.join(".solid-checker").is_dir() {
+            continue;
+        }
+        let admitted = selected_in(candidate, trust_supplied, &mut selection.unauthenticated)?;
+        if !admitted.is_empty() {
+            selection.nested.push(NestedCatalogs {
+                directory: candidate.clone(),
+                admitted,
+            });
+        }
+    }
+    Ok(selection)
+}
+
+/// The catalogs discovered in `directory`'s `.solid-checker/` that this run can
+/// read, pushing each one it cannot onto `withheld`.
+fn selected_in(
+    directory: &Path,
+    trust_supplied: bool,
+    withheld: &mut Vec<UnauthenticatedCatalog>,
+) -> Result<Vec<PathBuf>, BackendError> {
+    let contract = |error: crate::ContractFailure| BackendError::Contract(error.to_string());
+    let discovered =
+        crate::contract_interface::discovered_catalog_paths(directory).map_err(contract)?;
+    if trust_supplied {
+        return Ok(discovered);
+    }
+    let mut admitted = Vec::new();
+    for path in discovered {
+        let packages = crate::contract_interface::catalog_packages_needing_receipt_trust(&path)
+            .map_err(contract)?;
+        if packages.is_empty() {
+            admitted.push(path);
+        } else {
+            withheld.push(UnauthenticatedCatalog { path, packages });
+        }
+    }
+    Ok(admitted)
+}
+
+/// The directories whose `.solid-checker/` may hold a catalog for one of
+/// `files`: every ancestor directory of an analysed file strictly inside
+/// `project_directory`, sorted, whether or not it holds a catalog. The project
+/// directory itself is not one -- its catalog is the project's own -- and
+/// neither is a directory at or below a `node_modules`, which holds installed
+/// packages rather than this project's sources. A file outside the project
+/// directory contributes nothing, so the project's own catalog is the only one
+/// that applies to it.
+///
+/// Every candidate is returned, not only the ones that hold a catalog today: a
+/// host that caches an answer has to treat a catalog appearing in any of them
+/// as a change.
+#[must_use]
+pub fn nested_catalog_candidates<'a>(
+    project_directory: &Path,
+    files: impl IntoIterator<Item = &'a str>,
+) -> Vec<PathBuf> {
+    // The project directory as the host spelled it, and as an absolute and a
+    // real path: file paths come from the compiler, which may have resolved
+    // either. A candidate keeps the file's own spelling, because that is what
+    // an importer is compared with.
+    let mut spellings = vec![project_directory.to_path_buf()];
+    spellings.extend(std::path::absolute(project_directory).ok());
+    spellings.extend(fs::canonicalize(project_directory).ok());
+    let mut candidates = std::collections::BTreeSet::new();
+    for file in files {
+        let Some(parent) = Path::new(file).parent() else {
+            continue;
+        };
+        let Some(project) = spellings
+            .iter()
+            .find(|spelling| parent.starts_with(spelling))
+        else {
+            continue;
+        };
+        for ancestor in parent.ancestors() {
+            if ancestor == project {
+                break;
+            }
+            let Ok(relative) = ancestor.strip_prefix(project) else {
+                break;
+            };
+            if relative
+                .components()
+                .any(|component| component.as_os_str() == "node_modules")
+            {
+                continue;
+            }
+            if !candidates.insert(ancestor.to_path_buf()) {
+                // Every ancestor above this one was inserted with it.
+                break;
+            }
+        }
+    }
+    candidates.into_iter().collect()
+}
+
+/// The accepted-contract index ordinary analysis reads, from every tier this
+/// project can reach.
+///
+/// One function because the *order* is the rule, and three callers had to agree
+/// on it: the analysis, `contract check`, and the daemon. Project catalogs
+/// first, the compiled-in tier below them, and the missing-evidence markers
+/// last -- a project that certified a package itself keeps its own answer, a
+/// package this build carries a contract for stops raising an obligation the
+/// user cannot discharge, and everything else still raises one. Artifact
+/// admission runs project-first for the same reason.
+///
+/// Callers still resolve `catalogs` and `trust` themselves, because how a
+/// catalog is *selected* genuinely differs between them (an explicit `--catalog`
+/// overrides discovery; the emission path supplies neither). What must not
+/// differ is what happens afterwards. `nested` is the selection's
+/// [`NestedCatalogs`], each folded in above every project-wide tier for its
+/// own directory's files.
+#[allow(clippy::too_many_arguments)]
+pub fn project_accepted_contracts(
+    directory: &Path,
+    catalogs: &[PathBuf],
+    nested: &[NestedCatalogs],
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    bundled: bool,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+    requirements: AcceptedContractIndex,
+) -> Result<AcceptedContractIndex, BackendError> {
+    let mut contracts = read_catalogs(catalogs, trust)?;
+    if bundled {
+        // ADR 0198: the authored tier, below the project's own catalogs.
+        contracts = contracts.with_fallback(
+            crate::authored_contracts::compiled_in_authored_contracts()
+                .map_err(|error| BackendError::Contract(error.to_string()))?,
+        );
+    }
+    let mut contracts = contracts.with_fallback(requirements);
+    // An acceptance is issued for the file that imported the package during
+    // certification. Admit the specifier project-wide when *this* project's
+    // installed artifact is the one that acceptance names -- same integrity,
+    // entrypoint and declared conditions. With no declared conditions this
+    // admits nothing, because conditions select the artifact and the analyzer
+    // has no facts of its own about them.
+    //
+    // One call per tier, in precedence order. `with_admitted_artifacts` keeps
+    // the first tier to claim a specifier, and it requires the identities
+    // *within* one call to agree -- which a project's own catalog and a
+    // contract compiled into this build have no reason to do, and no reason to
+    // be asked to.
+    //
+    // "This project's installed artifact" is the one each importer's own
+    // resolution reaches ([`ImporterInstalls`]); both tiers are asked from the
+    // same installs.
+    let installs = importer_installs(directory, facts, None)?;
+    let project = admitted_catalog_artifacts(
+        catalogs, trust, directory, conditions, facts, None, &installs,
+    )?
+    .agreed(&contracts);
+    contracts = project.admit_into(contracts);
+    if bundled {
+        let authored =
+            authored_admissions(directory, conditions, facts, &installs)?.agreed(&contracts);
+        contracts = authored.admit_into(contracts);
+    }
+    // Why a project catalog's acceptance was not admitted, for the acceptance
+    // gate to say at the imports it leaves unanswered and for the package
+    // summary to report instead of `accepted`. These are the sentences
+    // `contract check` appends to a `missing` status, from the same replay of
+    // admission steps 1-3, for the project tier only: a compiled-in contract is
+    // not something this project asked for, and its refusals are `contract
+    // check`'s to explain. Explanation only -- nothing here binds or withholds.
+    if !catalogs.is_empty() {
+        contracts = refusal_notes(directory, catalogs, facts, contracts, None, &installs)?;
+    }
+    // A catalog in a directory inside the project applies to that directory's
+    // files, above every project-wide tier; see [`NestedCatalogs`]. Each is its
+    // own tier with its own admission, replayed from its own directory: that is
+    // where Node starts looking for the package when one of those files
+    // imports it, so it is the installed tree the acceptance has to reproduce.
+    for scope in nested {
+        contracts = contracts.with_scoped(
+            scope.directory.to_string_lossy().into_owned(),
+            scoped_accepted_contracts(scope, trust, conditions, facts)?,
+        );
+    }
+    // ADR 0153 part 3: a package whose contract rests a claim on a context
+    // premise, and which the project imports, loses that premise when any
+    // other installed package depends on it -- that package's code may
+    // provide the context, and this analysis does not see it.
+    let imported = facts
+        .files
+        .iter()
+        .flat_map(|file| {
+            file.ast
+                .imports
+                .iter()
+                .map(|import| import.module.as_str())
+                .chain(
+                    file.ast
+                        .exports
+                        .iter()
+                        .filter_map(|export| export.module.as_deref()),
+                )
+        })
+        .filter_map(package_name_of_specifier)
+        .collect::<std::collections::BTreeSet<_>>();
+    let premised = contracts
+        .context_premise_packages()
+        .into_iter()
+        .filter(|package| imported.contains(package))
+        .collect::<std::collections::BTreeSet<_>>();
+    if !premised.is_empty() {
+        let depended = installed_dependents(directory, &premised);
+        if !depended.is_empty() {
+            contracts = contracts.with_context_provided_packages(depended);
+        }
+    }
+    Ok(contracts)
+}
+
+/// ADR 0153 part 3: which of `targets` some other installed package declares a
+/// dependency of any kind on (`dependencies`, `devDependencies`,
+/// `peerDependencies` or `optionalDependencies`).
+///
+/// Reads the manifest of every package in every `node_modules` directory from
+/// `directory` up to the filesystem root -- the directories Node resolution
+/// can reach -- including scoped packages, nested `node_modules`, and pnpm's
+/// `.pnpm/<entry>/node_modules` store. A directory with no `package.json` is
+/// not a package and names nothing. Everything this walk cannot answer fails
+/// closed, counting every target as depended on: a manifest that is present
+/// but unreadable or unparsable, and a tree deeper than the walk descends.
+fn installed_dependents(
+    directory: &Path,
+    targets: &std::collections::BTreeSet<String>,
+) -> std::collections::BTreeSet<String> {
+    fn visit_modules(
+        modules: &Path,
+        targets: &std::collections::BTreeSet<String>,
+        seen: &mut std::collections::BTreeSet<PathBuf>,
+        found: &mut std::collections::BTreeSet<String>,
+        depth: usize,
+    ) {
+        if found.len() == targets.len() {
+            return;
+        }
+        if depth > 32 {
+            found.extend(targets.iter().cloned());
+            return;
+        }
+        let Ok(canonical) = std::fs::canonicalize(modules) else {
+            return;
+        };
+        if !seen.insert(canonical) {
+            return;
+        }
+        let Ok(entries) = std::fs::read_dir(modules) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name == ".pnpm" {
+                if let Ok(store) = std::fs::read_dir(&path) {
+                    for entry in store.flatten() {
+                        visit_modules(
+                            &entry.path().join("node_modules"),
+                            targets,
+                            seen,
+                            found,
+                            depth + 1,
+                        );
+                    }
+                }
+            } else if name.starts_with('@') {
+                if let Ok(scoped) = std::fs::read_dir(&path) {
+                    for entry in scoped.flatten() {
+                        visit_package(&entry.path(), targets, seen, found, depth + 1);
+                    }
+                }
+            } else if !name.starts_with('.') {
+                visit_package(&path, targets, seen, found, depth + 1);
+            }
+        }
+    }
+    fn visit_package(
+        package: &Path,
+        targets: &std::collections::BTreeSet<String>,
+        seen: &mut std::collections::BTreeSet<PathBuf>,
+        found: &mut std::collections::BTreeSet<String>,
+        depth: usize,
+    ) {
+        if !package.is_dir() {
+            return;
+        }
+        let manifest_path = package.join("package.json");
+        let manifest = match std::fs::read(&manifest_path) {
+            Ok(bytes) => serde_json::from_slice::<serde_json::Value>(&bytes).ok(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                visit_modules(&package.join("node_modules"), targets, seen, found, depth);
+                return;
+            }
+            Err(_) => None,
+        };
+        let Some(manifest) = manifest.filter(serde_json::Value::is_object) else {
+            found.extend(targets.iter().cloned());
+            return;
+        };
+        {
+            let own = manifest.get("name").and_then(serde_json::Value::as_str);
+            for field in [
+                "dependencies",
+                "devDependencies",
+                "peerDependencies",
+                "optionalDependencies",
+            ] {
+                if let Some(map) = manifest.get(field).and_then(serde_json::Value::as_object) {
+                    for target in targets {
+                        if own != Some(target.as_str()) && map.contains_key(target) {
+                            found.insert(target.clone());
+                        }
+                    }
+                }
+            }
+        }
+        visit_modules(&package.join("node_modules"), targets, seen, found, depth);
+    }
+    let mut found = std::collections::BTreeSet::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut current = Some(directory);
+    while let Some(directory) = current {
+        visit_modules(
+            &directory.join("node_modules"),
+            targets,
+            &mut seen,
+            &mut found,
+            0,
+        );
+        current = directory.parent();
+    }
+    found
+}
+
+/// Every catalog read and folded in the one order the project tier uses.
+fn read_catalogs(
+    catalogs: &[PathBuf],
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+) -> Result<AcceptedContractIndex, BackendError> {
+    let mut contracts = AcceptedContractIndex::default();
+    for path in catalogs {
+        contracts =
+            crate::contract_interface::read_external_contract_catalog_with_trust(path, trust)
+                .map_err(|error| BackendError::Contract(error.to_string()))?
+                .with_fallback(contracts);
+    }
+    Ok(contracts)
+}
+
+/// One nested directory's tier: its catalogs, what they admit by artifact for
+/// the files below it, and why they refused the rest. It holds no compiled-in
+/// contract and no missing-evidence marker -- those are project-wide, and the
+/// index consults them after every scope.
+fn scoped_accepted_contracts(
+    scope: &NestedCatalogs,
+    trust: Option<&crate::contract_certification::Policy2TrustConfiguration>,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+) -> Result<AcceptedContractIndex, BackendError> {
+    let directory = scope.directory.as_path();
+    let mut contracts = read_catalogs(&scope.admitted, trust)?;
+    let installs = importer_installs(directory, facts, Some(directory))?;
+    let admitted = admitted_catalog_artifacts(
+        &scope.admitted,
+        trust,
+        directory,
+        conditions,
+        facts,
+        Some(directory),
+        &installs,
+    )?
+    .agreed(&contracts);
+    contracts = admitted.admit_into(contracts);
+    refusal_notes(
+        directory,
+        &scope.admitted,
+        facts,
+        contracts,
+        Some(directory),
+        &installs,
+    )
+}
+
+/// Adds to `contracts` the refusal sentence for each specifier the files
+/// `within` (every file when `None`) import or re-export, or that `contracts`
+/// binds by importer, whose package has an acceptance in `catalogs` that steps
+/// 1-3 of admission refused from `directory`.
+///
+/// A split specifier ([`ImporterInstalls`]) is also explained per importer,
+/// from the install that importer reaches, and a context whose replay refused
+/// nothing says so -- so the project directory's sentence, which is about
+/// another copy, is never the one an importer elsewhere is told.
+fn refusal_notes(
+    directory: &Path,
+    catalogs: &[PathBuf],
+    facts: &solid_facts::ProjectFacts,
+    contracts: AcceptedContractIndex,
+    within: Option<&Path>,
+    installs: &ImporterInstalls,
+) -> Result<AcceptedContractIndex, BackendError> {
+    let refusals = admission_refusal_details(directory, catalogs)?;
+    let mut by_importer = Vec::new();
+    for (base, specifiers) in &installs.contexts {
+        let replayed;
+        let refusals = if base == directory {
+            &refusals
+        } else {
+            replayed = admission_refusal_details(base, catalogs)?;
+            &replayed
+        };
+        for (specifier, importers) in specifiers {
+            let refusal = package_name_of_specifier(specifier)
+                .and_then(|module| refusals.get(&module))
+                .cloned();
+            for importer in importers {
+                by_importer.push(((importer.clone(), specifier.clone()), refusal.clone()));
+            }
+        }
+    }
+    // Nothing to say anywhere: the index is left exactly as it was.
+    if by_importer.iter().all(|(_, refusal)| refusal.is_none()) {
+        by_importer.clear();
+    }
+    let mut contracts = contracts;
+    if !by_importer.is_empty() {
+        contracts = contracts.with_admission_refusals_for(by_importer);
+    }
+    if refusals.is_empty() {
+        return Ok(contracts);
+    }
+    let specifiers = facts
+        .files
+        .iter()
+        .filter(|file| {
+            within.is_none_or(|within| Path::new(file.path.as_str()).starts_with(within))
+        })
+        .flat_map(|file| {
+            file.ast
+                .imports
+                .iter()
+                .map(|import| import.module.as_str())
+                .chain(
+                    file.ast
+                        .exports
+                        .iter()
+                        .filter_map(|export| export.module.as_deref()),
+                )
+        })
+        .chain(
+            contracts
+                .semantic_identity()
+                .iter()
+                .map(|binding| binding.specifier.as_str()),
+        )
+        .collect::<std::collections::BTreeSet<_>>();
+    let notes = specifiers
+        .into_iter()
+        .filter_map(|specifier| {
+            let refusal = refusals.get(&package_name_of_specifier(specifier)?)?;
+            Some((specifier.to_owned(), refusal.clone()))
+        })
+        .collect::<Vec<_>>();
+    Ok(if notes.is_empty() {
+        contracts
+    } else {
+        contracts.with_admission_refusals(notes)
+    })
+}
+
+/// Keeps one acceptance per specifier, and only where every candidate for it
+/// claims the same thing.
+///
+/// `admissible_cases` narrows to a single case whenever the host declared its
+/// export conditions. It cannot when the host declared none — the ESLint and
+/// Oxlint case — and then it hands over every case that reaches the file this
+/// project resolved. That used to be decided by admitting when all candidates
+/// named the same *runtime file*, on the ground that they therefore describe
+/// the same bytes; a contract describes an entry file's export surface while
+/// its semantics depend on the whole module closure, and conditions select that
+/// closure, so agreeing on a path is not agreeing on a claim.
+///
+/// The comparison is the document's own content address for each export's
+/// claims ([`contract_document::export_claims_address`]), because the in-memory
+/// form cannot be compared directly: decoding qualifies every operation id with
+/// the artifact-case id, so two contracts that agree completely still differ in
+/// every `OperationId`. Measured on `@kobalte/utils@0.9.2`, whose two `.` cases
+/// -- `["import"]` and `["import","solid"]` -- differ in exactly that and in
+/// nothing else, for 13 of its 59 exports.
+///
+/// A candidate whose address cannot be computed answers nothing, so the
+/// specifier is dropped: this must add acceptances on proof, never on the
+/// absence of a comparison.
+fn agreed_admissions(
+    contracts: &AcceptedContractIndex,
+    candidates: Vec<(String, String)>,
+) -> Vec<(String, String)> {
+    let claims = |identity: &str| -> Option<BTreeMap<String, String>> {
+        let contract = contracts.contract_for_artifact(identity)?;
+        let case = contract.artifact_case();
+        case.exports
+            .iter()
+            .map(|(name, export)| {
+                crate::contract_document::export_claims_address(case, name, export)
+                    .ok()
+                    .map(|address| (name.clone(), address))
+            })
+            .collect()
+    };
+    let mut grouped: Vec<(String, Vec<String>)> = Vec::new();
+    for (specifier, identity) in candidates {
+        match grouped.iter_mut().find(|(name, _)| *name == specifier) {
+            Some((_, identities)) => identities.push(identity),
+            None => grouped.push((specifier, vec![identity])),
+        }
+    }
+    let mut admitted = Vec::new();
+    for (specifier, identities) in grouped {
+        let [first, rest @ ..] = identities.as_slice() else {
+            continue;
+        };
+        if rest.is_empty() {
+            // One candidate needs no comparison, but it still has to be an
+            // acceptance this index can serve, so that what comes back is
+            // exactly what will be admitted.
+            if contracts.contract_for_artifact(first).is_some() {
+                admitted.push((specifier, first.clone()));
+            }
+            continue;
+        }
+        let Some(expected) = claims(first) else {
+            continue;
+        };
+        if rest
+            .iter()
+            .all(|identity| claims(identity).is_some_and(|other| other == expected))
+        {
+            admitted.push((specifier, first.clone()));
+        }
+    }
+    admitted
+}
+
+/// Every lockfile [`project_accepted_contracts`] can consult when it decides
+/// whether an acceptance applies here.
+///
+/// Artifact admission recomputes the acceptance root from the *installed*
+/// tarball integrity, and the integrity comes from whichever lockfile the
+/// project's package manager wrote. A host that caches an answer across runs
+/// has to treat these as inputs, or an install that repacks a dependency at the
+/// same version keeps serving the previous verdict. Paths are returned whether
+/// or not they exist, so that a lockfile appearing is a change too.
+#[must_use]
+pub fn admission_input_paths(project_directory: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for ancestor in project_directory.ancestors() {
+        paths.push(ancestor.join("package-lock.json"));
+        paths.push(ancestor.join("node_modules").join(".package-lock.json"));
+        paths.push(ancestor.join("bun.lock"));
+        paths.push(ancestor.join("pnpm-lock.yaml"));
+        paths.push(ancestor.join("yarn.lock"));
+        // Where a patch is declared (ADR 0131): pnpm and Bun declare theirs
+        // here, and a manifest's scripts name `patch-package`'s directory.
+        paths.push(ancestor.join("package.json"));
+        paths.push(ancestor.join("pnpm-workspace.yaml"));
+    }
+    // And the patch files themselves, which no lockfile mentions. A patch
+    // file added or removed changes this list, which is a change too.
+    paths.extend(crate::installed_patches::patch_input_paths(
+        project_directory,
+    ));
+    paths
+}
+
+/// The authored tier's admissions (ADR 0198), asked from the same installs as
+/// every other tier.
+fn authored_admissions(
+    project_directory: &Path,
+    conditions: &std::collections::BTreeSet<String>,
+    facts: &solid_facts::ProjectFacts,
+    installs: &ImporterInstalls,
+) -> Result<ArtifactAdmissions, BackendError> {
+    admitted_by_install(
+        project_directory,
+        facts,
+        None,
+        installs,
+        &|installed, bytes, resolved_target, environment| {
+            crate::authored_contracts::admitted_authored_artifacts(
+                conditions,
+                installed,
+                bytes,
+                resolved_target,
+                environment,
+            )
+        },
+    )
+}
+
+/// Whether the catalog `contract certify` just published under `catalog_root`
+/// is admitted in the tree it was certified in: steps 1-3 of the one admission
+/// rule ([`crate::artifact_admission::admission_refusals`]) for every entry of
+/// `package_name`, one `(specifier, refusal)` per entry, `None` when admitted.
+///
+/// A certification that its own tree would refuse is a certification no
+/// project can use, and until this check it exited 0 without a word: measured,
+/// `vite-plugin-solid@3.0.0-next.5` certified in kobalte core and was refused in
+/// the same tree. Asking the admission rule itself, rather than re-deriving
+/// what it would say, is what keeps the two from drifting apart again.
+///
+/// The tree is the catalog's project -- the parent of a `.solid-checker/`
+/// catalog root -- when that project installs the package, and otherwise the
+/// package's own installed location, from which Node finds the package itself.
+/// Step 4 (the file a project resolved, and case selection) needs a project's
+/// resolved imports, which a certification has none of; it is not replayed.
+///
+/// `issued` names the receipts this certification issued, by their signed
+/// `(artifactAcceptanceRoot, dependencyEnvironmentRoot)`: a catalog merges, and
+/// an entry an earlier certification left for the same package is not this
+/// certification's to answer for.
+pub fn certified_catalog_self_admission(
+    catalog_root: &Path,
+    package_name: &str,
+    package_root: &Path,
+    issued: &std::collections::BTreeSet<(String, String)>,
+) -> Result<Vec<(String, Option<crate::AdmissionRefusal>)>, BackendError> {
+    let catalog_project = catalog_root
+        .file_name()
+        .is_some_and(|name| name == ".solid-checker")
+        .then(|| catalog_root.parent())
+        .flatten();
+    let project = catalog_project
+        .filter(|project| installed_artifact_identity(project, package_name).is_some())
+        .unwrap_or(package_root);
+    let patches = crate::installed_patches::InstalledPatches::read(project);
+    let snapshots = InstalledSnapshots::default();
+    let installed = |specifier: &str| installed_artifact_identity(project, specifier);
+    let bytes = |specifier: &str, patched: bool| {
+        installed_artifact_bytes(project, specifier, patched, &patches, &snapshots)
+    };
+    let difference = |specifier: &str, environment: &[crate::DependencyEnvironmentEntry]| {
+        installed_environment_difference(project, specifier, environment, &patches)
+    };
+    let catalogs = crate::contract_interface::catalog_paths_in(catalog_root)
+        .map_err(|error| BackendError::Contract(error.to_string()))?;
+    Ok(crate::contract_interface::project_admission_refusals_where(
+        &catalogs,
+        &installed,
+        &bytes,
+        &difference,
+        |bindings| {
+            issued.contains(&(
+                bindings.artifact_acceptance_root.clone(),
+                bindings.dependency_environment_root.clone(),
+            ))
+        },
+    )
+    .map_err(|error| BackendError::Contract(error.to_string()))?
+    .into_iter()
+    .filter(|(specifier, _)| package_name_of_specifier(specifier).as_deref() == Some(package_name))
+    .collect())
+}
+
+/// Whether this project's installed tree, resolved from the installed copy of
+/// the package `specifier` names, is the dependency environment an acceptance
+/// -- a compiled-in bundle or a project catalog entry -- was proven in.
+///
+/// The root is the directory [`installed_artifact_identity`] reads the
+/// package's own identity from, so the environment is checked from exactly the
+/// copy whose bytes were matched. Every lookup after that is Node's, from real
+/// paths: a pnpm store sibling is found where Node finds it, and a hoisted
+/// copy only where no nearer `node_modules` shadows it. Anything this cannot
+/// state exactly -- a missing package, an unreadable manifest, a lockfile that
+/// names no integrity or two -- answers `false`, so the acceptance is not
+/// admitted.
+#[cfg(test)]
+pub(crate) fn installed_environment_matches(
+    project_directory: &Path,
+    specifier: &str,
+    environment: &[crate::DependencyEnvironmentEntry],
+) -> bool {
+    installed_environment_matches_in(
+        project_directory,
+        specifier,
+        environment,
+        &crate::installed_patches::InstalledPatches::read(project_directory),
+    )
+}
+
+/// [`installed_environment_matches`] with the tree's patch records already
+/// read: an entry whose installed copy the tree records as patched is not the
+/// certified one, however its lockfile integrity reads (ADR 0131).
+fn installed_environment_matches_in(
+    project_directory: &Path,
+    specifier: &str,
+    environment: &[crate::DependencyEnvironmentEntry],
+    patches: &crate::installed_patches::InstalledPatches,
+) -> bool {
+    if environment.is_empty() {
+        return true;
+    }
+    let Some(module) = package_name_of_specifier(specifier) else {
+        return false;
+    };
+    let Ok(Some(directory)) = discover_package_directory(project_directory, &module) else {
+        return false;
+    };
+    let (Ok(root), Ok(project)) = (
+        fs::canonicalize(&directory),
+        fs::canonicalize(project_directory),
+    ) else {
+        return false;
+    };
+    crate::artifact_admission::environment_is_installed(
+        environment,
+        root,
+        |from, name| node_package_lookup(from, name),
+        |at| installed_environment_identity(&project, at),
+        |at| installed_package_patch(patches, at),
+    )
+}
+
+/// The first way this tree differs from `environment`, rendered, by the same
+/// walk [`installed_environment_matches`] takes; `None` when it reproduces it.
+/// Diagnostic only.
+pub(crate) fn installed_environment_difference(
+    project_directory: &Path,
+    specifier: &str,
+    environment: &[crate::DependencyEnvironmentEntry],
+    patches: &crate::installed_patches::InstalledPatches,
+) -> Option<String> {
+    if environment.is_empty() {
+        return None;
+    }
+    let unlocatable = || {
+        Some(format!(
+            "{specifier} is not installed where this tree can say"
+        ))
+    };
+    let Some(module) = package_name_of_specifier(specifier) else {
+        return unlocatable();
+    };
+    let Ok(Some(directory)) = discover_package_directory(project_directory, &module) else {
+        return unlocatable();
+    };
+    let (Ok(root), Ok(project)) = (
+        fs::canonicalize(&directory),
+        fs::canonicalize(project_directory),
+    ) else {
+        return unlocatable();
+    };
+    crate::artifact_admission::environment_difference(
+        environment,
+        root,
+        |from, name| node_package_lookup(from, name),
+        |at| installed_environment_identity(&project, at),
+        |at| installed_package_patch(patches, at),
+        |at| {
+            serde_json::from_slice::<PackageManifest>(&fs::read(at.join("package.json")).ok()?)
+                .ok()
+                .map(|manifest| manifest.version)
+                .filter(|version| !version.is_empty())
+        },
+    )
+    .map(|difference| difference.to_string())
+}
+
+/// What the tree records about the package installed at `directory` being
+/// patched, by its installed name and manifest version; `None` when nothing
+/// does, or when the package states no identity (which refuses it anyway).
+fn installed_package_patch(
+    patches: &crate::installed_patches::InstalledPatches,
+    directory: &Path,
+) -> Option<String> {
+    let name = installed_package_name(directory)?;
+    let manifest: PackageManifest =
+        serde_json::from_slice(&fs::read(directory.join("package.json")).ok()?).ok()?;
+    patches.of(directory, &name, &manifest.version)
+}
+
+/// Installed snapshot roots already computed in one admission, by canonical
+/// package directory.
+#[derive(Default)]
+struct InstalledSnapshots(std::cell::RefCell<HashMap<PathBuf, Result<String, String>>>);
+
+/// The [`crate::installed_package_snapshot_root`] of the package `specifier`
+/// names, as installed for `project_directory`, or why its files cannot be
+/// stated to be the published archive: a patch the tree records, or a member
+/// no archive installs as (ADR 0131). The admission side of
+/// [`crate::artifact_admission::InstalledArtifactBytes`].
+fn installed_artifact_bytes(
+    project_directory: &Path,
+    specifier: &str,
+    patched_install: bool,
+    patches: &crate::installed_patches::InstalledPatches,
+    snapshots: &InstalledSnapshots,
+) -> Result<String, String> {
+    let unlocatable = || format!("{specifier} is not installed where this tree can say");
+    let module = package_name_of_specifier(specifier).ok_or_else(unlocatable)?;
+    let (directory, manifest) = installed_package_manifest(project_directory, &module)
+        .ok()
+        .flatten()
+        .ok_or_else(unlocatable)?;
+    let directory = fs::canonicalize(&directory).map_err(|_| unlocatable())?;
+    // ADR 0208: an authored entry probed on a patched install compares that
+    // install's own snapshot root; every other acceptance is about the
+    // published archive, which a patched tree does not hold.
+    if let Some(evidence) = patches
+        .of(&directory, &module, &manifest.version)
+        .filter(|_| !patched_install)
+    {
+        return Err(format!(
+            "{module}@{} is patched ({evidence})",
+            manifest.version
+        ));
+    }
+    snapshots
+        .0
+        .borrow_mut()
+        .entry(directory)
+        .or_insert_with_key(|directory| {
+            crate::installed_package_snapshot_root(directory, &module, &manifest.version)
+        })
+        .clone()
+}
+
+/// [`installed_artifact_bytes`] with this tree's patch records read afresh.
+#[cfg(test)]
+pub(crate) fn installed_artifact_snapshot(
+    project_directory: &Path,
+    specifier: &str,
+) -> Result<String, String> {
+    installed_artifact_bytes(
+        project_directory,
+        specifier,
+        false,
+        &crate::installed_patches::InstalledPatches::read(project_directory),
+        &InstalledSnapshots::default(),
+    )
+}
+
+/// Node's lookup of the bare package `name` from the package installed at
+/// `from` (a real path): the nearest `<ancestor>/node_modules/<name>`, skipping
+/// ancestors that are themselves `node_modules` directories, as
+/// `Module._nodeModulePaths` does.
+///
+/// A candidate Node would load that is not a package directory with a manifest
+/// -- `<name>.js` beside it, or a directory with no `package.json` -- is not a
+/// fact this can state, and answers `Err` rather than walking past what Node
+/// would have stopped at.
+fn node_package_lookup(from: &Path, name: &str) -> Result<Option<PathBuf>, ()> {
+    for ancestor in from.ancestors() {
+        if ancestor.file_name().is_some_and(|it| it == "node_modules") {
+            continue;
+        }
+        let candidate = ancestor.join("node_modules").join(name);
+        for extension in ["js", "json", "node"] {
+            let mut file = candidate.clone().into_os_string();
+            file.push(".");
+            file.push(extension);
+            match fs::symlink_metadata(PathBuf::from(file)) {
+                Ok(_) => return Err(()),
+                Err(error) if absent(&error) => {}
+                Err(_) => return Err(()),
+            }
+        }
+        match fs::metadata(&candidate) {
+            Ok(metadata) if metadata.is_dir() => {
+                return match fs::metadata(candidate.join("package.json")) {
+                    Ok(manifest) if manifest.is_file() => {
+                        fs::canonicalize(&candidate).map(Some).map_err(|_| ())
+                    }
+                    _ => Err(()),
+                };
+            }
+            Ok(_) => return Err(()),
+            Err(error) if absent(&error) => {}
+            Err(_) => return Err(()),
+        }
+    }
+    Ok(None)
+}
+
+fn absent(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+    )
+}
+
+/// The three facts an environment entry states, read from the package
+/// installed at `directory` exactly as [`installed_artifact_identity`] reads
+/// them for the imported package: the installed directory's package name, the
+/// manifest version, and the lockfile integrity.
+fn installed_environment_identity(
+    project_directory: &Path,
+    directory: &Path,
+) -> Option<crate::DependencyEnvironmentEntry> {
+    let name = installed_package_name(directory)?;
+    let manifest: PackageManifest =
+        serde_json::from_slice(&fs::read(directory.join("package.json")).ok()?).ok()?;
+    if manifest.version.is_empty() {
+        return None;
+    }
+    let integrity = installed_package_integrity(project_directory, directory).ok()??;
+    Some(crate::DependencyEnvironmentEntry::package(
+        name,
+        manifest.version,
+        integrity,
+    ))
+}
+
+pub(crate) fn installed_artifact_identity(
+    project_directory: &Path,
+    specifier: &str,
+) -> Option<(String, String, String)> {
+    let module = package_name_of_specifier(specifier)?;
+    let (directory, manifest) = installed_package_manifest(project_directory, &module).ok()??;
+    let integrity = installed_package_integrity(project_directory, &directory).ok()??;
+    Some((module, manifest.version, integrity))
+}
+
+/// What this project resolved the specifier to, relative to the installed
+/// package root -- the fact that lets an acceptance be bound to this project
+/// without the host having to declare export conditions it usually does not
+/// know. `None` whenever the project cannot state one exactly: an unresolved
+/// import, a specifier no importer reached, or two importers that disagree
+/// (a nested install), each of which admits nothing rather than picking.
+///
+/// Only the attested rows of the importers `counted` selects are read: a
+/// nested catalog's own files, or the files whose resolution reaches the
+/// install `project_directory` names ([`ImporterInstalls`]).
+fn resolved_target_identity(
+    project_directory: &Path,
+    facts: &solid_facts::ProjectFacts,
+    specifier: &str,
+    counted: &dyn Fn(&str) -> bool,
+) -> Option<String> {
+    let module = package_name_of_specifier(specifier)?;
+    let (directory, _) = installed_package_manifest(project_directory, &module).ok()??;
+    let root = fs::canonicalize(&directory).ok()?;
+    let attested = facts.resolved_imports.as_ref()?;
+    let mut selected: Option<String> = None;
+    for (importer, import) in attested.iter() {
+        if import.text.as_str() != specifier
+            || import.resolution == solid_facts::ImportResolution::Unresolved
+            || !counted(importer)
+        {
+            continue;
+        }
+        let resolved = fs::canonicalize(Path::new(import.resolved_path.as_ref())).ok()?;
+        let relative = resolved
+            .strip_prefix(&root)
+            .ok()?
+            .to_string_lossy()
+            .replace('\\', "/");
+        if relative.is_empty() {
+            return None;
+        }
+        match &selected {
+            Some(existing) if existing != &relative => return None,
+            Some(_) => {}
+            None => selected = Some(relative),
+        }
+    }
+    selected
+}
+
+fn package_name_of_specifier(specifier: &str) -> Option<String> {
+    let mut parts = specifier.split('/');
+    let first = parts.next()?;
+    if first.starts_with('@') {
+        let second = parts.next()?;
+        return Some(format!("{first}/{second}"));
+    }
+    (!first.is_empty()).then(|| first.to_owned())
+}
+
 fn installed_package_manifest(
     project_directory: &Path,
     module: &str,
@@ -811,8 +3257,19 @@ fn installed_package_manifest(
     let Some(directory) = discover_package_directory(project_directory, module)? else {
         return Ok(None);
     };
+    read_installed_manifest(&directory)
+}
+
+/// An installed package directory with its parsed manifest, or `None` when the
+/// directory has no `package.json`.
+fn read_installed_manifest(
+    directory: &Path,
+) -> Result<Option<(PathBuf, PackageManifest)>, BackendError> {
     match fs::read(directory.join("package.json")) {
-        Ok(data) => Ok(Some((directory, serde_json::from_slice(&data)?))),
+        Ok(data) => Ok(Some((
+            directory.to_path_buf(),
+            serde_json::from_slice(&data)?,
+        ))),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
     }
@@ -859,7 +3316,7 @@ struct BunLockfile {
     packages: HashMap<String, Vec<serde_json::Value>>,
 }
 
-fn parse_json_with_trailing_commas<T: DeserializeOwned>(data: &[u8]) -> Option<T> {
+pub(crate) fn parse_json_with_trailing_commas<T: DeserializeOwned>(data: &[u8]) -> Option<T> {
     if let Ok(value) = serde_json::from_slice(data) {
         return Some(value);
     }
@@ -914,9 +3371,20 @@ fn installed_package_name(package_directory: &Path) -> Option<String> {
     }
 }
 
+/// The integrity `bun.lock` records for the package installed at
+/// `package_directory`, or `None` when it records none unambiguously.
+///
+/// Selection binds the exact installed identity, never the name alone: a
+/// record is this package's only when its identifier is exactly the installed
+/// directory's name at the installed manifest's version, and it is keyed at
+/// that name -- hoisted (`name`), nested (`parent/name`), or by the identity
+/// itself. Hoisting can record one name at several versions, so a key that
+/// matches the name while its identifier names another version describes
+/// another copy. Every selected record must carry an SRI integrity, and all of
+/// them the same one.
 fn bun_package_integrity(package_directory: &Path, data: &[u8]) -> Option<String> {
     let lockfile = parse_json_with_trailing_commas::<BunLockfile>(data)?;
-    if lockfile.lockfile_version != 2 {
+    if !crate::contract_certification::BUN_LOCKFILE_VERSIONS.contains(&lockfile.lockfile_version) {
         return None;
     }
     let name = installed_package_name(package_directory)?;
@@ -929,20 +3397,18 @@ fn bun_package_integrity(package_directory: &Path, data: &[u8]) -> Option<String
         return None;
     }
     let expected_identifier = format!("{name}@{version}");
+    let nested = format!("/{name}");
     let mut found = None;
     for (key, record) in lockfile.packages {
         let identifier = record.first().and_then(serde_json::Value::as_str);
-        if key != name
-            && key != expected_identifier
-            && identifier != Some(expected_identifier.as_str())
+        if identifier != Some(expected_identifier.as_str())
+            || !(key == name || key.ends_with(&nested) || key == expected_identifier)
         {
             continue;
         }
-        let Some(integrity) = record.get(3).and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        if integrity.is_empty() {
-            continue;
+        let integrity = record.get(3).and_then(serde_json::Value::as_str)?;
+        if !crate::contract_certification::is_sri_integrity(integrity) {
+            return None;
         }
         match &found {
             None => found = Some(integrity.to_owned()),
@@ -1042,7 +3508,107 @@ pub(crate) fn installed_package_integrity(
             }
         }
     }
+    if found.is_none() {
+        found = manifest_keyed_lockfile_integrity(project_directory, package_directory)?;
+    }
     Ok(found)
+}
+
+type PnpmLockParse = Result<
+    crate::contract_certification::PnpmLockIndex,
+    crate::contract_certification::ArtifactSnapshotError,
+>;
+
+/// The parsed form of a pnpm lockfile, memoized by its exact bytes.
+///
+/// The key is the file content, not its path or mtime, so a lockfile rewritten
+/// between runs of a long-lived process can never be answered from the old
+/// parse. A refused lockfile is memoized too: it refuses every selection alike.
+fn pnpm_lock_index(data: &[u8]) -> std::sync::Arc<PnpmLockParse> {
+    type Entry = (Vec<u8>, std::sync::Arc<PnpmLockParse>);
+    static CACHE: std::sync::Mutex<Vec<Entry>> = std::sync::Mutex::new(Vec::new());
+    if let Ok(cache) = CACHE.lock()
+        && let Some((_, index)) = cache.iter().find(|(bytes, _)| bytes == data)
+    {
+        return std::sync::Arc::clone(index);
+    }
+    let index = std::sync::Arc::new(crate::contract_certification::PnpmLockIndex::parse(data));
+    if let Ok(mut cache) = CACHE.lock() {
+        // A process certifies a handful of projects; bound the memo anyway.
+        if cache.len() >= 8 {
+            cache.remove(0);
+        }
+        cache.push((data.to_vec(), std::sync::Arc::clone(&index)));
+    }
+    index
+}
+
+/// The pnpm and Yarn-classic arm of the search above.
+///
+/// Separate from the ancestor walk because neither lockfile is keyed by install
+/// path. pnpm's store path (`.pnpm/<name>@<version>_<peers>/node_modules/…`) is
+/// not a key, and Yarn classic is keyed by *descriptor* (`name@range`), several
+/// of which share one entry. Both are therefore selected by the installed
+/// manifest's own name and version, which means there is no per-path
+/// disambiguation to fold into the loop.
+///
+/// Consulted only when no npm or Bun lockfile answered, so an npm-installed
+/// tree keeps its existing answer. Within an ancestor, pnpm is asked first for
+/// the same reason: an established answer must not move.
+fn manifest_keyed_lockfile_integrity(
+    project_directory: &Path,
+    package_directory: &Path,
+) -> Result<Option<String>, BackendError> {
+    let manifest = package_directory.join("package.json");
+    let Ok(bytes) = fs::read(&manifest) else {
+        return Ok(None);
+    };
+    // Only the identity fields matter here, and `PackageManifest` does not
+    // carry the name, so read the two directly rather than widening a struct
+    // the rest of this module uses for dependency edges.
+    let Ok(manifest) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return Ok(None);
+    };
+    let (Some(name), Some(version)) = (
+        manifest.get("name").and_then(serde_json::Value::as_str),
+        manifest.get("version").and_then(serde_json::Value::as_str),
+    ) else {
+        return Ok(None);
+    };
+    type Reader = fn(&[u8], String, &str, &str) -> Option<String>;
+    // One project asks this once per installed package, so the lockfile is
+    // parsed once per distinct byte content rather than once per call.
+    let pnpm: Reader = |data, locator, name, version| {
+        pnpm_lock_index(data)
+            .as_ref()
+            .as_ref()
+            .ok()?
+            .select(locator, name, version)
+            .ok()
+            .map(|selection| selection.integrity().to_owned())
+    };
+    let yarn: Reader = |data, locator, name, version| {
+        crate::contract_certification::PublishedGraphLockSelection::from_yarn_lock(
+            data, locator, name, version,
+        )
+        .ok()
+        .map(|selection| selection.integrity().to_owned())
+    };
+    for ancestor in project_directory.ancestors() {
+        for (file, read) in [("pnpm-lock.yaml", pnpm), ("yarn.lock", yarn)] {
+            let data = match fs::read(ancestor.join(file)) {
+                Ok(data) => data,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
+            // A lockfile this checker cannot read is not a malformed *contract*
+            // and must not fail the run, exactly as for the npm arm. A Yarn
+            // Berry lockfile lands here: it records a cache checksum rather than
+            // the registry integrity, so it states no fact and admits nothing.
+            return Ok(read(&data, format!("{name}@{version}"), name, version));
+        }
+    }
+    Ok(None)
 }
 
 fn manifest_uses_solid(manifest: &PackageManifest) -> bool {
@@ -1055,7 +3621,7 @@ fn manifest_uses_solid(manifest: &PackageManifest) -> bool {
     .any(|dependencies| {
         dependencies
             .keys()
-            .any(|name| name == "solid-js" || name.starts_with("@solidjs/"))
+            .any(|name| solid_dialect::ecosystem_dependency(name))
     })
 }
 
@@ -1063,16 +3629,76 @@ fn discover_package_directory(
     directory: &Path,
     module: &str,
 ) -> Result<Option<PathBuf>, BackendError> {
+    Ok(discover_package_install(directory, module)?.map(|(_, package)| package))
+}
+
+/// [`discover_package_directory`] with the directory whose `node_modules`
+/// holds the package: `(install directory, package directory)`. The install
+/// directory is where the package manager put this copy, so the lockfile that
+/// governs it is found by walking up from there.
+fn discover_package_install(
+    directory: &Path,
+    module: &str,
+) -> Result<Option<(PathBuf, PathBuf)>, BackendError> {
     for ancestor in directory.ancestors() {
         let candidate = ancestor.join("node_modules").join(module);
         match fs::metadata(&candidate) {
-            Ok(metadata) if metadata.is_dir() => return Ok(Some(candidate)),
+            Ok(metadata) if metadata.is_dir() => {
+                return Ok(Some((ancestor.to_path_buf(), candidate)));
+            }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
         }
     }
     Ok(None)
+}
+
+/// The program boundary a check uses when the user selected none (ADR 0193).
+///
+/// An application is the whole program: every caller of its exported
+/// components and hooks is one of its own call sites. A published library is
+/// not. The nearest `package.json` at or above the project decides:
+///
+/// - `"private": true` is an application;
+/// - otherwise, a manifest that publishes an entry (`exports`, `main`,
+///   `module`, `types`, `typings` or `bin`) is a library;
+/// - a manifest that publishes nothing is an application.
+///
+/// No manifest, or one that cannot be read, keeps the open boundary: a build
+/// that cannot tell stays fail-closed.
+pub(crate) fn default_program_boundary(project: &Path) -> solid_reactive_ir::ProgramBoundary {
+    use solid_reactive_ir::ProgramBoundary;
+    let start = if project.is_dir() {
+        project
+    } else {
+        project.parent().unwrap_or(project)
+    };
+    let Some(manifest) = start
+        .ancestors()
+        .map(|directory| directory.join("package.json"))
+        .find(|candidate| candidate.is_file())
+    else {
+        return ProgramBoundary::Open;
+    };
+    let Ok(text) = std::fs::read_to_string(&manifest) else {
+        return ProgramBoundary::Open;
+    };
+    let Ok(serde_json::Value::Object(fields)) = serde_json::from_str::<serde_json::Value>(&text)
+    else {
+        return ProgramBoundary::Open;
+    };
+    if fields.get("private") == Some(&serde_json::Value::Bool(true)) {
+        return ProgramBoundary::Closed;
+    }
+    let publishes = ["exports", "main", "module", "types", "typings", "bin"]
+        .iter()
+        .any(|field| fields.contains_key(*field));
+    if publishes {
+        ProgramBoundary::Open
+    } else {
+        ProgramBoundary::Closed
+    }
 }
 
 /// Loads the project's per-rule options from the nearest
@@ -1090,7 +3716,6 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
             dialect::ALL.iter().any(|dialect| (dialect.has_rule)(rule))
                 || dialect::retired_rule(rule).is_some()
         },
-        |rule| dialect::by_id("solid-v1").is_some_and(|dialect| (dialect.has_rule)(rule)),
     )
 }
 
@@ -1104,11 +3729,7 @@ pub fn semantic_demand_options_for_enablement(
     let mut options = discover_rule_options(project)?;
     options.request_presets(enablement.presets.iter().cloned());
     options.request_rules(enablement.rules.iter().cloned());
-    let rule = if dialect.id == "solid-v1" {
-        "v1/prefer-for"
-    } else {
-        "prefer-for"
-    };
+    let rule = "prefer-for";
     let metadata = (dialect.rule_metadata)(rule);
     Ok(SemanticDemandOptions {
         array_map_receiver_types: metadata.is_some_and(|metadata| {
@@ -1121,7 +3742,6 @@ pub fn semantic_demand_options_for_enablement(
 fn discover_rule_options_with(
     project: &Path,
     has_rule: impl Fn(&str) -> bool,
-    owns_solid1x_options: impl Fn(&str) -> bool,
 ) -> Result<RuleOptions, BackendError> {
     let directory = if project.is_dir() {
         project
@@ -1132,15 +3752,10 @@ fn discover_rule_options_with(
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse_with_aliases(
-                    &encoded,
-                    &has_rule,
-                    &owns_solid1x_options,
-                    dialect::rule_alias,
-                )
-                .map_err(|error| {
-                    BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
-                });
+                return RuleOptions::parse_with_aliases(&encoded, &has_rule, dialect::rule_alias)
+                    .map_err(|error| {
+                        BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
+                    });
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
@@ -1168,13 +3783,122 @@ pub fn discovered_rule_options_path(project_directory: &Path) -> Option<PathBuf>
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn inferred_projection_is_monotone_for_existing_violations() {
+        use super::{SnapshotFinding, merge_host_findings};
+        let finding = |kind: &str| {
+            serde_json::from_value::<SnapshotFinding>(serde_json::json!({
+            "id":"SC4001", "rule":"missing-owner", "kind":kind, "severity":"error", "message":"baseline",
+            "primaryLocation":{"path":"app.ts", "startByte":0, "endByte":1, "line":1, "column":1}
+        })).unwrap()
+        };
+        let baseline = [finding("violation"), finding("uncertifiable")];
+        let kept = merge_host_findings(&baseline, &[], &|_| true, "inferred browser: root");
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].message, "baseline");
+        let selected = merge_host_findings(
+            &baseline,
+            &[finding("violation")],
+            &|_| true,
+            "inferred browser: root",
+        );
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].evidence.len(), 1);
+        let refused = merge_host_findings(
+            &baseline,
+            &[finding("violation")],
+            &|_| false,
+            "inferred browser: root",
+        );
+        assert_eq!(refused.len(), 2);
+        assert!(refused.iter().all(|finding| finding.evidence.is_empty()));
+    }
+
     use std::{path::Path, sync::Arc};
 
     use solid_facts::core::Generation;
     use solid_facts::{ProjectFacts, TypeScriptTable};
     use solid_reactive_ir::{RuntimeEnvironment, contract_semantics::AcceptedContractIndex};
 
-    use super::{DiagnosticSession, installed_package_integrity, retain_enabled};
+    use super::{
+        DiagnosticSession, agreed_admissions, installed_environment_matches,
+        installed_package_integrity, retain_enabled,
+    };
+
+    const MINIMAL: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../benchmarks/package-contract-v2/phase6/minimal-unknown.json"
+    ));
+
+    fn acceptance_from(bytes: &[u8]) -> solid_reactive_ir::contract_semantics::AcceptedContract {
+        let contract = crate::contract_document::decode(bytes)
+            .unwrap()
+            .normalize()
+            .unwrap();
+        let case = contract.artifact_cases()[0].id.clone();
+        solid_reactive_ir::contract_semantics::proof::project_untrusted_proposal_for_generation(
+            contract, &case,
+        )
+        .unwrap()
+    }
+
+    fn acceptance() -> solid_reactive_ir::contract_semantics::AcceptedContract {
+        acceptance_from(MINIMAL)
+    }
+
+    /// A host that declares no export conditions cannot narrow two acceptances
+    /// of one artifact to one, so both arrive here and this decides.
+    ///
+    /// It decides on what they *claim*. The rule this replaced admitted when
+    /// every candidate named the same runtime file, which compares where a case
+    /// came from: a contract describes an entry file's export surface while its
+    /// semantics depend on the whole module closure, and conditions select that
+    /// closure.
+    #[test]
+    fn two_candidates_for_one_specifier_are_admitted_only_when_they_agree() {
+        let both = || {
+            vec![
+                ("pkg".to_owned(), "left".to_owned()),
+                ("pkg".to_owned(), "right".to_owned()),
+            ]
+        };
+        let agreeing = AcceptedContractIndex::from_artifact_acceptances([
+            ("left".to_owned(), acceptance()),
+            ("right".to_owned(), acceptance()),
+        ]);
+        assert_eq!(
+            agreed_admissions(&agreeing, both()),
+            [("pkg".to_owned(), "left".to_owned())],
+            "two certifications that claim the same thing are one answer"
+        );
+
+        // One of them states a different export surface. Which describes what
+        // this project runs is exactly the question nothing here can answer, so
+        // neither may be applied.
+        let divergent = String::from_utf8(MINIMAL.to_vec())
+            .unwrap()
+            .replace(r#""version": "plain-value""#, r#""release": "plain-value""#);
+        assert_ne!(divergent.as_bytes(), MINIMAL, "the variant must differ");
+        let disagreeing = AcceptedContractIndex::from_artifact_acceptances([
+            ("left".to_owned(), acceptance()),
+            ("right".to_owned(), acceptance_from(divergent.as_bytes())),
+        ]);
+        assert!(
+            agreed_admissions(&disagreeing, both()).is_empty(),
+            "two different answers about one artifact must admit neither"
+        );
+
+        // One candidate needs no comparison, and an identity the index does not
+        // carry answers nothing.
+        assert_eq!(
+            agreed_admissions(&agreeing, vec![("pkg".to_owned(), "left".to_owned())]),
+            [("pkg".to_owned(), "left".to_owned())]
+        );
+        assert!(
+            agreed_admissions(&agreeing, vec![("pkg".to_owned(), "absent".to_owned())]).is_empty()
+        );
+    }
 
     fn scratch(label: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -1199,6 +3923,117 @@ mod tests {
         )
     }
 
+    /// Yarn classic states the registry integrity; Yarn Berry cannot.
+    ///
+    /// Both halves are the point. A v1 lockfile carries the tarball's
+    /// subresource integrity and is keyed by descriptor, so several entries can
+    /// reach one installed copy and they have to agree. Berry's `checksum:` is
+    /// a hash of the package's zip in Yarn's own cache, which is not the fact
+    /// artifact admission needs -- so a Berry project must state nothing rather
+    /// than state something that will never reproduce an acceptance root.
+    #[test]
+    fn yarn_states_an_integrity_only_where_the_format_carries_one() {
+        let root = scratch("yarn-integrity");
+        let project = root.join("app");
+        let package = project.join("node_modules/@scope/pkg");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(
+            package.join("package.json"),
+            r#"{ "name": "@scope/pkg", "version": "1.0.0" }"#,
+        )
+        .unwrap();
+        let yarn = project.join("yarn.lock");
+        let write = |body: &str| std::fs::write(&yarn, body).unwrap();
+        // Real SHA-512 SRI values, because this reader goes through
+        // `PublishedGraphLockSelection`, which validates the shape. The npm arm
+        // reads its integrity straight out of JSON and does not, which is why
+        // the test above can use a placeholder and this one cannot.
+
+        // Two descriptors share one entry, which is the ordinary v1 shape.
+        write(concat!(
+            "# THIS IS AN AUTOGENERATED FILE\n",
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@^1.0.0\", \"@scope/pkg@~1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  resolved \"https://registry.yarnpkg.com/@scope/pkg/-/pkg-1.0.0.tgz#abc\"\n",
+            "  integrity sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==\n",
+            "  dependencies:\n",
+            "    version \"^9.9.9\"\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            Some("sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==".to_owned()),
+            "a dependency literally named `version` sits at four spaces and is not a field"
+        );
+
+        // Two entries reaching the same installed copy must agree.
+        write(concat!(
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@^1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  integrity sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==\n",
+            "\n",
+            "\"@scope/pkg@~1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  integrity sha512-SDYM9+5CDQbpn73xotxh2JVn3K9xKVAhCBZxyB+Oqa+wQfndYGUs86G3v6Ln0Dn6QB32gt3ReqcmaG1HVZuskA==\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // A git dependency has no registry tarball and so no integrity.
+        write(concat!(
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@git+ssh://git@github.com/scope/pkg.git#abc\":\n",
+            "  version \"1.0.0\"\n",
+            "  resolved \"git+ssh://git@github.com/scope/pkg.git#abc\"\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None,
+            "the `@` inside the URL is not the descriptor separator either"
+        );
+
+        // Berry. Refused as a format, not read as an empty classic file.
+        write(concat!(
+            "__metadata:\n",
+            "  version: 8\n",
+            "  cacheKey: 10c0\n",
+            "\n",
+            "\"@scope/pkg@npm:1.0.0\":\n",
+            "  version: 1.0.0\n",
+            "  resolution: \"@scope/pkg@npm:1.0.0\"\n",
+            "  checksum: 10c0/not-a-registry-integrity\n",
+        ));
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // An npm lockfile beside it still wins: an established answer must not
+        // move because a second reader was added.
+        write(concat!(
+            "# yarn lockfile v1\n",
+            "\n",
+            "\"@scope/pkg@^1.0.0\":\n",
+            "  version \"1.0.0\"\n",
+            "  integrity sha512-e8jH4SHIsKZrfxbOqcFlhtmvZTmN8kDtn5STzePihkjB9e2JGwBet9s14tcPSCl4hucoKEPpRI/PshjSzpvDvA==\n",
+        ));
+        std::fs::write(
+            project.join("package-lock.json"),
+            lockfile(3, "node_modules/@scope/pkg", Some("sha512-npm")),
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            Some("sha512-npm".to_owned())
+        );
+    }
+
     /// The lockfile read is the whole basis of integrity enforcement, and every
     /// way it can fail to produce a fact must produce *no* fact — never a
     /// verdict. `None` here means the contract keeps applying on version
@@ -1211,7 +4046,8 @@ mod tests {
         let package = project.join("node_modules/pkg");
         std::fs::create_dir_all(&package).unwrap();
 
-        // No lockfile at all: pnpm, Yarn, or a fresh checkout.
+        // No lockfile at all: a fresh checkout, or a manager none of these
+        // readers covers.
         assert_eq!(
             installed_package_integrity(&project, &package).unwrap(),
             None
@@ -1326,6 +4162,225 @@ mod tests {
         std::fs::remove_dir_all(&root).ok();
     }
 
+    fn real_lockfile(name: &str) -> String {
+        std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/lockfiles")
+                .join(name),
+        )
+        .unwrap()
+    }
+
+    fn install(project: &Path, relative: &str, name: &str, version: &str) -> std::path::PathBuf {
+        let directory = project.join(relative);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("package.json"),
+            format!(r#"{{ "name": "{name}", "version": "{version}" }}"#),
+        )
+        .unwrap();
+        directory
+    }
+
+    const META_NEXT_2: &str = "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA==";
+    const META_0_29_4: &str = "sha512-zdIWBGpR9zGx1p1bzIPqF5Gs+Ks/BH8R6fWhmUa/dcK1L2rUC8BAcZJzNRYBQv74kScf1TSOs0EY//Vd/I0V8g==";
+
+    /// `bun.lock` `lockfileVersion: 1` writes the same npm package tuple as
+    /// version 2 (Civil's real lockfile), so its integrity is read -- bound to
+    /// the exact installed identity. Civil hoists `@solidjs/meta` at
+    /// `1.0.0-next.2` and nests `0.29.4` under `@tanstack/solid-router`: the
+    /// nested copy's own record answers for it, where matching the hoisted key
+    /// by name alone would hand it the other version's integrity.
+    #[test]
+    fn a_bun_lock_version_1_states_the_exact_installed_integrity() {
+        let project = scratch("bun-lock-v1");
+        let lock = real_lockfile("civil.bun.lock");
+        std::fs::write(project.join("bun.lock"), &lock).unwrap();
+        let hoisted = install(
+            &project,
+            "node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "1.0.0-next.2",
+        );
+        let nested = install(
+            &project,
+            "node_modules/@tanstack/solid-router/node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "0.29.4",
+        );
+        let integrity =
+            |directory: &Path| installed_package_integrity(&project, directory).unwrap();
+        assert_eq!(integrity(&hoisted), Some(META_NEXT_2.to_owned()));
+        assert_eq!(integrity(&nested), Some(META_0_29_4.to_owned()));
+        // A version the lockfile never recorded has no record, though the
+        // hoisted key carries the name.
+        let unrecorded = install(
+            &project,
+            "node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "1.0.0-next.3",
+        );
+        assert_eq!(integrity(&unrecorded), None);
+        install(
+            &project,
+            "node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "1.0.0-next.2",
+        );
+
+        // Each refusal kept, one change to the real bytes at a time.
+        for (name, changed) in [
+            (
+                "an unknown lockfileVersion",
+                lock.replacen("\"lockfileVersion\": 1,", "\"lockfileVersion\": 3,", 1),
+            ),
+            (
+                "lockfileVersion 0",
+                lock.replacen("\"lockfileVersion\": 1,", "\"lockfileVersion\": 0,", 1),
+            ),
+            (
+                "no lockfileVersion",
+                lock.replacen("  \"lockfileVersion\": 1,\n", "", 1),
+            ),
+            (
+                "a missing integrity",
+                lock.replacen(&format!(", \"{META_NEXT_2}\"]"), "]", 1),
+            ),
+            (
+                "an empty integrity",
+                lock.replacen(META_NEXT_2, "", 1),
+            ),
+            (
+                "an integrity that is not SRI",
+                lock.replacen(META_NEXT_2, "md5-4aqPczFqDdep4JTAUXfh4n==", 1),
+            ),
+            (
+                "a conflicting duplicate record",
+                lock.replacen(
+                    "  \"packages\": {\n",
+                    &format!(
+                        "  \"packages\": {{\n    \"other/@solidjs/meta\": [\"@solidjs/meta@1.0.0-next.2\", \"\", {{}}, \"{META_0_29_4}\"],\n\n"
+                    ),
+                    1,
+                ),
+            ),
+        ] {
+            assert_ne!(changed, lock, "{name}");
+            std::fs::write(project.join("bun.lock"), &changed).unwrap();
+            assert_eq!(integrity(&hoisted), None, "{name} was read instead of refused");
+        }
+        // An agreeing duplicate is one fact.
+        std::fs::write(
+            project.join("bun.lock"),
+            lock.replacen(
+                "  \"packages\": {\n",
+                &format!(
+                    "  \"packages\": {{\n    \"other/@solidjs/meta\": [\"@solidjs/meta@1.0.0-next.2\", \"\", {{}}, \"{META_NEXT_2}\"],\n\n"
+                ),
+                1,
+            ),
+        )
+        .unwrap();
+        assert_eq!(integrity(&hoisted), Some(META_NEXT_2.to_owned()));
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    /// Every Bun reader accepts one `lockfileVersion` set: admission's
+    /// integrity reader and certification's `from_bun_lock` both refuse a
+    /// version 0, a version 3 and a missing version, so no receipt can be
+    /// issued from a lockfile admission would refuse. The acquisition twin's
+    /// half is "every Bun reader refuses a lockfileVersion admission refuses"
+    /// in `published-contract-graph.test.mjs`, over the same bytes.
+    #[test]
+    fn every_bun_reader_refuses_the_versions_admission_refuses() {
+        let project = scratch("bun-lock-versions");
+        let lock = real_lockfile("civil.bun.lock");
+        let hoisted = install(
+            &project,
+            "node_modules/@solidjs/meta",
+            "@solidjs/meta",
+            "1.0.0-next.2",
+        );
+        let certify = |bytes: &str| {
+            crate::contract_certification::PublishedGraphLockSelection::from_bun_lock(
+                bytes.as_bytes(),
+                "@solidjs/meta",
+                "@solidjs/meta",
+                "1.0.0-next.2",
+            )
+        };
+        let admit = |bytes: &str| {
+            std::fs::write(project.join("bun.lock"), bytes).unwrap();
+            installed_package_integrity(&project, &hoisted).unwrap()
+        };
+        for accepted in ["1", "2"] {
+            let bytes = lock.replacen(
+                "\"lockfileVersion\": 1,",
+                &format!("\"lockfileVersion\": {accepted},"),
+                1,
+            );
+            assert_eq!(admit(&bytes), Some(META_NEXT_2.to_owned()), "v{accepted}");
+            assert_eq!(
+                certify(&bytes).unwrap().integrity(),
+                META_NEXT_2,
+                "v{accepted}"
+            );
+        }
+        for (name, bytes, reason) in [
+            (
+                "version 0",
+                lock.replacen("\"lockfileVersion\": 1,", "\"lockfileVersion\": 0,", 1),
+                "Bun lockfileVersion 0 is not 1 or 2; only those versions' package records are read",
+            ),
+            (
+                "version 3",
+                lock.replacen("\"lockfileVersion\": 1,", "\"lockfileVersion\": 3,", 1),
+                "Bun lockfileVersion 3 is not 1 or 2; only those versions' package records are read",
+            ),
+            (
+                "a missing version",
+                lock.replacen("  \"lockfileVersion\": 1,\n", "", 1),
+                "Bun lockfile does not declare a lockfileVersion",
+            ),
+        ] {
+            assert_ne!(bytes, lock, "{name}");
+            assert_eq!(admit(&bytes), None, "admission read {name}");
+            let error = certify(&bytes).unwrap_err();
+            assert!(format!("{error}").contains(reason), "{name}: {error}");
+        }
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    /// The pnpm arm reads a pnpm 11+ lockfile's project document, the same
+    /// reader certification uses, so admission and the certified dependency
+    /// environment state one integrity for it (finds.team's real lockfile).
+    #[test]
+    fn a_pnpm_11_lockfile_states_the_project_documents_integrity() {
+        let project = scratch("pnpm-env-document");
+        std::fs::write(
+            project.join("pnpm-lock.yaml"),
+            real_lockfile("finds-team.pnpm-lock.yaml"),
+        )
+        .unwrap();
+        let router = install(
+            &project,
+            "node_modules/@tanstack/solid-router",
+            "@tanstack/solid-router",
+            "2.0.0-rc.8",
+        );
+        let pnpm = install(&project, "node_modules/pnpm", "pnpm", "12.5.1");
+        assert_eq!(
+            installed_package_integrity(&project, &router).unwrap(),
+            Some(
+                "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA=="
+                    .to_owned()
+            )
+        );
+        // pnpm itself is the env document's, installed outside the project.
+        assert_eq!(installed_package_integrity(&project, &pnpm).unwrap(), None);
+        std::fs::remove_dir_all(&project).ok();
+    }
+
     #[test]
     fn unknown_finding_identities_fail_closed() {
         let mut findings = vec![solid_reactive_ir::Finding::new(
@@ -1375,6 +4430,7 @@ mod tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: Default::default(),
         };
         let mut session = DiagnosticSession::default();
@@ -1421,6 +4477,7 @@ mod tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: Default::default(),
         };
         let mut session = DiagnosticSession::default();
@@ -1445,6 +4502,7 @@ mod tests {
                     presets: &["preferences".into()],
                     rules: &[],
                     runtime: RuntimeEnvironment::default(),
+                    feedback_facts: false,
                 },
             )
             .unwrap();
@@ -1458,6 +4516,7 @@ mod tests {
                     presets: &["preferences".into(), "preferences".into()],
                     rules: &[],
                     runtime: RuntimeEnvironment::default(),
+                    feedback_facts: false,
                 },
             )
             .unwrap();
@@ -1471,6 +4530,7 @@ mod tests {
                     presets: &[],
                     rules: &["prefer-show".into()],
                     runtime: RuntimeEnvironment::default(),
+                    feedback_facts: false,
                 },
             )
             .unwrap();
@@ -1490,6 +4550,110 @@ mod tests {
             "an enabled-rule change must miss retained analysis"
         );
     }
+    /// The filesystem half of environment admission, on a real installed
+    /// tree: the certified environment is resolved from the imported package's
+    /// own copy, the way Node resolves it, and compared by name, manifest
+    /// version and lockfile integrity. Anything else refuses the bundle.
+    #[test]
+    fn a_bundle_environment_is_checked_against_the_installed_tree() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-bundle-environment-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let write = |relative: &str, text: &str| {
+            let path = directory.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        let lock = |signals: &str, nested: Option<&str>| {
+            let nested = nested.map_or_else(String::new, |integrity| {
+                format!(
+                    r#","node_modules/@solid-primitives/utils/node_modules/@solidjs/signals":
+                        {{"version":"2.0.0-rc.0","integrity":"{integrity}"}}"#
+                )
+            });
+            format!(
+                r#"{{"lockfileVersion":3,"packages":{{
+                    "node_modules/@solid-primitives/utils":
+                        {{"version":"7.0.0-next.4","integrity":"sha512-utils"}},
+                    "node_modules/@solidjs/signals":
+                        {{"version":"2.0.0-rc.6","integrity":"{signals}"}}{nested}}}}}"#
+            )
+        };
+        write(
+            "node_modules/@solid-primitives/utils/package.json",
+            r#"{"name":"@solid-primitives/utils","version":"7.0.0-next.4"}"#,
+        );
+        write(
+            "node_modules/@solidjs/signals/package.json",
+            r#"{"name":"@solidjs/signals","version":"2.0.0-rc.6"}"#,
+        );
+        write("package-lock.json", &lock("sha512-signals-rc6", None));
+        let signals = |version: &str, integrity: &str| {
+            crate::DependencyEnvironmentEntry::package("@solidjs/signals", version, integrity)
+        };
+        let head = [signals("2.0.0-rc.6", "sha512-signals-rc6")];
+        let matches = |environment: &[crate::DependencyEnvironmentEntry]| {
+            installed_environment_matches(&directory, "@solid-primitives/utils", environment)
+        };
+
+        assert!(
+            matches(&head),
+            "the certified signals, hoisted beside utils"
+        );
+        assert!(matches(&[]), "an empty environment needs nothing installed");
+        assert!(
+            !matches(&[signals("2.0.0-rc.0", "sha512-signals-rc6")]),
+            "a different signals version refuses"
+        );
+        assert!(
+            !matches(&[signals("2.0.0-rc.6", "sha512-signals-repacked")]),
+            "a different dependency integrity refuses"
+        );
+        assert!(
+            !matches(&[crate::DependencyEnvironmentEntry::package(
+                "@solidjs/web",
+                "2.0.0-rc.6",
+                "sha512-web",
+            )]),
+            "a dependency that is not installed refuses"
+        );
+
+        // The lockfile names no integrity for the installed copy: not a fact
+        // this project makes available, so nothing is admitted on it.
+        write(
+            "package-lock.json",
+            r#"{"lockfileVersion":3,"packages":{
+                "node_modules/@solid-primitives/utils":{"version":"7.0.0-next.4","integrity":"sha512-utils"},
+                "node_modules/@solidjs/signals":{"version":"2.0.0-rc.6"}}}"#,
+        );
+        assert!(
+            !matches(&head),
+            "a dependency with no stated integrity refuses"
+        );
+
+        // utils carries its own nested rc.0, which is what Node loads from it,
+        // however right the hoisted copy is.
+        write(
+            "node_modules/@solid-primitives/utils/node_modules/@solidjs/signals/package.json",
+            r#"{"name":"@solidjs/signals","version":"2.0.0-rc.0"}"#,
+        );
+        write(
+            "package-lock.json",
+            &lock("sha512-signals-rc6", Some("sha512-signals-rc0")),
+        );
+        assert!(
+            !matches(&head),
+            "the copy the imported package resolves is the nested one"
+        );
+        assert!(
+            matches(&[signals("2.0.0-rc.0", "sha512-signals-rc0")]),
+            "and that nested copy is the one checked"
+        );
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
     /// A rule-options document naming a *removed* rule must load, and one
     /// naming a rule that never existed must still fail. The first half is the
     /// migration path for a project that had disabled a rule this checker went
@@ -1532,6 +4696,19 @@ mod tests {
         }
 
         for (old, current) in crate::dialect::RULE_ALIASES {
+            // An alias names a rule in one dialect's catalog, and a
+            // single-dialect build (`--no-default-features --features
+            // dialect-v2`, which `scripts/verify.sh` checks and which retiring
+            // 1.x makes the only build) compiles only one of them. An alias
+            // whose target no compiled-in catalog declares is not loadable
+            // here and is not this test's subject; the build that carries the
+            // target is where it is asserted.
+            if !crate::dialect::ALL
+                .iter()
+                .any(|dialect| (dialect.has_rule)(current))
+            {
+                continue;
+            }
             std::fs::write(
                 &document,
                 format!(
@@ -1567,5 +4744,170 @@ mod tests {
         assert!(super::discover_rule_options(&directory).is_err());
 
         std::fs::remove_dir_all(&directory).ok();
+    }
+
+    /// ADR 0193: an application is closed-world, a published library is not,
+    /// and a project with no readable manifest keeps the open boundary.
+    #[test]
+    fn the_default_program_boundary_follows_the_nearest_manifest() {
+        use solid_reactive_ir::ProgramBoundary::{Closed, Open};
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-program-boundary-{}",
+            std::process::id()
+        ));
+        let boundary = |manifest: Option<&str>| {
+            let _ = std::fs::remove_dir_all(&root);
+            let project = root.join("app/src");
+            std::fs::create_dir_all(&project).unwrap();
+            if let Some(manifest) = manifest {
+                std::fs::write(root.join("app/package.json"), manifest).unwrap();
+            }
+            super::default_program_boundary(&project.join("tsconfig.json"))
+        };
+        assert_eq!(
+            boundary(Some(r#"{"private": true, "exports": "./x.js"}"#)),
+            Closed
+        );
+        assert_eq!(
+            boundary(Some(r#"{"name": "app"}"#)),
+            Closed,
+            "publishes nothing"
+        );
+        assert_eq!(
+            boundary(Some(r#"{"name": "lib", "exports": "./x.js"}"#)),
+            Open
+        );
+        assert_eq!(boundary(Some(r#"{"name": "lib", "main": "x.js"}"#)), Open);
+        assert_eq!(boundary(Some(r#"{"name": "lib", "bin": "x.js"}"#)), Open);
+        assert_eq!(boundary(Some("not json")), Open, "an unreadable manifest");
+        assert_eq!(boundary(None), Open, "no manifest above the project");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A discovered catalog that needs trust nobody supplied is withheld and
+    /// explained, never fatal; one the user named still refuses; and a catalog
+    /// that needs no trust is read exactly as before. The process-level half,
+    /// with a real signed receipt, is
+    /// `an_authorized_catalog_is_not_admitted_without_the_trust_configuration`.
+    #[test]
+    fn a_catalog_needing_absent_trust_is_withheld_only_when_discovered() {
+        let fixture = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/reactive-ir/package-return-consumer/.solid-checker/accepted-contracts.json"
+        ))
+        .unwrap();
+        assert!(fixture.contains(r#""status": "obsolete-policy1""#));
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-withheld-catalog-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let project = |name: &str, catalog: &str| {
+            let directory = root.join(name);
+            std::fs::create_dir_all(directory.join(".solid-checker")).unwrap();
+            std::fs::write(
+                directory.join(".solid-checker/accepted-contracts.json"),
+                catalog,
+            )
+            .unwrap();
+            directory
+        };
+        let signed = project(
+            "signed",
+            &fixture.replace(
+                r#""status": "obsolete-policy1""#,
+                r#""status": "policy2-portable""#,
+            ),
+        );
+        let catalog = signed.join(".solid-checker/accepted-contracts.json");
+
+        let withheld = super::select_project_catalogs(&signed, "", false).unwrap();
+        assert!(withheld.admitted.is_empty());
+        assert!(
+            !withheld.is_empty(),
+            "a withheld catalog still counts as found"
+        );
+        assert_eq!(withheld.unauthenticated.len(), 1);
+        assert_eq!(withheld.unauthenticated[0].path, catalog);
+        assert_eq!(withheld.unauthenticated[0].packages, ["reactive-package"]);
+        let notice = withheld.notice().unwrap();
+        assert!(notice.contains(&catalog.display().to_string()), "{notice}");
+        assert!(notice.contains("reactive-package"), "{notice}");
+        assert!(
+            notice.contains("--receipt-trust-configuration <trust.json>"),
+            "{notice}"
+        );
+        // It replaces a compiled-in tier's refusal: the project tier answers first.
+        let mut refusals = std::collections::BTreeMap::from([(
+            "reactive-package".to_owned(),
+            "a compiled-in contract exists for this package and was not admitted".to_owned(),
+        )]);
+        withheld.extend_refusals(&mut refusals);
+        assert!(refusals["reactive-package"].contains("was not read"));
+        assert!(refusals["reactive-package"].contains(&catalog.display().to_string()));
+
+        let trusted = super::select_project_catalogs(&signed, "", true).unwrap();
+        assert_eq!(trusted.admitted, std::slice::from_ref(&catalog));
+        assert!(trusted.unauthenticated.is_empty() && trusted.notice().is_none());
+
+        let explicit = catalog.to_string_lossy().into_owned();
+        let refusal = super::select_project_catalogs(&root, &explicit, false)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            refusal.contains("authenticated issuer provenance"),
+            "{refusal}"
+        );
+        assert!(refusal.contains(&explicit), "{refusal}");
+        let named = super::select_project_catalogs(&root, &explicit, true).unwrap();
+        assert_eq!(named.admitted, std::slice::from_ref(&catalog));
+
+        // Obsolete policy-1 entries need no trust to be read as uncertifiable,
+        // so nothing about such a catalog changes.
+        let obsolete = project("obsolete", &fixture);
+        let unchanged = super::select_project_catalogs(&obsolete, "", false).unwrap();
+        assert_eq!(unchanged.admitted.len(), 1);
+        assert!(unchanged.notice().is_none());
+        let explicit = obsolete.join(".solid-checker/accepted-contracts.json");
+        assert!(super::select_project_catalogs(&root, &explicit.to_string_lossy(), false).is_ok());
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn nested_catalog_candidates_are_the_directories_between_a_file_and_the_project() {
+        let candidates = super::nested_catalog_candidates(
+            Path::new("/mono"),
+            [
+                "/mono/packages/a/src/App.ts",
+                "/mono/packages/a/src/deep/Other.ts",
+                "/mono/packages/b/Main.ts",
+                // The project's own directory is not a candidate: its catalog
+                // is the project's.
+                "/mono/index.ts",
+                // Installed packages are not this project's sources.
+                "/mono/node_modules/pkg/index.d.ts",
+                "/mono/packages/a/node_modules/pkg/index.d.ts",
+                // Outside the project nothing is nested in it.
+                "/elsewhere/src/main.ts",
+                "/monorepo/src/main.ts",
+            ],
+        );
+        assert_eq!(
+            candidates,
+            [
+                "/mono/packages",
+                "/mono/packages/a",
+                "/mono/packages/a/src",
+                "/mono/packages/a/src/deep",
+                "/mono/packages/b",
+            ]
+            .map(std::path::PathBuf::from)
+        );
+        assert!(
+            super::nested_catalog_candidates(Path::new("/mono"), ["/mono/src/App.ts"])
+                .into_iter()
+                .eq([std::path::PathBuf::from("/mono/src")])
+        );
     }
 }

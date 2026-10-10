@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "comment": "The published archives each dialect's negative claim authority was read against, mirrored out of the Rust tables so a consumer outside this crate can ask whether an installed tree is one the authority can answer about. Pinned field by field by `audited_archives_json_mirrors_the_dialect_tables` in src/lib.rs: a re-audit that changes a tuple fails that test until this file follows. Never a proof surface -- matching a tuple here says only that the identity gate in contract_certification/type_facts.rs could be reached, never that any row denies anything.",
+  "dialects": [
+    {
+      "id": "solid-v2",
+      "archives": [
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==",
+          "manifestSha256": "22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.6",
+          "integrity": "sha512-lPqwZNLPq1Z9CBvgXkMvi1ZFr5OHUiFNz1X40+yehszDWEbJkneZx7BGKIe9eMT/AN1NSL+PMjOiMyZaqVB2xw==",
+          "manifestSha256": "de11cde1dd28b678f380c865be674a1f1a18a198e399ad2f997fd83aef1c163c"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+          "manifestSha256": "c612461c9264f2b3509ced91ea91019ed7b1ea0df0d64bba7f0f30c8d00bb1c6"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ==",
+          "manifestSha256": "6783c3c632cfebf3a0fc26e18925887462b5925c481c6535ae0186845efb95a6"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+          "manifestSha256": "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-pfiWoLDnLc+QYWc7UyLqO+5QrPEf3oTiNmmRC+C+uM6AZ5VH0bZMNPtLM5rJ29LKPiTwQitKV843IQDf/oeyhQ==",
+          "manifestSha256": "5de9244eb8121c5efe10f3976a06b09ca09cb99de4caf5fcf56dc040ce9773dc"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ==",
+          "manifestSha256": "8b45ed71ed7a369883e7e00bb48b01fd7bda935bd5ba889cbecafc8eaa122bf5"
+        },
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==",
+          "manifestSha256": "e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+        },
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.9",
+          "integrity": "sha512-J/oHWnWqe7S0FeIEdIRKDvyyo+HY/TYKr2PrIB8VlePMWuErDg78QHqdsAV7f6HKa9qhWR/23eqzR/ZRV9ep0g==",
+          "manifestSha256": "c8d6224bd4bd63ed38f0cec77eb4d30d3f78debec091338dc4e466a2618e11bc"
+        },
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ==",
+          "manifestSha256": "ce43a022f763e5995d1ac8a5f78f135804edd01b627a2bcbee8ff9530e79d284"
+        }
+      ],
+      "negativeRowCount": 165
+    }
+  ]
+}

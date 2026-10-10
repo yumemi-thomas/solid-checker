@@ -5,8 +5,8 @@
 // expensive ones can wait. Applied by hand it is a judgement call made under
 // time pressure, which is the condition under which the wrong row gets picked.
 // This runs the table instead: it reads what actually changed, prints the row
-// it matched for every path, and runs exactly those checks plus the universal
-// handoff set the table always appends.
+// it matched for every path, and runs the universal preflight before the
+// selected tests and gates.
 //
 //   bun scripts/verify-delta.mjs             plan and run
 //   bun scripts/verify-delta.mjs --dry-run   print the plan, run nothing
@@ -44,6 +44,7 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { identity as typefactsIdentity } from "./typefacts-source-identity.mjs";
+import { certificationEnvironment } from "./lib/certification-environment.mjs";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -67,10 +68,13 @@ export const CHECKS = {
     command: ["scripts/build-typefacts.sh"],
   },
   "build-debug": {
-    why: "coverage and the ownership gate must run a fresh debug binary, not a packaged one that can lag rust/ source",
+    why:
+      "coverage and the ownership gate must run a fresh debug binary, not a packaged one that can lag " +
+      "rust/ source; solid-contract-authorize is built with it because coverage runs it for any fixture " +
+      "asking to be analyzed against an accepted contract, and looks for it beside the checker",
     command: [
       "cargo", TOOLCHAIN, "build", "--manifest-path", MANIFEST,
-      "-p", "solid-facts-backend", "--bin", "solid-checker-rust",
+      "-p", "solid-facts-backend", "--bin", "solid-checker-rust", "--bin", "solid-contract-authorize",
     ],
   },
   "facts-lib": {
@@ -116,6 +120,14 @@ export const CHECKS = {
       ["bun", "scripts/dialect-manifests.mjs", "check-composed-contracts"],
     ],
   },
+  "probe-harness": {
+    why:
+      "the harness image's bytes are hashed into the verifier by option_env!, so editing one " +
+      "moves the source manifest and every pin; this rebuilds with the recomputed digests and " +
+      "re-runs the probe-gate tracers against them. It goes through the Makefile because a bare " +
+      "cargo test compiles a binary with no pins, and every assertion then returns early",
+    command: ["make", "test-probe-harness"],
+  },
   "bun-test-cli": { command: ["bun", "run", "--cwd", "packages/cli", "test"] },
   "bun-test-wasm": { command: ["bun", "run", "--cwd", "packages/wasm", "test"] },
   // The universal handoff set, appended to every plan.
@@ -134,7 +146,7 @@ export const CHECKS = {
   verify: { command: ["scripts/verify.sh"] },
 };
 
-/** AGENTS.md's universal handoff set, in the order the document lists it. */
+/** AGENTS.md's universal handoff set, run before expensive tests and gates. */
 export const UNIVERSAL = [
   "fmt-check",
   "whitespace-check",
@@ -190,6 +202,30 @@ export const ROWS = [
     owner: "fixtures or expected findings",
     checks: ["coverage", "ownership-gate"],
   },
+  // The runtime-probe harness image. These are not ordinary CLI scripts: their
+  // bytes are the harness's *executable image*, hashed into
+  // `SOLID_CHECKER_PROBE_HARNESS_SHA256` and compiled into the verifier with
+  // `option_env!`. Editing one moves the source manifest and therefore every
+  // pin, so the binary has to be rebuilt with the recomputed digests before any
+  // probe assertion means anything -- and a bare `cargo test` rebuilds it
+  // *without* them, which turns every probe-gate tracer into a silent early
+  // return. `probe-harness` goes through the Makefile for exactly that reason.
+  //
+  // `scripts/probe-harness-source-identity.mjs` is the eighth manifest member
+  // and is deliberately not listed: `scripts/` matches no row at all, so it
+  // escalates to the full `make verify`.
+  ...[
+    "packages/cli/scripts/contract-probe-",
+    "packages/cli/scripts/probe-contract.mjs",
+    "packages/cli/package.json",
+    "packages/cli/package-lock.json",
+    "packages/cli/bun.lock",
+  ].map((prefix) => ({
+    prefix,
+    owner:
+      "the runtime-probe harness image (hashed into the verifier's compiled-in pins by option_env!)",
+    checks: ["probe-harness", "contract-process", "bun-test-cli"],
+  })),
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm"] },
 ].sort((a, b) => b.prefix.length - a.prefix.length);
@@ -229,11 +265,14 @@ export function planFor(paths) {
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
     // is already current.
     "build-typefacts",
+    ...UNIVERSAL,
     ...(needsChecker ? ["build-debug"] : []),
+    // Before the process tests: it rebuilds with the harness pins recomputed,
+    // and everything after it should run against that binary.
+    ...["probe-harness"].filter((id) => selected.has(id)),
     ...["facts-lib", "ir-lib", "backend-process", "contract-process"].filter((id) => selected.has(id)),
     ...["coverage", "ownership-gate", "conformance"].filter((id) => selected.has(id)),
     ...["bun-test-cli", "bun-test-wasm"].filter((id) => selected.has(id)),
-    ...UNIVERSAL,
   ];
   return { full: false, unmapped, decisions, checks: ordered };
 }
@@ -338,6 +377,13 @@ export const BASIS_CAVEATS = [
   "gitignored build products (bin/solid-typefacts, bin/solid-checker-rust, rust/target/**) are " +
     "invisible to `git status`; `build-typefacts` runs in every plan and a drifted producer stamp " +
     "escalates, but a hand-replaced binary is not detected here.",
+  "packages/cli/probe-harness.buildinfo is gitignored too. It is a build-provenance stamp for " +
+    "the runtime-probe harness image, and unlike bin/solid-typefacts.buildinfo nothing here " +
+    "checks it: the probe adapter recomputes the harness source manifest from the bytes on disk " +
+    "and compares the stamp *to* the compiled-in digest, so a stale stamp refuses at gate time " +
+    "rather than escalating a plan. A harness-script change is still mapped (it selects " +
+    "`probe-harness`, which rebuilds with the pins recomputed); what is invisible is the stamp " +
+    "having been written by some other build.",
   "gitignored fixture inputs are invisible too -- notably a node_modules/solid-js dialect stub " +
     "added to an already-tracked fixture without its .gitignore exception. No row selects coverage " +
     "for it, and checkDialectStubs (which catches a substituted dialect) runs inside coverage. " +
@@ -429,14 +475,18 @@ function main() {
   }
 
   console.log("");
+  let cargoEnvironment;
   for (const check of plan.checks) {
     for (const command of commandsOf(check)) {
       const started = Date.now();
       const [executable, ...args] = command;
+      if (executable === "cargo") cargoEnvironment ??= certificationEnvironment(ROOT);
       const result = spawnSync(executable, args, {
         cwd: ROOT,
         stdio: "inherit",
-        env: { ...process.env, ...(CHECKS[check].env ?? {}) },
+        // Later Bun/Make drivers can invoke Cargo too (bundle conformance is
+        // one). Keep the same pins across the whole selected plan.
+        env: { ...(cargoEnvironment ?? process.env), ...(CHECKS[check].env ?? {}) },
       });
       const seconds = ((Date.now() - started) / 1000).toFixed(2);
       if (result.error || result.status !== 0) {

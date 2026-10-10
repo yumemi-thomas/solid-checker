@@ -42,6 +42,38 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
           fail(`${source} references missing ${manifest[field]}`);
         }
       }
+      // The compiler each dialect is assembled against is per-dialect data,
+      // and `check-compiler-facts-identity.mjs` used to carry solid-v2's
+      // copy of it as literals. Declaring it here is what makes that gate
+      // enumerate dialects rather than check one: a dialect that omits the
+      // block fails validation instead of going silently unchecked.
+      const compiler = manifest.compilerIdentity;
+      if (typeof compiler !== "object" || compiler === null) {
+        fail(`${source} requires compilerIdentity`);
+      }
+      const compilerFields = [
+        "document",
+        "adapter",
+        "conformance",
+        "report",
+        "cargoPackage",
+        "cargoSourcePrefix"
+      ];
+      for (const field of compilerFields) {
+        requiredString(compiler[field], `compilerIdentity.${field}`, source);
+      }
+      for (const field of Object.keys(compiler)) {
+        if (!compilerFields.includes(field)) {
+          fail(`${source} compilerIdentity.${field} is not part of the compiler wiring`);
+        }
+      }
+      if (requireArtifacts) {
+        for (const field of ["document", "adapter", "conformance", "report"]) {
+          if (!existsSync(join(projectRoot, compiler[field]))) {
+            fail(`${source} references missing ${compiler[field]}`);
+          }
+        }
+      }
       if (!Array.isArray(manifest.contracts) || manifest.contracts.length === 0) {
         fail(`${source} requires at least one contract`);
       }
@@ -108,6 +140,8 @@ function generateContracts(check) {
   const args = [
     "+1.97",
     "run",
+    "--profile",
+    process.env.SOLID_CHECKER_CARGO_PROFILE || "dev",
     "--manifest-path",
     "rust/Cargo.toml",
     "-p",

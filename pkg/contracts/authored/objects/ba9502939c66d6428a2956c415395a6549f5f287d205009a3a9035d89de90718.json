@@ -1,0 +1,87 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "b3c4c50eefe486b83d35ad9f2773d569917b0a316eaff9675f24c96ffed8927a",
+            "path": "./dist/index.js",
+            "sha256": "87cc4e8f9f0a50068ca28bbc22a90128b9331516942be07329a3f8cb549ba0dc"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "d00fdadb6b8208a31e46f9ef723a79b7836955844be435112acbd7a23661e712"
+          },
+          "exports": {
+            "createNotification": "open-callable",
+            "createNotificationPermission": "open-callable",
+            "isNotificationSupported": "authored-isNotificationSupported",
+            "makeNotification": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-2/8+AQb9k7mXhu38p2TCxosKbllnDND4Z/avIDwl1XkU8vwOlWlv4+uVPuDo+IF8XmYWULwW1wkmxEqTyCNfYQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "8993105fb922aa0879f8e37054f1921ff40ee4eceb7713192db1ba71e99c07f8"
+    },
+    "name": "@solid-primitives/notification",
+    "version": "1.0.0-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-isNotificationSupported": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [],
+        "reads": [],
+        "callbacks": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"name":"client-package","version":"1.0.0","type":"module","exports":{".":{"node":"./missing.js","browser":{"development":"./client.js","default":"./client.js"},"default":"./missing.js"},"./public":"./client.js"}}

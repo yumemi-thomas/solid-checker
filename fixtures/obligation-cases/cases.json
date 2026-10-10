@@ -112,19 +112,6 @@
       ]
     },
     {
-      "rule": "strict-read-untracked",
-      "dialect": "v1",
-      "why": "Solid 1.x does not treat a direct JSX return as component identity: an exported function returning JSX may instead be used as a tracked render callback, whose body *is* a tracking scope. Until a caller settles which, the read's execution model is unknown.",
-      "obligation": "import { createSignal } from \"solid-js\";\nexport function Panel() {\n  const [count] = createSignal(0);\n  const value = count();\n  return <div>{value}</div>;\n}\n",
-      "closes": [
-        {
-          "evidence": "an exact JSX call site proves the function is rendered as a component, so its body runs once and untracked",
-          "expect": "violation",
-          "code": "import { createSignal } from \"solid-js\";\nfunction Panel() {\n  const [count] = createSignal(0);\n  const value = count();\n  return <div>{value}</div>;\n}\nexport function Host() {\n  return <div><Panel /></div>;\n}\n"
-        }
-      ]
-    },
-    {
       "rule": "http-response-after-flush",
       "dialect": "v2",
       "args": [

@@ -1,0 +1,19 @@
+{
+  "name": "declaration-closure-member-package",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./label": {
+      "types": "./src/label.ts",
+      "default": "./src/label.ts"
+    },
+    "./phantom-consumer": {
+      "types": "./src/phantom-consumer.ts",
+      "default": "./src/phantom-consumer.ts"
+    }
+  }
+}

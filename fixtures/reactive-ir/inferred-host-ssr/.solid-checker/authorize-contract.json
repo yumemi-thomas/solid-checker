@@ -1,0 +1,63 @@
+{
+  "document": "node_modules/reactive-package/solid-reactivity.json",
+  "import": {
+    "authority": "host",
+    "closure": {
+      "digest": "sha256:cb8aeef15a571deaaef974ea87367f48cca32595883f2dd0c98a1b9d27c50b37",
+      "entries": [
+        {
+          "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+          "path": "./package.json",
+          "role": "manifest"
+        }
+      ]
+    },
+    "declarationTrace": {
+      "branch": ""
+    },
+    "declarations": {
+      "path": "node_modules/reactive-package/index.d.ts",
+      "digest": "sha256:020a408654aa1f67beeede8e51a59f07072c94adb218d6bea882dc3c6f661411"
+    },
+    "exports": {
+      "startClosed": {
+        "declarations": {
+          "exportName": "startClosed",
+          "module": {
+            "path": "node_modules/reactive-package/index.d.ts",
+            "digest": "sha256:020a408654aa1f67beeede8e51a59f07072c94adb218d6bea882dc3c6f661411"
+          }
+        },
+        "runtime": {
+          "exportName": "startClosed",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      }
+    },
+    "importer": "authority.ts",
+    "packageIntegrity": "fixture:sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+    "packageManifest": {
+      "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+      "path": "node_modules/reactive-package/package.json"
+    },
+    "packageName": "reactive-package",
+    "packageRoot": "node_modules/reactive-package",
+    "packageVersion": "1.0.0",
+    "requestedEntrypoint": ".",
+    "runtime": {
+      "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+      "path": "node_modules/reactive-package/package.json"
+    },
+    "runtimeTrace": {
+      "branch": ""
+    },
+    "specifier": "reactive-package"
+  },
+  "exportConditions": [
+    "browser",
+    "import"
+  ]
+}

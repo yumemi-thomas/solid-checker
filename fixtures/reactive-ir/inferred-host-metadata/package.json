@@ -1,0 +1,7 @@
+{
+  "name": "inferred-host-metadata",
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  }
+}

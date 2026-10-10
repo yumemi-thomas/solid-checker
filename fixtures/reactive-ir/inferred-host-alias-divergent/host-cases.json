@@ -1,0 +1,13 @@
+[
+  {
+    "path": "src/main.tsx",
+    "text": "console.log",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/helper.ts",
+    "text": "alias target",
+    "browser": false
+  }
+]

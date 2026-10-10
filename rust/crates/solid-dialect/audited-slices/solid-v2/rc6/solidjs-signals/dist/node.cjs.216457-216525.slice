@@ -1,0 +1,3 @@
+ */ function createTrackedEffect(e, t) {
+    trackedEffect(e, t);
+}

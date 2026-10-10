@@ -33,6 +33,40 @@
     "sidecars": { "$ref": "#/$defs/sidecars" }
   },
   "$defs": {
+    "capturedLookup": {
+      "description": "Authored conditional own-string lookup slice on a whole returned graph. Requires one bare dictionary capture. Open callbacks/returns are discharged only by an exact immutable dictionary, omitted defaults and own literal key proof; no claim outside that premise.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dictionary",
+        "key",
+        "defaultArguments",
+        "stripLeadingDot"
+      ],
+      "properties": {
+        "dictionary": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "key": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "defaultArguments": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          }
+        },
+        "stripLeadingDot": {
+          "type": "boolean"
+        }
+      }
+    },
     "string": { "type": "string", "maxLength": 16384 },
     "nonemptyString": {
       "type": "string",
@@ -103,6 +137,7 @@
       "additionalProperties": false,
       "required": ["artifact", "declarations", "exports"],
       "properties": {
+        "initialization": { "enum": ["inert"] },
         "artifact": { "$ref": "#/$defs/runtimeArtifact" },
         "declarations": { "$ref": "#/$defs/file" },
         "transform": { "$ref": "#/$defs/file" },
@@ -128,6 +163,7 @@
       "additionalProperties": false,
       "required": ["resolution", "artifact", "declarations", "exports"],
       "properties": {
+        "initialization": { "enum": ["inert"] },
         "resolution": { "$ref": "#/$defs/resolution" },
         "artifact": { "$ref": "#/$defs/runtimeArtifact" },
         "declarations": { "$ref": "#/$defs/file" },
@@ -184,6 +220,36 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/callDomain" }
         },
+        "proposedClosures": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/callDomain" }
+        },
+        "contextPremises": {
+          "description": "ADR 0153 part 3: every claim of this export holds only in a program where the context this package exports under each named export receives no value from outside the package. A consumer that cannot show that reads every domain of the export as open.",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonemptyString" }
+        },
+        "accessorBounds": {
+          "description": "ADR 0153 item C: the closure's runtime-accessor-installation hazard sources, as the closure manifest names them, that this export's closed reads holds against: each installs on a target its installing function allocates fresh and on which this export executes no operation. A consumer opens reads for every accessor hazard of the closure this list does not name. Stated only beside a closed reads.",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonemptyString" }
+        },
+        "callbackResults": {
+          "description": "Authored finite use censuses for exact callback invocation results. Omission states no result claim; recursive traversal is unsupported.",
+          "type": "array", "maxItems": 4096,
+          "items": { "$ref": "#/$defs/callbackResult" }
+        },
+        "capturedLookup": { "$ref": "#/$defs/capturedLookup" },
+        "captures": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/capturedValue" }
+        },
         "callbacks": {
           "type": "array",
           "items": { "$ref": "#/$defs/callback" }
@@ -196,6 +262,10 @@
         "returns": { "$ref": "#/$defs/operationIds" },
         "cleanups": { "$ref": "#/$defs/operationIds" },
         "disposals": { "$ref": "#/$defs/operationIds" },
+        "computations": {
+          "$comment": "ADR 0114: stated by item only in schema version 1, so it is not a callDomain and neither closed nor proposedClosures may name it.",
+          "$ref": "#/$defs/operationIds"
+        },
         "operations": {
           "type": "array",
           "maxItems": 4096,
@@ -237,6 +307,32 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/nonemptyString" }
     },
+    "capturedValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonemptyString" },
+        "from": {
+          "allOf": [
+            { "$ref": "#/$defs/valueSource" },
+            { "not": { "anyOf": [{ "required": ["capture"] }, { "required": ["members"] }] } }
+          ]
+        }
+      }
+    },
+    "callbackResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["producer", "shape"],
+      "properties": {
+        "producer": { "$ref": "#/$defs/nonemptyString" },
+        "shape": { "$ref": "#/$defs/value" },
+        "uses": { "$ref": "#/$defs/operationIds" },
+        "callableOnly": { "$ref": "#/$defs/operationIds" },
+        "closed": { "type": "array", "uniqueItems": true,
+          "items": { "enum": ["uses"] } }
+      }
+    },
     "callback": {
       "type": "object",
       "additionalProperties": false,
@@ -253,12 +349,18 @@
         "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },
         "operation": { "$ref": "#/$defs/nonemptyString" },
         "resource": { "$ref": "#/$defs/nonemptyString" },
-        "path": { "$ref": "#/$defs/stringPath" }
+        "capture": { "$ref": "#/$defs/nonemptyString" },
+        "path": { "$ref": "#/$defs/stringPath" },
+        "members": {
+          "$comment": "ADR 0207: a class of the value's own members the item names. `event-handler-props` is every key that starts with `on` and contains no `:`, the properties the Solid runtime's spread attaches as event listeners. The item is exhaustive for its class whatever the domain's closure; its operation is an `invoke` of the call protocol, and only `arg` may name the value. A decoder that predates the field refuses the document, which is intended.",
+          "enum": ["event-handler-props"]
+        }
       },
       "oneOf": [
-        { "required": ["arg"], "not": { "anyOf": [{ "required": ["operation"] }, { "required": ["resource"] }] } },
-        { "required": ["operation"], "not": { "anyOf": [{ "required": ["arg"] }, { "required": ["resource"] }] } },
-        { "required": ["resource"], "not": { "anyOf": [{ "required": ["arg"] }, { "required": ["operation"] }] } }
+        { "required": ["arg"], "not": { "anyOf": [{ "required": ["operation"] }, { "required": ["resource"] }, { "required": ["capture"] }] } },
+        { "required": ["operation"], "not": { "anyOf": [{ "required": ["arg"] }, { "required": ["resource"] }, { "required": ["members"] }, { "required": ["capture"] }] } },
+        { "required": ["resource"], "not": { "anyOf": [{ "required": ["arg"] }, { "required": ["operation"] }, { "required": ["members"] }, { "required": ["capture"] }] } },
+        { "required": ["capture"], "not": { "anyOf": [{ "required": ["arg"] }, { "required": ["operation"] }, { "required": ["resource"] }, { "required": ["members"] }] } }
       ]
     },
     "stringPath": {
@@ -271,11 +373,15 @@
       "required": ["id", "kind"],
       "properties": {
         "id": { "$ref": "#/$defs/nonemptyString" },
-        "kind": { "enum": ["invoke", "return", "read", "write", "invalidate", "create", "cleanup", "dispose"] },
+        "kind": { "enum": ["invoke", "return", "read", "write", "invalidate", "create", "cleanup", "dispose", "compute"] },
         "guard": { "$ref": "#/$defs/guard" },
         "trigger": { "$ref": "#/$defs/trigger" },
         "at": { "$ref": "#/$defs/executionPoint" },
         "tracking": { "enum": ["tracked", "untracked", "ambient-at-execution"] },
+        "strictRead": {
+          "const": "cleared",
+          "description": "Explicit assertion that this read executes with strict-read checking cleared. Valid only on a read with untracked tracking. Absence establishes no strict-read clearing."
+        },
         "owner": { "$ref": "#/$defs/owner" },
         "count": { "$ref": "#/$defs/cardinality" },
         "inputs": {
@@ -287,11 +393,62 @@
           "type": "array",
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/nonemptyString" }
+        },
+        "composedFrom": { "$ref": "#/$defs/composedFrom" },
+        "protocol": {
+          "$comment": "Which protocol of the caller's value an invoke runs. Absence means call. Legacy non-call forms retain their call 0..many shape; the two value enumerations have the narrower counts described below. Every non-call form is same-stack, ambient-at-execution, unguarded and named by one callbacks item from a bare parameter. Unknown protocol spellings are refused.",
+          "enum": ["call", "get", "iterate", "coerce", "has-instance", "get-enumerable-string-values", "get-own-enumerable-values"],
+          "description": "Value enumerations are distinct from broad get. get-enumerable-string-values enters one for-in value-copy enumeration per call (count call 1..1); get-own-enumerable-values may enter one own enumerable string+symbol value-copy enumeration after an unproved prefix (count call 0..1). Both use a bare parameter, call trigger/event, same-stack, ambient tracking and owner, no guard, inputs, output, resources or provenance. A count is about entering the enumeration; each getter requires a separate receiver, descriptor and prefix proof. Old documents retain their meaning."
         }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["strictRead"] },
+          "then": {
+            "required": ["tracking"],
+            "properties": { "kind": { "const": "read" }, "tracking": { "const": "untracked" } }
+          }
+        },
+        {
+          "if": { "required": ["protocol"], "properties": { "protocol": { "enum": ["get-enumerable-string-values", "get-own-enumerable-values"] } } },
+          "then": {
+            "required": ["trigger", "at", "tracking", "owner", "count"],
+            "properties": {
+              "kind": { "const": "invoke" },
+              "trigger": { "const": { "event": "call" } },
+              "at": { "const": { "event": "call", "schedule": "same-stack" } },
+              "tracking": { "const": "ambient-at-execution" },
+              "owner": { "const": { "source": "ambient-at-execution" } },
+              "inputs": { "maxItems": 0 },
+              "resources": { "maxItems": 0 },
+              "count": { "required": ["scope", "min", "max"], "properties": { "scope": { "const": "call" }, "max": { "const": 1 } } }
+            },
+            "not": { "anyOf": [{ "required": ["guard"] }, { "required": ["output"] }, { "required": ["composedFrom"] }] }
+          }
+        },
+        {
+          "if": { "required": ["protocol"], "properties": { "protocol": { "const": "get-enumerable-string-values" } } },
+          "then": { "properties": { "count": { "properties": { "min": { "const": 1 } } } } }
+        },
+        {
+          "if": { "required": ["protocol"], "properties": { "protocol": { "const": "get-own-enumerable-values" } } },
+          "then": { "properties": { "count": { "properties": { "min": { "const": 0 } } } } }
+        }
+      ]
+    },
+    "composedFrom": {
+      "description": "The export and operation of the SAME artifact case this operation was composed from: the behaviour this operation describes is that export's own operation, performed through this export's call to it. `operation` is the target's own local operation id (`read-0`), never a qualified one -- a document cannot name an operation outside the artifact case that carries it. Optional and additive: an operation that omits it makes no provenance claim, and a consumer then requires this export's own evidence for the row. Only a `read` operation may carry it. A consumer must not read it as authority: it names a target to prove against, and discharging it requires proving both that this export really calls that export (by resolved declaration, never by name) and that the target's own claim for the named operation holds.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["export", "operation"],
+      "properties": {
+        "export": { "$ref": "#/$defs/nonemptyString" },
+        "operation": { "$ref": "#/$defs/nonemptyString" }
       }
     },
     "event": {
-      "enum": ["call", "render", "flush", "settle", "transition", "async-emission", "cleanup", "external-event", "request", "response-commitment"]
+      "$comment": "`result-access` (ADR 0139) is valid only as both the trigger and the execution point of an `invoke` that exactly one `callbacks` item names from a bare parameter, scheduled `external`, `ambient-at-execution` for tracking and owner with unconstrained requirements, count trigger 0..many, unguarded, with no protocol, inputs, output or resources. It says the export stores the caller's callable only in the value it returns (for a construction, the instance), and the callable runs later, on the stack of code that invokes it through that value. A document stating it hashes in a digest family of its own (`solid-checker:semantic-result-access:v1`); a decoder that predates the event refuses the document, which is intended.",
+      "enum": ["call", "render", "flush", "settle", "transition", "async-emission", "cleanup", "external-event", "request", "response-commitment", "result-access"]
     },
     "trigger": {
       "type": "object",
@@ -502,6 +659,21 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["arg", "ownDataKeys"],
+          "properties": {
+            "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "path": { "$ref": "#/$defs/stringPath" },
+            "ownDataKeys": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string" },
+              "description": "Exact unordered keys of a fresh own-data object. Types, accessors, spreads, computed keys, custom prototypes and proxies do not establish this premise."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["arg", "tupleAlternative"],
           "properties": {
             "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },
@@ -524,7 +696,7 @@
     },
     "value": {
       "oneOf": [
-        { "enum": ["unknown", "plain", "callable", "component", "ref-application"] },
+        { "enum": ["unknown", "plain", "undefined", "callable", "component", "ref-application"] },
         { "$ref": "#/$defs/unknownValue" },
         { "$ref": "#/$defs/plainValue" },
         { "$ref": "#/$defs/parameterValue" },
@@ -537,6 +709,15 @@
         { "$ref": "#/$defs/asyncIterableValue" },
         { "$ref": "#/$defs/reactiveValue" },
         { "$ref": "#/$defs/storeValue" },
+        { "$ref": "#/$defs/mergedPropsValue" },
+        { "$ref": "#/$defs/argumentArrayValue" },
+        { "$ref": "#/$defs/invocationResultValue" },
+        { "$ref": "#/$defs/undefinedValue" },
+        { "$ref": "#/$defs/describedCallableValue" },
+        { "$ref": "#/$defs/effectfulCallableValue" },
+        { "$ref": "#/$defs/returnedCallableValue" },
+        { "$ref": "#/$defs/prototypeInstanceValue" },
+        { "$ref": "#/$defs/lazyGetterObjectValue" },
         { "$ref": "#/$defs/actionValue" },
         { "$ref": "#/$defs/componentValue" },
         { "$ref": "#/$defs/cleanupValue" },
@@ -546,6 +727,13 @@
     },
     "unknownValue": { "$ref": "#/$defs/kindOnlyUnknown" },
     "plainValue": { "$ref": "#/$defs/kindOnlyPlain" },
+    "undefinedValue": {
+      "description": "Item B round 2 of ways-to-improve § 3.3. Exactly `undefined`: what an optional chain hands back when its receiver is nullish -- the other value of `event?.defaultPrevented`. Narrower than `plain`, and carries no closure of its own.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": { "kind": { "const": "undefined" } }
+    },
     "callableValue": { "$ref": "#/$defs/kindOnlyCallable" },
     "componentValue": { "$ref": "#/$defs/kindOnlyComponent" },
     "refApplicationValue": { "$ref": "#/$defs/kindOnlyRefApplication" },
@@ -667,6 +855,230 @@
         "resource": { "$ref": "#/$defs/nonemptyString" },
         "closed": { "type": "array", "uniqueItems": true, "items": { "const": "capabilities" } },
         "capabilities": { "$ref": "#/$defs/capabilityClaims" }
+      }
+    },
+    "mergedPropsValue": {
+      "description": "ADR 0109. An object whose property reads reach through to the caller's argument at `from`: what a props merge yields. Conditional on purpose \u2014 a merge creates no reactive source, it carries its arguments'. A consumer asserts reactivity of this value exactly when the argument it passed at `from` is itself reactive, and asserts nothing otherwise; reading it as a store would claim reactivity of a merge of plain objects.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from"],
+      "properties": {
+        "kind": { "const": "merged-props" },
+        "from": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "argumentArrayValue": {
+      "description": "ADR 0115. A fresh array whose elements, in order, are exactly the caller's own arguments at `items`: `[value]` is `[0]` and `[]` is empty. Exact by construction, so it carries no closure of its own.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "items"],
+      "properties": {
+        "kind": { "const": "argument-array" },
+        "items": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+      }
+    },
+    "invocationResultValue": {
+      "description": "ADR 0116. The value an invocation of the caller's own argument at `parameter` returned, handed back unchanged: `valueOrFn(...args)` is `0`. Names no argument of the invocation and carries no closure of its own.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "parameter"],
+      "properties": {
+        "kind": { "const": "invocation-result" },
+        "parameter": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "prototypeInstanceValue": {
+      "description": "Authored-only exact constructor instance; getObserver-gated per-instance TriggerCache reads and cleanup, with iterator work on first resumption. Missing members remain unknown.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "members",
+        "population"
+      ],
+      "properties": {
+        "kind": {
+          "const": "prototype-instance"
+        },
+        "population": {
+          "enum": [
+            "opaque",
+            "values",
+            "entries"
+          ]
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "kind",
+              "tracks"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "enum": [
+                  "method",
+                  "getter",
+                  "iterator"
+                ]
+              },
+              "tracks": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "cache"
+                  ],
+                  "properties": {
+                    "cache": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "argument": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "shared": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "oneOf": [
+                    {
+                      "required": [
+                        "argument"
+                      ],
+                      "not": {
+                        "required": [
+                          "shared"
+                        ]
+                      }
+                    },
+                    {
+                      "required": [
+                        "shared"
+                      ],
+                      "not": {
+                        "required": [
+                          "argument"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "lazyGetterObjectValue": {
+      "description": "Authored-only fresh per-key lazy signal Get recipe; exact keys or factory argument key provenance. Untracked priming is not inferred.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "keys"],
+      "properties": {
+        "kind": { "const": "lazy-getter-object" },
+        "keys": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "from": { "type": "integer", "minimum": 0, "maximum": 65535 }
+      },
+      "oneOf": [
+        { "required": ["from"], "properties": { "keys": { "maxItems": 0 } } },
+        { "not": { "required": ["from"] }, "properties": { "keys": { "minItems": 1 } } }
+      ]
+    },
+    "returnedCallableValue": {
+      "description": "A whole function returned by a factory. Optional call describes invocation arguments; its explicit captures catalogue supplies retained factory values in a separate scope. Optional named members reuse returned-member values. Missing graphs/members confer no dispatch proof. Valid only as the whole output of a factory return, never nested; certification refuses it. Operation and resource IDs share the factory namespace. Factory closure never closes a returned graph.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "returned-callable" },
+        "call": { "$ref": "#/$defs/call" },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "value"],
+            "properties": {
+              "name": { "$ref": "#/$defs/nonemptyString" },
+              "value": { "$ref": "#/$defs/value" }
+            }
+          }
+        }
+      }
+    },
+    "effectfulCallableValue": {
+      "description": "ADR 0235. A callable the export hands back as a member of a returned tuple or object, with what one call of it does: its own call graph, whose operations share the export's id namespace and may name the export's resources. Valid only as a direct member of a `return` operation's tuple or object output; never nested; refused by certification.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "call"],
+      "properties": {
+        "kind": { "const": "effectful-callable" },
+        "call": { "$ref": "#/$defs/call" }
+      }
+    },
+    "describedCallableValue": {
+      "description": "ADR 0145. A callable the export hands back together with what one invocation of it does, stated exactly: it invokes no callable it did not define, creates nothing, registers nothing on an owner, performs exactly `reads` (on the invoking caller's stack, in that caller's tracking context) and hands back exactly one of `returns` (none: it completes without a value). ADR 0146: `owned-signal` is a read of a signal the export created with the dialect's `createSignal` over primitive arguments, and `read-value` is exactly the value such a read observed. ADR 0162: `owned-memo` is a read of a memo the export created with the dialect's `createMemo` and returned unaltered; it is not inert -- a stale read re-runs the registered computation, which the export's own `creates` and `callbacks` claims account for -- and it invokes no other callable. ADR 0152: `callbacks` names the export arguments one invocation runs, and `invocation-result` in `returns` is exactly what one of them returned. Valid only as the whole output of a `return` operation; carries no closure of its own.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reads", "returns"],
+      "properties": {
+        "kind": { "const": "described-callable" },
+        "reads": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["owned-signal", "owned-memo"] }
+        },
+        "returns": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "oneOf": [
+              { "enum": ["plain", "read-value"] },
+              { "$ref": "#/$defs/invocationResultValue" }
+            ]
+          }
+        },
+        "callbacks": {
+          "description": "ADR 0152. The callables one invocation runs that it did not define, each an argument the export was handed and the returned callable captured, in the top-level item's shape with its operation inline. Absent is `[]`, which is how every document before ADR 0152 reads. Validation admits exactly one invocation: triggered by and at the described call, on the same stack, in the invoking caller's tracking context and under its owner, exactly once per call, unguarded. An `invocation-result` in `returns` names an argument one of these items invokes.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/describedCallback" }
+        }
+      }
+    },
+    "describedCallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "operation"],
+      "properties": {
+        "from": { "$ref": "#/$defs/valueSource" },
+        "operation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "invoke" },
+            "trigger": { "$ref": "#/$defs/trigger" },
+            "at": { "$ref": "#/$defs/executionPoint" },
+            "tracking": { "enum": ["tracked", "untracked", "ambient-at-execution"] },
+            "owner": { "$ref": "#/$defs/owner" },
+            "count": { "$ref": "#/$defs/cardinality" }
+          }
+        }
       }
     },
     "capabilityClaims": {

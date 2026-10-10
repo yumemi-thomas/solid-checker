@@ -1,0 +1,138 @@
+{
+  "package": "@kobalte/core",
+  "version": "2.0.0-alpha.0",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "Root": {
+      "why": "Hands every prop it does not consume to Polymorphic, which renders Dynamic with `as` (default \"button\"). With `as` absent or a tag name, Dynamic renders an element and the runtime's spread attaches every un-namespaced `on\u2026` prop as an event listener, invoked only when the event is dispatched. A component `as` receives every prop, so the claim is guarded on `as` being plain.",
+      "rule": "strict-read-untracked",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#clicked",
+          "text": "clicked"
+        }
+      ],
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": [],
+              "members": "event-handler-props"
+            },
+            "operation": "event-handlers"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "kind": "plain",
+                  "path": [
+                    "as"
+                  ]
+                }
+              ]
+            },
+            "id": "event-handlers",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "external-event"
+            }
+          }
+        ]
+      }
+    },
+    "Button": {
+      "why": "Hands every prop it does not consume to Polymorphic, which renders Dynamic with `as` (default \"button\"). With `as` absent or a tag name, Dynamic renders an element and the runtime's spread attaches every un-namespaced `on\u2026` prop as an event listener, invoked only when the event is dispatched. A component `as` receives every prop, so the claim is guarded on `as` being plain.",
+      "rule": "strict-read-untracked",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#clicked",
+          "text": "clicked"
+        }
+      ],
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": [],
+              "members": "event-handler-props"
+            },
+            "operation": "event-handlers"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "kind": "plain",
+                  "path": [
+                    "as"
+                  ]
+                }
+              ]
+            },
+            "id": "event-handlers",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "external-event"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

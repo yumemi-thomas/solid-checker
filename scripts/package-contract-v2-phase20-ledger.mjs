@@ -6,6 +6,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  isCompleteCoverage,
+  isMeasuredCoverage
+} from "./ecosystem-benchmark/lib/certified-coverage.mjs";
 import { classifyResult } from "./ecosystem-benchmark/lib/classify.mjs";
 import { collectExternalEdges } from "./ecosystem-benchmark/lib/external-edges.mjs";
 
@@ -21,6 +25,11 @@ const PHASE21_BASELINE_PATH = join(
 
 export const PROPOSAL_STATES = ["complete", "partial", "fully-refused"];
 export const CERTIFICATION_STATES = ["not-attempted", "exact-refusal", "verified"];
+// The two halves `verified` splits into. `row.certification.state` deliberately
+// keeps saying `verified`: it is the field every existing consumer reads, and
+// the split travels as extra `summary.certificationStates` keys whose sum is
+// the unchanged `verified` count.
+export const CERTIFICATION_COVERAGE_STATES = ["verified-complete", "verified-partial"];
 export const APPLICABILITY_CLASSES = [
   "runtime-module",
   "verifier-proved-type-only",
@@ -116,6 +125,21 @@ function certificationState(attempt) {
     attempt.ordinaryAnalysis?.exactCaseSelected === true
   ) return "verified";
   return "exact-refusal";
+}
+
+/// Which half of `verified` a row falls in, or `null` for a row that is not
+/// verified or whose published catalog could not be measured.
+///
+/// `null` is a third answer on purpose. A verified row whose coverage is
+/// unreadable -- which every row measured before `certificationAttempt.coverage`
+/// existed is -- must not be counted in either half: calling it partial would
+/// be as much a fabrication as calling it complete. A row whose *denominator*
+/// is unreadable is the same non-answer, which is why the test is
+/// `isMeasuredCoverage` and not merely a present object.
+function certificationCoverageState(attempt) {
+  if (certificationState(attempt) !== "verified") return null;
+  if (!isMeasuredCoverage(attempt.coverage ?? null)) return null;
+  return isCompleteCoverage(attempt.coverage) ? "verified-complete" : "verified-partial";
 }
 
 function acceptedCases(result) {
@@ -326,6 +350,26 @@ export function buildPhase20Ledger(ecosystem, { reportPath = REPORT_RELATIVE, re
   const rows = official.map(buildRow);
   const proposalStates = countBy(rows, row => row.proposal.state);
   const certificationStates = countBy(rows, row => row.certification.state);
+  // Additive sub-counts, read from each row's own certification attempt rather
+  // than added to `row.certification`. Two reasons for that placement: the
+  // per-row coverage already travels in the ecosystem report (and from there
+  // into the Phase 21 ledger's verbatim `certificationAttempt` snapshot), and
+  // widening `row.certification` would rewrite every row of both checked-in
+  // ledgers with fields that carry nothing on a report predating the
+  // measurement.
+  //
+  // `verified` above stays the total: these two counts plus the unmeasured
+  // remainder reconstruct it, so a consumer reading only `verified` is
+  // unaffected.
+  const coverageStates = official.map(result =>
+    certificationCoverageState(result.certificationAttempt)
+  );
+  for (const state of CERTIFICATION_COVERAGE_STATES) {
+    certificationStates[state] = coverageStates.filter(value => value === state).length;
+  }
+  certificationStates["verified-coverage-unmeasured"] =
+    (certificationStates.verified ?? 0) -
+    coverageStates.filter(value => value !== null).length;
   const failureRows = rows.filter(row => row.proposal.state === "fully-refused");
   const blockerMemberships = {};
   for (const row of rows) {
@@ -389,6 +433,27 @@ export function assertPhase20Ledger(ledger) {
   assert.equal(ledger.documentKind, "solid-checker-package-contract-phase20-row-ledger");
   assert.equal(ledger.rows.length, ledger.summary.rows);
   assert.equal(new Set(ledger.rows.map(row => row.probeId)).size, ledger.rows.length);
+  // Absent on the frozen ledger, which predates `certificationAttempt.coverage`.
+  // Present on every ledger built since, and then it must reconstruct the
+  // unchanged `verified` count exactly -- the split is a decomposition, not a
+  // second opinion.
+  //
+  // Asserted only after the identity checks above: a document that is not a
+  // Phase 20 ledger at this schema version must fail on *that*, not on a
+  // missing summary field dereferenced ahead of it. The unmeasured remainder
+  // defaults to 0 rather than summing to `NaN` -- a builder that emitted the
+  // two halves and no remainder had nothing unmeasured, and `NaN !== verified`
+  // would have reported that as a broken decomposition.
+  const states = ledger.summary.certificationStates;
+  if (states["verified-complete"] !== undefined) {
+    assert.equal(
+      states["verified-complete"] +
+        states["verified-partial"] +
+        (states["verified-coverage-unmeasured"] ?? 0),
+      states.verified ?? 0,
+      "the verified coverage split must sum to the verified count"
+    );
+  }
   for (const row of ledger.rows) {
     assert.ok(PROPOSAL_STATES.includes(row.proposal.state), `${row.probeId} has one proposal state`);
     assert.ok(CERTIFICATION_STATES.includes(row.certification.state), `${row.probeId} has one certification state`);
@@ -437,6 +502,22 @@ export function assertPhase20Ledger(ledger) {
   }
 }
 
+/// The parenthesised split, or the empty string for a ledger that does not
+/// carry it.
+///
+/// The frozen Phase 20 ledger predates `certificationAttempt.coverage`, so it
+/// has no split to print, and printing `0 complete, 0 partial` for it would
+/// state a measurement nobody made. Absent means absent.
+function verifiedSplit(summary) {
+  const complete = summary.certificationStates["verified-complete"];
+  const partial = summary.certificationStates["verified-partial"];
+  if (complete === undefined || partial === undefined) return "";
+  const unmeasured = summary.certificationStates["verified-coverage-unmeasured"] ?? 0;
+  return ` (${complete} complete, ${partial} partial${
+    unmeasured > 0 ? `, ${unmeasured} coverage unmeasured` : ""
+  })`;
+}
+
 export function renderPhase20LedgerMarkdown(ledger) {
   const summary = ledger.summary;
   const rows = Object.entries(summary.blockerMemberships)
@@ -445,7 +526,7 @@ export function renderPhase20LedgerMarkdown(ledger) {
 
 - Rows: ${summary.rows}
 - Proposal states: ${summary.proposalStates.complete ?? 0} complete, ${summary.proposalStates.partial ?? 0} partial, ${summary.proposalStates["fully-refused"] ?? 0} fully refused
-- Certification states: ${summary.certificationStates.verified ?? 0} verified, ${summary.certificationStates["exact-refusal"] ?? 0} exact refusal, ${summary.certificationStates["not-attempted"] ?? 0} not attempted
+- Certification states: ${summary.certificationStates.verified ?? 0} verified${verifiedSplit(summary)}, ${summary.certificationStates["exact-refusal"] ?? 0} exact refusal, ${summary.certificationStates["not-attempted"] ?? 0} not attempted
 - Historical full-refusal rows awaiting structured remeasurement: ${summary.incompleteRefusalCensusRows}
 - Accepted-case rows awaiting identity-rich remeasurement: ${summary.incompleteAcceptedCaseIdentityRows}
 - External edges without an observed exact installed version: ${summary.externalEdgesWithoutResolvedVersion}/${summary.externalEdges}

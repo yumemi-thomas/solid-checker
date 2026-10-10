@@ -1,0 +1,163 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "78592d1cc393e2bfdf214d9c14deedbde5465ff00ac70396591de0d023cdcf6b",
+            "path": "./dist/index.js",
+            "sha256": "aaf7ecce59ae4f5d0d7f0230700aa69918120876999698ffbce82d58cadcd12c"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "a0a3fbb77087db9634b2d063c74d0844b1141bc4b3adb4d923db64a8967d8bcf"
+          },
+          "exports": {
+            "createReconnectingWS": "authored-createReconnectingWS",
+            "createWS": "open-callable",
+            "createWSData": "open-callable",
+            "createWSMessage": "open-callable",
+            "createWSState": "authored-createWSState",
+            "createWSStore": "open-callable",
+            "makeHeartbeatWS": "open-callable",
+            "makeReconnectingWS": "open-callable",
+            "makeWS": "open-callable",
+            "wsMessageIterable": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-x5wKmCnZeKrUQmy0au5MlFjDcXnQqcAYmMctPXxceTvtY7YJXlAykaf7Sx+XknNvzlbl+UrOZ2zGNRD8BNeOxw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "3ff72fed65b50f6c12a96edee656718b193045c78e5bd23089278f372f6e8674"
+    },
+    "name": "@solid-primitives/websocket",
+    "version": "2.0.0-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createReconnectingWS": {
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createWSState": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "socket-state"
+            }
+          },
+          {
+            "id": "create-state",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "socket-state"
+            ]
+          }
+        ],
+        "resources": [
+          {
+            "id": "socket-state",
+            "kind": "reactive-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-state"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "shape": "callable"
+    }
+  }
+}

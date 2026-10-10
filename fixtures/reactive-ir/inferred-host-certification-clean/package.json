@@ -1,0 +1,8 @@
+{
+  "name": "inferred-host-certification-clean",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  }
+}

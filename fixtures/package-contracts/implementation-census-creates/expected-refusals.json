@@ -1,0 +1,83 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "implementation-census-creates-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "iife",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:26748:26787",
+      "declaration": "",
+      "shape": "expression-callee",
+      "spelling": "function-expression"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "ownGetterFromFactory",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:24300:24317",
+      "declaration": "",
+      "shape": "undeclared-identifier",
+      "spelling": "externalGlobal"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "ownGetterFromFactory",
+      "domain": "creates",
+      "kind": "refusing-callee-fixpoint",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:24396:24415",
+      "declaration": "<package-root>/index.js:24227:24331",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "ownGetterThroughHelper",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:24193:24210",
+      "declaration": "",
+      "shape": "undeclared-identifier",
+      "spelling": "externalGlobal"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "unresolved",
+      "domain": "creates",
+      "kind": "unresolved-callee",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:5210:5231",
+      "declaration": "",
+      "shape": "undeclared-identifier",
+      "spelling": "externalGlobal"
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "3431aed69a01b58873e26fbecd5c82ec87031c5aa64543651a83b54b83b928fc",
+            "path": "./dist/index.js",
+            "sha256": "f3753c3756aff270b2db7ec8298b5c88e956f412790f785c056cf73dd79ab32e"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "c030185b689dd18b4354343e3441ca84ce330c726ab5188fa197d73ec27feee9"
+          },
+          "exports": {
+            "DEFAULT_DELAY": "open-plain",
+            "DEFAULT_MIN_SWIPE_DISTANCE": "open-plain",
+            "doubleTap": "open-callable",
+            "getCenterOfTwoPoints": "authored-getCenterOfTwoPoints",
+            "longPress": "open-callable",
+            "pan": "open-callable",
+            "pinch": "open-callable",
+            "registerPointerListener": "open-callable",
+            "rotate": "open-callable",
+            "swipe": "open-callable",
+            "tap": "authored-tap"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-Q7tOcowDI5E0WdSdUlixGB19XiSN7WHB3IitlepLbLMDrulsW3fZW+GbMEjWrJBTxxB65mUVFnUs/P/w6SeVeA==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "a6b847d857c7f6cf187020f0db51bf9ce6c0a879ed6c6dc2e8854d2f50654aee"
+    },
+    "name": "@solid-primitives/gestures",
+    "version": "3.0.0-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-plain": {
+      "call": {},
+      "shape": "plain"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-getCenterOfTwoPoints": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-tap": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": [],
+        "cleanups": [
+          "cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

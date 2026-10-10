@@ -1,0 +1,37 @@
+// Declarations transcribed from solid-js@2.0.0-rc.3 and @solidjs/web@2.0.0-rc.3.
+//
+// Byte-faithful, because every claim in this fixture rests on them:
+//
+// - `IntrinsicElement`, `ValidComponent`, `ComponentProps`
+//                  @solidjs/web `types/index.d.ts:46-48`
+// - `dynamic`      @solidjs/web `types/index.d.ts:81`: one parameter, so a
+//                  second argument is TS2554
+// - `Component`    solid-js `types/client/component.d.ts:6`
+//
+// ("Byte-faithful" up to the one token an ambient `declare module` block
+// forbids: the published files are modules, so they spell `export declare
+// function`, and inside the block that is `export function`.)
+//
+// Reduced, and safe to reduce because no claim reads them back: `SolidElement`
+// is this file's `JSX.Element` rather than solid-js' `Element` union, and
+// `JSX` itself.
+
+declare namespace JSX {
+  interface IntrinsicElements {
+    div: { children?: any };
+  }
+  interface Element {}
+}
+
+declare module "solid-js" {
+  type SolidElement = JSX.Element;
+  export type Component<P extends Record<string, any> = {}> = (props: P) => SolidElement;
+}
+
+declare module "@solidjs/web" {
+  import { Component } from "solid-js";
+  export type IntrinsicElement = Extract<keyof JSX.IntrinsicElements, string>;
+  export type ValidComponent = IntrinsicElement | Component<any> | (string & {});
+  export type ComponentProps<T extends ValidComponent> = T extends Component<infer P> ? P : T extends keyof JSX.IntrinsicElements ? JSX.IntrinsicElements[T] : Record<string, unknown>;
+  export function dynamic<T extends ValidComponent>(source: () => T | Promise<T> | null | undefined | false): Component<ComponentProps<T>>;
+}

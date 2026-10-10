@@ -58,8 +58,49 @@ pub struct ExportValueDemand {
     pub location: Location,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub implementation_location: Option<Location>,
+    /// Asks for an implementation transcript of the function-like declaration
+    /// whose source range is *exactly* this location, inside the analyzed
+    /// snapshot.
+    ///
+    /// It is the only way to reach a declaration no export names.
+    /// [`Self::implementation_location`] starts from an identifier and
+    /// resolves through the export's runtime binding, so a module-local helper
+    /// — which is most of what an implementation census recurses into — is
+    /// unreachable through it.
+    ///
+    /// The location names the **declaration node**, not an identifier, and the
+    /// match is exact in both bytes. The producer refuses by open reason and
+    /// never by answering about a different declaration: `sourceUnavailable`
+    /// when the accepted program resolved no file at that path or the byte
+    /// range is invalid, `declarationOutsideSnapshot` when the file is in the
+    /// program but carries no runtime bytes (every `lib.*.d.ts` and every
+    /// dependency `.d.ts` is a program file, and none of them is snapshot
+    /// source), `declarationNotExact` when no node has exactly that span or
+    /// the node that does is not function-like, `declarationAmbiguous` when
+    /// more than one function-like node does, `implementationUnavailable` when
+    /// the declaration has no body, `symbolUnresolved` for an anonymous
+    /// callable whose name cannot be recovered from an enclosing variable
+    /// declaration, and `declarationIdentityUnbound` when the declaration the
+    /// checker resolves does not sit inside the demanded span.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_declaration_location: Option<Location>,
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub callable_depth: usize,
+    /// The premise the local declaration's uncensused-form census is asked to
+    /// classify under: each named parameter bound to the given type, which is
+    /// the type the **caller's** premised census found in that argument slot
+    /// at the call that reached this declaration
+    /// ([`ExportImplementationTranscript::call_argument_premises`]), copied
+    /// back verbatim (handshake protocol 23, ADR 0038). Meaningful only beside
+    /// [`Self::local_declaration_location`]; the producer refuses a demand
+    /// stating it for anything else, because an export's root has a declared
+    /// signature to bind. Indexes are strictly increasing. The answer's
+    /// [`ExportImplementationTranscript::parameter_premises`] either equals
+    /// this list — every entry re-established on the callee's twin — or is
+    /// empty, the strictly more refusing census; `Session::export_values`
+    /// refuses anything in between.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_premises: Vec<ParameterPremise>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -179,6 +220,20 @@ pub struct CallablePathFact {
     pub declaration: Option<Declaration>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub complete: bool,
+    /// True for a member the value carries only through the compiler's
+    /// apparent-type augmentation: the global `Function` interface's members on
+    /// a node with call or construct signatures. Such a member exists — the
+    /// compiler answers it and `tsc` type-checks the access — but it is
+    /// library-owned rather than declared by the package under analysis, it is
+    /// never caller-supplied, and the producer emits it as a leaf. Declared
+    /// members carry false.
+    ///
+    /// Declared-member census closure excludes these facts; exact path lookups
+    /// still find them. There is deliberately no `serde(default)`: a producer
+    /// that omits the field is rejected rather than defaulted, because
+    /// defaulting it to false would silently turn every apparent leaf into a
+    /// declared census member.
+    pub apparent: bool,
     pub subtree_enumerated: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_reasons: Vec<Arc<str>>,
@@ -292,15 +347,394 @@ pub struct ExportValueTranscript {
     pub call_signatures: Vec<SelectedSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub implementation: Option<ExportImplementationTranscript>,
+    /// Exact runtime export initializer derivation, not a call-result verdict.
+    /// A consumer must independently authenticate the imported factory's
+    /// return contract before using its object argument as a result premise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initializer: Option<ExportInitializerTranscript>,
+    /// The answer to [`ExportValueDemand::local_declaration_location`],
+    /// present exactly when that field was set.
+    ///
+    /// Its [`ExportImplementationTranscript::location`] is the demanded
+    /// location **verbatim**, which is precisely why that field cannot be the
+    /// binding on its own: a producer answering about a different helper would
+    /// echo the demand just the same. What
+    /// [`crate::Session::export_values`] actually requires, and what a caller
+    /// may rely on, is:
+    ///
+    /// - presence agrees with the demand — a `local_declaration` for a demand
+    ///   that asked for none, and its absence for a demand that asked for one,
+    ///   are both refused;
+    /// - `location` equals the demanded location (the echo, which catches a
+    ///   producer that answered a *different demand of the same batch*, since
+    ///   the batch's demands differ there);
+    /// - when [`ExportImplementationTranscript::declaration`] is present, its
+    ///   location names the demanded file and lies inside the demanded span.
+    ///   This is the non-echoed half: the producer derives it from the located
+    ///   declaration's own symbol, not from the demand. It is a containment
+    ///   rather than an equality because a named function resolves to its
+    ///   *identifier* while an anonymous `const helper = () => …` resolves to
+    ///   the arrow itself;
+    /// - when both are populated, `query_name` and the resolved declaration's
+    ///   `name` agree.
+    ///
+    /// None of that makes a *well-formed* answer about another helper in
+    /// another file impossible to construct — a producer is trusted for the
+    /// contents of the body it censuses, exactly as it is for an export's. It
+    /// makes an answer whose own two identity fields disagree, or which
+    /// describes a declaration outside the bytes that were asked about,
+    /// refusable without reading the source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_declaration: Option<ExportImplementationTranscript>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub complete: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_reasons: Vec<Arc<str>>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExportInitializerBinding {
+    pub declaration: ResolvedDeclaration,
+    pub location: Location,
+    pub initializer: Location,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExportInitializerObjectArgument {
+    pub index: u32,
+    pub location: Location,
+}
+
+/// A positively unwritten, same-module variable chain ending in one ordinary
+/// imported call. Object arguments are direct literals; no member behavior or
+/// result identity is asserted here. Missing derivations grant no premise.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExportInitializerTranscript {
+    pub location: Location,
+    pub target: Arc<str>,
+    pub bindings: Vec<ExportInitializerBinding>,
+    pub call: Location,
+    pub callee: Location,
+    pub declaration: ResolvedDeclaration,
+    pub specifier: Arc<str>,
+    pub export_name: Arc<str>,
+    pub object_arguments: Vec<ExportInitializerObjectArgument>,
+}
+
+/// What a function-like implementation hands its caller when it completes,
+/// classified from the `async` modifier and the asterisk token on the
+/// declaration itself (ADR 0035). A plain callable completes with whatever its
+/// return sites carry; an `async` function always hands back a promise, a
+/// generator an iterator, an async generator an async iterator, whatever the
+/// body does. `Unclassified` is the producer's default for a declaration kind
+/// its classifier does not review, and a consumer refuses it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ImplementationCompletionForm {
+    Plain,
+    Async,
+    Generator,
+    AsyncGenerator,
+    Unclassified,
+}
+
 /// Exact runtime implementation selected independently of the declaration
 /// expression used by [`ExportValueTranscript`]. This is not an invented
 /// invocation: the producer inspects the snapshot-replayed binding itself.
+/// One parameter's type binding under which an implementation's
+/// uncensused-form census was classified (ADR 0038). See
+/// [`ExportImplementationTranscript::parameter_premises`].
+///
+/// `identity` is the producer's own binding of the text to a declaration —
+/// type flags and declaration positions — stated on a call-argument premise
+/// and echoed on the demand and the callee's premise so that a spelling which
+/// resolves to a *different* declaration of the same name on the callee's twin
+/// is refused by the producer rather than bound. A consumer compares it byte
+/// for byte and reads nothing into it; a root premise, bound to the declared
+/// signature by its text alone, carries none.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ParameterPremise {
+    pub index: usize,
+    pub r#type: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub identity: Arc<str>,
+    /// A form of [`Self::r#type`] that resolves from a module which cannot
+    /// name it directly — `import("<specifier>").<Name>` — stated when the
+    /// printed text names a type declared in a declaration file (ADR 0046,
+    /// handshake protocol 30).
+    ///
+    /// A helper premise is written into a **JavaScript** module as a JSDoc
+    /// `@param`, where `@param {Axis}` resolves to nothing however precisely
+    /// the package's declarations define `Axis`; the caller's twin, which does
+    /// resolve it, is where the spelling can be computed.
+    ///
+    /// **A hint, never the premise.** The type text and the identity remain
+    /// the whole falsifier, so a spelling that resolved to something else
+    /// refuses the twin exactly as a wrong printed text does. This side echoes
+    /// it byte for byte and interprets none of it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub spelling: String,
+}
+
+/// The type each informative written argument slot of one call carried on the
+/// twin a premised census ran over (handshake protocol 23). See
+/// [`ExportImplementationTranscript::call_argument_premises`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CallArgumentPremise {
+    // `arguments` covers the slots the call writes and, since ADR 0049, the
+    // slots it does not: an unwritten parameter receives `undefined` at run
+    // time, a primitive. A slot whose parameter has an initializer, is a rest
+    // parameter, is not a plain identifier, or is written in the callee's own
+    // file is skipped rather than stated, and the list stays strictly
+    // increasing either way.
+    pub call: Location,
+    pub arguments: Vec<ParameterPremise>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UnwrittenParameterBinding {
+    pub parameter_index: usize,
+    pub declaration: Location,
+}
+
+/// ADR 0139, handshake protocol 65: one constructor parameter a class export
+/// keeps on its instance.
+///
+/// `store` is the parameter's own reference in the one top-level
+/// `this.<key> = p` statement of the constructor; every other use of the
+/// parameter is a direct call in the constructor's own frame. `invocations`
+/// is every member call `this.<key>(…)` in the class body, none of which a
+/// construction reaches.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RetainedArgument {
+    pub parameter_index: usize,
+    pub key: Arc<str>,
+    pub store: Location,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invocations: Vec<Location>,
+}
+
+/// Protocol 46: original input transferred to a stable local helper, whose
+/// unchanged parameter is read synchronously at one exact member call.
+/// Possible execution only; no member shape or later input identity follows.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OriginalHelperRead {
+    pub parameter_index: usize,
+    pub declaration: Location,
+    pub call: Location,
+    pub argument_index: usize,
+    pub argument: Location,
+    pub helper: Location,
+    pub helper_implementation: Location,
+    pub helper_parameter: Location,
+    pub read: Location,
+    pub property: Arc<str>,
+}
+
+impl OriginalHelperRead {
+    pub fn binds_to(&self, implementation: &ExportImplementationTranscript) -> bool {
+        let encloses = |outer: &Location, inner: &Location| {
+            outer.path == inner.path
+                && outer.start_byte < outer.end_byte
+                && inner.start_byte < inner.end_byte
+                && outer.start_byte <= inner.start_byte
+                && inner.end_byte <= outer.end_byte
+        };
+        implementation.completion_form == Some(ImplementationCompletionForm::Plain)
+            && !self.property.is_empty()
+            && self.declaration.path == implementation.location.path
+            && self.helper.path == self.declaration.path
+            && encloses(&self.call, &self.argument)
+            && encloses(&self.helper_implementation, &self.helper)
+            && encloses(&self.helper_implementation, &self.helper_parameter)
+            && encloses(&self.helper_implementation, &self.read)
+            && implementation
+                .parameter_uses
+                .iter()
+                .filter(|usage| {
+                    usage.parameter_index == self.parameter_index
+                        && usage.location == self.argument
+                        && usage.binding_path.is_empty()
+                        && !usage.alias
+                        && !usage.captured
+                        && usage.reach != Reachability::Unreachable
+                        && usage.kind == ParameterUseKind::ArgumentKnown
+                })
+                .count()
+                == 1
+            && implementation
+                .signature
+                .as_ref()
+                .and_then(|s| s.parameters.get(self.parameter_index))
+                .is_some_and(|p| {
+                    p.index == self.parameter_index
+                        && !p.defaulted
+                        && !p.rest
+                        && p.declaration
+                            .as_ref()
+                            .is_some_and(|d| d.location == self.declaration)
+                })
+            && implementation
+                .calls
+                .iter()
+                .filter(|call| {
+                    call.location == self.call
+                        && call.kind == CallKind::Call
+                        && !call.captured
+                        && call.reach != Reachability::Unreachable
+                        && !call.target.is_empty()
+                        && call
+                            .declaration
+                            .as_ref()
+                            .is_some_and(|d| d.location == self.helper)
+                        && call
+                            .argument_parameters
+                            .get(self.argument_index)
+                            .and_then(Option::as_ref)
+                            .is_some_and(|p| {
+                                p.parameter_index == self.parameter_index && p.path.is_empty()
+                            })
+                })
+                .count()
+                == 1
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InitialParameterRead {
+    pub parameter_index: usize,
+    pub declaration: Location,
+    pub r#use: Location,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub first_iteration_only: bool,
+    /// ADR 0069: established by order alone — the read precedes every store
+    /// this body performs, with no iteration statement enclosing both. The
+    /// claim is about *this* use, so only a consumer that binds the use to its
+    /// own operation may take it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub positional: bool,
+    /// Origin holds only for a defined caller argument; the undefined branch
+    /// creates a local empty array. Never an unconditional identity premise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undefined_default: Option<UndefinedParameterDefault>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UndefinedParameterDefault {
+    pub guard: Location,
+    pub assignment: Location,
+}
+
+impl UndefinedParameterDefault {
+    /// Envelope validation only. The pinned producer owns the exhaustive
+    /// store census and strict-undefined guard semantics at these locations.
+    pub fn binds_read(&self, read: &InitialParameterRead) -> bool {
+        !read.positional
+            && !read.first_iteration_only
+            && self.guard.path == read.declaration.path
+            && self.assignment.path == self.guard.path
+            && self.guard.start_byte < self.assignment.start_byte
+            && self.assignment.start_byte < self.assignment.end_byte
+            && self.assignment.end_byte < self.guard.end_byte
+            && self.guard.end_byte <= read.r#use.start_byte
+    }
+}
+
+/// [`ExportImplementationTranscript::not_callable_value`] (ADR 0099).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NotCallableValue {
+    /// `primitive` when every constituent of the value type is a primitive
+    /// type, `object` otherwise.
+    pub kind: Arc<str>,
+    /// The checker's spelling of the whole value type, for the receipt.
+    pub r#type: Arc<str>,
+}
+
+/// [`ExportImplementationTranscript::default_library_alias`] (ADR 0103).
+///
+/// The producer proved the export binding *is* this default-library member,
+/// by identity. It deliberately states nothing about what the member does:
+/// `Object.keys` invokes no caller callable and reads nothing but its
+/// argument's own keys, while `Array.prototype.map` invokes one per element,
+/// and the producer states both identically. Deciding which members a call
+/// domain may close on is the certifier's reviewed act, so a member with no
+/// entry in that table reads as "not stated".
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DefaultLibraryAlias {
+    /// The container the member was read from: `Object`, `Math`, …
+    pub container: Arc<str>,
+    /// The member name: `keys`, `entries`, `floor`, …
+    pub member: Arc<str>,
+    /// ADR 0112, handshake protocol 60: every place the aliasing file hands the
+    /// *container* to `Container.member.bind(Container)`, as the qualified
+    /// member whose `bind` received it.
+    ///
+    /// Protocol 59 refused the file's aliases outright on any escape of the
+    /// container, and `const defaultEquals = Object.is.bind(Object)` is one —
+    /// which is why `@solid-primitives/utils@7.0.0-next.4` stated no identity
+    /// for `Object.entries` or `Object.keys` although it re-exports both.
+    /// `Function.prototype.bind` neither mutates its `thisArg` nor invokes the
+    /// target, so the aliased value is the library's own. What the producer
+    /// cannot decide is whether the *bound target* rewrites the container when
+    /// it later runs, which is the same reviewed question as which members a
+    /// domain may close on.
+    ///
+    /// **Every entry must be a member this consumer has reviewed**, and the
+    /// whole fact reads as not stated otherwise. Empty is protocol 59's
+    /// meaning: no escape at all.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub container_escapes: Vec<Arc<str>>,
+}
+
+impl DefaultLibraryAlias {
+    /// The `Container.member` spelling the reviewed table is keyed by, and
+    /// the spelling a receipt records.
+    #[must_use]
+    pub fn qualified_name(&self) -> String {
+        format!("{}.{}", self.container, self.member)
+    }
+}
+
+/// An imported binding a `dependency-member` subject is rooted at (ADR 0104,
+/// handshake protocol 58): the module specifier exactly as the import wrote it
+/// and the exporting module's own name for the export.
+///
+/// **The specifier is not a package identity.** It is the text of a string
+/// literal in someone else's source, so a consumer decides for itself whether
+/// it names a dependency it has reviewed. The producer refuses a relative or
+/// absolute specifier, a namespace import, a default import and a locally
+/// assigned binding, which is what makes the pair meaningful at all — but it
+/// cannot tell a consumer that the named module is the one actually installed.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImportedModuleMember {
+    /// The module specifier as written: `solid-js`, `@scope/name`.
+    pub specifier: Arc<str>,
+    /// The exported name, not the local alias.
+    pub name: Arc<str>,
+}
+
+impl ImportedModuleMember {
+    /// The `specifier:name` spelling the reviewed table is keyed by, and the
+    /// spelling a receipt records.
+    #[must_use]
+    pub fn qualified_name(&self) -> String {
+        format!("{}:{}", self.specifier, self.name)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExportImplementationTranscript {
@@ -313,8 +747,33 @@ pub struct ExportImplementationTranscript {
     pub declaration: Option<ResolvedDeclaration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<SelectedSignature>,
+    /// How this implementation completes to its caller, from its own syntax
+    /// (ADR 0035, handshake protocol 19). Stated beside [`Self::declaration`]
+    /// on every transcript that reached its implementation; a consumer never
+    /// reads its absence as [`ImplementationCompletionForm::Plain`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_form: Option<ImplementationCompletionForm>,
+    /// The declaration whose body this transcript's census walked when
+    /// [`Self::declaration`] is a binding that aliases it by identity --
+    /// `const defaultScheduler = systemSetTimeoutZero` (handshake protocol
+    /// 20). Absent when the body is the declaration's own. The producer states
+    /// it only for an exact alias: an identifier initializer, the binding never
+    /// assigned in its file, the aliased function never assigned in its own;
+    /// an import that module resolution took to a sibling `.d.ts` is followed
+    /// to the runtime module the specifier denotes and to that module's export
+    /// of the imported name, which is what the import binds at runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implementation_of: Option<ResolvedDeclaration>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameter_uses: Vec<ParameterUse>,
+    /// Protocol 39: affirmative identity of plain, unwritten caller slots.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unwritten_parameters: Vec<UnwrittenParameterBinding>,
+    /// Protocol 40: original caller roots at specific opening-prefix reads.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub initial_parameter_reads: Vec<InitialParameterRead>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub original_helper_reads: Vec<OriginalHelperRead>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control_flow: Option<ControlFlowCensus>,
     /// Return-carry edges owned by nested callables in this implementation.
@@ -327,10 +786,664 @@ pub struct ExportImplementationTranscript {
     pub callable_returns: Vec<CallableReturnCensus>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calls: Vec<ImplementationCall>,
+    /// Every syntactic position in this implementation that can invoke user
+    /// code and that [`Self::calls`] does *not* record.
+    ///
+    /// `calls` holds `CallExpression` and `NewExpression` only. Everything
+    /// else that reaches a callable — a tagged template, an accessor behind a
+    /// property access, the iteration protocol, a decorator, `Symbol.dispose`,
+    /// `Symbol.hasInstance`, a thenable's `then`, a coercion, a JSX lowering —
+    /// arrives here instead, so a consumer that must enumerate every invoking
+    /// form refuses **by name** rather than concluding from silence.
+    ///
+    /// **An absent field and a present empty one are different facts, and no
+    /// consumer may conflate them.** A present empty list is the producer's
+    /// positive claim that every form it walked was a call, a construction, or
+    /// a node kind on its reviewed list of kinds that provably cannot invoke
+    /// user code. An absent list is a producer that never classified anything,
+    /// and the census must refuse. Serde cannot tell them apart here — the
+    /// field defaults to empty — so the discriminator is the **handshake
+    /// protocol**: a producer at or above the protocol that introduced this
+    /// field always *classified every form it walked*, whether or not the
+    /// resulting list reaches the wire (the field is `omitempty` there, so an
+    /// empty list is encoded as nothing at all), and
+    /// [`crate::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL`] is compared
+    /// field-for-field before any transcript is read. A census must therefore
+    /// establish the protocol, not inspect the emptiness.
+    ///
+    /// [`Self::complete`] says nothing about this field and this field says
+    /// nothing about `complete`; see `complete`'s own doc comment for the
+    /// seven gates it actually asserts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub uncensused_invoking_forms: Vec<UncensusedInvokingForm>,
+    /// The declared-signature premise [`Self::uncensused_invoking_forms`] was
+    /// classified under, when the producer bound one (ADR 0038, handshake
+    /// protocol 22): one entry per parameter of this implementation, in
+    /// position order, each naming the type the export's *declared* call
+    /// signature gives that position — printed byte-identically to the
+    /// corresponding `SelectedParameter.value.type.text` of the export's own
+    /// transcript, which is how a consumer binds the premise to the signature
+    /// it already holds and the synthesized veto already samples from.
+    ///
+    /// Present, the forms were classified with the implementation's parameters
+    /// carrying those types instead of the implicit `any` an unannotated
+    /// JavaScript parameter has, and a consumer that closes a domain on the
+    /// resulting census records every entry as a condition of the closure.
+    /// Absent, the forms were classified over the parameters' own types, the
+    /// strictly more refusing reading; an empty list is never a premise. On
+    /// the export's root implementation the entries are the declared
+    /// signature's types; on a local declaration's transcript (protocol 23)
+    /// they equal the demand's [`ExportValueDemand::parameter_premises`],
+    /// which the consumer copied from the caller's
+    /// [`Self::call_argument_premises`] for the call it followed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_premises: Vec<ParameterPremise>,
+    /// Why the producer, holding a declared signature and a form a type could
+    /// have cleared, stated no premise. Diagnostic only; a consumer decides
+    /// nothing from it and reads nothing into its absence.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub parameter_premise_refusal: Arc<str>,
+    /// For each call or construction the **premised** census walked whose
+    /// callee is an identifier resolving to a declaration in the program's own
+    /// runtime source, the type the twin's checker gave each informative
+    /// written argument slot (handshake protocol 23). This is how a premise
+    /// reaches a local helper: a consumer following the call copies the entry
+    /// into the helper's [`ExportValueDemand::parameter_premises`]. Stated only
+    /// beside a nonempty [`Self::parameter_premises`], only for a call with no
+    /// spread, and only for the slots whose type is not `any`; each `call` is
+    /// the location of a row of [`Self::calls`]. A consumer refuses an entry
+    /// that names no row and any entry on an unpremised transcript.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub call_argument_premises: Vec<CallArgumentPremise>,
+    /// Whether the value this implementation hands its caller is **provably a
+    /// primitive**: the checker's return type for the declaration, on the very
+    /// program this census was classified over — the premise twin when the
+    /// census was premised — is a union of primitive types alone (ADR 0045,
+    /// handshake protocol 29).
+    ///
+    /// The completion form needs no separate test: an async function's return
+    /// type is a `Promise` and a generator's is a `Generator`, neither of which
+    /// is a primitive.
+    ///
+    /// **It is a fact about the census's premise, not about the declaration.**
+    /// The same helper censused under two argument premises may state it under
+    /// one and not the other, so it may be read only from the transcript that
+    /// was demanded under the premise the reader recorded. Absent means
+    /// "not stated", which is the refusing value on every protocol.
+    /// ADR 0099, handshake protocol 56: the export's value **cannot be
+    /// invoked**. The producer states it only on a transcript that is
+    /// otherwise open with the single reason `valueNotCallable` and that
+    /// carries [`Self::declaration`] for identity; the certifier closes the
+    /// proposable call domains on it vacuously, because each denies an
+    /// operation "one invocation of this export" gives rise to and a value
+    /// with neither [[Call]] nor [[Construct]] has no invocation. Absent means
+    /// "not stated", never "callable".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_callable_value: Option<NotCallableValue>,
+    /// ADR 0103, handshake protocol 57: the export **is** a default-library
+    /// member, by identity. Stated beside the transcript's existing open
+    /// reason rather than instead of it — `Object.keys` stays
+    /// `callSignatureNotUnique` and `Math.floor` stays
+    /// `implementationUnavailable` — so a consumer that does not recognize the
+    /// named member keeps refusing exactly as protocol 56 did. Absent means
+    /// "not stated", never "not a built-in".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_library_alias: Option<DefaultLibraryAlias>,
+    /// The form the selected signature is invoked through: `Some("construct")`
+    /// for a class export, and **absent for a call** (ADR 0105, handshake
+    /// protocol 59).
+    ///
+    /// Absence has to mean `call`, because that is what every producer below
+    /// this protocol meant by saying nothing; the handshake refuses protocol
+    /// and digest together, so no consumer that has not reviewed this field
+    /// ever sees a producer that states it.
+    ///
+    /// **A consumer must read it.** The census of a construction is a census
+    /// of a constructor body — `new C(…)` — and a consumer that took this
+    /// transcript for a call would be describing an invocation the class
+    /// cannot accept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invocation: Option<Arc<str>>,
+    /// ADR 0139, handshake protocol 65: the constructor parameters a
+    /// construction keeps on the instance under a fixed key, for its own
+    /// members to call later. Stated only beside `invocation: construct`, and
+    /// only for a parameter the producer's census of the class admits. Absence
+    /// is not a statement that nothing is kept.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retained_arguments: Vec<RetainedArgument>,
+    /// ADR 0153 item C (handshake protocol 73): every run-time accessor
+    /// installation of this implementation's own installed package, whether
+    /// its target is a fresh allocation, every operation the package performs
+    /// on that target, and whether this implementation can execute one.
+    /// `None` is a producer with no opinion, which a consumer must read as
+    /// every site reaching it; an empty census is the claim that the package
+    /// installs nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessor_installations: Option<AccessorInstallationCensus>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub primitive_completion: bool,
+    /// The conjunction of seven independent gates, every one of which the
+    /// producer clears before setting this — and nothing else.
+    ///
+    /// In the producer's own order
+    /// (`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go`,
+    /// `exportImplementationTranscriptLocked`), each failed gate appends the
+    /// named open reason and returns instead:
+    ///
+    /// 1. the queried node is an **exact identifier** — `identifierNotExact`;
+    /// 2. `GetSymbolAtLocation` **resolves that identifier** —
+    ///    `symbolUnresolved`;
+    /// 3. the alias chain resolves to a **canonical target** —
+    ///    `aliasUnresolved`;
+    /// 4. the value's type has **exactly one call signature** —
+    ///    `callSignatureNotUnique`;
+    /// 5. the selected signature has an implementation declaration **with an
+    ///    available body** — `implementationUnavailable`;
+    /// 6. that implementation has a **resolved declaration** —
+    ///    `declarationUnavailable`;
+    /// 7. the control-flow census has **no unsupported branch** —
+    ///    `controlFlowUnsupported`.
+    ///
+    /// (`sourceUnavailable` precedes all seven: without the source file there
+    /// is no node to query.)
+    ///
+    /// **`complete` says nothing about the calls census being total.** Gate 7
+    /// is about control flow, not about invoking forms, and
+    /// [`Self::calls`] records `CallExpression` and `NewExpression` only. A
+    /// transcript can be `complete: true` while a tagged template, an
+    /// accessor, or a JSX lowering in its body invokes code that appears in no
+    /// `calls` row. The enumeration guarantee lives entirely in
+    /// [`Self::uncensused_invoking_forms`], and a census that read `complete`
+    /// as one would be unsound.
     #[serde(default, skip_serializing_if = "is_false")]
     pub complete: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_reasons: Vec<Arc<str>>,
+}
+
+/// One syntactic position that can invoke user code and that the
+/// implementation call census does not record.
+///
+/// Two invoking forms are deliberately absent from [`UncensusedInvokingFormKind`]:
+///
+/// - **A `Proxy` trap.** A trap belongs to the object a value happens to be at
+///   runtime, not to any syntax, so no walk of an implementation can see it:
+///   `obj.x` on a proxy is the same `PropertyAccessExpression` as `obj.x` on a
+///   plain object. It is out of the producer's reach entirely, and a marker for
+///   it would claim a census the producer cannot perform. What the producer can
+///   say is that a member it could not resolve is unresolved, which is
+///   [`UncensusedInvokingFormKind::PropertyAccessUnknownAccessor`] — a
+///   statement about the checker's knowledge, not about proxies. A consumer
+///   whose claim requires that no trap ran must obtain that premise elsewhere.
+/// - **An optional call, `f?.(x)`.** It is already a `CallExpression`, so the
+///   call census records it like any other call.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UncensusedInvokingForm {
+    /// The closed vocabulary. An **unrecognized** string is not mapped to a
+    /// catch-all: [`UncensusedInvokingFormKind`] carries no `#[serde(other)]`
+    /// arm, so deserialization fails and the whole transcript is rejected —
+    /// exactly as an unrecognized [`crate::CallKind`] is (see
+    /// [`ImplementationCall::kind`]). A producer that invented a kind is a
+    /// producer this side does not understand, and reading its census as a set
+    /// of unknown-kind rows would keep every *other* field of those rows in
+    /// play. There is also no `Unknown` default: unlike `kind` on a call, an
+    /// absent kind here is a malformed row rather than a degraded one.
+    pub kind: UncensusedInvokingFormKind,
+    /// The compiler's own name for the node's syntax kind, with the `Kind`
+    /// prefix removed. Always populated, and the only description of the form
+    /// that exists for
+    /// [`UncensusedInvokingFormKind::UnclassifiedInvokingForm`].
+    pub node_kind: Arc<str>,
+    pub location: Location,
+    /// From the same walk, and therefore the same reachability notion, as
+    /// [`ImplementationCall::reach`].
+    ///
+    /// This census applies no jump withholding, unlike the call census. There,
+    /// dropping a row keeps an over-optimistic `Reach` off the wire; here, a
+    /// dropped row is silence, which is the failure this census exists to
+    /// prevent, and an over-optimistic `Reach` can only make a consumer refuse
+    /// a form that might not have run.
+    pub reach: Reachability,
+    /// The exact source range of the innermost callable containing this form,
+    /// absent when the form sits directly in the implementation's own body.
+    /// [`Self::captured`] is true exactly when this is present. Same
+    /// discipline, and same reason, as [`ImplementationCall::enclosing_callable`]:
+    /// lexical containment in a closure is not execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enclosing_callable: Option<Location>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub captured: bool,
+    /// The parameter of the transcript's own declaration at which this form's
+    /// subject — the receiver of a property or element access — is rooted
+    /// through a chain of property and element reads (ADR 0034, handshake
+    /// protocol 18; extended to write position by ADR 0040 at protocol 24).
+    /// Stated only for a `get-accessor`, `set-accessor` or
+    /// `property-access-unknown-accessor` form whose root is a plain,
+    /// uninitialized, non-rest parameter binding written nowhere in its file,
+    /// in a declaration mentioning neither `arguments` nor `eval`.
+    ///
+    /// **Absence is never "not rooted."** A protocol-17 producer states nothing
+    /// here for a rooted form, so a consumer that reads this field must
+    /// require protocol 18 first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_parameter: Option<usize>,
+    /// Whether the access this form's [`Self::subject_parameter`] roots is in
+    /// **write** position — an assignment target, a compound assignment, or an
+    /// update expression — so the accessor that may run is a setter, and a
+    /// compound or update form runs the getter too (ADR 0040, handshake
+    /// protocol 24).
+    ///
+    /// The position is stated rather than folded into the subject because the
+    /// two are one fact for `creates` — the accessor is the caller's code
+    /// either way — and different facts for `writes` and `invalidates`, where
+    /// the write is this export's own act. A consumer that cannot tell them
+    /// apart must not read the subject, which is why the handshake moves.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub subject_write: bool,
+    /// How this form's [`Self::subject_parameter`] was rooted at that slot
+    /// (ADR 0043, handshake protocol 27). Present exactly when the subject is,
+    /// over a closed two-value set:
+    ///
+    /// - `parameter` — ADR 0034's premise unchanged: the value the caller
+    ///   passed at that slot, read directly or through a chain the census
+    ///   already dispositions. Since protocol 27 that also covers a name an
+    ///   **object binding pattern in parameter position** bound and a name a
+    ///   **local declaration** bound from an already-rooted initializer,
+    ///   because naming an intermediate does not change whose value it is.
+    /// - `parameter-default` — the slot carries a **default** naming another
+    ///   slot rooted the first way, so the value is caller-supplied under
+    ///   either branch. A different claim, and a consumer that has reviewed
+    ///   only ADR 0034 must refuse it.
+    ///
+    /// **An unrecognized spelling is unreviewed, not weaker.** The field is a
+    /// `String` rather than an enum precisely so a value a later producer adds
+    /// decodes and refuses by name instead of failing the whole transcript or
+    /// collapsing into a reviewed arm.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub subject_root: String,
+    /// The exact source range of the variable declaration an `own-literal`
+    /// subject is rooted at, and stated for that derivation alone (ADR 0044,
+    /// handshake protocol 28).
+    ///
+    /// It is the half of that premise a consumer can check for itself. Every
+    /// other derivation names a parameter of the transcript's own declaration;
+    /// this one names a binding elsewhere in the file, and the premise turns on
+    /// that binding sitting in the analyzed artifact's own **runtime source**
+    /// rather than in a declaration file or a dependency.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_declaration: Option<Location>,
+    /// The imported binding a `dependency-member` subject is rooted at (ADR
+    /// 0104, handshake protocol 58), and stated for that derivation alone.
+    ///
+    /// What the producer states is that the name is imported, by that name,
+    /// from that bare specifier, and never assigned here. Whether that
+    /// module's export is an object whose own properties are data properties
+    /// — the premise a consumer needs before it may excuse a property read of
+    /// it — is a reviewed question the certifier answers from its own table.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_import: Option<ImportedModuleMember>,
+    /// Why no derivation was stated, for an accessor form that carries no
+    /// [`Self::subject_root`] (handshake protocol 48).
+    ///
+    /// **Diagnostic, never a premise.** Nothing may be admitted on its
+    /// account; it exists so a refusal can say which leg the subject fell off
+    /// — a written parameter, a module binding, an import, a call result —
+    /// which the consumer's own message cannot know. Sizing the next premise
+    /// in this family previously meant reading packages rather than reading a
+    /// run.
+    ///
+    /// A `String` for the same reason [`Self::subject_root`] is: a spelling a
+    /// later producer adds must arrive as an unrecognized diagnostic rather
+    /// than collapse into a reviewed one. The producer's own default is
+    /// `unclassified-subject`, which means "no information" and must not be
+    /// read as any named leg.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub subject_root_refusal: String,
+    /// Protocol 51, for a `coercion` form: the derivation **every** one of its
+    /// ToPrimitive operands agreed on, or why they did not. Exactly one of the
+    /// two is ever stated.
+    ///
+    /// Diagnostic, never a premise, and deliberately not `subject_root`: that
+    /// field is an accessor's receiver, which `census_form_shape_reads_the_subject`
+    /// admits, while a coercion's operands are admitted by nothing here. They
+    /// exist so the premise ADR 0042's argument suggests for a coercion can be
+    /// sized before it is written.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coercion_subject_root: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coercion_subject_root_refusal: String,
+    /// Protocol 53 (ADR 0093): the own-result arm's premises for a
+    /// `parameter-or-own-result` subject — one per assigned source that is a
+    /// call whose result this program's own code allocated.
+    ///
+    /// Each entry is the premise [`Self::local_literal_result`] states for a
+    /// single subject, and a consumer binds **every** one of them to a call row
+    /// of this very transcript before admitting the derivation. Empty for every
+    /// other derivation; a `parameter-or-own-result` with an empty list is a
+    /// producer whose two walks disagree and refuses.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subject_local_literal_results: Vec<LocalLiteralResultPremise>,
+    /// Protocol 52 (ADR 0092): the parameter slots a caller-rooted
+    /// [`Self::coercion_subject_root`] rooted at, strictly increasing and
+    /// deduplicated.
+    ///
+    /// The companion fact that turns that derivation from a diagnostic into a
+    /// premise, under the invariant ADR 0047 states for
+    /// [`Self::subject_parameter`]: a claim that the value is the caller's must
+    /// say **which** slot, because that is what the receipt asserts. A coercion
+    /// applies ToPrimitive to every operand, so it names every slot they rooted
+    /// at rather than one receiver — `a + a` names one slot, `a + b` two.
+    ///
+    /// Empty where the agreed derivation names no slot of this declaration, and
+    /// a consumer of the parameter derivations must refuse an empty list rather
+    /// than read it as "any slot".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coercion_subject_parameters: Vec<usize>,
+    /// What a `coercion` form's clearance would rest on: every operand the
+    /// coercion applies ToPrimitive to is either provably a primitive by its
+    /// own type — not listed, because a primitive has nothing to reach — or the
+    /// result of one of these calls into the program's own runtime source
+    /// (ADR 0045, handshake protocol 29).
+    ///
+    /// **Stating it is not a claim that the form clears.** A consumer grants
+    /// it only by matching each call to a row of the same transcript's
+    /// [`ExportImplementationTranscript::calls`], taking that row's own callee
+    /// and premise, and requiring the callee's transcript to state
+    /// [`ExportImplementationTranscript::primitive_completion`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coercion_premise: Option<CoercionPremise>,
+    /// Complete source derivation for a local call returning one data-only
+    /// literal allocation. The consumer must bind and census that exact call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_literal_result: Option<LocalLiteralResultPremise>,
+    /// Protocol 70 (ADR 0153): the form reads a data member of every object
+    /// this program provides for a package-owned context. Positions only, and
+    /// never beside a subject root: the consumer binds every chain call to a
+    /// row its census walked, asks the audited dialect about every named call,
+    /// and refuses a context that escapes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_member: Option<ContextMemberPremise>,
+}
+
+/// ADR 0153's premise for one member read. See
+/// [`UncensusedInvokingForm::context_member`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextMemberPremise {
+    /// The member the form reads, by its literal name.
+    pub member: String,
+    /// How the subject reaches the dialect read, outermost first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chain: Vec<ContextChainStep>,
+    /// The dialect `useContext` call the chain ends at; one of the
+    /// provision's reads.
+    pub read: Location,
+    pub context: ContextProvision,
+    /// Every call in the program's runtime source that could turn a data
+    /// member into an accessor or delete it, with the literal key(s) it names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub installations: Vec<ContextInstallation>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContextChainStepKind {
+    /// A call to a local function whose one completion expression is reduced
+    /// next, in that function's body.
+    Result,
+    /// A call to a local function whose every completion hands back its
+    /// unwritten first parameter; the call's first argument is reduced next,
+    /// in the same body.
+    Identity,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextChainStep {
+    pub kind: ContextChainStepKind,
+    pub call: Location,
+    pub callee: Location,
+    pub returns: Vec<Location>,
+}
+
+/// A call whose callee the producer resolved to a declaration-file binding
+/// named `target_name`. Whether that is the dialect's is the consumer's
+/// question.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextDialectCall {
+    pub call: Location,
+    pub target_name: String,
+    pub declaration: ResolvedDeclaration,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextProvision {
+    /// The `const C = createContext()` declarator.
+    pub declaration: Location,
+    /// Its `createContext()` call, with no arguments.
+    pub initializer: ContextDialectCall,
+    /// Every dialect `useContext` call whose argument is the context, directly
+    /// or through a read helper.
+    pub reads: Vec<ContextDialectCall>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub helpers: Vec<ContextReadHelper>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub providers: Vec<ContextProvider>,
+    /// The names the context escapes the package under.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exports: Vec<ContextExport>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextReadHelper {
+    pub call: Location,
+    pub callee: Location,
+    pub argument: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextProvider {
+    pub render: ContextDialectCall,
+    pub value: Location,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub factory: Option<ContextFactory>,
+    pub literals: Vec<ContextLiteral>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextFactory {
+    pub call: Location,
+    pub callee: Location,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextLiteral {
+    pub literal: Location,
+    pub member: Location,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextExport {
+    pub location: Location,
+    pub name: String,
+}
+
+/// ADR 0153 item C: the run-time accessor installations of one installed
+/// package, as they bear on one implementation.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccessorInstallationCensus {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<AccessorInstallationSite>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AccessorInstallationKind {
+    /// The target is an allocation its installing function makes, and every
+    /// use of it anywhere in the package is classified.
+    FreshTarget,
+    /// A `__proto__: null` literal key: no prototype, so no inherited
+    /// accessor.
+    NullPrototype,
+    /// Anything else; `refusal` says why.
+    Unbounded,
+}
+
+/// One installation site and, for a fresh target, the whole flow of the value
+/// it installs on.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccessorInstallationSite {
+    /// The installing expression. It contains the span the closure's hazard
+    /// names.
+    pub site: Location,
+    pub kind: AccessorInstallationKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function: Option<Location>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<Location>,
+    /// Every named function whose completion may hand the target back.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub returns: Vec<Location>,
+    /// Every operation the package performs on the target.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accesses: Vec<AccessorTargetAccess>,
+    /// Every named function that may execute one of `accesses`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub readers: Vec<Location>,
+    /// The implementation this census is attached to is one of `readers`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reached: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub refusal: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccessorTargetAccess {
+    pub location: Location,
+    pub kind: String,
+    pub function: Location,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextInstallation {
+    pub location: Location,
+    pub keys: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalLiteralResultPremise {
+    pub call: Location,
+    pub callee: Location,
+    pub allocation: Location,
+    pub returns: Vec<Location>,
+}
+
+/// The calls one `coercion` form's clearance would rest on. See
+/// [`UncensusedInvokingForm::coercion_premise`].
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoercionPremise {
+    /// Locations of rows of the same transcript's `calls`, in source order and
+    /// without duplicates. An entry naming no row refuses the form.
+    #[serde(default)]
+    pub calls: Vec<Location>,
+}
+
+/// The closed vocabulary of invoking forms the call census does not record.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UncensusedInvokingFormKind {
+    /// A `TaggedTemplateExpression`: the tag is invoked with the strings array
+    /// and the substitutions. An `html` template counts here and nowhere else.
+    TaggedTemplate,
+    /// A property access, element access, or destructured member the checker
+    /// resolved to a symbol with a get-accessor declaration, in a position
+    /// that reads it.
+    GetAccessor,
+    /// The same, with a set-accessor declaration, in an assignment target
+    /// position.
+    SetAccessor,
+    /// A member the producer cannot answer for. Three ways that happens: the
+    /// checker resolved **no symbol** at all (an `any`-typed receiver, a
+    /// computed key, an index signature, an element access whose key is not an
+    /// exact literal); it resolved declarations that are **not the snapshot's
+    /// runtime bytes**, such as a `.d.ts` `readonly value` that may perfectly
+    /// well describe a `.js` getter (the default library excepted, since it
+    /// describes the engine rather than user code); or the form reads every
+    /// own enumerable property of a value whose shape is not statically known
+    /// — object spread, JSX prop spread, and an object rest element.
+    ///
+    /// It is recorded rather than dropped because the producer genuinely
+    /// cannot tell whether the member is an accessor: with no symbol there are
+    /// no declarations to inspect, with only a declaration file there are no
+    /// bytes, and neither absence is evidence of a plain data property. A
+    /// member the checker *does* resolve, to runtime declarations none of
+    /// which is an accessor, invokes nothing and is recorded nowhere.
+    PropertyAccessUnknownAccessor,
+    /// A `Decorator` application: the decorator expression is invoked when the
+    /// decorated declaration is evaluated.
+    Decorator,
+    /// A position that reaches `Symbol.iterator` or `Symbol.asyncIterator` and
+    /// then the iterator's own `next`/`return`: `for…of`, `for await…of`, a
+    /// spread element, an array binding pattern, an array **assignment**
+    /// pattern (`[a, b] = src`, which is an `ArrayLiteralExpression` the
+    /// compiler reinterprets), and `yield*`.
+    IterationProtocol,
+    /// A `using` or `await using` declaration list: scope exit reaches
+    /// `Symbol.dispose` or `Symbol.asyncDispose` on every declared value.
+    UsingDispose,
+    /// An `instanceof` operator, which reaches `Symbol.hasInstance` on its
+    /// right operand when that operand defines it. Whether it does is a
+    /// property of the runtime value, so the form is always recorded.
+    #[serde(rename = "instanceof")]
+    InstanceOf,
+    /// An `await` whose operand is not provably resolved by the engine alone.
+    /// Awaiting a thenable invokes that object's own `then`, so the form is
+    /// recorded unless **every** constituent of the operand's type is either a
+    /// primitive — which has no `then` to call — or a default-library
+    /// `Promise`, whose `then` is the engine's own. A `PromiseLike` *is*
+    /// recorded, because its `then` is whatever the value carries.
+    ///
+    /// "The type declares no `then`" is deliberately *not* a reason to stay
+    /// silent: a union missing it in one constituent carries it in another, an
+    /// unconstrained type parameter has no members the checker can enumerate,
+    /// and an index-signature type such as `Record<string, unknown>` declares
+    /// none while permitting one at runtime, whose `Get` would reach a getter
+    /// and whose value `await` would call.
+    AwaitThen,
+    /// A template expression or an operator application whose operand is not
+    /// provably a non-object, so evaluating it may reach `Symbol.toPrimitive`,
+    /// `valueOf`, or `toString`. `any`, `unknown`, and a type parameter are
+    /// *not* provably non-object and are recorded.
+    Coercion,
+    /// A JSX element, self-closing element, or fragment. Its compiler lowering
+    /// invokes a component or an accessor, and the producer records neither the
+    /// lowering nor what it invokes.
+    JsxElement,
+    /// The catch-all, and the row this whole field exists for: a node kind
+    /// that is neither classified above nor on the producer's reviewed list of
+    /// kinds that provably cannot invoke user code.
+    /// [`UncensusedInvokingForm::node_kind`] carries the compiler's own name
+    /// for it.
+    ///
+    /// A consumer refuses on this row unconditionally. There is nothing else
+    /// it could soundly do with a form nobody has classified, and a kind a
+    /// future compiler revision adds arrives here rather than passing in
+    /// silence.
+    UnclassifiedInvokingForm,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -339,6 +1452,31 @@ pub struct ParameterValueSource {
     pub parameter_index: usize,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub path: Vec<PathSegment>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImmutableCalleeAliasBinding {
+    pub declaration: ResolvedDeclaration,
+    pub initializer: Location,
+}
+
+/// An immutable identifier chain, separate from the call's syntactic symbol.
+/// Every binding and initializer belongs to the call's authenticated runtime
+/// file. The terminal declaration and invoker metadata describe the copied
+/// callable; absence is no claim about an alias's value.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImmutableCalleeAlias {
+    pub bindings: Vec<ImmutableCalleeAliasBinding>,
+    pub expression: Location,
+    pub declaration: ResolvedDeclaration,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receiver: Option<ResolvedDeclaration>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub default_library_invoker: Arc<str>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invoked_arguments: Vec<usize>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -374,9 +1512,96 @@ pub struct ImplementationCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declaration: Option<ResolvedDeclaration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub immutable_callee_alias: Option<ImmutableCalleeAlias>,
+    /// Beside a `declaration` in the default library: the value this call
+    /// invokes is that declaration **by identity** (ADR 0149, handshake
+    /// protocol 68), not merely by the declared type of a
+    /// binding the callee is read through. The producer states it for a callee
+    /// whose receiver is nothing (`setTimeout(…)`), an unshadowed
+    /// default-library global the file never writes, deletes or lets escape
+    /// (`Math.min`, `Object.prototype.toString.call`), or a fresh built-in the
+    /// expression itself makes (a primitive by grammar, an array or
+    /// regular-expression literal, `new Map()`). `false` is no claim: in a
+    /// JavaScript file `let m = Math; … m = { min: run }; m.min()` resolves to
+    /// `Math.min` and runs `run`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub standard_library_identity: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callee_parameter: Option<ParameterValueSource>,
+    /// The parameter-rooted iterable whose iteration produced this call's
+    /// callee — the binding a `for…of` head declares, called inside the loop
+    /// (ADR 0042, handshake protocol 26).
+    ///
+    /// What the caller's iterable yields is the caller's, so calling it runs
+    /// the caller's code exactly as calling a parameter does. The producer
+    /// states it only for a plain non-`await` `for…of` whose head declares
+    /// this one binding, which nothing writes, over an expression rooted at a
+    /// parameter of the censused declaration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callee_iterated_parameter: Option<ParameterValueSource>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub argument_parameters: Vec<Option<ParameterValueSource>>,
+    /// Per written argument slot, whether the expression written there is a
+    /// primitive by its grammar alone (ADR 0168, handshake protocol 74): the
+    /// same answer [`ImplementationValueSource::arguments_primitive_syntax`]
+    /// gives for a call-result source's arguments, stated for this call. A
+    /// spread is not one, and every slot at or after a spread is stated `false`.
+    /// Empty is "not stated", or a call with no argument, and a consumer
+    /// requiring a slot primitive reads a missing slot as not proved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_primitive_syntax: Vec<bool>,
+    /// For a `.call` or `.apply` whose resolved callee is the default library's
+    /// `Function.prototype` member: the resolved declaration of the *receiver*
+    /// expression, e.g. `Object.prototype.toString` in
+    /// `Object.prototype.toString.call(value)` (ADR 0034, protocol 18). A
+    /// consumer may decide such a site by the receiver instead of refusing every
+    /// by-reference transfer alike, but only for receivers it has reviewed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_receiver: Option<ResolvedDeclaration>,
+    /// Beside `call_receiver`: the parameter of this declaration the `this`
+    /// argument (slot 0) is rooted at, under exactly the premises of
+    /// [`UncensusedInvokingForm::subject_parameter`]. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub this_parameter: Option<usize>,
+    /// Per written argument slot, the traced value provenance of the expression
+    /// written there — the same trace [`ReturnSite::sources`] carries for a
+    /// returned expression. Parallel to `argument_parameters` and gated the
+    /// same way, so a slot a spread has displaced carries an empty list rather
+    /// than a trace of the expression written at that position.
+    ///
+    /// **An empty list means the producer traced nothing.** It is never "this
+    /// argument is not an accessor", never "this argument is plain", and never
+    /// a claim about the slot at all: the tracer follows array literals,
+    /// callable expressions, call results and one hop through a
+    /// single-assignment array binding element, and every other expression — a
+    /// conditional, a property read, a reassigned or redeclared binding, a rest
+    /// or defaulted element, a computed callee — leaves the slot empty. A short
+    /// list is the same absence: a consumer reads the slot it wants and fails
+    /// closed when it is missing or empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub argument_sources: Vec<Vec<ImplementationValueSource>>,
+    /// The traced value provenance of the *callee expression* — the same trace
+    /// [`ReturnSite::sources`] carries for a returned expression and
+    /// `argument_sources` carries for an argument, applied to the callee.
+    ///
+    /// It answers "what created the value being called", which nothing else on
+    /// this struct answers. `target`, `target_name`, `target_module`,
+    /// `declaration` and `callee_parameter` state the callee's *resolution* —
+    /// which symbol, which declaration, which parameter — and they are
+    /// unchanged by this field's presence: a consumer whose claim is "the callee
+    /// is parameter N" keeps reading `callee_parameter`. The two coexist because
+    /// they disagree usefully: `read()` for `const [read] = createSignal(0)`
+    /// resolves to a `BindingElement` and traces to `createSignal`'s tuple slot
+    /// 0.
+    ///
+    /// **An empty list means the producer traced nothing.** It is never "the
+    /// callee is not an accessor", never "the callee is plain", and never a
+    /// claim about the callee at all: an ordinary `arr.push(x)` traces nothing
+    /// here, and so do a computed callee, a reassigned binding, and
+    /// `(options.storage || createSignal)(…)`. Every consumer fails closed on
+    /// an empty list, and a *short* trace is the same absence.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callee_sources: Vec<ImplementationValueSource>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub captured: bool,
     /// The exact source range of the *innermost* callable containing this call,
@@ -441,6 +1666,30 @@ pub struct ImplementationCall {
     /// does not recognize proves nothing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub callee_pending_invocations: Vec<CalleePendingInvocation>,
+    /// The index of the censused implementation's parameter this call's
+    /// callee *is*, by binding identity (ADR 0152, handshake protocol 71): an
+    /// identifier, after identity-preserving wrappers, resolving to a plain
+    /// identifier parameter with no initializer, not rest or destructured,
+    /// declared once and written nowhere in the implementation -- nested
+    /// callables included -- which mentions neither `arguments` nor `eval`.
+    ///
+    /// Stated at any depth of nesting, which is what `callee_parameter` is not
+    /// asked to be: a call inside a closure the implementation returns names
+    /// the implementation's own parameter that closure captured. Absent for a
+    /// construction and for every other callee; absence is never "not a
+    /// parameter".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callee_unwritten_parameter: Option<usize>,
+    /// Whether the call runs exactly once on every normal completion of its
+    /// flow owner -- `enclosing_callable`, or the implementation when that is
+    /// absent (ADR 0152, handshake protocol 71). The lower bound `reach` never
+    /// states: `reach` keeps both arms of an `if` reachable, and this is true
+    /// only when no node between the call and its flow owner's body evaluates
+    /// it conditionally or repeatedly and no earlier statement of an enclosing
+    /// block can leave the owner by `return`, `break` or `continue`. False
+    /// claims nothing, and so does an absent field below protocol 71.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unconditional: bool,
 }
 
 /// One conditional callee-parameter claim: parameter `parameter` of this call's
@@ -561,6 +1810,17 @@ pub enum ImplementationValueSourceKind {
     CallResult,
 }
 
+/// One traced provenance of a value: what sits at `path` within the traced
+/// value, and — for a [`ImplementationValueSourceKind::CallResult`] — which
+/// callee and which slot of its result it came from.
+///
+/// A source's *presence* is a positive fact; its absence is not. A value the
+/// producer declines to model contributes no source, so an empty list of these
+/// is the producer's silence and never a claim about what the value is not.
+/// `target_module` is the written import specifier text and is empty for a
+/// locally declared callee: it is a fact about the source text, not a resolved
+/// package identity, and a consumer that needs dialect identity must ask the
+/// dialect whether that specifier exports that name.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImplementationValueSource {
@@ -575,6 +1835,30 @@ pub struct ImplementationValueSource {
     pub target_module: Arc<str>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub target_path: Vec<PathSegment>,
+    /// For a call-result source, whether each written argument of the call
+    /// whose result this is traced to is a primitive by its grammar alone
+    /// (ADR 0146, handshake protocol 66); a spread is not one. Empty is "not
+    /// stated", or a call with no argument -- a consumer requiring every
+    /// argument primitive reads the two alike, and both are true of an empty
+    /// argument list, so it must also require the source to be a call result.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_primitive_syntax: Vec<bool>,
+    /// Each written argument is not a spread and has not been displaced by
+    /// an earlier spread (ADR 0162, handshake protocol 76). Missing is unproved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_non_spread_syntax: Vec<bool>,
+    /// For a call-result source, whether each written argument's grammar alone
+    /// proves its value is not a function (ADR 0162, handshake protocol 76): a
+    /// primitive by grammar, an array literal or an object literal. A spread is
+    /// not one. A missing slot is not proved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_not_function_syntax: Vec<bool>,
+    /// For a call-result source, whether each written argument is an object
+    /// literal whose every member is a plain non-computed `key: value` of a
+    /// primitive by grammar, so it carries no callback (ADR 0162, handshake
+    /// protocol 76). A spread is not one. A missing slot is not proved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments_plain_options_syntax: Vec<bool>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -667,10 +1951,16 @@ pub enum Reachability {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ReturnSite {
+    /// ADR 0172: exhaustive fresh literal construction; absence is open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<ReturnStructure>,
     pub location: Location,
     pub reach: Reachability,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<InvocationValueFact>,
+    /// Positive identity of an unchanged whole input binding. Absence is open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<ParameterValueSource>,
     /// Exact source ranges of the callables this returned value provably
     /// carries. A call inside a nested callable is reachable through the
     /// returned value exactly when its location lies within one of these
@@ -683,6 +1973,144 @@ pub struct ReturnSite {
     pub carry_reach: Option<Reachability>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<ImplementationValueSource>,
+    /// The values this site can hand back when its expression is a conditional
+    /// or an array literal (ADR 0115, handshake protocol 61): the leaves of the
+    /// conditional tree after identity-preserving wrappers, in source order,
+    /// with a branch a literal condition excludes left out.
+    ///
+    /// **Present means exhaustive**: a conditional evaluates to one of its two
+    /// branches, and the producer states no arms at all for a tree past its
+    /// bounds rather than some of them. Empty for every other expression, which
+    /// this site's own fields describe.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arms: Vec<ReturnArm>,
+    /// The exact location of the function or arrow expression this site's
+    /// whole value is, after identity-preserving wrappers (ADR 0145, handshake
+    /// protocol 66): every evaluation hands back a fresh closure of exactly
+    /// that code. Absent for every other expression. Absence is no claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callable: Option<Location>,
+    /// The returned expression's value is a primitive by its grammar alone
+    /// (ADR 0145, handshake protocol 66), whatever any binding it reads holds:
+    /// a non-object literal, an untagged template, a unary, arithmetic,
+    /// relational or equality operator, and conditionals and logical operators
+    /// of them; since handshake protocol 67, also a never-written `const` with
+    /// a plain name whose initializer is one, and the intrinsic `undefined`;
+    /// since protocol 68 (the 2026-09-28 amendment to ADR 0149), a `let` or
+    /// `var` whose initializer and every write are.
+    /// `false` is no claim. A checker type is not this proof in a JavaScript
+    /// file, where an unchecked write does not widen a declaration's type.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub primitive_syntax: bool,
+    /// The exact location of the call expression the returned expression is,
+    /// after identity-preserving wrappers (ADR 0146, handshake protocol 66).
+    /// Absence is no claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<Location>,
+    /// The default-library member, as `Receiver.member`, that the returned
+    /// call invokes by identity (the 2026-09-28 amendment to ADR 0113,
+    /// handshake protocol 67): a plain `Receiver.member(...)` call whose
+    /// receiver and member both resolve to default-library declarations alone,
+    /// neither written, deleted nor escaped in the file. It names which
+    /// built-in runs, not what that built-in hands back, which is the
+    /// consumer's reviewed question. Empty is no claim.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub default_library_call: Arc<str>,
+    /// The return sits in a TypeScript source file, neither JavaScript nor a
+    /// declaration file (the 2026-09-28 amendment to ADR 0113, handshake
+    /// protocol 67): there the checker holds every write to a binding to its
+    /// declared type. `false` is JavaScript, or no claim.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub type_script_source: bool,
+}
+
+/// One value a return site can hand back (ADR 0115).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReturnArm {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<ReturnStructure>,
+    pub location: Location,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<InvocationValueFact>,
+    /// Positive identity of an unchanged whole input binding, exactly as on
+    /// [`ReturnSite::parameter`], when its path is empty. A non-empty path
+    /// (handshake protocol 64) states that the arm is a non-call read of that
+    /// member of the unchanged binding -- a property access or a literal-keyed
+    /// element access -- whose value is what the member held when the read
+    /// ran. Absence is open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<ParameterValueSource>,
+    /// The arm is an array literal, and [`Self::elements`] lists every one of
+    /// its elements in order; empty for `[]`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub array_literal: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements: Vec<ReturnArmElement>,
+    /// The unchanged whole input binding this arm calls, when the arm is a
+    /// non-optional call whose callee is that binding itself (ADR 0116): the
+    /// arm's value is what the invocation returned. Absence is open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoked: Option<ParameterValueSource>,
+    /// The arm an optional chain short-circuits to (handshake protocol 64):
+    /// `p?.key` is `undefined`, exactly, when `p` is nullish. Stated beside
+    /// the chain's member arm, with no value fact and no other field.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub undefined: bool,
+    /// [`ReturnSite::callable`] for one arm (ADR 0145, handshake protocol 66).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callable: Option<Location>,
+}
+
+/// Exhaustive literal construction, independently of each leaf's behavior.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReturnStructure {
+    pub location: Location,
+    pub kind: ReturnStructureKind,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub complete: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ReturnStructure>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<ReturnStructureProperty>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub primitive_syntax: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<ParameterValueSource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<ImplementationValueSource>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub default_library_call: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReturnStructureProperty {
+    pub name: String,
+    pub key: Location,
+    pub value: ReturnStructure,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReturnStructureKind {
+    Leaf,
+    Tuple,
+    Object,
+}
+
+/// One element of an array-literal [`ReturnArm`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReturnArmElement {
+    pub location: Location,
+    /// Positive identity of an unchanged whole input binding. A spread, a hole
+    /// and any other expression carry none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<ParameterValueSource>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub spread: bool,
 }
 
 /// Exact return-carry rows for one nested callable.
@@ -729,17 +2157,82 @@ pub struct BranchSite {
     pub partitions: Vec<FinitePartition>,
 }
 
+/// Which of two different things a control-flow `unsupported` marker means.
+///
+/// The enum is **closed**: it carries no `#[serde(other)]` arm, so an
+/// unrecognized string fails deserialization and rejects the whole transcript,
+/// exactly as for [`crate::UncensusedInvokingFormKind`]. Reading an unknown
+/// class as either arm picks the unsound one half the time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ControlFlowIncompletenessClass {
+    /// A construct the census walked in full: every site inside it is recorded
+    /// by the shared body walk, and no site is called `unreachable` on its
+    /// account — the sites inside carry `unknown`. What is missing is only the
+    /// *lower* bound: control may not enter a loop body, a `catch` clause, or
+    /// a selected `switch` clause.
+    ///
+    /// A consumer asking a **may-execute** question — "is every callable this
+    /// body can reach enumerated here?" — is therefore answered. One asking for
+    /// a guarantee is not, which is why the marker still opens the transcript.
+    ReachabilityLowerBound,
+    /// A construct whose flow the census cannot account for in either
+    /// direction, so neither a may-execute nor a guarantee question is
+    /// answered. It is also the producer's classifier default, so a marker
+    /// nobody classified arrives here rather than as the admissible arm.
+    FlowUnaccounted,
+}
+
+/// One construct whose flow a control-flow census does not fully model, at its
+/// exact location, and what is missing.
+///
+/// One row per construct, so a body with two loops carries two rows.
+/// [`ControlFlowCensus::unsupported`] stays one deduplicated marker string per
+/// *kind*, for the consumers that already read it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ControlFlowIncompleteness {
+    /// The same string `unsupported` carries for this construct, so the two
+    /// lists can be joined.
+    pub marker: Arc<str>,
+    pub class: ControlFlowIncompletenessClass,
+    pub location: Location,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ControlFlowCensus {
+    /// Protocol 77: exact body frame, distinct from a queried export name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_location: Option<Location>,
+    /// Protocol 77: absence is open; only Unreachable excludes fallthrough.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_reach: Option<Reachability>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub returns: Vec<ReturnSite>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub throws: Vec<ThrowSite>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub branches: Vec<BranchSite>,
+    /// The deduplicated marker set, unchanged in meaning: any entry means this
+    /// census is incomplete, and the producer appends `controlFlowUnsupported`
+    /// to the transcript's open reasons.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unsupported: Vec<Arc<str>>,
+    /// `unsupported` with the two facts a marker string never carried: where
+    /// the construct is, and which class the incompleteness belongs to.
+    ///
+    /// Every marker in `unsupported` has at least one row here and every row's
+    /// marker is in `unsupported`;
+    /// [`crate::session::validate_control_flow_incompleteness`] enforces both,
+    /// so a producer cannot state an unclassified marker.
+    ///
+    /// An **absent** list beside a nonempty `unsupported` is a producer with no
+    /// classification, which a consumer must refuse — and serde cannot separate
+    /// it from a present empty one, so
+    /// [`crate::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL`] is the discriminator.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub incompleteness: Vec<ControlFlowIncompleteness>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

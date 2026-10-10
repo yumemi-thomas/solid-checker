@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "54f52a372c748968b87737e1879773c5d3aaff1b7022cadbf80ef6bc9f8eb018",
+            "closureSha256": "3d3fe15668bfe7c767c3e992117a0d488266345349581ea19df3650f66c73042",
             "path": "./index.mjs",
             "sha256": "23117759da8e21468bb4901f94964f272d14fe70793ba7b47875a8da46ee9d9b"
           },
@@ -13,13 +13,13 @@
             "sha256": "17cd27d928a303281246012890cd96b5d1038f02ebf0cb4420f2bb511fa5ad59"
           },
           "exports": {
-            "bootstrapSource": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
-            "createAlias": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "createConditional": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "createFromMemberFactory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "createLocal": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "createValue": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "factoryComponent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "bootstrapSource": "summary-776ef708b4e4badb1aec430a2c4a00812bc6bef342b30153b6e6b7d6af5c2285",
+            "createAlias": "summary-8fc8798f495f4bfc3b108e18c9f9a29725a70a3dc355f984bf899a16dc2de4b8",
+            "createConditional": "summary-e8c8acc089d1fd868293ca15432bf6c0f58d967c98eb9ee85a386c2898947e8a",
+            "createFromMemberFactory": "summary-e8c8acc089d1fd868293ca15432bf6c0f58d967c98eb9ee85a386c2898947e8a",
+            "createLocal": "summary-ab83888b059f7764b9494e015741ce17339cead32e41b9a6631a10df03d38e0f",
+            "createValue": "summary-ab83888b059f7764b9494e015741ce17339cead32e41b9a6631a10df03d38e0f",
+            "factoryComponent": "summary-e8c8acc089d1fd868293ca15432bf6c0f58d967c98eb9ee85a386c2898947e8a"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -43,12 +43,101 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
+    "summary-776ef708b4e4badb1aec430a2c4a00812bc6bef342b30153b6e6b7d6af5c2285": {
+      "call": {
+        "accessorBounds": [
+          "./index.mjs:448-453"
+        ],
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
       "shape": "plain"
     },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
+    "summary-8fc8798f495f4bfc3b108e18c9f9a29725a70a3dc355f984bf899a16dc2de4b8": {
+      "call": {
+        "accessorBounds": [
+          "./index.mjs:448-453"
+        ],
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "summary-ab83888b059f7764b9494e015741ce17339cead32e41b9a6631a10df03d38e0f": {
+      "call": {
+        "accessorBounds": [
+          "./index.mjs:448-453"
+        ],
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-e8c8acc089d1fd868293ca15432bf6c0f58d967c98eb9ee85a386c2898947e8a": {
+      "call": {
+        "accessorBounds": [
+          "./index.mjs:448-453"
+        ],
+        "closed": [
+          "reads"
+        ],
+        "proposedClosures": [
+          "reads"
+        ],
+        "reads": []
+      },
       "shape": "callable"
     }
   }

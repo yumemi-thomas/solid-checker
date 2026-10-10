@@ -1,0 +1,69 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "implementation-census-reads-fresh-target-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "createBounds",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:1010-1031",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "createBounds",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:738-743",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "readWidth",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:1010-1031",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "readWidth",
+      "domain": "reads",
+      "kind": "runtime-accessor-installation",
+      "package": "",
+      "callee": "",
+      "location": "./index.js:738-743",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

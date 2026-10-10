@@ -1,0 +1,560 @@
+{
+  "package": "@solid-primitives/clipboard",
+  "version": "2.0.0-next.17",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createClipboard": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:81-110 \u2014 Browser creates trigger signal, eager async-capable memo, mandatory clipboardchange cleanup and, only with a data accessor, one required-owner effect. trigger reads occur tracked under the created memo (ADR0239); data is invoked only in the tracked compute of the created data effect, first and on flush. No constructor clipboard I/O: the first memo pass returns []; later readClipboardItems and effect apply use platform Promise/clipboard/Blob behavior under P1. Draft browser authority only. Opaque controls still need captures/write-policy modeling for future use.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor"
+                },
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "trigger-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "trigger"
+            ]
+          },
+          {
+            "id": "clipboard-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "clipboard-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "clipboard-memo-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "clipboard-source",
+              "clipboard-memo-owner"
+            ],
+            "owner": {
+              "source": "created",
+              "resource": "clipboard-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "clipboard-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "trigger-first-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "clipboard-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "clipboard-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "trigger"
+              }
+            ]
+          },
+          {
+            "id": "trigger-flush-read",
+            "kind": "read",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "clipboard-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "clipboard-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "trigger"
+              }
+            ]
+          },
+          {
+            "id": "data-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "data-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "data-first",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "data-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "data-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "data-flush",
+            "kind": "invoke",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "data-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "data-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "resources": [
+          {
+            "id": "trigger",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "clipboard-memo-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "clipboard-source",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "data-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "creates": [
+          "trigger-production",
+          "clipboard-memo-production"
+        ],
+        "computations": [
+          "clipboard-memo",
+          "data-effect"
+        ],
+        "reads": [
+          "trigger-first-read",
+          "trigger-flush-read"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "data-first"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "data-flush"
+          }
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:81-110 \u2014 Browser creates trigger signal, eager async-capable memo, mandatory clipboardchange cleanup and, only with a data accessor, one required-owner effect. trigger reads occur tracked under the created memo (ADR0239); data is invoked only in the tracked compute of the created data effect, first and on flush. No constructor clipboard I/O: the first memo pass returns []; later readClipboardItems and effect apply use platform Promise/clipboard/Blob behavior under P1. Tuple has exactly clipboard accessor, opaque refetch, opaque writeClipboard.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:81-110 \u2014 Browser creates trigger signal, eager async-capable memo, mandatory clipboardchange cleanup and, only with a data accessor, one required-owner effect. trigger reads occur tracked under the created memo (ADR0239); data is invoked only in the tracked compute of the created data effect, first and on flush. No constructor clipboard I/O: the first memo pass returns []; later readClipboardItems and effect apply use platform Promise/clipboard/Blob behavior under P1.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:81-110 \u2014 Browser creates trigger signal, eager async-capable memo, mandatory clipboardchange cleanup and, only with a data accessor, one required-owner effect. trigger reads occur tracked under the created memo (ADR0239); data is invoked only in the tracked compute of the created data effect, first and on flush. No constructor clipboard I/O: the first memo pass returns []; later readClipboardItems and effect apply use platform Promise/clipboard/Blob behavior under P1.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:81-110 \u2014 Browser creates trigger signal, eager async-capable memo, mandatory clipboardchange cleanup and, only with a data accessor, one required-owner effect. trigger reads occur tracked under the created memo (ADR0239); data is invoked only in the tracked compute of the created data effect, first and on flush. No constructor clipboard I/O: the first memo pass returns []; later readClipboardItems and effect apply use platform Promise/clipboard/Blob behavior under P1. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:18-47 \u2014 Only platform clipboard item/Blob methods and Promise operations; no other constructor argument invocation."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "The direct cleanup or effect runs ownerless versus inside a live root; dispose is queued outside render."
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        },
+        {
+          "label": "data-first",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Supplied data accessor first executes under the created tracked effect. Correct moves sink write to click.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "data-flush",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Change source after construction; data compute invokes it again tracked. First callback is clean; only recomputation attempts owned write.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "writeClipboard": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:10-13 - Plain Promise<void>: it carries no reactive capability; platform clipboard calls satisfy P1, data satisfies P2. No caller callback, signal, computation or cleanup. Promise rejection/availability stays open."
+      }
+    },
+    "newClipboardItem": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/clipboard-createClipboard-module-scope/node_modules/@solid-primitives/clipboard/dist/index.js:158 - Native ClipboardItem, not a reactive store/accessor. P1 for the constructor; MIME string and Blob/Promise<Blob> data retain P2. No owner registration."
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/promise",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-+RHW7pHv6Dg94S5dO7y2Dk0UFnyU1Tx1BoN2fb/7fZeqDJ4IBi6uFE0dws21qTTk30vsfHyvTPBymTLSfflRoQ==",
+      "snapshotRoot": "sha256:836077cc9c3964cd6ca4bb5408396156f85b44f72116e7b47b2c80b0bdd9e998",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "1f33b3820282d9892a4087fb3090bf5f39dcba47c6e77b0b8466b5b3e797b38f",
+                  "path": "./dist/index.js",
+                  "sha256": "342d91d80ddf7f75d6a4481299dc029678c31b5249900e5d1b3b33f249a1c9c3"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "d1fd607925e078bd0f29eb68989688c7769410b119c9842d85eb09571078889e"
+                },
+                "exports": {
+                  "changed": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "promiseTimeout": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "raceTimeout": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "retry": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "until": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "untilAll": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "untilAny": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-+RHW7pHv6Dg94S5dO7y2Dk0UFnyU1Tx1BoN2fb/7fZeqDJ4IBi6uFE0dws21qTTk30vsfHyvTPBymTLSfflRoQ==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "bc33a5d0e3f99c5dbcc2c42cf8c6ef5b5d19a9faf16628108f5103af8c962fc3"
+          },
+          "name": "@solid-primitives/promise",
+          "version": "2.0.0-next.2"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

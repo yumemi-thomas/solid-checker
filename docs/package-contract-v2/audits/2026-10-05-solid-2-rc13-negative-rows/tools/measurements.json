@@ -1,0 +1,2036 @@
+{
+ "reads": {
+  "action": {
+   "cut": "run,_evaluate,B,wireExternalSource,write",
+   "prod": {
+    "rc9": 61,
+    "rc13": 67,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 68,
+    "rc13": 75,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 197,
+    "rc13": 223,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "createMemo": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 83,
+    "rc13": 91,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 91,
+    "rc13": 100,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 154,
+    "rc13": 194,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "createOptimistic": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 88,
+    "rc13": 96,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 98,
+    "rc13": 107,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 159,
+    "rc13": 198,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "createOptimistic setter (setSignal)": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 31,
+    "rc13": 32,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 38,
+    "rc13": 40,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 42,
+    "rc13": 47,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "createSignal": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 85,
+    "rc13": 93,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 95,
+    "rc13": 104,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 156,
+    "rc13": 195,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "createSignal setter (setMemo)": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 33,
+    "rc13": 36,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 40,
+    "rc13": 44,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 44,
+    "rc13": 51,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "createTrackedEffect": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 84,
+    "rc13": 92,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 92,
+    "rc13": 101,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 156,
+    "rc13": 196,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "onSettled": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 85,
+    "rc13": 93,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 93,
+    "rc13": 102,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 157,
+    "rc13": 196,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "flush": {
+   "cut": "run,_evaluate,B,wireExternalSource,write",
+   "prod": {
+    "rc9": 53,
+    "rc13": 59,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 60,
+    "rc13": 67,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 166,
+    "rc13": 218,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "getOwner": {
+   "cut": "flush",
+   "prod": {
+    "rc9": 1,
+    "rc13": 1,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 1,
+    "rc13": 1,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 1,
+    "rc13": 1,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "onCleanup": {
+   "cut": "flush",
+   "prod": {
+    "rc9": 2,
+    "rc13": 2,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 2,
+    "rc13": 2,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 8,
+    "rc13": 8,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "runWithOwner": {
+   "cut": "flush",
+   "prod": {
+    "rc9": 1,
+    "rc13": 1,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 1,
+    "rc13": 1,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 6,
+    "rc13": 6,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "untrack": {
+   "cut": "flush",
+   "prod": {
+    "rc9": 1,
+    "rc13": 1,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 1,
+    "rc13": 1,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 1,
+    "rc13": 1,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "reconcile": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 93,
+    "rc13": 120,
+    "rc9Reads": [],
+    "rc13Reads": [
+     "nodeValue->serve"
+    ],
+    "rc13Path": [
+     "reconcile -> reconcileNextState -> applyAdopt -> optimisticView -> readerOverride -> nodeValue"
+    ]
+   },
+   "observe": {
+    "rc9": 102,
+    "rc13": 132,
+    "rc9Reads": [],
+    "rc13Reads": [
+     "nodeValue->serve"
+    ],
+    "rc13Path": [
+     "reconcile -> reconcileNextState -> applyAdopt -> optimisticView -> readerOverride -> nodeValue"
+    ]
+   },
+   "dev": {
+    "rc9": 106,
+    "rc13": 139,
+    "rc9Reads": [],
+    "rc13Reads": [
+     "nodeValue->serve"
+    ],
+    "rc13Path": [
+     "reconcile -> reconcileNextState -> applyAdopt -> optimisticView -> readerOverride -> nodeValue"
+    ]
+   }
+  },
+  "mapArray (For, solid-js client)": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 84,
+    "rc13": 92,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 92,
+    "rc13": 102,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 156,
+    "rc13": 194,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  },
+  "repeat (Repeat, solid-js client)": {
+   "cut": "flush,wireExternalSource,write",
+   "prod": {
+    "rc9": 84,
+    "rc13": 92,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "observe": {
+    "rc9": 92,
+    "rc13": 102,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   },
+   "dev": {
+    "rc9": 156,
+    "rc13": 194,
+    "rc9Reads": [],
+    "rc13Reads": [],
+    "rc13Path": []
+   }
+  }
+ },
+ "host": {
+  "action": {
+   "prod": {
+    "rc13": {
+     "Promise": [
+      "action"
+     ],
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "Promise": [
+      "action"
+     ],
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     126,
+     133
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "Promise": [
+      "action"
+     ],
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "Promise": [
+      "action"
+     ],
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     205,
+     227
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "Promise": [
+      "action",
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "self": [
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "Promise": [
+      "action",
+      "resolve"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "self": [
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     238,
+     270
+    ]
+   }
+  },
+  "createMemo": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     134,
+     141
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     213,
+     235
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     240,
+     272
+    ]
+   }
+  },
+  "createOptimistic": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     139,
+     146
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     218,
+     239
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     244,
+     276
+    ]
+   }
+  },
+  "createOptimisticStoreNext": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule",
+      "scheduleWithheld"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     223,
+     244
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule",
+      "scheduleWithheld"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     235,
+     260
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "createOptimisticStoreNext",
+      "declareFlight",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule",
+      "scheduleWithheld"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "createOptimisticStoreNext",
+      "declareFlight",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     262,
+     298
+    ]
+   }
+  },
+  "createProjectionNext": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule",
+      "scheduleWithheld"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     210,
+     231
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule",
+      "scheduleWithheld"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     222,
+     247
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule",
+      "scheduleWithheld"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     257,
+     293
+    ]
+   }
+  },
+  "createRoot": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted"
+     ]
+    },
+    "fns": [
+     17,
+     18
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "WeakRef": [
+      "registerRoot"
+     ],
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted"
+     ]
+    },
+    "fns": [
+     17,
+     20
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "notifyHalted",
+      "reportDiagnostic"
+     ],
+     "WeakRef": [
+      "registerRoot"
+     ],
+     "self": [
+      "disposeChildren"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "notifyHalted",
+      "reportDiagnostic"
+     ],
+     "self": [
+      "disposeChildren"
+     ]
+    },
+    "fns": [
+     23,
+     29
+    ]
+   }
+  },
+  "createSignal": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     136,
+     143
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     215,
+     236
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     241,
+     273
+    ]
+   }
+  },
+  "createStore": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule",
+      "scheduleWithheld"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     213,
+     236
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule",
+      "scheduleWithheld"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     226,
+     253
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule",
+      "scheduleWithheld"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     261,
+     299
+    ]
+   }
+  },
+  "createTrackedEffect": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     135,
+     142
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     214,
+     236
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "Promise": [
+      "resolve"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     241,
+     273
+    ]
+   }
+  },
+  "flush": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     125,
+     132
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     204,
+     226
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "self": [
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "Promise": [
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "self": [
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "Promise": [
+      "resolve"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     237,
+     269
+    ]
+   }
+  },
+  "getOwner": {
+   "prod": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     1,
+     1
+    ]
+   },
+   "observe": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     1,
+     1
+    ]
+   },
+   "dev": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     1,
+     1
+    ]
+   }
+  },
+  "omit": {
+   "prod": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     2,
+     3
+    ]
+   },
+   "observe": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     2,
+     3
+    ]
+   },
+   "dev": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     2,
+     3
+    ]
+   }
+  },
+  "onCleanup": {
+   "prod": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     2,
+     2
+    ]
+   },
+   "observe": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     2,
+     2
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "console": [
+      "emitDiagnostic",
+      "reportDiagnostic"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic"
+     ]
+    },
+    "rc9": {
+     "console": [
+      "emitDiagnostic",
+      "reportDiagnostic"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic"
+     ]
+    },
+    "fns": [
+     8,
+     8
+    ]
+   }
+  },
+  "onSettled": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     136,
+     143
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "fns": [
+     215,
+     236
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "queueMicrotask": [
+      "checkPostAwaitRead",
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "Promise": [
+      "resolve",
+      "watchAsyncTail"
+     ],
+     "WeakRef": [
+      "registerRoot",
+      "watchAsyncTail"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "enqueue",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "haltReactivity",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic",
+      "runEffect"
+     ],
+     "self": [
+      "computed",
+      "createEffectNode",
+      "disposeChildren",
+      "setupComputedNode"
+     ],
+     "Promise": [
+      "resolve"
+     ],
+     "globalThis": [
+      "haltReactivity"
+     ]
+    },
+    "fns": [
+     241,
+     273
+    ]
+   }
+  },
+  "reconcile": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted"
+     ]
+    },
+    "fns": [
+     93,
+     120
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted"
+     ]
+    },
+    "fns": [
+     113,
+     144
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic"
+     ],
+     "self": [
+      "disposeChildren"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "notifyHalted",
+      "reportDiagnostic"
+     ],
+     "self": [
+      "disposeChildren"
+     ]
+    },
+    "fns": [
+     119,
+     153
+    ]
+   }
+  },
+  "runWithOwner": {
+   "prod": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     1,
+     1
+    ]
+   },
+   "observe": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     1,
+     1
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "console": [
+      "emitDiagnostic",
+      "reportDiagnostic"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic"
+     ]
+    },
+    "rc9": {
+     "console": [
+      "emitDiagnostic",
+      "reportDiagnostic"
+     ],
+     "queueMicrotask": [
+      "emitDiagnostic"
+     ]
+    },
+    "fns": [
+     6,
+     6
+    ]
+   }
+  },
+  "snapshot": {
+   "prod": {
+    "rc13": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted"
+     ]
+    },
+    "fns": [
+     48,
+     79
+    ]
+   },
+   "observe": {
+    "rc13": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted",
+      "reportClientError"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted"
+     ]
+    },
+    "fns": [
+     48,
+     151
+    ]
+   },
+   "dev": {
+    "rc13": {
+     "queueMicrotask": [
+      "emitDiagnostic",
+      "schedule"
+     ],
+     "console": [
+      "emitDiagnostic",
+      "notifyHalted",
+      "reportClientError",
+      "reportDiagnostic"
+     ],
+     "self": [
+      "disposeChildren"
+     ]
+    },
+    "rc9": {
+     "queueMicrotask": [
+      "schedule"
+     ],
+     "console": [
+      "notifyHalted"
+     ],
+     "self": [
+      "disposeChildren"
+     ]
+    },
+    "fns": [
+     50,
+     160
+    ]
+   }
+  },
+  "untrack": {
+   "prod": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     1,
+     1
+    ]
+   },
+   "observe": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     1,
+     1
+    ]
+   },
+   "dev": {
+    "rc13": {},
+    "rc9": {},
+    "fns": [
+     1,
+     1
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,207 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "6cae1b2c3e0b61f6e591e845335e62e6a6b5f284e66b43161a8e9f48d6e8e861",
+            "path": "./dist/esm/index.js",
+            "sha256": "48bd5d97e48d0e65b3cec6f7056729ada6c90083107cd9463592aae978b3413a"
+          },
+          "declarations": {
+            "path": "./dist/esm/index.d.ts",
+            "sha256": "ed97f6872cc7f130f4a305fd7f1d3f1e0e3d79bd8a4179010e8a57faa7426a16"
+          },
+          "exports": {
+            "Asset": "open-callable",
+            "Await": "open-callable",
+            "Block": "open-callable",
+            "CatchBoundary": "open-callable",
+            "CatchNotFound": "open-callable",
+            "ClientOnly": "open-callable",
+            "DEFAULT_PROTOCOL_ALLOWLIST": "open-plain",
+            "DefaultGlobalNotFound": "open-callable",
+            "ErrorComponent": "open-callable",
+            "FileRoute": "open-callable",
+            "FileRouteLoader": "open-callable",
+            "HeadContent": "open-callable",
+            "LazyRoute": "open-callable",
+            "Link": "open-callable",
+            "Match": "open-callable",
+            "MatchRoute": "open-callable",
+            "Matches": "open-callable",
+            "Navigate": "open-callable",
+            "NotFoundRoute": "open-callable",
+            "Outlet": "open-callable",
+            "RootRoute": "open-callable",
+            "Route": "open-callable",
+            "RouteApi": "open-callable",
+            "Router": "open-callable",
+            "RouterContextProvider": "open-callable",
+            "RouterProvider": "open-callable",
+            "ScriptOnce": "open-callable",
+            "Scripts": "open-callable",
+            "ScrollRestoration": "open-callable",
+            "SearchParamError": "open-callable",
+            "cleanPath": "open-callable",
+            "composeRewrites": "open-callable",
+            "createBrowserHistory": "open-callable",
+            "createControlledPromise": "open-callable",
+            "createFileRoute": "open-callable",
+            "createHashHistory": "open-callable",
+            "createHistory": "open-callable",
+            "createLazyFileRoute": "open-callable",
+            "createLazyRoute": "open-callable",
+            "createLink": "open-callable",
+            "createMemoryHistory": "open-callable",
+            "createRootRoute": "open-callable",
+            "createRootRouteWithContext": "open-callable",
+            "createRoute": "open-callable",
+            "createRouteMask": "open-callable",
+            "createRouter": "open-callable",
+            "createSerializationAdapter": "open-callable",
+            "deepEqual": "open-callable",
+            "defaultParseSearch": "open-callable",
+            "defaultStringifySearch": "open-callable",
+            "defer": "open-callable",
+            "functionalUpdate": "open-callable",
+            "getRouteApi": "open-callable",
+            "interpolatePath": "open-callable",
+            "isMatch": "open-callable",
+            "isNotFound": "open-callable",
+            "isPlainArray": "open-callable",
+            "isPlainObject": "open-callable",
+            "isRedirect": "open-callable",
+            "joinPaths": "open-callable",
+            "lazyFn": "open-callable",
+            "lazyRouteComponent": "open-callable",
+            "linkOptions": "open-callable",
+            "notFound": "open-callable",
+            "parseSearchWith": "open-callable",
+            "redirect": "open-callable",
+            "replaceEqualDeep": "open-callable",
+            "resolvePath": "open-callable",
+            "retainSearchParams": "open-callable",
+            "rootRouteId": "open-plain",
+            "rootRouteWithContext": "open-callable",
+            "stringifySearchWith": "open-callable",
+            "stripSearchParams": "open-callable",
+            "trimPath": "open-callable",
+            "trimPathLeft": "open-callable",
+            "trimPathRight": "open-callable",
+            "useAwaited": "open-callable",
+            "useBlocker": "open-callable",
+            "useCanGoBack": "open-callable",
+            "useChildMatches": "open-callable",
+            "useElementScrollRestoration": "open-callable",
+            "useHydrated": "open-callable",
+            "useLinkProps": "open-callable",
+            "useLoaderData": "open-callable",
+            "useLoaderDeps": "open-callable",
+            "useLocation": "open-callable",
+            "useMatch": "open-callable",
+            "useMatchRoute": "open-callable",
+            "useMatches": "open-callable",
+            "useNavigate": "open-callable",
+            "useParams": "authored-useParams",
+            "useParentMatches": "open-callable",
+            "useRouteContext": "open-callable",
+            "useRouter": "open-callable",
+            "useRouterState": "open-callable",
+            "useSearch": "authored-useSearch",
+            "useTags": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "5c3ceb176e4f8cb8720c585a20316a12e2d182df1bb413fa7c0ab7e48042adaa"
+    },
+    "name": "@tanstack/solid-router",
+    "version": "2.0.0-rc.4"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "open-plain": {
+      "call": {},
+      "shape": "plain"
+    },
+    "authored-useParams": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useSearch": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

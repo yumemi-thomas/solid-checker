@@ -23,7 +23,14 @@ export const AUDITED_SOLID_1 = "1.9.14";
 // The Solid 2 release this benchmark treats as its authority ceiling. Older
 // compatible releases may still appear as floor probes, but discovery never
 // silently advances a head beyond this exact reviewed runtime tuple.
-export const AUDITED_SOLID_2 = "2.0.0-rc.3";
+//
+// rc.9 since 2026-09-27 (owner decision): `solid-js`, `@solidjs/web` and
+// `@solidjs/signals` 2.0.0-rc.9 are the audited release, and rc.0-rc.8 are
+// analyzed under SC9014. It was rc.3 before. The ceiling and the audited
+// archives are separate facts: a consumer environment on this release is still
+// refused until each of its runtime packages is an audited archive
+// (rust/crates/solid-dialect/audited-archives.json).
+export const AUDITED_SOLID_2 = "2.0.0-rc.9";
 
 // The packages whose own published releases define what "Solid 2" even means
 // for compatibility purposes. Order matters: it is the tie-break order used

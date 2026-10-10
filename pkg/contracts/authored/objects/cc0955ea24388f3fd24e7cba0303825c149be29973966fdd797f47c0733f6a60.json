@@ -1,0 +1,127 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "314ab447820c19155b4792ebe476dae956ca35b86c93fc597c8ad17aaab2226a",
+            "path": "./dist/index.js",
+            "sha256": "f803d7322d9ea2c1bde9bdfe1769de057089d01da034f160c535cf4f3ec286ac"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "1d07aa983e841026650ae6b7bf57f5336cecc095bd00abbd26ac5c3b3b28afff"
+          },
+          "exports": {
+            "TriggerCache": "open-callable",
+            "createTrigger": "authored-createTrigger",
+            "createTriggerCache": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-YhTGBKEPP7XI7Bk6/2gWxfZmwMWQEwfZsTiMO2dt9X/AQ9bmLk+xuRbT2QDOPg2IBe0D3uh/uguHUMYOLYGpbQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "857c14b6605d16902777bdd3d53ded0547fd0c253e14dc9bad43966842ae4780"
+    },
+    "name": "@solid-primitives/trigger",
+    "version": "3.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createTrigger": {
+      "call": {
+        "operations": [
+          {
+            "id": "create-trigger",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "trigger"
+            ]
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "trigger"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "creates": [
+          "create-trigger"
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "trigger",
+            "kind": "reactive-source"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "shape": "callable"
+    }
+  }
+}

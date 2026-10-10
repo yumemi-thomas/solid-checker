@@ -1,0 +1,29 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "conditional-returns-divergence-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [
+        "browser"
+      ],
+      "stage": "closure-proposal",
+      "export": "Show",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createSignal",
+      "location": "<package-root>/browser.js:153:177",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

@@ -1,0 +1,2336 @@
+{
+  "format": "solid-checker-contract-proposal-plan",
+  "planVersion": 1,
+  "semanticModelVersion": 1,
+  "semanticDigest": "sha256:aaccf4c0188cd92d3ab0403e6ee09f7a3d1f387df1088cb2a7994d2a8ffc50ff",
+  "closureCandidates": [
+    {
+      "claimId": "claim:v1:sha256:238097a5f5b3d14bd2f9d3a7579ee6978e2376937cfe159b456c1ff4bf64b3f0",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "call",
+          "domain": "callbacks"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:280fef2bca5ae87e7b92957d182aa845fc9d95fcce33eb58c5ea9174cb99cbff",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "call",
+          "domain": "callbacks"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:3026d90015cf562433e93cb9f3c56c9c656fb624e670fb40841f7fbc4591e755",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "call",
+          "domain": "reads"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:34b365ac92f14be9b580456f0cb61449b617548d8228ffbbd9945ec329756f74",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:551abd1fb365610df894ce20a9a4a165b43d8bd7aba997128afb80522271850c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "call",
+          "domain": "reads"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:558116e3d4c93a671b14a521753cfc393445ad760f5e660844d031fb22308d3a",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "call",
+          "domain": "reads"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:564433947d6caa439d66cc60e0762f7390dd4098981fc8956fd2f42b0c17a5a3",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "call",
+          "domain": "reads"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:5d383482544e53a31037a0533e4a3a9dd227cf2d68eca82b8c80680a819b6c08",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:5f6600e830daf22133f33de5c2c844927f767ef959f6f047d0f3c75837c1dd52",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:8efc2307f56eeb321e7d33bb8dccb700dadd32f2a32cb19fba39dc6a244f8234",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "callbacks"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:a3b292e93ddad4d216b9b2a2bff7d49f6071b8040f4d27e379746ac410a2fc89",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:b0ce1fb86a3988a823e7f3fad230c72efc7fe9f7b815cc443897c20f7ab85fb1",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:bfc17c2e4fd0d4b2f423b564cd39e143650a75689d969d2ba185cecf5f03869b",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:bfe54717e3b8390e7f4012e5cd40fe4be3bf0a9ef3c4da802f47c0d94443ba4d",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "call",
+          "domain": "callbacks"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:d24809c0d9d51154b89a7ee3280394eea04fc0bfa1da5161f5830bc51f5bd822",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "call",
+          "domain": "callbacks"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:d26ad2189cbafb2bdcb60a389b176ea2ad13bd90411be00589e0a6f2935be55c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:d75d5d791a0ec2f5a78e455da4a0664725d34ce24a28657d882e2071ebef2132",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "reads"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:da48691b4e3b6155ae0fe54b3c05aff03843ccee7d9b9d7a5f21c60aa784d222",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "call",
+          "domain": "reads"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e1d82fa765ffd8719c0034b26ea2f824c4deaa0a5b09ac1bc4145ea905e4c385",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:f9db1927a2f1e2da24f54e61344ffb6edb55d90b30018e748a190626f6553e23",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    }
+  ],
+  "unresolvedClaims": [
+    {
+      "claimId": "claim:v1:sha256:008d523bc327423cd834138fe8611145ef782237f5ad92be2fcb5ddf30932fe2",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:read-0",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:0930aae333bd79a8ff42c9f96b66d8c7dbf25a20fe3894ce472e606e61f80f9e",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "call",
+          "domain": "throws"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:09949f68729c6ad39960c43df30da52a8b7aaf3f7dffd9b61efe0c2661b04838",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "call",
+          "domain": "invalidates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:0f90e36a5e2f4b959219bac45aa5ad742ffba160b2fabcb84574f21e2d1f086b",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:callback-0",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:0fcff88bf00d0de8dcd697422bb64c9d33533fb99423edb4cb8497171a9fa62d",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:read-0",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:132906ffb69506eeb61c4add7e6329354e2034d459eabe33dd79e46749a07cac",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:return",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:13933bfb29bb5484e3caaf845dd0e60053e1733542e9cfe8af109e12eec15d8b",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:later:operation:callback-0",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:18d92211954c5ecef9de63138f3438c53731680844a958f015beae84b68142f7",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:return",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:1dda8d0715a3983893cc65e269992c58eb1d7bbb6900f137d1b133856b256493",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:read-0",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:1f137a696d352c35026f0b62a5b55dc4ddcd1ad721ac8cf14a4033b841d4c130",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "call",
+          "domain": "invalidates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:22fbbd89288aa81831154ea1b96be44b7379fdaef72c6a009c77aaf9094391d6",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:return",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:2b3581561dbbaf0c460f72c18fc71501cf92df7e551520bab33041dfb4d921c0",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:callback-0",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:2bc9ac7dfd8001b40440eb8cb1442e7201a78785aca3ca7f1a84c57ce9310299",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:read-0",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:2d26a7cce6ee30ea0f8a6860dbf661f4dd2816cf985a43485e75d9b52db3bf67",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:read-0",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:30ca43621b8b9e1b1998ad8698bfa2043f9aed462d70c366b9afaa9b91808ff2",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:callback-0",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:3357cbc84b157ed1394a9ef5e5743dfb050674d3e3db4f0e4128e9c28fd61bf2",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:return",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:371903d44e921539a8b6d07e0bfb73dfb88a75c13eb316c94ddbd73a1463741a",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:return",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:3a4d57823d6fbbd785cfa3b254529046b491c3058834a66f5e45b1945b1833dc",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "call",
+          "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:3c629f434cce675b9dcd06a1b216021649e24cc04907b09f67086e9b0873b963",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:return",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:3f853f297991193656ba7f9eeb76e25d395cdbc1df075f51493a5e43b762f1eb",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "invalidates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:3fd365768a8f8eb1455a51713e1a817df8280dc630de70b10e190f1c9e1baefc",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:return",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:402064b0bfc2778d3f5a9ea8625eb992c7649d9301e3d5cbfad50284a25aa2f6",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:callback-0",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:404b086451f277d8e94506cd23d838354b69a6b4aec5ceb55f42b58958ed5fa9",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "call",
+          "domain": "throws"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:409d0624315cce6d2faf367dbf604397c0d073a6b890c81c2fd6b132f03f84f6",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:callback-0",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:434a7b5f4f7c865fff8406b3200fe0bfef075569d066eccab5bb6d7e1f7c270c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "call",
+          "domain": "throws"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:46b9a8f85642f80a9465032228033673ce2cabe616f500bb596aad8f712fb34c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:callback-0",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:490bad5a281758a3caf40e63facfc9d83aeeec18e88fd1d33e93fad2efe62873",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:callback-0",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:49501d5788222acfc581b7bef6a1ca6d00809498ef813ddad14d887fde9a5cab",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:callback-0",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:4a857c634eed7fabf1eed7a676b1d7e993d2703066c3ecf7b7f5733ce545a218",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "call",
+          "domain": "writes"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:4b53961fc34bd629e1cb135d68994b5a01e34110e734546670ca45778582a50c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:return",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:4ca83b23746c5246c34af9ffabde295f7fd72a1ebf60e93c66320ede9daa7c4d",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "disposals"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:5112a7b4e525ab9c28d5b0e4aa197f9cf4c48ff978d51edf4aa589cbfd7b4c3a",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:read-0",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:515ac3d1e5f89b06a56326e23b54e8426d30094e775b40b4d69667adfa29c382",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:read-0",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:515f14030ff84e5723fa8dd36f99373d6ca0ae96efcde1dc6eda4ac8be3f8b18",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:callback-0",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:555821cb7c254819030aec0bbea98f1a902d5f2b5164efc2de0ad771217234ac",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:57249c87afd2e48e0fc27da12433b07996d25073fc5d4c1e21e61e0a377a54b2",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "call",
+          "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:57a7012b9f6ef5502be3ec01d0f15a882771d5a849a4aeb7c398977aa941ebbd",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "call",
+          "domain": "disposals"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:58ca93441ed4473142862acf28a9af98456e3f9eda4d26b2d1e6787db381619b",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:callback-0",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:595eec90e25178ee17aef31ebdd29546bc020748c0526d312345f6fa5a2aa686",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:callback-0",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:5f58127152112e97d1fa142ccf3b577eba47c3decee851dcba93712d20689131",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:6035370ec07f9f918484b1609d8371bab1e43bdb731958904966c38537c2a878",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:61772afd8413e396cba247c3bf174674f23fe2693073ffe84f37338a68cec069",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:later:operation:callback-0",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:68326cd6fb2a419b977efc88280ce738ff90231398897c4643621cf1cba109c9",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:callback-0",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:688e4b8ba3fdfdffb7e313ab56223ee8bffc3c2edb9bdace0e1170f3c0ca570e",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:6a92a5746cdbb9077308ded7dc8a3c3914e0047866bf92fea3569346346c99b5",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "call",
+          "domain": "callbacks"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:7113a792bfcac04af4337b0d8048b8a8cf716da5b8b7e8cfcb811ec335413c86",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:later:operation:callback-0",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:76179ac8b028321ffb72c0ed87f72b149a0c5de75e0108f4df8651cf7004ac0b",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "call",
+          "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:7829496dff9b0ae7c024c9edb4fc8770179c8c2f978ca1d5e6d1de0b9495f16e",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:callback-0",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:7a02f06df38d313d0b15e2ec92479379c681de2e68d5720dab108e42865e7ac6",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:read-0",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:7ba4e179a727185f260525f988e3d2f9fd9fb1855ae7da5f31e839b2bcd8d9c4",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:callback-0",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:7cfc45199d3043f899e822c694bfcae8078159f1774d00c66c573a7877729f28",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "call",
+          "domain": "disposals"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:7ebcdcb84b74d3540c05a2de20b0adeefe244e5c68fee9b71c09104e83a20c69",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "call",
+          "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:84880fc97052133637b2ae9c959934136f6769599c27dd313b1e48dd4d0f8c87",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "call",
+          "domain": "invalidates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:84a7b4fe0ba878f8bc3f0ea06952beb7eb4858fedfccc11318fd56831a0e2f5b",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:callback-0",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:84d864aec711eabf28deb020728311db77340ec76e70b08c1e0cf4ceab45443d",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "call",
+          "domain": "writes"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:84f4d6e57dafadd49af07aa7632917eeb5c64adf2e2a0f396d49675af00707d4",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:return",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:9097a57c9dff962928cd585a7eb7cfabdd7911f334811dace1a20ddc13b58923",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "call",
+          "domain": "throws"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:9c487af3eb4175bbca663468e329fbd8df31fc0b4a7d0c27b879ec61643ffb20",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "call",
+          "domain": "disposals"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:a70c272a53f97e31875c2a826460eaf732b5b7a7a87d9862599bd8d8215b9147",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:callback-0",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:a783831015ec3412c243895d91193607f906f4deaa61bd1c15cc4862c1ec9058",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:callback-0",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:a9b07b47f4a7b97a7c7e5ea86e31c2875dadb4abf906346cf809538ea4aa197d",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "call",
+          "domain": "writes"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:b20beb6d5d6016f55963e13d40dd24680fd52bdac51537a9d5f8aa7f82a75b60",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:b20debc3066d58d4a505819adee5db1b12b13f2f62da57e4eb8ceb54a6ee40b7",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:return",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:b26ee9cdad0e470e563e3c0db75230b9cef61c91572b584b2c5729719865f41d",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:b5432dc1b0e149c8cf569788599f2e4554d6d89b45ecdfbf50cd45ea9bda0659",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:baae317ec27b46703e044a97af9f67222596e1a1af90557277bb2b0e7bd5e533",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "call",
+          "domain": "writes"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:bc86f240192b326de91d2dcb2785848067255ed6d636dd0ef2910b8b2758ff49",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "call",
+          "domain": "disposals"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:cd7bae4f048c71a7e63551259d5c935018f0ffcc6bae4b491330e78c205c298b",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:return",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:cdf081bf64e1af4f088f4f3dc93eab8af0dd9e454ba0caa44d24086f0fbe3b96",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "call",
+          "domain": "writes"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:cede6aeead6d1f477277c1e405f585d1824a7f9c5debabd4457ed87417318f9c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:return",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:d13dbf122c8927626fc83a77fd25ef27adc9deb029e20c346ac1a1ecaf4aa39b",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "writes"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:d189c843f7da1357d02a093cdea57f95ed2235c32e16f8272c57d54f7c0bc211",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "throughUnclassified",
+        "path": {
+          "kind": "call",
+          "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:d1ce37adbccf908f115faf51665eb514daf6d5fdbeee5ac36517298d7f07d1c0",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:later:operation:callback-0",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:d446bd93605718f3ce75fde8a439dde34d286990150c96bb0d24d96d8880d64f",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:return",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e010931a08a4c6efdb9801b69618a395a13542065d60c4f27c44c3ecf7104c22",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:return",
+          "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e107d73ce3c3595ffa29249190c3236b8c008446361c929f7afde7bee4274d7c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:read-0",
+          "domain": "owner-productions"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e1219149d99d916d6afb08615d60ad9241768a9c1ae46fadbefaf848a70d2581",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e420a66cb03bfe08309977e570a135fd4adbde204e045469a1c196d443d26b14",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:callback-0",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e6068d3230b6e6ba007d5005d6bc73050cf0872f4f07c0ea508faada0764a865",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:read-0",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e74515b17123ba49f7b92c2b9bdc0d8352c34be1bae08e4b43ca77a91637609a",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:callback-0",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e8204f0e6c4c15b4785d8dfd30da1c173be3936f2382b44aa5afbf72d4bae164",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "call",
+          "domain": "invalidates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:ea2f0cdf52d220e1aeeacdde9daa9d248cff4f54b1e9fb6941702b7b1175e499",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:return",
+          "domain": "owner-child-capability"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:ef4f6a84e50560bb795860b632b45b1480b6b7a0a6325b0ee321d473ac05f71c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "call",
+          "domain": "invalidates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:f1f90533eb5d7fa59f7e3b59f65675479e002e5886c7e986e1919b2a7e2bca09",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "throws"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:f370426d48b97d61ecf5376e6e6b969ba39ebc236928e10aa05df331a494a774",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "call",
+          "domain": "cleanups"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:f4f37ca6cd352c4df14954ab24dc56bf393bac2d720a4931f0e49642ba2662b0",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "call",
+          "domain": "throws"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:f8880dc9552de35676b327ffd1ea4c21ffaa2911a4bb67037edb17909b132d8e",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:fa188c58b34a9f49c9a90dcae6302edbdccd50baad8bc165588f72f3de032a7a",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "call",
+          "domain": "disposals"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:ff554bc3042a9ab3e31e83b6d5faf42efe9bd1d613165d31ca02361757e8ff88",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:callback-0",
+          "domain": "owner-lifetime"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:ff860d9451290e329ed39808c7e1d4e310ba827b56246a4d84a0598f083a19a9",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "operation-axis",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:later:operation:callback-0",
+          "domain": "owner-cleanup-capability"
+        }
+      }
+    }
+  ],
+  "positiveOperations": [
+    {
+      "claimId": "claim:v1:sha256:0c0b2a98ed0bf241f12e92e9a11cdcee834b7bc656d49108a2b62ade430cfcf3",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:read-0"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:193ea0c579edd227c98c53aea9f8982450bd23e1650b5317fecfc29faa4566a2",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:callback-0"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:1c7a89c4d7b0f55c38bd626170e90df9eb02c9ae91944300267daa635b976d66",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "untrackedThroughLocalWrapper",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:untrackedThroughLocalWrapper:operation:return"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:200be7e89328648da14ad8997684204db15cee25c85475f72a7be5c591ad2ee0",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "later",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:later:operation:callback-0"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:452910018d03d8e68bdd7999059ee54188d912511ab16bfcee7c61fc785070dc",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:callback-0"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:741c372c7357ec2b2cf77d6902f7f3b6d391c86fab533282827a9bedcd26dc6c",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "bindArgument",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:bindArgument:operation:return"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:8cae23bc5337564ed0837ec9d1fcba60e60e9f58dc02327ca0826fd4c535d266",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:return"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:a9652a88277df1eb384418706bc3800de6791c42607f09afc915e452fe00603b",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:read-0"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:d26568f112733e58ae811d290397d197e5906bc2d4e272b75aa6b4e9902d7711",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "listen",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:listen:operation:callback-0"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:e2aaf87a498cc193b93ab2b962fd099a97fb7ebb30563f30701f91d7da89752a",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.ts",
+        "runtimeDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "declarationsPath": "./index.ts",
+        "declarationsDigest": "sha256:b225e2c65c82df520c63af273d5ed95e7558e92fe5ccbc1e3f5f25533bccf59e",
+        "closureDigest": "sha256:5b2026115367640c65d50b19f68c26fcd0d3e78e9d754e4ca545b1a9a1ec8032"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb",
+        "export": "trackedThroughLocalHelper",
+        "path": {
+          "kind": "operation",
+          "operation": "artifact-case:fc64a308921f88f5b137c36f8bf8a505845b94371201f0aa53b98e674c0486cb:trackedThroughLocalHelper:operation:callback-0"
+        }
+      }
+    }
+  ]
+}

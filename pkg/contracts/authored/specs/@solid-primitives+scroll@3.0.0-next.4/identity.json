@@ -1,0 +1,75 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/scroll",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-6Zod2Q2YPnkZhijVMSOhU2e1ip5hzOSQNhZIaKh7Kx7HcocYrzhn1NqYJlaUr464o1hFZweEQVkhALi9EHvt/Q==",
+      "snapshotRoot": "sha256:eb3787f1fd5d11551199d16b2aa67f3410e2de5e8c9650b7fb8f94d4fed73cba",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "4ecbe90c118c3cd7f4d516ff7637230040d682f7153298fac9d37294eaff1115",
+                  "path": "./dist/index.js",
+                  "sha256": "00fddd681e81a6c243a9b93a40be059e75e264d05d61a10398be368c1e7cbc56"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "3e9b272656979b93c6c1c5c2d78c99868ad98dfb3920a40c2265c28a005a60c2"
+                },
+                "exports": {
+                  "createPreventScroll": "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055",
+                  "createScrollPosition": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getScrollParent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getScrollPosition": "summary-a5e37862e34da3f7003b74453a5f0e6092789f638b20042e1e67492fca185e47",
+                  "isScrollable": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useWindowScrollPosition": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-6Zod2Q2YPnkZhijVMSOhU2e1ip5hzOSQNhZIaKh7Kx7HcocYrzhn1NqYJlaUr464o1hFZweEQVkhALi9EHvt/Q==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "39237d967dc7b794947b2e999f187d20c2f2d1010c47667188aa2d7c551cc249"
+          },
+          "name": "@solid-primitives/scroll",
+          "version": "3.0.0-next.4"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-a5e37862e34da3f7003b74453a5f0e6092789f638b20042e1e67492fca185e47": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

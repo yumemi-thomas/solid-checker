@@ -13,7 +13,7 @@
             "sha256": "c83c79cfdb7cf89d11debcc2a5201cefc7e2a2d110011d427f369115bd37fe81"
           },
           "exports": {
-            "sameName": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61"
+            "sameName": "summary-4bd0b753ad178a7b8677bbcbc3595369a009233278923f1783cea84cf9180b06"
           },
           "resolution": {
             "runtimeBranch": "/exports/./node",
@@ -31,7 +31,7 @@
             "sha256": "19867e1ae01c5f4be5061a5e8ed7045552887c595ebb9d78c051a9ac140b3563"
           },
           "exports": {
-            "sameName": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "sameName": "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -53,7 +53,7 @@
             "sha256": "19867e1ae01c5f4be5061a5e8ed7045552887c595ebb9d78c051a9ac140b3563"
           },
           "exports": {
-            "sameName": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "sameName": "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1jsx-runtime",
@@ -77,8 +77,16 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+    "summary-4bd0b753ad178a7b8677bbcbc3595369a009233278923f1783cea84cf9180b06": {
       "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -103,14 +111,38 @@
             }
           }
         ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
         "returns": [
           "return"
         ]
       },
       "shape": "callable"
     },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
+    "summary-531f27f0017c6b946639511260e54cfaa3d9358d2914244c0afbd3f102680f26": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
       "shape": "callable"
     }
   }

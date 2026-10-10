@@ -1,0 +1,23 @@
+[
+  {"name":"package factories and heritage", "dependency":"import {createStore,createRouter} from 'startup-factory'; export const store=createStore({}); export const router=createRouter({}); export class HttpError extends Error {}", "body":"startClosed();", "browser":true},
+  {"name":"unknown top-level call", "dependency":"import * as factory from 'startup-factory'; factory.createRouter({}); export {};", "body":"startClosed();", "browser":true},
+  {"name":"unknown dependency branch completes", "dependency":"import * as factory from 'startup-factory'; if(Math.random()) factory.createRouter({}); export {};", "body":"startClosed();", "browser":true},
+  {"name":"top-level await", "dependency":"import {createRouter} from 'startup-factory'; await createRouter({}); export {};", "body":"startClosed();", "browser":true},
+  {"name":"dependency throw", "dependency":"throw 0; export {};", "body":"startClosed();", "browser":false, "contradiction":true},
+  {"name":"dependency throws awaited value", "dependency":"throw await Promise.resolve(0); export {};", "body":"startClosed();", "browser":false, "contradiction":true},
+  {"name":"await before certain block exit", "dependency":"{await Promise.resolve(); throw 0;} export {};", "body":"startClosed();", "browser":false, "contradiction":true},
+  {"name":"await before client-live exit", "dependency":"if(!import.meta.env.SSR){await Promise.resolve(); throw 0;} export {};", "body":"startClosed();", "browser":false, "contradiction":true},
+  {"name":"client-live dependency throw", "dependency":"if (!import.meta.env.SSR) throw 0; export {};", "body":"startClosed();", "browser":false, "contradiction":true},
+  {"name":"client-dead dependency throw", "dependency":"if (import.meta.env.SSR) throw 0; export {};", "body":"startClosed();", "browser":true},
+  {"name":"root throw after a live prefix", "dependency":"export {};", "body":"startClosed(); throw 0;", "browser":false, "contradiction":true},
+  {"name":"root client-dead throw", "dependency":"export {};", "body":"if(import.meta.env.SSR) throw 0; startClosed();", "browser":true},
+  {"name":"function-body completion", "dependency":"export {};", "body":"function run(){new Date(); startClosed();} run();", "browser":false},
+  {"name":"function-body await", "dependency":"export {};", "body":"async function run(){await Promise.resolve(); startClosed();} run();", "browser":false},
+  {"name":"unknown guard", "dependency":"export {};", "body":"if (Math.random()) startClosed();", "browser":false},
+  {"name":"dead guard", "dependency":"export {};", "body":"if (import.meta.env.SSR) startClosed();", "browser":false},
+  {"name":"dynamic-only completion stays unproved", "load":"import('./startup');", "dependency":"import {startClosed} from 'reactive-package'; new Date(); startClosed(); export {};", "site":"startup", "body":"", "browser":false},
+  {"name":"unused value import does not premise a dynamic module", "load":"import {Marker} from './startup'; import('./startup');", "dependency":"import {startClosed} from 'reactive-package'; export class Marker {} new Date(); startClosed();", "site":"startup", "body":"", "browser":false},
+  {"name":"type-space value import does not premise a dynamic module", "load":"import {Marker} from './startup'; type Alias = Marker; import('./startup');", "dependency":"import {startClosed} from 'reactive-package'; export class Marker {} new Date(); startClosed();", "site":"startup", "body":"", "browser":false},
+  {"name":"type-only dependency does not premise a dynamic module", "load":"import type {Marker} from './startup'; import('./startup');", "dependency":"import {startClosed} from 'reactive-package'; export interface Marker {} new Date(); startClosed();", "site":"startup", "body":"", "browser":false},
+  {"name":"dynamic throw does not contradict static startup", "load":"import('./startup');", "dependency":"throw 0; export {};", "body":"startClosed();", "browser":true}
+]

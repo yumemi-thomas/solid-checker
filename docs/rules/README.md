@@ -1,25 +1,34 @@
 # Rules
 
-solid-checker has two dialect-owned catalogs: 18 rules for Solid 1.x and 26
-for Solid 2.0. Solid 1.x findings keep a `v1/` prefix; Solid 2.0 findings are
-unprefixed. The checker detects the installed `solid-js` major, with
-`--dialect solid-v1` and `--dialect solid-v2` available for unusual layouts.
+solid-checker ships one dialect-owned catalog: 31 rules for Solid 2.0, with
+unprefixed rule names. The checker detects the installed `solid-js` major and
+**refuses** a project whose runtime it has no vocabulary for
+([`unsupported-solid-runtime`](unsupported-solid-runtime.md)) rather than
+analyzing it under the wrong language; `--dialect solid-v2` is available for
+unusual layouts. A Solid 2 installation the vocabulary was not audited on is
+analyzed with a notice
+([`unaudited-solid-release`](unaudited-solid-release.md)). The Solid 1.x catalog was retired on 2026-09-16 — see
+[ADR 0110](../adr/0110-the-checker-analyzes-solid-2-only.md), and
+[the catalog migration note](../rule-catalog-migration.md) for mapping a `v1/`
+suppression onto its 2.0 identity.
 
-A shared `SCxxxx` code names one defect concept across dialects, while the rule
-name is the configurable external identity. Findings are either:
+An `SCxxxx` code names one defect concept and the rule name is the configurable
+external identity; the two are separate so a code can outlive a rename and a
+future second catalog can share a concept without sharing a name. Findings are either:
 
 - **violation** — semantic and execution facts prove a runtime defect;
 - **uncertifiable** — required evidence is unavailable, so correctness cannot
   be certified.
 
-The catalogs share 16 concepts. Solid 1.x adds `jsx-no-undef` and
-`prefer-classlist`; Solid 2.0 adds ten rules for actions, tracked `resolve`, leaf
-owners, directives, async computations, and the server surface.
+Sixteen of the 27 are concepts the retired 1.x catalog also carried; the other
+ten cover actions, tracked `resolve`, leaf owners, directives, async
+computations, and the server surface. `jsx-no-undef` and `prefer-classlist` had
+no 2.0 counterpart and were dropped rather than re-homed (ADR 0110 § 2).
 
 ## Configuration
 
-Every catalog rule is enabled by default, including `prefer-for`,
-`prefer-show`, and Solid 1.x `prefer-classlist`. Native projects opt out in
+Every catalog rule is enabled by default, including `prefer-for` and
+`prefer-show`. Native projects opt out in
 `.solid-checker/rule-options.json`:
 
 ```json
@@ -57,7 +66,7 @@ Renamed and merged configuration keys, retired identities, and the six merges
 whose disables deliberately do not transfer are listed in the
 [catalog migration note](../rule-catalog-migration.md).
 
-## Solid 2.0 catalog — 26 rules
+## Solid 2.0 catalog — 31 rules
 
 | Code | Rule | Severity | Default |
 | --- | --- | --- | --- |
@@ -71,6 +80,9 @@ whose disables deliberately do not transfer are listed in the
 | SC2002 | [action-called-in-owned-scope](action-called-in-owned-scope.md) | error | on |
 | SC2003 | [no-direct-mutation](no-direct-mutation.md) | warning | on |
 | SC2004 | [resolve-in-tracked-scope](resolve-in-tracked-scope.md) | error | on |
+| SC2005 | [until-in-tracked-scope](until-in-tracked-scope.md) | error | on |
+| SC2006 | [flush-in-action](flush-in-action.md) | error | on |
+| SC2007 | [static-dynamic-async-source](static-dynamic-async-source.md) | error | on |
 | SC3001 | [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) | error | on |
 | SC4001 | [missing-owner](missing-owner.md) | warning | on |
 | SC5001 | [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) | error | on |
@@ -87,33 +99,19 @@ whose disables deliberately do not transfer are listed in the
 | SC9005 | [package-contract-incomplete](package-contract-incomplete.md) | error | on |
 | SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning | on |
 | SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning | on |
+| SC9013 | [unsupported-solid-runtime](unsupported-solid-runtime.md) | error | on |
+| SC9014 | [unaudited-solid-release](unaudited-solid-release.md) | warning | on |
 
 `http-response-after-flush`, `package-contract-incomplete`,
-`reactive-source-uncaptured`, and `reactive-dispatch-unresolved` can produce
-uncertifiable results. Their pages name the missing evidence and remediation.
+`reactive-source-uncaptured`, `reactive-dispatch-unresolved`,
+`unsupported-solid-runtime`, and `unaudited-solid-release` can produce
+uncertifiable results. Their pages name
+the missing evidence and remediation.
 
-## Solid 1.x catalog — 18 rules
-
-| Code | Rule | Severity | Default |
-| --- | --- | --- | --- |
-| SC1001 | [v1/strict-read-untracked](v1/strict-read-untracked.md) | warning | on |
-| SC1002 | [v1/reactive-read-after-await](v1/reactive-read-after-await.md) | error | on |
-| SC1003 | [v1/no-destructure](v1/no-destructure.md) | error | on |
-| SC1004 | [v1/components-return-once](v1/components-return-once.md) | warning | on |
-| SC1005 | [v1/uncalled-accessor](v1/uncalled-accessor.md) | warning | on |
-| SC1007 | [v1/reactive-handler-frozen](v1/reactive-handler-frozen.md) | warning | on |
-| SC2001 | [v1/reactive-write-in-owned-scope](v1/reactive-write-in-owned-scope.md) | error | on |
-| SC2003 | [v1/no-direct-mutation](v1/no-direct-mutation.md) | warning | on |
-| SC4001 | [v1/missing-owner](v1/missing-owner.md) | warning | on |
-| SC7001 | [v1/missing-effect-function](v1/missing-effect-function.md) | error | on |
-| SC8003 | [v1/jsx-no-duplicate-props](v1/jsx-no-duplicate-props.md) | error | on |
-| SC8005 | [v1/jsx-no-undef](v1/jsx-no-undef.md) | error | on |
-| SC8013 | [v1/prefer-classlist](v1/prefer-classlist.md) | warning | on |
-| SC8014 | [v1/prefer-for](v1/prefer-for.md) | error | on |
-| SC8015 | [v1/prefer-show](v1/prefer-show.md) | warning | on |
-| SC9005 | [v1/package-contract-incomplete](v1/package-contract-incomplete.md) | error | on |
-| SC9011 | [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) | warning | on |
-| SC9012 | [v1/reactive-dispatch-unresolved](v1/reactive-dispatch-unresolved.md) | warning | on |
+`unsupported-solid-runtime` and `unaudited-solid-release` are the two
+identities here the rules engine never produces. Dialect detection decides
+both. The refusal replaces the analysis and appears **alone** when it appears
+at all (ADR 0110). The notice accompanies the analysis.
 
 ## Migrating from eslint-plugin-solid
 

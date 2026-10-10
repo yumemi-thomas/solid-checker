@@ -1,0 +1,90 @@
+[
+  {
+    "id": "A1",
+    "answer": "computed_accessor_read_archive (ADR 0162, ADR 0175)",
+    "scope_today": "Solid2::computed_accessor_read_archive returns true only for AUDITED_ARCHIVES entries named @solidjs/signals or solid-js with version 2.0.0-rc.9, for (CreateMemo, Whole) and (CreateSignal, TupleItem(0))",
+    "asserts": "Invoking createMemo's whole result, or createSignal's slot 0, reads the node the creating call made: it may re-run the computation that call registered, and it may throw; it invokes no other callable",
+    "rc13_verdict": "holds",
+    "evidence": "signals: createMemo, accessor and signal are byte-identical (dev); read adds only the dev checkPostAwaitRead diagnostic and a guard term; prepareComputed relinks an auto-disposed computed before recompute(comp, true). solid-js client: every exit of rc.13 hydrateSignalLike still returns coreFn(...)'s result. solid-js server: createMemo's read is unchanged (only the disposal flag gained onDisposed hooks); createSyncMemo, clientHoleRead and createSignal are identical",
+    "tags": "[M] diffs, [E] reading",
+    "needs_code_change": "admit the rc.13 @solidjs/signals and solid-js tuples in the gate"
+  },
+  {
+    "id": "A2",
+    "answer": "inert_accessor_read (ADR 0146)",
+    "asserts": "With primitive arguments, createSignal's slot 0 is a plain signal read that runs no code",
+    "rc13_verdict": "holds",
+    "evidence": "createSignal's plain path, signal (dev) and accessor are identical; read's rc.13 additions are dev diagnostics; solid-js server non-function createSignal path is identical",
+    "tags": "[M]"
+  },
+  {
+    "id": "A3",
+    "answer": "inert_read_ignores_options (ADR 0180)",
+    "asserts": "read consults neither options.equals nor options.unobserved",
+    "rc13_verdict": "holds",
+    "evidence": "dev signal is byte-identical (prod mangled names only); rc.13 read references neither _equals nor the unobserved slot (one comment mention, above the dormantNodes deferral that applies only to auto-disposed computeds); not re-probed",
+    "tags": "[M]"
+  },
+  {
+    "id": "A4",
+    "answer": "eager_owned_computation_slot (ADR 0183)",
+    "asserts": "A one-argument createMemo and a two-argument createEffect run their compute during the call",
+    "rc13_verdict": "holds",
+    "evidence": "setupComputedNode keeps !options?.lazy && recompute(self, true); effect and createEffect are identical; runtime.md probes J/K/N on rc.13 dev and prod",
+    "tags": "[M]"
+  },
+  {
+    "id": "A5",
+    "answer": "callback_handles_pending_accessor_read (isPending, slot 0)",
+    "asserts": "The isPending callback is exempt from the strict pending-read safeguard",
+    "rc13_verdict": "holds",
+    "evidence": "read still guards with strictRead && !pendingCheckActive && owner._statusFlags & STATUS_PENDING; the new checkPostAwaitRead gate also excludes pendingCheckActive",
+    "tags": "[M]"
+  },
+  {
+    "id": "A6",
+    "answer": "tracking_runtime (ADR 0163)",
+    "asserts": "@solidjs/signals exports createRoot, createMemo, createSignal and getObserver, and a read inside a created memo links a dependency",
+    "rc13_verdict": "holds",
+    "evidence": "the four names are exported by dist/prod/index.js, dist/observe/index.js and dist/dev.js; link is identical in dev; the probe's run-time dependency-field calibration succeeded on all three rc.13 builds",
+    "tags": "[M]"
+  },
+  {
+    "id": "A7",
+    "answer": "AUDITED_ARCHIVES tuples",
+    "rc13_verdict": "values established",
+    "tuples": [
+      {"name": "@solidjs/signals", "version": "2.0.0-rc.13", "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ==", "manifest_sha256": "6783c3c632cfebf3a0fc26e18925887462b5925c481c6535ae0186845efb95a6"},
+      {"name": "solid-js", "version": "2.0.0-rc.13", "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ==", "manifest_sha256": "ce43a022f763e5995d1ac8a5f78f135804edd01b627a2bcbee8ff9530e79d284"},
+      {"name": "@solidjs/web", "version": "2.0.0-rc.13", "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ==", "manifest_sha256": "8b45ed71ed7a369883e7e00bb48b01fd7bda935bd5ba889cbecafc8eaa122bf5"}
+    ],
+    "evidence": "phase0/rc13/*/tarball.json (npm pack 2026-10-05; SRI equals the registry's) and files.json; every file of the three installs matches its manifest",
+    "tags": "[M]"
+  },
+  {
+    "id": "A8",
+    "answer": "withheld rc.9 entries (dialect test withheld list; createOptimisticStore reads)",
+    "rc13_verdict": "not re-read; no row on rc.13",
+    "note": "reconcile reads joins them for rc.13"
+  },
+  {
+    "id": "A9",
+    "answer": "DEFINITION_ALIASES (createOptimisticStore -> createOptimisticStoreNext, createProjection -> createProjectionNext)",
+    "rc13_verdict": "same aliases on rc.13; table needs rc.13 entries",
+    "evidence": "dist/prod/index.js:41, :43 and dist/observe/index.js:43, :45",
+    "tags": "[M]"
+  },
+  {
+    "id": "A10",
+    "answer": "HostTarget scopes of the solid-js createSignal and createMemo creates rows",
+    "rc13_verdict": "unchanged",
+    "evidence": "solid-js exports['.'] identical to rc.9's; runtime dist/solid{,.dev,.observe}.js; delegates are rc.13 signals rows granted in this audit",
+    "tags": "[M]"
+  },
+  {
+    "id": "A11",
+    "answer": "releases.rs release answers (B1-B4, N3-N5)",
+    "rc13_verdict": "not re-measured here",
+    "evidence": "runtime.md section 3.5 measured all seven equal to Solid2::RC9 on rc.13"
+  }
+]

@@ -1,0 +1,332 @@
+{
+  "package": "@solid-primitives/cookies",
+  "version": "1.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createUserTheme": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:17-36 — createUserTheme's private deserialize produces only light/dark/defaultValue under the real Theme typings; private serialize is String. Exactly one scalar signal and one split effect are constructed, with the sole internal read cookie() inside tracked effect compute. Its browser return is exactly the accessor/setter tuple; setter is opaque callable so invocations remain obligations. No caller callable is invoked. P1 document.cookie; P2 typed name/options. Source-reviewed browser draft only. Identity generation and case-attributed Chrome rc.13 probes are pending; this is not shipping evidence.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "callbacks": [],
+        "creates": [
+          "create-theme"
+        ],
+        "computations": [
+          "cookie-effect"
+        ],
+        "reads": [
+          "cookie-compute-read"
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "theme",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "cookie-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create-theme",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "theme"
+            ]
+          },
+          {
+            "id": "cookie-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "cookie-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cookie-compute-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "cookie-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "cookie-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "theme"
+              }
+            ]
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "theme"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:17-36 — createUserTheme's private deserialize produces only light/dark/defaultValue under the real Theme typings; private serialize is String. Exactly one scalar signal and one split effect are constructed, with the sole internal read cookie() inside tracked effect compute. Its browser return is exactly the accessor/setter tuple; setter is opaque callable so invocations remain obligations. No caller callable is invoked. P1 document.cookie; P2 typed name/options.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:17-36 — createUserTheme's private deserialize produces only light/dark/defaultValue under the real Theme typings; private serialize is String. Exactly one scalar signal and one split effect are constructed, with the sole internal read cookie() inside tracked effect compute. Its browser return is exactly the accessor/setter tuple; setter is opaque callable so invocations remain obligations. No caller callable is invoked. P1 document.cookie; P2 typed name/options.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:17-36 — createUserTheme's private deserialize produces only light/dark/defaultValue under the real Theme typings; private serialize is String. Exactly one scalar signal and one split effect are constructed, with the sole internal read cookie() inside tracked effect compute. Its browser return is exactly the accessor/setter tuple; setter is opaque callable so invocations remain obligations. No caller callable is invoked. P1 document.cookie; P2 typed name/options.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:17-36 — createUserTheme's private deserialize produces only light/dark/defaultValue under the real Theme typings; private serialize is String. Exactly one scalar signal and one split effect are constructed, with the sole internal read cookie() inside tracked effect compute. Its browser return is exactly the accessor/setter tuple; setter is opaque callable so invocations remain obligations. No caller callable is invoked. P1 document.cookie; P2 typed name/options."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "The mandatory split effect emits NO_OWNER_EFFECT after an awaited click.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Creating the split effect in a present leaf emits PRIMITIVE_IN_FORBIDDEN_SCOPE."
+        }
+      ]
+    },
+    "getCookiesString": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16. Server reads the request header via getRequestEvent, returning its string or the empty string; browser returns native document.cookie. Both satisfy the stated plain output, no reactive read/source/owner/caller callback. getRequestEvent is context lookup, not reactive creation; standard request/Headers and AsyncLocalStorage methods are the host premise. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:3936,3957-3964,4011-4018 (request context lookup); Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16. Server reads the request header via getRequestEvent, returning its string or the empty string; browser returns native document.cookie. Both satisfy the stated plain output, no reactive read/source/owner/caller callback. getRequestEvent is context lookup, not reactive creation; standard request/Headers and AsyncLocalStorage methods are the host premise. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:3936,3957-3964,4011-4018 (request context lookup); Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16. Server reads the request header via getRequestEvent, returning its string or the empty string; browser returns native document.cookie. Both satisfy the stated plain output, no reactive read/source/owner/caller callback. getRequestEvent is context lookup, not reactive creation; standard request/Headers and AsyncLocalStorage methods are the host premise. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:3936,3957-3964,4011-4018 (request context lookup); Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16. Server reads the request header via getRequestEvent, returning its string or the empty string; browser returns native document.cookie. Both satisfy the stated plain output, no reactive read/source/owner/caller callback. getRequestEvent is context lookup, not reactive creation; standard request/Headers and AsyncLocalStorage methods are the host premise. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:3936,3957-3964,4011-4018 (request context lookup); Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16. Server reads the request header via getRequestEvent, returning its string or the empty string; browser returns native document.cookie. Both satisfy the stated plain output, no reactive read/source/owner/caller callback. getRequestEvent is context lookup, not reactive creation; standard request/Headers and AsyncLocalStorage methods are the host premise. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:3936,3957-3964,4011-4018 (request context lookup); Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain returns: Every normal completion has the same browser-stated output shape/identity; no server replacement accessor, inert control or returned setter is admitted."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16 — Browser build returns the platform document.cookie string; no Solid reads, reactive creation or caller callback. P1 document.cookie. Server/request behavior is not admitted by this browser-only draft.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16 — Browser build returns the platform document.cookie string; no Solid reads, reactive creation or caller callback. P1 document.cookie. Server/request behavior is not admitted by this browser-only draft.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16 — Browser build returns the platform document.cookie string; no Solid reads, reactive creation or caller callback. P1 document.cookie. Server/request behavior is not admitted by this browser-only draft.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16 — Browser build returns the platform document.cookie string; no Solid reads, reactive creation or caller callback. P1 document.cookie. Server/request behavior is not admitted by this browser-only draft.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:13-16 — Browser build returns the platform document.cookie string; no Solid reads, reactive creation or caller callback. P1 document.cookie. Server/request behavior is not admitted by this browser-only draft."
+      }
+    },
+    "parseCookie": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8. Identical primitive-string match/RegExp function returns a plain string or undefined on both builds; no Solid or host-dependent primitive is called. Original declaration/P2 premise is retained. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8. Identical primitive-string match/RegExp function returns a plain string or undefined on both builds; no Solid or host-dependent primitive is called. Original declaration/P2 premise is retained. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8. Identical primitive-string match/RegExp function returns a plain string or undefined on both builds; no Solid or host-dependent primitive is called. Original declaration/P2 premise is retained. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8. Identical primitive-string match/RegExp function returns a plain string or undefined on both builds; no Solid or host-dependent primitive is called. Original declaration/P2 premise is retained. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8. Identical primitive-string match/RegExp function returns a plain string or undefined on both builds; no Solid or host-dependent primitive is called. Original declaration/P2 premise is retained. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain returns: Every normal completion has the same browser-stated output shape/identity; no server replacement accessor, inert control or returned setter is admitted."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8 — String and key declarations admit primitive strings. Native match/RegExp on these plain values returns a string or undefined and performs no reactive read, construction or caller callback. P2 plain primitives.",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8 — String and key declarations admit primitive strings. Native match/RegExp on these plain values returns a string or undefined and performs no reactive read, construction or caller callback. P2 plain primitives.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8 — String and key declarations admit primitive strings. Native match/RegExp on these plain values returns a string or undefined and performs no reactive read, construction or caller callback. P2 plain primitives.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8 — String and key declarations admit primitive strings. Native match/RegExp on these plain values returns a string or undefined and performs no reactive read, construction or caller callback. P2 plain primitives.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cookies-createUserTheme-top-level-read/node_modules/@solid-primitives/cookies/dist/index.js:6-8 — String and key declarations admit primitive strings. Native match/RegExp on these plain values returns a string or undefined and performs no reactive read, construction or caller callback. P2 plain primitives."
+      }
+    }
+  }
+}

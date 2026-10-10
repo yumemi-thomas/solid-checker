@@ -7,8 +7,8 @@ use solid_dialect::Dialect;
 use solid_facts::core::Span;
 
 use super::{
-    ExecutionRole, PrimitiveCreation, PrimitiveName, SemanticLookup, SymbolId, execution_role,
-    location, primitive_name,
+    ExecutionRole, PrimitiveCreation, PrimitiveName, SemanticLookup, SymbolId, call_primitive_name,
+    execution_role, location,
 };
 use crate::owners::containing_ast_function;
 use crate::pipeline::{AnalysisContext, ProgramDraft};
@@ -92,10 +92,9 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
             containing_ast_function(&file.ast, call.span)
                 .is_some_and(|owner| owner.span == function.span)
         }) {
-            if let Some(primitive) = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
+            if let Some(primitive) = call_primitive_name(
+                file,
+                call,
                 self.lookup.entities(),
                 self.symbol_names,
                 self.lookup.dialect,
@@ -198,16 +197,20 @@ pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mu
     for file in &ctx.facts.files {
         for call in &file.ast.calls {
             let role = execution_role(&file.compiler, call.callee, &[]);
+            // A component's `ref` is a prop the component invokes itself, not
+            // an ownerless ref application.
+            let on_component = file.compiler.callback_roles.iter().any(|callback| {
+                callback.role == solid_facts::compiler::CallbackRoleKind::DirectiveApply
+                    && callback.span.contains(call.callee)
+                    && !crate::owners::ref_application_on_intrinsic(file, callback.span)
+            });
             if role == ExecutionRole::DirectiveApply
-                && let Some(primitive) = primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    ctx.entities,
-                    ctx.symbol_names,
-                    ctx.dialect,
-                )
-                .filter(|primitive| creation_registers_work(ctx.dialect, file, call, primitive))
+                && !on_component
+                && let Some(primitive) =
+                    call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect)
+                        .filter(|primitive| {
+                            creation_registers_work(ctx.dialect, file, call, primitive)
+                        })
             {
                 push_directive_creation(
                     &mut draft.directive_creations,
@@ -220,7 +223,9 @@ pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mu
             }
         }
         for callback in &file.compiler.callback_roles {
-            if callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply {
+            if callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
+                || !crate::owners::ref_application_on_intrinsic(file, callback.span)
+            {
                 continue;
             }
             for call in file

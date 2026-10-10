@@ -1,0 +1,76 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/cookies",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-GXroFrNmfEupTaE7njBft67TrXoEAfommHy6B8ZrHauEF3k3Bk//LJcWpipwhSF4XURuq7YGGTCZaxCIWKnBKw==",
+      "snapshotRoot": "sha256:f1b3425a6fc3cc72e136d9dd67dabf50557d3fd1e3679b8e4485dc2872e90ce3",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "da14c35c02f09cf13d07c64658989bb097640d33e87641a5f95f900a7befc741",
+                  "path": "./dist/index.js",
+                  "sha256": "52f06ddde9ca2a0383faffb929b31087f4d976a508cd1e45d7a8d03955bf7695"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "4a99b9a50c7f131f9fb75b14882064320253e1d7bfd13ff9e2ac73759548cbb0"
+                },
+                "exports": {
+                  "createServerCookie": "summary-b1ae4d6d6a1404b5c1d418b25fab95df6ba25619134f652661c98285d47358fc",
+                  "createUserTheme": "summary-1121ed3a369218bd0a060700d661de80850abbcfe3bf99dfdba7c3b268ec15cf",
+                  "getCookiesString": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "parseCookie": "summary-5450eed9be8a3d4bf3f1673b16b884a352a95cf2e4210f665ab008d626d9f017"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-GXroFrNmfEupTaE7njBft67TrXoEAfommHy6B8ZrHauEF3k3Bk//LJcWpipwhSF4XURuq7YGGTCZaxCIWKnBKw==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "a7bec6d713f7b95d53e69cf4030449f6fce1f1118a6d5a180ffe8f4d6918b00f"
+          },
+          "name": "@solid-primitives/cookies",
+          "version": "1.0.0-next.2"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-b1ae4d6d6a1404b5c1d418b25fab95df6ba25619134f652661c98285d47358fc": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-1121ed3a369218bd0a060700d661de80850abbcfe3bf99dfdba7c3b268ec15cf": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-5450eed9be8a3d4bf3f1673b16b884a352a95cf2e4210f665ab008d626d9f017": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,422 @@
+{
+  "format": "solid-checker-probe-recipe-addressing",
+  "addressingVersion": 2,
+  "corpus": "scripts/ecosystem-benchmark/probe-recipes",
+  "demand": "docs/package-contract-v2/phase21/2026-09-14-consumer-demand-recensus.json",
+  "totals": {
+    "recipes": 366,
+    "addressed": 95,
+    "addressedByAddress": 15,
+    "stale": 119,
+    "outOfScope": 152,
+    "unservedClaims": 341,
+    "unplaceableClaims": 255,
+    "unservedExports": 42,
+    "unservedSites": 24
+  },
+  "families": [
+    {
+      "subject": "@solid-primitives/utils",
+      "recipes": 174,
+      "addressed": 64,
+      "stale": 110,
+      "inScope": true
+    },
+    {
+      "subject": "@corvu/utils",
+      "recipes": 48,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@corvu-next/utils",
+      "recipes": 34,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "motion-utils",
+      "recipes": 27,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@kobalte/utils",
+      "recipes": 24,
+      "addressed": 18,
+      "stale": 6,
+      "inScope": true
+    },
+    {
+      "subject": "@floating-ui/utils",
+      "recipes": 20,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@corvu-next/utils,solid-js",
+      "recipes": 6,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@solid-primitives/rootless",
+      "recipes": 6,
+      "addressed": 6,
+      "stale": 0,
+      "inScope": true
+    },
+    {
+      "subject": "@solid-primitives/scheduled",
+      "recipes": 6,
+      "addressed": 3,
+      "stale": 3,
+      "inScope": true
+    },
+    {
+      "subject": "@tanstack/store",
+      "recipes": 6,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@solid-primitives/refs,solid-js",
+      "recipes": 4,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@solid-primitives/trigger",
+      "recipes": 4,
+      "addressed": 4,
+      "stale": 0,
+      "inScope": true
+    },
+    {
+      "subject": "@solid-primitives/i18n",
+      "recipes": 3,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "seroval",
+      "recipes": 3,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    },
+    {
+      "subject": "@solidjs/web",
+      "recipes": 1,
+      "addressed": 0,
+      "stale": 0,
+      "inScope": false
+    }
+  ],
+  "unserved": [
+    {
+      "export": "@kobalte/utils::snapValueToStep",
+      "sites": 6,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/platform::isSafari",
+      "sites": 6,
+      "domains": [
+        "callbacks",
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/permission::createPermission",
+      "sites": 3,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/utils::getScrollParent",
+      "sites": 2,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/context::createContextProvider",
+      "sites": 2,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/tween::createTween",
+      "sites": 2,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Title",
+      "sites": 2,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/scheduled::throttle",
+      "sites": 1,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::ColorModeContext",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::ColorModeProvider",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::ColorModeScript",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::cookieStorageManagerSSR",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::createCookieStorageManager",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::createDomCollectionItem",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::createLocalStorageManager",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::createRegisterId",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::createTagName",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::DomCollectionContext",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::Polymorphic",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::useColorMode",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::useColorModeValue",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::useDomCollectionContext",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/core::useOptionalDomCollectionContext",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@kobalte/utils::roundToStepPrecision",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/context::createLayeredContext",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/context::createOptionalContextProvider",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/context::MultiProvider",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/platform::isBrave",
+      "sites": 0,
+      "domains": [
+        "callbacks",
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/scheduled::leadingAndTrailing",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/scheduled::scheduleIdle",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/timer::createTimeoutLoop",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/timer::createTimer",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/timer::makeTimer",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::globalRegistry",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solid-primitives/utils::sortBy",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Base",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Head",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Link",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Meta",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Script",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Style",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    },
+    {
+      "export": "@solidjs/meta::Stylesheet",
+      "sites": 0,
+      "domains": [
+        "reads"
+      ]
+    }
+  ]
+}

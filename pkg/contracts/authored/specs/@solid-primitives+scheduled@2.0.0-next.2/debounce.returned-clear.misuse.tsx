@@ -1,0 +1,11 @@
+import { onCleanup } from "solid-js";
+import { debounce } from "@solid-primitives/scheduled";
+export default function App() {
+  const done = document.createElement("p");
+  done.id = "done";
+  document.body.append(done);
+  const trigger = debounce(() => onCleanup(() => {}), 10);
+  queueMicrotask(() => { trigger(); });
+  setTimeout(() => { done.textContent = "done"; }, 50);
+  return document.createElement("p");
+}

@@ -13,6 +13,11 @@ export function Ported(props: { ready: boolean; html: string }) {
   return (
     <main>
       <ul>{items().map((item) => <li>{item}</li>)}</ul>
+      {/* An index parameter: `<For>` supplies only its declared parameter, so
+          there is no semantics-preserving rewrite and no fix is offered. This
+          is the branch whose message names the alternative component, and the
+          only place that wording is pinned. */}
+      <ul>{items().map((item, index) => <li>{item}{index}</li>)}</ul>
       <section>{ready() && <strong>ready</strong>}</section>
       <div innerHTML={props.html}>fallback</div>
       <div onClick={() => {}} onclick={() => {}} />

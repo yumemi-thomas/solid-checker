@@ -9,8 +9,8 @@ use typefacts::v3::EntityDemand;
 
 use crate::dialect::Dialect;
 use crate::{
-    BackendError, SemanticDemandOptions, callee_property_location, structural_accessor_spans,
-    typefacts_location,
+    BackendError, PrimitiveImports, SemanticDemandOptions, callee_property_location,
+    structural_accessor_spans, typefacts_location,
 };
 
 pub(crate) fn plan(
@@ -77,6 +77,23 @@ fn plan_file(
             add_symbol(binding.local.span, true);
         }
     }
+    // Host discovery reads reference space at exact binder-selected uses.
+    // Request those rows too, rather than interpreting missing demand as a
+    // negative. The consumer separately guards aggregate server/client uses.
+    let import_bindings = file
+        .ast
+        .imports
+        .iter()
+        .flat_map(|import| &import.bindings)
+        .map(|binding| binding.local.span)
+        .collect::<HashSet<_>>();
+    let import_references = file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, declaration)| import_bindings.contains(declaration))
+        .map(|(reference, _)| *reference)
+        .collect::<HashSet<_>>();
     for binding in &file.ast.bindings {
         for name in &binding.names {
             add_symbol(name.span, true);
@@ -137,6 +154,10 @@ fn plan_file(
         }
     }
     for export in &file.ast.exports {
+        if let Some(binding) = &export.namespace_binding {
+            add_symbol(binding.span, true);
+            type_descriptor_spans.insert(binding.span);
+        }
         for item in export.specifiers.iter().chain(&export.declarations) {
             add_symbol(item.local.span, true);
             type_descriptor_spans.insert(item.local.span);
@@ -362,6 +383,101 @@ fn plan_file(
             runtime_value_domain_spans.insert(returned.span);
         }
     }
+    // ADR 0115: a returned conditional's branches, and the elements of a
+    // branch that is an array literal, are named by the symbol the generator's
+    // argument-container walk resolves them by. Only returned conditionals and
+    // calls, and only as deep as the producer decomposes its arms.
+    let reference = |span: solid_facts::core::Span| {
+        file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == span
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        })
+    };
+    // ADR 0116: a lone array literal an expression-bodied arrow returns names
+    // its elements the same way; a block's `return [value]` already demands
+    // them above, and the arrow spelling of the same return must answer alike.
+    for returned in file
+        .ast
+        .functions
+        .iter()
+        .filter_map(|function| function.expression_return.as_ref())
+        .filter(|returned| returned.properties().is_empty())
+    {
+        for element in returned.elements().iter().flatten().copied() {
+            if reference(element) {
+                add_symbol(element, false);
+            }
+        }
+    }
+    let mut returned_conditionals = file
+        .ast
+        .returns
+        .iter()
+        .filter_map(|returned| returned.argument)
+        .chain(
+            file.ast
+                .functions
+                .iter()
+                .filter_map(|function| function.expression_return.as_ref())
+                .map(|returned| returned.span),
+        )
+        .map(|span| (span, 0usize))
+        .collect::<Vec<_>>();
+    while let Some((span, depth)) = returned_conditionals.pop() {
+        if depth > 8 {
+            continue;
+        }
+        // ADR 0116: a returned call -- the whole expression or a branch -- of
+        // an identifier is named by its callee's symbol, which is how the walk
+        // tells a call of the caller's own argument.
+        if let Some(call) = file.ast.calls.iter().find(|call| call.span == span) {
+            if call.direct_callee && reference(call.callee) {
+                add_symbol(call.callee, false);
+            }
+            continue;
+        }
+        // Item B round 2 of ways-to-improve § 3.3: a returned member read --
+        // the whole expression or a branch -- of an identifier is named by its
+        // receiver's symbol, which is how the walk tells a member of the
+        // caller's own argument.
+        if let Some(member) = file.ast.members.iter().find(|member| member.span == span) {
+            if reference(member.object) {
+                add_symbol(member.object, false);
+            }
+            continue;
+        }
+        let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == span)
+        else {
+            continue;
+        };
+        for (branch, array) in [
+            (
+                conditional.consequent,
+                conditional.consequent_array.as_deref(),
+            ),
+            (
+                conditional.alternate,
+                conditional.alternate_array.as_deref(),
+            ),
+        ] {
+            if let Some(elements) = array {
+                for element in elements.iter().flatten().copied() {
+                    if reference(element) {
+                        add_symbol(element, false);
+                    }
+                }
+            } else {
+                if reference(branch) {
+                    add_symbol(branch, false);
+                }
+                returned_conditionals.push((branch, depth + 1));
+            }
+        }
+    }
     for call in &file.ast.calls {
         for argument in &call.arguments {
             match argument.value {
@@ -536,6 +652,24 @@ fn plan_file(
     // loses that provenance.
     for member in &file.ast.members {
         add_symbol(member.object, false);
+        // A wrapped namespace callee still needs its exact property symbol.
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        let namespace_member =
+            file.ast
+                .reference_declaration(receiver)
+                .is_some_and(|declaration| {
+                    file.ast.imports.iter().any(|import| {
+                        !import.type_only
+                            && import.bindings.iter().any(|binding| {
+                                !binding.type_only
+                                    && binding.kind == solid_facts::ast::ImportKind::Namespace
+                                    && binding.local.span == declaration
+                            })
+                    })
+                });
+        if namespace_member {
+            add_symbol(member.property, false);
+        }
         if file.ast.calls.iter().any(|call| call.span == member.object) {
             add_symbol(member.property, false);
         }
@@ -548,6 +682,14 @@ fn plan_file(
         for slot in assignment.array_slots.iter().flatten() {
             add_symbol(*slot, true);
         }
+    }
+    // Reference-space discovery must not introduce symbol observations at
+    // otherwise undemanded uses (for example a typeof constructor wrapper).
+    // Those observations can alter independent baseline dispatch findings.
+    for reference in &import_references {
+        let mut planned = demand(typefacts_location(&path, *reference));
+        planned.reference_space = true;
+        demands.push(planned);
     }
     for (span, references) in symbol_spans {
         let mut planned = demand(typefacts_location(&path, span)).symbol(references);
@@ -570,19 +712,19 @@ fn plan_file(
         planned.array_shape = array_shape_spans.contains(&span);
         planned.tuple_shape = tuple_shape_spans.contains(&span);
         planned.library_types = library_type_spans.contains(&span);
-        planned.reference_space = file.ast.imports.iter().any(|import| {
-            import
-                .bindings
-                .iter()
-                .any(|binding| binding.local.span == span)
-        });
-        planned.runtime_identity = planned.reference_space
+        planned.reference_space =
+            import_bindings.contains(&span) || import_references.contains(&span);
+        planned.runtime_identity = import_bindings.contains(&span)
             || file.ast.exports.iter().any(|export| {
                 export
-                    .specifiers
-                    .iter()
-                    .chain(&export.declarations)
-                    .any(|item| item.local.span == span)
+                    .namespace_binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.span == span)
+                    || export
+                        .specifiers
+                        .iter()
+                        .chain(&export.declarations)
+                        .any(|item| item.local.span == span)
             });
         demands.push(planned);
     }
@@ -600,30 +742,227 @@ fn plan_file(
     for span in async_value_spans {
         demands.push(demand(typefacts_location(&path, span)).async_context());
     }
+    let primitive_imports = PrimitiveImports::new(dialect, file);
+    // The callbacks a leaf owner (`onSettled`, `createTrackedEffect`) runs,
+    // as the dialect answers per argument. Matched by spelling, so an import
+    // that only shares the name over-demands, which decides nothing.
+    let mut leaf_callbacks = file
+        .ast
+        .calls
+        .iter()
+        .filter_map(|call| {
+            let primitive = call
+                .static_callee(&file.source)
+                .and_then(|callee| primitive_imports.primitive(callee))?;
+            Some((call, primitive))
+        })
+        .flat_map(|(call, primitive)| {
+            call.arguments
+                .iter()
+                .enumerate()
+                .filter(move |(index, _)| {
+                    dialect
+                        .vocabulary
+                        .callback_semantics_at(primitive, *index, call.arguments.len())
+                        .owner
+                        == Some(solid_dialect::CallbackOwner::Leaf)
+                })
+                .map(|(_, argument)| argument.span)
+        })
+        .collect::<Vec<_>>();
+    extend_leaf_demand_regions(file, &mut leaf_callbacks);
     for call in &file.ast.calls {
         let callee = typefacts_location(&path, call.callee);
         let property = callee_property_location(&file.source, &callee);
         let mut planned = demand(callee.clone()).symbol(false);
-        // Signature-to-argument mapping is consumed only when a call has an
+        // Signature-to-argument mapping is consumed when a call has an
         // argument to classify, when cleanup analysis must prove the
-        // callability of a returned call, or when a computed call needs a
-        // validity gate before unresolved runtime dispatch is exposed.
+        // callability of a returned call, or when dispatch needs a validity
+        // gate. Captured-prop projection also needs validity at a plain call
+        // of an exact nested function, even when it passes no arguments.
         let computed_dispatch = file
             .ast
             .computed_members
             .binary_search(&file.ast.peel_ts_sugar_span(call.callee))
             .is_ok();
+        // And a dialect primitive's call needs its declaration even with no
+        // argument: the generator's `creates` walk asks the audits about the
+        // package that *declares* a primitive callee, and only the resolved
+        // call carries the declaration. Without it `getOwner() ? a : b` and a
+        // bare `flush()` declined as the dialect's silence although both have
+        // rows (`@solidjs/signals`, reached through `solid-js`' re-export).
+        let argumentless_primitive = call.arguments.is_empty()
+            && call
+                .static_callee(&file.source)
+                .is_some_and(|callee| primitive_imports.primitive(callee).is_some());
+        // Parameter members and leaf-reachable local helpers need exact
+        // declarations too. Keep unrelated functions out: extra resolved
+        // declarations can move structural member resolution (ADR 0192).
+        let argumentless_method = call.arguments.is_empty()
+            && property != callee
+            && (parameter_rooted_member_call(file, call)
+                || leaf_callbacks
+                    .iter()
+                    .any(|region| region.contains(call.span)));
+        // And an argumentless construction (`new Date()`), because only its
+        // resolved call says which constructor builds the value: a value
+        // whose origin is a reviewed built-in class selects that class's
+        // members at a parameter-member call site (ADR 0211).
+        let argumentless_construction = call.arguments.is_empty() && call.construct;
+        let argumentless_local_helper = call.arguments.is_empty()
+            && call.direct_callee
+            && local_nested_function_callee(file, call.callee);
+        // A returned graph's capture replay needs call validity even when
+        // its invocation supplies no arguments. This only requests a fact:
+        // a call initializer is no proof of a returned callable or a contract.
+        let argumentless_factory_result = call.arguments.is_empty()
+            && call.direct_callee
+            && file
+                .ast
+                .reference_declaration(call.callee)
+                .is_some_and(|declaration| {
+                    file.ast.bindings.iter().any(|binding| {
+                        binding.immutable
+                            && binding.shape == solid_facts::ast::BindingShape::Identifier
+                            && binding.names.len() == 1
+                            && binding.names[0].span == declaration
+                            && binding.call_initializer.is_some()
+                    })
+                });
         planned.resolved_call = !call.arguments.is_empty()
             || returned_callees.contains(&call.callee)
-            || computed_dispatch;
+            || computed_dispatch
+            || argumentless_primitive
+            || argumentless_method
+            || argumentless_construction
+            || argumentless_local_helper
+            || argumentless_factory_result;
         planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
+        // Typed source discovery must distinguish the exact callable value
+        // from a container carrying that value's nested alias declarations.
+        planned.callability = planned.type_descriptor;
+        planned.constructability = planned.type_descriptor;
         demands.push(planned);
         if property != callee {
-            demands.push(demand(property).symbol(false));
+            let mut member = demand(property).symbol(false);
+            member.type_descriptor = call.arguments.is_empty();
+            member.callability = member.type_descriptor;
+            member.constructability = member.type_descriptor;
+            demands.push(member);
         }
     }
     Ok(())
+}
+
+/// Extend leaf demand regions through exact local function references. This
+/// plans facts, not execution: callbacks and nested literals may over-demand.
+/// Imports and member dispatch need semantic facts and are left to a later pass.
+fn extend_leaf_demand_regions(file: &FileFacts, regions: &mut Vec<solid_facts::core::Span>) {
+    use solid_facts::ast::{BindingShape, FunctionKind};
+
+    let mut functions = HashMap::new();
+    for function in &file.ast.functions {
+        if function.kind == FunctionKind::Declaration
+            && let Some(name) = &function.name
+        {
+            functions.insert(name.span, function.span);
+        }
+    }
+    for binding in &file.ast.bindings {
+        if !binding.immutable || binding.shape != BindingShape::Identifier {
+            continue;
+        }
+        let Some(initializer) = binding.initializer else {
+            continue;
+        };
+        let initializer = file.ast.peel_ts_sugar_span(initializer);
+        if file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span == initializer)
+            && let Some(name) = binding.names.first()
+        {
+            functions.insert(name.span, initializer);
+        }
+    }
+    let mut seen = regions.iter().copied().collect::<HashSet<_>>();
+    let mut next = 0;
+    while next < regions.len() {
+        let region = regions[next];
+        next += 1;
+        for (reference, declaration) in &file.ast.reference_declarations {
+            if region.contains(*reference)
+                && let Some(function) = functions.get(declaration)
+                && seen.insert(*function)
+            {
+                regions.push(*function);
+            }
+        }
+    }
+}
+
+/// Only an exact lexical declaration of a nested function value. This is
+/// demand selection, not component identity or an execution proof. Parameters,
+/// aliases, imports, methods, and call-initialized bindings do not enter it.
+fn local_nested_function_callee(file: &FileFacts, callee: solid_facts::core::Span) -> bool {
+    use solid_facts::ast::{BindingShape, FunctionKind};
+    let Some(declaration) = file.ast.reference_declaration(callee) else {
+        return false;
+    };
+    file.ast.functions.iter().any(|function| {
+        let names_value = (function.kind == FunctionKind::Declaration
+            && function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration))
+            || file.ast.bindings.iter().any(|binding| {
+                binding.immutable
+                    && binding.shape == BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && binding.names[0].span == declaration
+                    && binding.initializer.is_some_and(|initializer| {
+                        file.ast.peel_ts_sugar_span(initializer) == function.span
+                    })
+            });
+        names_value
+            && file
+                .ast
+                .functions
+                .iter()
+                .any(|outer| outer.span != function.span && outer.body.contains(function.span))
+    })
+}
+
+/// An argumentless method call through one of an enclosing function's
+/// parameters (`name.trim()` inside `(name: string) => name.trim().split(…)`).
+/// The IR records it as a parameter-member invocation, and only its resolved
+/// declaration says whether the member is a primitive wrapper's built-in
+/// (ADR 0190). The root is matched by spelling, so a shadowed name
+/// over-demands, which costs a fact and decides nothing.
+fn parameter_rooted_member_call(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let Some(text) = file.source_text(callee) else {
+        return false;
+    };
+    let root_length = text
+        .find(|character: char| {
+            !(character.is_alphanumeric() || character == '_' || character == '$')
+        })
+        .unwrap_or(text.len());
+    let (root, rest) = text.split_at(root_length);
+    if root.is_empty() || !(rest.starts_with('.') || rest.starts_with("?.")) {
+        return false;
+    }
+    file.ast.functions.iter().any(|function| {
+        function.span.contains(call.span)
+            && function
+                .parameters
+                .iter()
+                .flat_map(|parameter| &parameter.names)
+                .any(|name| file.source_text(name.span) == Some(root))
+    })
 }
 
 fn demand(location: typefacts::Location) -> EntityDemand {

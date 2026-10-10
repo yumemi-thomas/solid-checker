@@ -1,0 +1,59 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "conditional-returns-divergence-both-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "Show",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createSignal",
+      "location": "<package-root>/node.js:90:114",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [
+        "browser"
+      ],
+      "stage": "closure-proposal",
+      "export": "Show",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createSignal",
+      "location": "<package-root>/browser.js:182:206",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [
+        "node"
+      ],
+      "stage": "closure-proposal",
+      "export": "Show",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createSignal",
+      "location": "<package-root>/node.js:90:114",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

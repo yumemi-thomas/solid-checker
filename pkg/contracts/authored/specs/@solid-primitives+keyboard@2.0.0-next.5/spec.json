@@ -1,0 +1,1058 @@
+{
+  "package": "@solid-primitives/keyboard",
+  "version": "2.0.0-next.5",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "pairs": "../_pairs/@solid-primitives+keyboard",
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createKeyHold": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:140-151 \u2014 Optional second singleton root and eager held-key memo; initial keys read is strictRead cleared by untrack, memo reads tracked under created owner. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:203-212 \u2014 Optional prevent-default native listener cleanup; mandatory final eager memo. Both memo read contexts are created/tracked. Options Get remains ambient-at-execution, not inert for reactive props. Draft only; no unconditional singleton allocations.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "singleton-subscription-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "singleton-root-production",
+            "kind": "create",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "captured",
+              "resource": "detached-owner",
+              "requires": "unconstrained",
+              "productions": [
+                {
+                  "resource": "singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ],
+              "requiresChildren": "required"
+            },
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked"
+          },
+          {
+            "id": "pressed-keys-production",
+            "kind": "create",
+            "resources": [
+              "pressed-keys"
+            ],
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "owner": {
+              "source": "created",
+              "resource": "singleton-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "held-key-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "result-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "prevent-default-listener-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "options-get",
+            "kind": "invoke",
+            "protocol": "get",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "keydown-pressed-keys-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          },
+          {
+            "id": "singleton-listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 4,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "singleton-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "held-singleton-root-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "captured",
+              "resource": "detached-owner",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "held-singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "inner-key-list-subscription-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "held-singleton-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "held-singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "held-key-memo-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "held-singleton-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "held-singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "resources": [
+              "held-key-memo-owner",
+              "held-key-source"
+            ]
+          },
+          {
+            "id": "initial-pressed-keys-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "held-singleton-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "held-singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "pressed-keys"
+              }
+            ],
+            "strictRead": "cleared",
+            "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:143 \u2014 Actual unlabelled untrack(keys). /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5863-5887 \u2014 untrack clears strictRead and restores it afterward."
+          },
+          {
+            "id": "held-singleton-first-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "held-key-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "held-key-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "pressed-keys"
+              }
+            ]
+          },
+          {
+            "id": "held-singleton-flush-read",
+            "kind": "read",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "held-key-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "held-key-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "pressed-keys"
+              }
+            ]
+          },
+          {
+            "id": "result-memo-first-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "result-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "result-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "held-key-source"
+              }
+            ]
+          },
+          {
+            "id": "result-memo-flush-read",
+            "kind": "read",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "result-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "result-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "held-key-source"
+              }
+            ]
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "options-get"
+          }
+        ],
+        "resources": [
+          {
+            "id": "singleton-root",
+            "kind": "owner"
+          },
+          {
+            "id": "pressed-keys",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "detached-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "held-singleton-root",
+            "kind": "owner"
+          },
+          {
+            "id": "held-key-memo-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "held-key-source",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "result-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "singleton-subscription-cleanup",
+          "prevent-default-listener-cleanup",
+          "singleton-listener-cleanups",
+          "inner-key-list-subscription-cleanup"
+        ],
+        "creates": [
+          "singleton-root-production",
+          "pressed-keys-production",
+          "held-singleton-root-production",
+          "held-key-memo-production"
+        ],
+        "computations": [
+          "held-key-memo"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [
+          "keydown-pressed-keys-read",
+          "initial-pressed-keys-read",
+          "held-singleton-first-read",
+          "held-singleton-flush-read",
+          "result-memo-first-read",
+          "result-memo-flush-read"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:140-151 \u2014 Optional second singleton root and eager held-key memo; initial keys read is strictRead cleared by untrack, memo reads tracked under created owner. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:203-212 \u2014 Optional prevent-default native listener cleanup; mandatory final eager memo. Both memo read contexts are created/tracked. Options Get remains ambient-at-execution, not inert for reactive props.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:140-151 \u2014 Optional second singleton root and eager held-key memo; initial keys read is strictRead cleared by untrack, memo reads tracked under created owner. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:203-212 \u2014 Optional prevent-default native listener cleanup; mandatory final eager memo. Both memo read contexts are created/tracked. Options Get remains ambient-at-execution, not inert for reactive props.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:140-151 \u2014 Optional second singleton root and eager held-key memo; initial keys read is strictRead cleared by untrack, memo reads tracked under created owner. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:203-212 \u2014 Optional prevent-default native listener cleanup; mandatory final eager memo. Both memo read contexts are created/tracked. Options Get remains ambient-at-execution, not inert for reactive props. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-8 \u2014 makeEventListener uses tryOnCleanup under the active factory/caller owner.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:140-151 \u2014 Optional second singleton root and eager held-key memo; initial keys read is strictRead cleared by untrack, memo reads tracked under created owner. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:203-212 \u2014 Optional prevent-default native listener cleanup; mandatory final eager memo. Both memo read contexts are created/tracked. Options Get remains ambient-at-execution, not inert for reactive props. P1 native handlers are package-defined. P2 plain key/options data; createKeyHold's existing options-get preserves unknown getter behavior."
+      },
+      "probes": [
+        {
+          "label": "subscription-owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Singleton subscription cleanup and memo child restriction in a leaf."
+        },
+        {
+          "label": "cleared-initial",
+          "rule": "strict-read-untracked",
+          "why": "Constructor's actual untrack(keys) must stay clean, while misuse's final accessor read warns. First invocation includes both singleton factories; correct reads only in JSX."
+        }
+      ]
+    },
+    "createShortcut": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained. Guard draft: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/keyboard/dist/index.js:243-319; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-8; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 Exact keys.length=2 excludes the empty-list return and reaches four makeEventListener/tryOnCleanup calls. The optional row retains other lengths. No owner is required if absent, but a present leaf forbids these registrations.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          },
+          {
+            "id": "shortcut-listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 4,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "shortcut-callback",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "two-key-listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 4,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 2
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "shortcut-callback"
+          }
+        ],
+        "resources": [],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "shortcut-listener-cleanups",
+          "two-key-listener-cleanups"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 All normal completions are undefined, including empty-key exit.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 Empty keys creates none; otherwise exactly four tryOnCleanup listener registrations. Owner is unconstrained with cleanup required on a present owner; 0..4 remains conditional, not guaranteed. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints). Guard audit: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/keyboard/dist/index.js:243-319; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-8; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/utils/dist/index.js:149 \u2014 The exact length=2 branch registers cleanup; all remaining key lengths retain the optional registration, with no private source production.",
+        "reads": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 P2: key-array length/map/index and option destructuring are plain data. P1: editable target and event fields/methods have no reactive getters. No package signal is read.",
+        "callbacks": "P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 P1: The only caller callback executes from matching keydown branches on the host's later stack; shortcut-callback is external/ambient/0..many. P2: keys/options traversal is data, not another callable origin."
+      },
+      "probes": [
+        {
+          "label": "host-dispatch",
+          "rule": "missing-owner",
+          "why": "A real keydown host dispatch reaches the case-file shortcut callback without owner restoration. The correct twin re-enters the captured owner for cleanup registration.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:243-319; Server returns undefined at line 244 before mapping keys, accessing options, registering listeners, or invoking callback. Browser listener-cleanup cardinality is already minimum zero and callback is optional, so minZero is empty. Both paths have the claimed undefined return. Resolved makeEventListener/tryOnCleanup: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/keyboard/dist/index.js:244 \u2014 New two-key-listener-cleanups is weakened to min:0 because the server returns before any listener.",
+        "minZero": [
+          "two-key-listener-cleanups"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:243-319; Server returns undefined at line 244 before mapping keys, accessing options, registering listeners, or invoking callback. Browser listener-cleanup cardinality is already minimum zero and callback is optional, so minZero is empty. Both paths have the claimed undefined return. Resolved makeEventListener/tryOnCleanup: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 All normal completions are undefined, including empty-key exit. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/keyboard/dist/index.js:244 \u2014 The exact-two-key guarded registration is skipped on server as well.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:243-319; Server returns undefined at line 244 before mapping keys, accessing options, registering listeners, or invoking callback. Browser listener-cleanup cardinality is already minimum zero and callback is optional, so minZero is empty. Both paths have the claimed undefined return. Resolved makeEventListener/tryOnCleanup: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 Empty keys creates none; otherwise exactly four tryOnCleanup listener registrations. Owner is unconstrained with cleanup required on a present owner; 0..4 remains conditional, not guaranteed. Runtime owner semantics: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 (optional memo parent, present leaf rejected); /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/.pnpm/solid-js@2.0.0-rc.4/node_modules/@solidjs/signals/dist/dev.js:2311-2358 (cleanup and signal/memo entrypoints). /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/keyboard/dist/index.js:244 \u2014 The exact-two-key guarded registration is skipped on server as well.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:243-319; Server returns undefined at line 244 before mapping keys, accessing options, registering listeners, or invoking callback. Browser listener-cleanup cardinality is already minimum zero and callback is optional, so minZero is empty. Both paths have the claimed undefined return. Resolved makeEventListener/tryOnCleanup: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 P2: key-array length/map/index and option destructuring are plain data. P1: editable target and event fields/methods have no reactive getters. No package signal is read. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/keyboard/dist/index.js:244 \u2014 The exact-two-key guarded registration is skipped on server as well.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:243-319; Server returns undefined at line 244 before mapping keys, accessing options, registering listeners, or invoking callback. Browser listener-cleanup cardinality is already minimum zero and callback is optional, so minZero is empty. Both paths have the claimed undefined return. Resolved makeEventListener/tryOnCleanup: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:149. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: P1: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/keyboard/dist/index.js:8-32,243-319; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../rootless/dist/index.js:84-100; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/resize-observer/../utils/dist/index.js:52,149 \u2014 P1: The only caller callback executes from matching keydown branches on the host's later stack; shortcut-callback is external/ambient/0..many. P2: keys/options traversal is data, not another callable origin. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createShortcut-leaf-owner/node_modules/@solid-primitives/keyboard/dist/index.js:244 \u2014 The exact-two-key guarded registration is skipped on server as well."
+        }
+      }
+    },
+    "useKeyDownList": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse.  Draft only; no unconditional singleton allocations.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "singleton-subscription-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "singleton-root-production",
+            "kind": "create",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "captured",
+              "resource": "detached-owner",
+              "requires": "unconstrained",
+              "productions": [
+                {
+                  "resource": "singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ],
+              "requiresChildren": "required"
+            },
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked"
+          },
+          {
+            "id": "pressed-keys-production",
+            "kind": "create",
+            "resources": [
+              "pressed-keys"
+            ],
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "owner": {
+              "source": "created",
+              "resource": "singleton-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "keydown-pressed-keys-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          },
+          {
+            "id": "returned-pressed-keys-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          },
+          {
+            "id": "singleton-listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 4,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "singleton-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "singleton-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [],
+        "resources": [
+          {
+            "id": "singleton-root",
+            "kind": "owner"
+          },
+          {
+            "id": "pressed-keys",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "detached-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "singleton-subscription-cleanup",
+          "singleton-listener-cleanups"
+        ],
+        "creates": [
+          "singleton-root-production",
+          "pressed-keys-production"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [
+          "keydown-pressed-keys-read",
+          "returned-pressed-keys-read"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse. ",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse. ",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse.  /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-8 \u2014 makeEventListener uses tryOnCleanup under the active factory/caller owner.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/keyboard/dist/index.js:91-119 \u2014 Shared key-list factory may allocate its root and one pressedKeys signal; four native listener cleanup registrations are under that created root. Native keydown is the only internal signal read outside memos and is later on the native stack, not construction. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyboard-createKeyHold-top-level-read/node_modules/@solid-primitives/rootless/dist/index.js:84-100 \u2014 Each public singleton use unconditionally registers subscriber cleanup; allocation only if disposeRoot is absent, under the retained detached owner. Internal subscription is under the held singleton root. Counts 0..1 preserve reuse.  P1 native handlers are package-defined. P2 plain key/options data; createKeyHold's existing options-get preserves unknown getter behavior."
+      },
+      "probes": [
+        {
+          "label": "subscription-owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Singleton use registers subscriber onCleanup on caller owner even on reuse."
+        },
+        {
+          "label": "reuse-cleanup",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Prime singleton in the component and use again under an onSettled leaf: even reuse registers subscriber cleanup. Correct second subscription remains in component owner."
+        }
+      ]
+    }
+  }
+}

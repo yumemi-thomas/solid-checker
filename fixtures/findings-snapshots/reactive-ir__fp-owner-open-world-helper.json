@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-open-world-helper/App.tsx",
+      "start": 217,
+      "end": 226,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-owner-open-world-helper/App.tsx",
+      "start": 418,
+      "end": 427,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-owner-open-world-helper/App.tsx",
+      "start": 668,
+      "end": 677,
+      "fixes": 0
+    }
+  ]
+}

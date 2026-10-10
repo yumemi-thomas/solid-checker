@@ -1,0 +1,25 @@
+function flush(e) {
+    if (e) {
+        syncDepth++;
+        try {
+            return e();
+        } finally {
+            // Decrement even if the drain throws (a throwing effect): a leaked
+            // syncDepth would stop `schedule()` from ever queuing a microtask again.
+            try {
+                flush();
+            } finally {
+                syncDepth--;
+            }
+        }
+    }
+    if (globalQueue.de) {
+        return;
+    }
+    if (halted) return;
+    // `flush()` is an explicit drain point, so it must also process an active
+    // transition even if no microtask was scheduled for it yet.
+        while (scheduled$1 || activeTransition) {
+        globalQueue.flush();
+    }
+}

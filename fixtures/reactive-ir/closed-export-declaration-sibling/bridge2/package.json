@@ -1,0 +1,4 @@
+{
+  "main": "./runtime.ts",
+  "types": "./surface.d.ts"
+}

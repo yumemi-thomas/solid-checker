@@ -17,9 +17,10 @@ kind decision:
 
 - callable or constructable proves runtime function kind;
 - closed non-callable plus non-constructable proves value kind;
-- unknown, mixed, or absent facts prove neither and refuse the entrypoint;
+- present unknown or mixed facts preserve `shape: "unknown"` with behavior open;
+- absent kind facts still refuse the entrypoint;
 - raising a value summary to function leaves callback behavior open.
 
 The fixture therefore guards both false negative closure (`class` published as
-inert value) and false positive dependency trust. No serialized unknown
-sentinel, variant, or inline evidence object is part of the result.
+inert value) and false positive dependency trust. `./unresolvable` now records
+the existing public unknown shape, with no behavioral claims (ADR 0011).

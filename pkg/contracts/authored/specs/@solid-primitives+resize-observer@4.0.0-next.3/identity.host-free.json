@@ -1,0 +1,71 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/resize-observer",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-g7aKa5xgXd2wXC2EtJzYdx5k9pZCPRDuG+m5Kndfmi9f6yLhe1g1d0y4L6jE6Zxjwxz7a+wRnjpnTLbsP3JvRw==",
+      "snapshotRoot": "sha256:3b3619fb831a0e2414c5b0dcf4c54e6c144f1151cb52535633427c8d6a5e5bc1",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "301fde8b6821528d7e811c181bfb1953ce7462144fa0ad42704e2fe74b0b6eeb",
+                  "path": "./dist/index.js",
+                  "sha256": "b5c44c6dba172beeb41559166f147c0f7e38e2af5a5e9c7af817d57af4f7a991"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "c14a83fca067a3b9f9017299b640a30b45a191147fe34f15a22a2cd53d92f0ec"
+                },
+                "exports": {
+                  "createElementSize": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createResizeObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createWindowSize": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getElementSize": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getWindowSize": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "makeResizeObserver": "summary-5d6ffbf47eaa5934b1edfd2842014e5e1f49297f0c5ff31c51a9c84fbefda8cc",
+                  "useWindowSize": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-g7aKa5xgXd2wXC2EtJzYdx5k9pZCPRDuG+m5Kndfmi9f6yLhe1g1d0y4L6jE6Zxjwxz7a+wRnjpnTLbsP3JvRw==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "e4a04dafe53be74412f4b4d826431ce0b59d35f785203e5ad871f82b9e3498ec"
+          },
+          "name": "@solid-primitives/resize-observer",
+          "version": "4.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-5d6ffbf47eaa5934b1edfd2842014e5e1f49297f0c5ff31c51a9c84fbefda8cc": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

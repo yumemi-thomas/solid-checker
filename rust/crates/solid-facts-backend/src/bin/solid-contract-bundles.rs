@@ -7,7 +7,7 @@ use std::{
 };
 
 use serde::Serialize;
-use solid_facts_backend::{BundleSelector, solid1_bundles, solid2_rc3_bundles};
+use solid_facts_backend::{BundleSelector, solid2_rc3_bundles};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,10 +53,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             _ => return Err(format!("unknown argument {argument:?}").into()),
         }
     }
-    let groups = [
-        ("solid-v1", solid1_bundles()?),
-        ("solid-v2", solid2_rc3_bundles()?),
-    ];
+    let groups = [("solid-v2", solid2_rc3_bundles()?)];
     let count = groups
         .iter()
         .map(|(_, bundles)| bundles.len())

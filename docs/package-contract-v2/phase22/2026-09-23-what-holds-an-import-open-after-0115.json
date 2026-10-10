@@ -1,0 +1,1940 @@
+{
+  "run": "2026-09-23T14:45:30.917Z",
+  "bySiteClass": {
+    "some-uses | callbacks | withheld: census refused": 194,
+    "some-uses | returns | withheld operation: census refused": 230,
+    "every-import | callbacks | withheld: census refused": 280,
+    "every-import | returns | withheld: veto did not complete": 112,
+    "every-import | creates | withheld: census refused": 257,
+    "every-import | returns | never proposed": 237,
+    "every-import | callbacks | never proposed": 82,
+    "every-import | reads | withheld: census refused": 80,
+    "every-import | creates | never proposed": 137,
+    "some-uses | returns | never proposed": 72,
+    "every-import | callbacks | declined: unaccepted-external-dependency": 68,
+    "every-import | returns | declined: unaccepted-external-dependency": 71,
+    "every-import | returns | proposed, not certified": 26,
+    "every-import | creates | declined: dialect-silent": 33,
+    "every-import | callbacks | proposed, not certified": 29,
+    "some-uses | callbacks | never proposed": 22,
+    "every-import | creates | declined: unaccepted-external-dependency": 25,
+    "every-import | reads | withheld: no recipe in corpus": 25,
+    "every-import | returns | withheld operation: census refused": 21,
+    "every-import | creates | withheld: veto did not complete": 8,
+    "every-import | reads | never proposed": 4,
+    "every-import | creates | declined: unresolved-callee": 10,
+    "every-import | reads | declined: unaccepted-external-dependency": 19,
+    "some-uses | callbacks | proposed, not certified": 3,
+    "every-import | creates | declined: refusing-callee-fixpoint": 2,
+    "every-import | reads | proposed, not certified": 1
+  },
+  "onlyReturns": [
+    {
+      "package": "@solid-primitives/utils",
+      "export": "entries",
+      "sites": 37
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "accessWith",
+      "sites": 27
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "keys",
+      "sites": 22
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "createIdGenerator",
+      "sites": 3
+    }
+  ],
+  "exports": [
+    {
+      "package": "@solid-primitives/utils",
+      "export": "access",
+      "sites": 157,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate describes call-time invocation(s) of parameter(s) 0, but the implementation census dispositioned 2 call(s) into the parameter-rooted family (parameter-rooted 1, parameter-rooted-accessor 1): the parameter-rooted-accessor member (1) is an invocation of caller-supplied code the enumeration does not describe"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2:access): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:12448..12454 whose completion the producer did not prove primitive"
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/utils",
+      "export": "callHandler",
+      "sites": 112,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an unresolved callee at <tmp>/node_modules/@kobalte/utils/dist/index.js:186..215 (`handler[0](handler[1], event)`)"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld: veto did not complete",
+          "detail": "veto did not complete: gate sha256:02c1cf966e521f7a3d8389ef4d15e7da75ff5e8afcd9a23c360c1b58c12e41d8 (certification-probe: the worker threw: Error: Stripping types is currently unsupported for files under node_modules, for \"file://<tmp>/node_modules/@kobalte/utils/src/events.ts\")"
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an unresolved callee at <tmp>/node_modules/@kobalte/utils/src/events.ts:337..366 (`handler[0](handler[1], event)`)"
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/utils",
+      "export": "composeEventHandlers",
+      "sites": 48,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an unresolved callee at <tmp>/node_modules/@kobalte/utils/dist/index.js:186..215 (`handler[0](handler[1], event)`); parameterPremiseRefusal at <tmp>/node_modules/@kobalte/utils/dist/index.js:76..251 (depth 1): parameter 1 types differ: twin \"any\", premised \"EventHandlerUnion<T, any, EventHandler<T, any>> | undefined\""
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an unresolved callee at <tmp>/node_modules/@kobalte/utils/src/events.ts:337..366 (`handler[0](handler[1], event)`)"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "entries",
+      "sites": 37,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "tryOnCleanup",
+      "sites": 37,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: domain-exhaustiveness (artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2:tryOnCleanup): runtime implementation transcript is incomplete or open (reasons=[\"implementationUnavailable\"])"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "accessWith",
+      "sites": 27,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2:accessWith): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:12469..12479 whose completion the producer did not prove primitive"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/rootless",
+      "export": "createHydratableSingletonRoot",
+      "sites": 27,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/rootless@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in this artifact's own runtime source: \"getOwner\" declared at <tmp>/node_modules/@solidjs/signals/dist/types/core/owner.d.ts:2394..2402, called at <tmp>/node_modules/@solid-primitives/rootless/dist/index.js:4419..4429"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "createCallbackStack",
+      "sites": 22,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a call through \"cb\" declared at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:6355..6357: a parameter of a nested callable is caller-supplied code, which the callbacks domain owns and this census cannot see, called at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:6362..6388"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a call through \"cb\" declared at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:6355..6357: a parameter of a nested callable is caller-supplied code, which the callbacks domain owns and this census cannot see, called at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:6362..6388"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "keys",
+      "sites": 22,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "createHydratableSignal",
+      "sites": 20,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "returns",
+          "status": "proposed, not certified",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "declined: dialect-silent",
+          "detail": "dialect-silent solid-js createSignal"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "createMicrotask",
+      "sites": 20,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "proposed, not certified",
+          "detail": ""
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in this artifact's own runtime source: \"onCleanup\" declared at <tmp>/node_modules/@solidjs/signals/dist/types/signals.d.ts:1892..1901, called at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:6914..6940"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "accessArray",
+      "sites": 12,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 4 call(s) into the parameter-rooted family (parameter-rooted 2, parameter-rooted-accessor 2): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2:accessArray): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:12456..12467 whose completion the producer did not prove primitive"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "pick",
+      "sites": 12,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/object.js:707..711, reach reachable, the producer offered no subject derivation: nested-parameter"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: reads-census premise required: the property-access-unknown-accessor form (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/object.js:707..711 (reachable) states no reviewed subject root, so whose value it reads is undecided"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "arrayEquals",
+      "sites": 11,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2:arrayEquals): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:12493..12504 whose completion the producer did not prove primitive"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "asAccessor",
+      "sites": 11,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2:asAccessor): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:12506..12516 whose completion the producer did not prove primitive"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "push",
+      "sites": 9,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in this artifact's own runtime source: \"withArrayCopy\" declared at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/copy.d.ts:597..610, called at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/array.js:305..355"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "chain",
+      "sites": 7,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 2 call(s) into the parameter-rooted family (parameter-rooted-element 1, parameter-rooted-iterable 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/rootless",
+      "export": "createSingletonRoot",
+      "sites": 7,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/rootless@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in this artifact's own runtime source: \"onCleanup\" declared at <tmp>/node_modules/@solidjs/signals/dist/types/signals.d.ts:1892..1901, called at <tmp>/node_modules/@solid-primitives/rootless/dist/index.js:3446..3615"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "handleDiffArray",
+      "sites": 7,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:8666..8676, reach unknown, the producer offered no subject derivation: written-parameter"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: reads-census premise required: the property-access-unknown-accessor form (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:8666..8676 (unknown) states no reviewed subject root, so whose value it reads is undecided"
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:8666..8676, reach unknown, the producer offered no subject derivation: written-parameter"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "drop",
+      "sites": 6,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 2 call(s) into the parameter-rooted family (parameter-rooted 1, parameter-rooted-accessor 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "filterOut",
+      "sites": 6,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/array.js:1302..1330, reach reachable, the coerced operands rooted at nothing shared: mixed-operand-roots"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/utils",
+      "export": "isPointInPolygon",
+      "sites": 6,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 3 call(s) into the parameter-rooted family (parameter-rooted-accessor 3): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: operation-reachability (artifact-case:6d69dd5a30735cafcc4bd3b5b50bbf3236888a18b7fc2a1d735985e28ee3a76f:isPointInPolygon): return operation has no reachable implementation return"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "remove",
+      "sites": 6,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in this artifact's own runtime source: \"withArrayCopy\" declared at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/copy.d.ts:597..610, called at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/array.js:1894..1966"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/utils",
+      "export": "snapValueToStep",
+      "sites": 6,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:6d69dd5a30735cafcc4bd3b5b50bbf3236888a18b7fc2a1d735985e28ee3a76f:snapValueToStep): primitive returns census refuses a return at <tmp>/node_modules/@kobalte/utils/dist/index.js:2524..2544, reach reachable, whose own value the producer did not type as a primitive alone, for <tmp>/node_modules/@kobalte/utils/dist/index.js:4796..4811"
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: veto did not complete",
+          "detail": "veto did not complete: gate sha256:8a35e95adedf02a7d525df907d92d0c4eaa847f5d8ccd5442bd9683e93e2ede7 (certification-probe: the worker threw: Error: Stripping types is currently unsupported for files under node_modules, for \"file://<tmp>/node_modules/@kobalte/utils/src/index.ts\")"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/trigger",
+      "export": "TriggerCache",
+      "sites": 6,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/trigger@3.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "update",
+      "sites": 5,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: reads-census premise required: the property-access-unknown-accessor form (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/update.js:887..899 (reachable) states no reviewed subject root, so whose value it reads is undecided"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/marker",
+      "export": "createMarker",
+      "sites": 4,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/marker@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "proposed, not certified",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unresolved-callee",
+          "detail": "unresolved-callee; refusing-callee-fixpoint; dialect-silent solid-js createSignal"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/scheduled",
+      "export": "debounce",
+      "sites": 4,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/scheduled@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "proposed, not certified",
+          "detail": ""
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:6f867f0c52fcf2326754d14e3732fc846506169f421964acdd213ca859cbbd8d:debounce): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/scheduled/dist/index.js:7383..7391 whose completion the producer did not prove primitive"
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in this artifact's own runtime source: \"getOwner\" declared at <tmp>/node_modules/@solidjs/signals/dist/types/core/owner.d.ts:2394..2402, called at <tmp>/node_modules/@solid-primitives/scheduled/dist/index.js:932..942"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/marker",
+      "export": "makeSearchRegex",
+      "sites": 4,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/marker@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (PropertyAccessExpression) at <tmp>/node_modules/@solid-primitives/marker/dist/index.js:524..545, reach reachable, the producer offered no subject derivation: call-result"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: reads-census premise required: the property-access-unknown-accessor form (PropertyAccessExpression) at <tmp>/node_modules/@solid-primitives/marker/dist/index.js:524..545 (reachable) states no reviewed subject root, so whose value it reads is undecided"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:4cca7aed72fcbdb26d7eae3f3e8ccf723b8d9c53162a8f52e470069977c01775:makeSearchRegex): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/marker/dist/index.js:2891..2906 whose completion the producer did not prove primitive"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unresolved-callee",
+          "detail": "unresolved-callee"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "removeItems",
+      "sites": 4,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 3 call(s) into the parameter-rooted family (parameter-rooted 2, parameter-rooted-accessor 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "reverseChain",
+      "sites": 4,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses \"callback\" declared at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:2962..2970: the binding is initialized by an expression that is not a function or arrow literal, and the census does not trace values, called at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:3002..3019"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses \"callback\" declared at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:2962..2970: the binding is initialized by an expression that is not a function or arrow literal, and the census does not trace values, called at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:3002..3019"
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/core",
+      "export": "Select",
+      "sites": 4,
+      "view": "every-import",
+      "entrypoint": "./select",
+      "row": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency; runtime-accessor-installation"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "splice",
+      "sites": 4,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in this artifact's own runtime source: \"withArrayCopy\" declared at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/copy.d.ts:597..610, called at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/array.js:1894..1966"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/core",
+      "export": "Tabs",
+      "sites": 4,
+      "view": "every-import",
+      "entrypoint": "./tabs",
+      "row": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency; runtime-accessor-installation"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "add",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/number.js:124..130, reach unknown, the coerced operands rooted at nothing shared: local-binding-uninitialized"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: reads-census premise required: the coercion form (BinaryExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/number.js:124..130 (unknown) states no reviewed subject root, so whose value it reads is undecided"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "afterPaint",
+      "sites": 3,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "proposed, not certified",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "compare",
+      "sites": 3,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 2 call(s) into the parameter-rooted family (parameter-rooted-coercion 2): this export invokes callable(s) its caller supplied"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "concat",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: reads-census premise required: the property-access-unknown-accessor form (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/array.js:2384..2388 (unknown) states no reviewed subject root, so whose value it reads is undecided"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "createIdGenerator",
+      "sites": 3,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/memo",
+      "export": "createLazyMemo",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/memo@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: dialect-silent",
+          "detail": "dialect-silent solid-js createMemo; unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/permission",
+      "export": "createPermission",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/permission@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "proposed, not certified",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "declined: dialect-silent",
+          "detail": "dialect-silent solid-js createSignal; dialect-silent solid-js createEffect; unresolved-callee"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/rootless",
+      "export": "createSubRoot",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/rootless@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: dialect-silent",
+          "detail": "dialect-silent  onCleanup; unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/trigger",
+      "export": "createTriggerCache",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/trigger@3.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses the standard-library member `CallableFunction.bind`: it transfers control to a callable by reference (or evaluates text as code), which the census cannot disposition, called at <tmp>/node_modules/@solid-primitives/trigger/dist/index.js:2561..2580"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses the standard-library member `CallableFunction.bind`: it transfers control to a callable by reference (or evaluates text as code), which the census cannot disposition, called at <tmp>/node_modules/@solid-primitives/trigger/dist/index.js:2561..2580"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "divide",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "dropRight",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 1 call(s) into the parameter-rooted family (parameter-rooted 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "filter",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 2 call(s) into the parameter-rooted family (parameter-rooted 1, parameter-rooted-accessor-write 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "filterNonNullable",
+      "sites": 3,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 2 call(s) into the parameter-rooted family (parameter-rooted 1, parameter-rooted-accessor 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2:filterNonNullable): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:12702..12719 whose completion the producer did not prove primitive"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "flatten",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (PropertyAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/array.js:3100..3111, reach reachable, the producer offered no subject derivation: nested-parameter"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: reads-census premise required: the property-access-unknown-accessor form (PropertyAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/array.js:3100..3111 (reachable) states no reviewed subject root, so whose value it reads is undecided"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "get",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 1 call(s) into the parameter-rooted family (parameter-rooted-accessor 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "map",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 2 call(s) into the parameter-rooted family (parameter-rooted 1, parameter-rooted-accessor 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "merge",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "multiply",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "ofClass",
+      "sites": 3,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 2 call(s) into the parameter-rooted family (parameter-rooted-accessor 1, parameter-rooted-has-instance 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:1bea9ecdd99dcdbedc17ea6efb689911ddcefe25cbd7a1c13424967dec04dab2:ofClass): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/utils/dist/index.js:12855..12862 whose completion the producer did not prove primitive"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "omit",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/object.js:419..430, reach reachable, the producer offered no subject derivation"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: reads-census premise required: the property-access-unknown-accessor form (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/object.js:419..430 (reachable) states no reviewed subject root, so whose value it reads is undecided"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "power",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "slice",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 2 call(s) into the parameter-rooted family (parameter-rooted 1, parameter-rooted-accessor 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "sort",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an unresolved callee at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/array.js:1487..1515 (`list.slice().sort(compareFn)`)"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "split",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: census refused",
+          "detail": "census refused: reads-census premise required: the property-access-unknown-accessor form (ElementAccessExpression) at <tmp>/node_modules/@solid-primitives/utils/dist/immutable/object.js:1057..1065 (unknown) states no reviewed subject root, so whose value it reads is undecided"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "substract",
+      "sites": 3,
+      "view": "every-import",
+      "entrypoint": "./immutable",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/utils",
+      "export": "wrapSetter",
+      "sites": 3,
+      "view": "some-uses",
+      "entrypoint": ".",
+      "row": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate describes call-time invocation(s) of parameter(s) 1, but the implementation census dispositioned 6 call(s) into the parameter-rooted family (parameter-rooted 2, parameter-rooted-accessor 3, parameter-rooted-iterable 1): the parameter-rooted-accessor member (3) is an invocation of caller-supplied code the enumeration does not describe"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/core",
+      "export": "Collapsible",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": "./collapsible",
+      "row": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency; runtime-accessor-installation"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/context",
+      "export": "createContextProvider",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/context@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an uncensused invoking form: property-access-unknown-accessor (PropertyAccessExpression) at <tmp>/node_modules/@solid-primitives/context/dist/index.js:1413..1427, reach reachable, the producer offered no subject derivation: nested-parameter"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/rootless",
+      "export": "createSharedRoot",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/rootless@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/tween",
+      "export": "createTween",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/tween@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "proposed, not certified",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "declined: dialect-silent",
+          "detail": "dialect-silent solid-js createSignal; dialect-silent solid-js createEffect"
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/core",
+      "export": "Dialog",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": "./dialog",
+      "row": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency; runtime-accessor-installation"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/core",
+      "export": "Dialog",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": "./dialog",
+      "row": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency; runtime-accessor-installation"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/utils",
+      "export": "getPrecision",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses an unresolved callee at <tmp>/node_modules/@kobalte/utils/dist/index.js:1561..1599 (`stepString.toLowerCase().indexOf(\"e-\")`)"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:6d69dd5a30735cafcc4bd3b5b50bbf3236888a18b7fc2a1d735985e28ee3a76f:getPrecision): primitive returns census refuses a return at <tmp>/node_modules/@kobalte/utils/dist/index.js:1618..1683, reach reachable, whose own value the producer did not type as a primitive alone, for <tmp>/node_modules/@kobalte/utils/dist/index.js:4725..4737"
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: veto did not complete",
+          "detail": "veto did not complete: gate sha256:a3a958590f38491ec9942a0138669b3de907a42b47a99dc6c8d8574b04dacba9 (certification-probe: the worker threw: Error: Stripping types is currently unsupported for files under node_modules, for \"file://<tmp>/node_modules/@kobalte/utils/src/index.ts\")"
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/utils",
+      "export": "getScrollParent",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: the callbacks closure candidate enumerates no invocation, but the implementation census dispositioned 1 call(s) into the parameter-rooted family (parameter-rooted-accessor 1): this export invokes callable(s) its caller supplied"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:6d69dd5a30735cafcc4bd3b5b50bbf3236888a18b7fc2a1d735985e28ee3a76f:getScrollParent): primitive returns census refuses an implementation at <tmp>/node_modules/@kobalte/utils/dist/index.js:4739..4754 whose completion the producer did not prove primitive"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/keyed",
+      "export": "keyArray",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/keyed@3.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unresolved-callee",
+          "detail": "unresolved-callee; refusing-callee-fixpoint; dialect-silent solid-js createSignal; unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@kobalte/core",
+      "export": "Popover",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": "./popover",
+      "row": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency; runtime-accessor-installation"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solidjs/meta",
+      "export": "Title",
+      "sites": 2,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solidjs/meta@1.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in this artifact's own runtime source: \"omit\" declared at <tmp>/node_modules/@solidjs/signals/dist/types/store/utils.d.ts:4480..4484, called at <tmp>/node_modules/@solidjs/meta/dist/index.js:835..865"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:331a0f83c1e38578e205764486b5bc038b0eec7dc45f01b0f110a0643b85fad3:Title): a plain return output requires every declared signature's result to be a primitive alone"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: refusing-callee-fixpoint",
+          "detail": "refusing-callee-fixpoint; dialect-silent  children; dialect-silent solid-js omit; dialect-silent solid-js createMemo; dialect-silent solid-js merge; dialect-silent @solidjs/web useHead"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/timer",
+      "export": "createPolled",
+      "sites": 1,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/timer@1.4.5-next.1|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "never proposed",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "proposed, not certified",
+          "detail": ""
+        },
+        {
+          "domain": "returns",
+          "status": "proposed, not certified",
+          "detail": ""
+        },
+        {
+          "domain": "creates",
+          "status": "declined: dialect-silent",
+          "detail": "dialect-silent solid-js createEffect; dialect-silent solid-js createSignal; refusing-callee-fixpoint"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/memo",
+      "export": "createWritableMemo",
+      "sites": 1,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/memo@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: dialect-silent",
+          "detail": "dialect-silent solid-js createMemo; unresolved-callee; dialect-silent solid-js createSignal; refusing-callee-fixpoint; unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/storage",
+      "export": "makePersisted",
+      "sites": 1,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/storage@5.0.0-next.4|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "reads",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "returns",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        },
+        {
+          "domain": "creates",
+          "status": "declined: unaccepted-external-dependency",
+          "detail": "unaccepted-external-dependency"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/scheduled",
+      "export": "throttle",
+      "sites": 1,
+      "view": "every-import",
+      "entrypoint": ".",
+      "row": "@solid-primitives/scheduled@2.0.0-next.2|solid2|floor",
+      "open": [
+        {
+          "domain": "callbacks",
+          "status": "proposed, not certified",
+          "detail": ""
+        },
+        {
+          "domain": "reads",
+          "status": "withheld: no recipe in corpus",
+          "detail": "no recipe in corpus"
+        },
+        {
+          "domain": "returns",
+          "status": "withheld operation: census refused",
+          "detail": "operation census refused: recursive-value-shape (artifact-case:6f867f0c52fcf2326754d14e3732fc846506169f421964acdd213ca859cbbd8d:throttle): primitive returns census refuses an implementation at <tmp>/node_modules/@solid-primitives/scheduled/dist/index.js:7436..7444 whose completion the producer did not prove primitive"
+        },
+        {
+          "domain": "creates",
+          "status": "withheld: census refused",
+          "detail": "census refused: creates census refuses a resolved callee that is neither a default-library member, a dialect primitive under the negative authority, nor a declaration in this artifact's own runtime source: \"getOwner\" declared at <tmp>/node_modules/@solidjs/signals/dist/types/core/owner.d.ts:2394..2402, called at <tmp>/node_modules/@solid-primitives/scheduled/dist/index.js:2167..2177"
+        }
+      ]
+    }
+  ]
+}

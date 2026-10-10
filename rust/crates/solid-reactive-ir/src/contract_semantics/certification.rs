@@ -37,7 +37,11 @@ pub struct ArtifactSnapshotLimits {
 /// The source candidate list is deliberately not an argument. This typestate
 /// is constructed only by walking the normalized candidate, so a proof
 /// document cannot omit a proposed closure or positive operation from the
-/// planner's universe.
+/// planner's universe — and no caller can add one either. A generated proposal
+/// therefore states its closure in the document like any other candidate,
+/// labelled `CallSemantics::proposed_closures` to keep it distinguishable from
+/// a reviewed claim.
+#[derive(Clone)]
 pub struct CertificationCandidates {
     candidate_semantic_digest: Digest,
     proposal: NormalizedContract,
@@ -307,6 +311,83 @@ impl ProofPolicy2 {
 
         for artifact in &mut artifact_cases {
             for (export_name, export) in &mut artifact.exports {
+                if value_has_prototype_instances(&export.shape)
+                    || export.call.operations.iter().any(|operation| {
+                        operation.inputs.iter().any(value_has_prototype_instances)
+                            || operation
+                                .output
+                                .as_ref()
+                                .is_some_and(value_has_prototype_instances)
+                    })
+                {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "prototype instance behavior is authored-only and not certifiable"
+                            .into(),
+                    });
+                }
+                // Per-key lazy cache behavior has no certification census.
+                if value_has_lazy_getters(&export.shape)
+                    || export.call.operations.iter().any(|operation| {
+                        operation.inputs.iter().any(value_has_lazy_getters)
+                            || operation
+                                .output
+                                .as_ref()
+                                .is_some_and(value_has_lazy_getters)
+                    })
+                {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "lazy getter cache behavior is authored-only and not certifiable"
+                            .into(),
+                    });
+                }
+                if export.call.operations.iter().any(|operation| {
+                    matches!(&operation.output, Some(ValueShape::ReturnedCallable {
+                        call: Some(call), ..
+                    }) if !call.captures().is_empty() || call.captured_lookup().is_some())
+                }) {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "returned captures and captured lookups are authored-only and not certifiable".into(),
+                    });
+                }
+                // No implementation census establishes result-use closure.
+                if !export.call.callback_results().is_empty() {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "callback-result provenance is authored-only and not certifiable"
+                            .into(),
+                    });
+                }
+                // No census establishes the strict-read label at a read.
+                // Only an authored, cited and probed contract can state this.
+                if export
+                    .call
+                    .operations
+                    .iter()
+                    .any(|operation| operation.strict_read.is_some())
+                {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "a strictRead cleared assertion is not certifiable".into(),
+                    });
+                }
+                // ADR 0235: no census proves what a returned member's call
+                // does; only an authored, probed contract states it.
+                if export.call.operations.iter().any(|operation| {
+                    operation
+                        .output
+                        .as_ref()
+                        .is_some_and(holds_effectful_member)
+                }) {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason:
+                            "a returned callable or effectful callable member is not certifiable"
+                                .into(),
+                    });
+                }
                 inventory_export_facts(
                     &artifact.id,
                     export_name,
@@ -321,6 +402,11 @@ impl ProofPolicy2 {
                         path: SemanticClaimPath::Operation(operation.id.clone()),
                     }
                 }));
+                // One export's whole candidate universe, withdrawn from the
+                // returned proposal as it is read. A generated proposal states
+                // its `creates` closure like any other document and labels it
+                // `proposed_closures`; the label is withdrawn with the closure
+                // here, so the planning proposal offers nothing twice.
                 closure_candidates.extend(export.open_proposed_closure().into_iter().map(|path| {
                     SemanticClaimSubject {
                         artifact_case: artifact.id.clone(),
@@ -711,12 +797,28 @@ fn inventory_value_shape(
             value,
             facts,
         ),
+        // A merged props object has no child shape to inventory: its members
+        // are the caller's argument's, and this side has no premise about them.
+        // An argument array's items are the caller's arguments too (ADR 0115).
         ValueShape::Unknown
         | ValueShape::Plain
         | ValueShape::Parameter { .. }
+        | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
+        | ValueShape::Undefined
+        // ADR 0145: exact, with no child shape of its own to inventory. The
+        // one fact its root pushes above is the whole claim.
+        | ValueShape::DescribedCallable(_)
+        // ADR 0235: refused before inventory (`inspect_candidates`).
+        | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. }
+        | ValueShape::PrototypeInstance { .. }
+        | ValueShape::LazyGetterObject { .. }
+        | ValueShape::ReadValue
         | ValueShape::Callable
         | ValueShape::Reactive { .. }
         | ValueShape::Store { .. }
+        | ValueShape::MergedProps { .. }
         | ValueShape::Action { .. }
         | ValueShape::Component
         | ValueShape::Cleanup { .. }
@@ -744,7 +846,13 @@ fn inventory_value_shape(
 /// disagree, so a shape derived from one cannot assert about the other.
 const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability {
     match shape {
-        ValueShape::Callable | ValueShape::Component => DemandedCallability::Callable,
+        // ADR 0145: the claim is that the value is invoked, and what that does,
+        // so the demand asserts callability; the census proves the rest.
+        ValueShape::Callable
+        | ValueShape::Component
+        | ValueShape::DescribedCallable(_)
+        | ValueShape::EffectfulCallable(_)
+        | ValueShape::ReturnedCallable { .. } => DemandedCallability::Callable,
         ValueShape::Plain => DemandedCallability::NonCallable,
         ValueShape::Unknown
         | ValueShape::Parameter { .. }
@@ -756,6 +864,13 @@ const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability 
         | ValueShape::AsyncIterable(_)
         | ValueShape::Reactive { .. }
         | ValueShape::Store { .. }
+        | ValueShape::MergedProps { .. }
+        | ValueShape::ArgumentArray { .. }
+        | ValueShape::InvocationResult { .. }
+        | ValueShape::Undefined
+        | ValueShape::PrototypeInstance { .. }
+        | ValueShape::LazyGetterObject { .. }
+        | ValueShape::ReadValue
         | ValueShape::Action { .. }
         | ValueShape::Cleanup { .. }
         | ValueShape::RefApplication
@@ -1423,6 +1538,19 @@ impl WitnessBinding {
     pub fn demand_id(&self) -> &str {
         &self.demand_id
     }
+
+    #[must_use]
+    pub fn evidence_root(&self) -> &str {
+        &self.evidence_root
+    }
+
+    /// The witness sites this binding names, in the adapter's own order. Audit
+    /// and test material: coverage validation folds them into the evidence
+    /// root and authenticates none of them.
+    #[must_use]
+    pub fn site_ids(&self) -> &[String] {
+        &self.site_ids
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1918,6 +2046,57 @@ const fn manifest() -> PolicyManifest {
     }
 }
 
+/// Whether a returned tuple or object carries an effectful callable member
+/// (ADR 0235).
+fn value_has_prototype_instances(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::PrototypeInstance { .. } => true,
+        ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+            items.items().iter().any(value_has_prototype_instances)
+        }
+        ValueShape::Object(items) => items
+            .items()
+            .iter()
+            .any(|item| value_has_prototype_instances(&item.value)),
+        ValueShape::Array { element, .. }
+        | ValueShape::Promise(element)
+        | ValueShape::AsyncIterable(element) => value_has_prototype_instances(element),
+        _ => false,
+    }
+}
+
+fn value_has_lazy_getters(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::LazyGetterObject { .. } => true,
+        ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+            items.items().iter().any(value_has_lazy_getters)
+        }
+        ValueShape::Object(properties) => properties
+            .items()
+            .iter()
+            .any(|property| value_has_lazy_getters(&property.value)),
+        ValueShape::Array { element, .. }
+        | ValueShape::Promise(element)
+        | ValueShape::AsyncIterable(element) => value_has_lazy_getters(element),
+        _ => false,
+    }
+}
+
+fn holds_effectful_member(output: &ValueShape) -> bool {
+    match output {
+        ValueShape::ReturnedCallable { .. } => true,
+        ValueShape::Tuple(items) => items
+            .items()
+            .iter()
+            .any(|item| matches!(item, ValueShape::EffectfulCallable(_))),
+        ValueShape::Object(properties) => properties
+            .items()
+            .iter()
+            .any(|property| matches!(property.value, ValueShape::EffectfulCallable(_))),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -2068,11 +2247,14 @@ mod tests {
             at: None,
             schedule: None,
             tracking: Tracking::Unknown,
+            strict_read: None,
             owner: OwnerRelation::default(),
             cardinality,
             inputs: Vec::new(),
             output: None,
             resources: std::collections::BTreeSet::new(),
+            composed_from: None,
+            protocol: None,
         };
         let call = CallSemantics::new(
             CallClaims::default(),

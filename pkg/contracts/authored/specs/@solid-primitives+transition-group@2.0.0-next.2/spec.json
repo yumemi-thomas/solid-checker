@@ -1,0 +1,156 @@
+{
+  "package": "@solid-primitives/transition-group",
+  "version": "2.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createSwitchTransition": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/transition-group-createSwitchTransition-module-scope/node_modules/@solid-primitives/transition-group/dist/index.js:41-87 — The browser branch always creates the render effect; options callbacks and done continuations remain open. Research draft; Chrome attribution/probe gate has not run. Do not ship before every listed pair passes.",
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "call": {
+        "operations": [
+          {
+            "id": "create-list-version",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "list-version"
+            ]
+          },
+          {
+            "id": "render-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "render-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "list-version"
+            }
+          }
+        ],
+        "creates": [
+          "create-list-version"
+        ],
+        "computations": [
+          "render-effect"
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "list-version",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "render-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/transition-group-createSwitchTransition-module-scope/node_modules/@solid-primitives/transition-group/dist/index.js:41-87 — No own reactive source read occurs during construction: source initialization is an explicit untrack(callback), computation's source is caller code, and listVersion is read only when the returned accessor is used.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/transition-group-createSwitchTransition-module-scope/node_modules/@solid-primitives/transition-group/dist/index.js:41-87 — Exactly one numeric listVersion signal (47) and one render-effect computation (75) are constructed. Runtime dev.js:1723-1757 establishes the required effect owner. Effects from caller callbacks remain in the open callbacks domain.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/transition-group-createSwitchTransition-module-scope/node_modules/@solid-primitives/transition-group/dist/index.js:41-87 — Every browser normal completion returns the wrapper at 83-86, which reads the freshly created listVersion signal; the SSR constant accessor is excluded from this browser artifact."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf rejects the render effect. No onEnter/onExit callbacks are supplied."
+        },
+        {
+          "label": "returns",
+          "rule": "strict-read-untracked",
+          "why": "Read the returned accessor at a case-file value-access site, not the package constructor. It witnesses listVersion creation and the accessor return."
+        }
+      ]
+    }
+  }
+}

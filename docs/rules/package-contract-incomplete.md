@@ -22,6 +22,51 @@ open-claim context naming the exact callback and independent semantic axes; the
 diagnostic never emits an editable contract or treats an omitted field as
 negative proof.
 
+## Severity by gate
+
+The rule's severity is **error**, and it stays error at every gate but one
+([ADR 0119](../adr/0119-sc9005-severity-by-gate.md)):
+
+| gate | severity |
+| --- | --- |
+| no receipt-accepted contract matches the import (acceptance gate) | error |
+| a contract authorized only by obsolete proof policy 1 | error |
+| an accepted contract omits the imported export | error |
+| an accepted contract states a claim the call site cannot bind | error |
+| the export's claims rest on a context premise this project does not meet (`context-premise-unmet:…`) | error |
+| **an accepted contract leaves claims open** (`unknown-contract-claims:…`) | **warning** |
+
+A context premise ([ADR 0153](../adr/0153-a-member-of-a-package-owned-context-value.md)
+part 3) states an export's claims only for a program where a context the
+package exports receives no value from outside it. The project meets it by
+reading that context only as the argument of `useContext`. Any other use (a
+`<Context value={…}>` provider, `createComponent(Context, …)`, a re-export, an
+argument to another function), or another installed package that depends on
+the certified one, withdraws every claim of the export at that import. The
+finding is an error, not the open-claims warning, because the claims are
+unusable there rather than partial.
+
+Every one of them is `uncertifiable`, so a run with any of them still certifies
+nothing; the warning only says the analysis ran over an accepted, partial
+premise rather than a missing one.
+
+## One finding per fix, not per site
+
+Where every site would carry the same sentence, the sites collapse into one
+finding for the project, anchored at the first site, with the others in
+`relatedLocations` and their count in the message:
+
+| gate | one finding per |
+| --- | --- |
+| acceptance gate | package ("N exports used across K import sites") |
+| any other gate, at an import | package, export and gate ("N import sites") |
+| open claims at call arguments | package, export and open domains ("N call sites") |
+
+An unbound claim at a call stays one finding per call, because its fix — pass
+the callback inline — is at that call. A collapsed finding carries
+`subjectKind` `package` or `package-export`, and the ESLint adapter reports it
+in every file holding one of its sites, at that file's first site.
+
 ## Why it matters
 
 Reactive reads, writes, ownership, and timing can cross ordinary function and

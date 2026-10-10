@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /Users/thomas/Documents/Github/solid-checker/packages/cli
+
+
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+   Start at  13:43:47
+   Duration  3.96s (transform 38ms, setup 0ms, import 112ms, tests 3.81s, environment 0ms)
+

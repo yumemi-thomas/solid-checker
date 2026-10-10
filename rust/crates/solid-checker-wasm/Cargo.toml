@@ -7,10 +7,9 @@ publish.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["napi-host", "dialect-v1", "dialect-v2"]
+default = ["napi-host", "dialect-v2"]
 napi-host = ["dep:napi", "dep:napi-derive"]
 reactor = []
-dialect-v1 = ["solid-facts-backend/dialect-v1"]
 dialect-v2 = ["solid-facts-backend/dialect-v2"]
 
 [lib]

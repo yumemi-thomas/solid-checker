@@ -1,0 +1,14 @@
+{
+  "name": "foreign-declaration-package",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "declaring-package": "1.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  }
+}

@@ -1,0 +1,2495 @@
+{
+  "format": "solid-checker-primitives-checkpoint-corpus",
+  "corpusVersion": 1,
+  "measuredOn": "2026-09-28",
+  "scope": "@solid-primitives",
+  "source": {
+    "org": "https://registry.npmjs.org/-/org/solid-primitives/package (117 packages)",
+    "solid2": "a published version whose solid-js range (runtime before peer) admits a published solid-js 2.x, or that depends on @solidjs/signals; the newest such version is pinned",
+    "manifest": {
+      "path": "scripts/ecosystem-benchmark/manifest.json",
+      "generatedAt": "2026-09-27T05:49:38.983Z"
+    },
+    "nextBranch": "gh api repos/solidjs-community/solid-primitives/contents/packages?ref=next (informational: unpublished versions)"
+  },
+  "packages": [
+    {
+      "rank": 1,
+      "package": "@solid-primitives/a11y",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-ohvuHYkxTNJtOPlhSHHCiLILE7KOQ3K6hcDrq4Fr69euk1Fnpct3d9VxFbgMPxBG31RJtJoD6Yh5BJNwFz84kw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/a11y@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "a11y",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 2,
+      "package": "@solid-primitives/active-element",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-/75EE30E9S/szk2SQ5b6FcH7ZiYYBb71by22+bbULqaUnnIiFOaVoXjSDkj/WZB2Fsf2LlaTjWk1JehZPeYtrQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/active-element@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "active-element",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 3,
+      "package": "@solid-primitives/analytics",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-fqNe+gnlxlWL9NxRe5SpftzmjaSTp0sbiavUx750ENQsT15qp/f1O2upBu2p62DhEEgJ5Qa27Qv7a1O1VuG0aQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/analytics@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "analytics",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 4,
+      "package": "@solid-primitives/animation",
+      "version": "1.0.0-next.1",
+      "integrity": "sha512-MUZrbNwZWir6t75TBeTo8D9SGw0S6DlK/Z49os3SKhA9C6Vl/+CcV6J1GTPUFO6wuuUPZ9e9tix7wjIB3aLtjw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/animation@1.0.0-next.1|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.1",
+      "solid2Releases": 1,
+      "nextBranch": {
+        "directory": "animation",
+        "version": "1.0.0-next.2",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 5,
+      "package": "@solid-primitives/async",
+      "version": "0.0.101-next.3",
+      "integrity": "sha512-Op+3kB7DdrekwZwHtOpCk8gQ/jdIaKZfsjHu2IFfuItyQebv6FQmAGakeG4IDQi9IOcBViAxQRO1c5Vc6MDreA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/async@0.0.101-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "0.0.101-next.0",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "async",
+        "version": "0.0.101-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 6,
+      "package": "@solid-primitives/audio",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-QBVDCk8lAZ5JkSQwFI4t2hSh4t+I0110rx/JUkbKALVHbBtnsDgy0okE3mAbfPD0ZAXoK6CqKxySWoWBwbzpAw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/audio@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "audio",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 7,
+      "package": "@solid-primitives/bounds",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-tvGd7eop6RltlA+O+VvQWzlXv5pdZjDyIgZY9y03VFQ+OwdAuS8hpYcFd/KxAQIDveMeCaX91Y52Jk3MsIXywA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/bounds@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "bounds",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 8,
+      "package": "@solid-primitives/broadcast-channel",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-yxGksUOZkV6sGBUd2/hpdS/FiOP0jgrieWrXfe47wuTvRCAqq/RxDkNIlDoUS4/lopet64MZUzavm5153dlZig==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/broadcast-channel@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "broadcast-channel",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 9,
+      "package": "@solid-primitives/clipboard",
+      "version": "2.0.0-next.17",
+      "integrity": "sha512-Zvm2yeGR16OsX3Bzk/gyywdXxXiVq3kUhbukPkogEKgA2bNKwGlKDuRC48C26aPKBJmYxbRRbg2p0KKG5kvqlg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/clipboard@2.0.0-next.17|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.17",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "clipboard",
+        "version": "2.0.0-next.18",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 10,
+      "package": "@solid-primitives/connectivity",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-Sovi/qB+DReZ66kJZIQq5bifsQMkoDjIccAW9XdGKdsp6j26hqL2QkPoJH9NW6lxeyydaXVxaH4nj706ASQg2Q==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/connectivity@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "connectivity",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 11,
+      "package": "@solid-primitives/context",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-QtOWAPbwmt35ngUqRwv/qa/Yvbwn7wzBXt2ameO7IYUTOiaT4fPVeOrRcc8bMUJbYsU1FPHI/Lcuz+zSKZVklA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/context@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "context",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": true
+    },
+    {
+      "rank": 12,
+      "package": "@solid-primitives/controlled-props",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-ZW7jjHzRLP3T0/Y1f40hep3EZkqfYzH+TkIjLrc7ZfEBl7AxMBNYEAstOKsASVGrIMXRyhqITjrWpb9WMzmsKQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/controlled-props@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "controlled-props",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 13,
+      "package": "@solid-primitives/controlled-signal",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-vcc3sI+0TFeqD6OWHr65LuH0x6OuRhmWQ9DxqGY53VIfvV5PFfIlBlxPidOyGbiN6VoHHMagZaXUq4ZnuH/KPg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "controlled-signal",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 14,
+      "package": "@solid-primitives/cookies",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-GXroFrNmfEupTaE7njBft67TrXoEAfommHy6B8ZrHauEF3k3Bk//LJcWpipwhSF4XURuq7YGGTCZaxCIWKnBKw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/cookies@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "cookies",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 15,
+      "package": "@solid-primitives/cursor",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-0oOCxmd9PI1k2FulRAQZif2FOX+AlepQaZGN2DBXW5CdolTTovfAuIkCnHjgs/76bejaM9pbQdVHeQ6iVwB28A==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/cursor@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "cursor",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 16,
+      "package": "@solid-primitives/date",
+      "version": "3.0.0-next.3",
+      "integrity": "sha512-00FN65UXXbG4w+xtH74zZvtuIJ957/IuEUX2V3KSjdp24kYNuqdLwfcall/v/I2xKHlN3Dz368e7+5NftnbldA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/date@3.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "date",
+        "version": "3.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 17,
+      "package": "@solid-primitives/deep",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-PYus+PGfzKxLlumt7x25MvDh3vFrfcoUrus8byeboJEQcD+KTFHwi4Jt4ZmKHDJD+ZjtM3S81z3Ibt50LP5fuA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/deep@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "deep",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 18,
+      "package": "@solid-primitives/destructure",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-jH+wYPKGld0NoqcUZO2VssX3DQWmWYjHGScE+3lFjywlbIC9bRHfx/We2AM5sZsILlwiCaKUCiHr/1OaDsZ+Vg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/destructure@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "destructure",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 19,
+      "package": "@solid-primitives/devices",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-/wJgCgYt69Z10A501hecGgunjaFHHxysOoN+GLv98Do1aq5Kvgb97vFe1HNhBMv+qhezpxmjeY5wRglrXQq0/g==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/devices@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "devices",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 20,
+      "package": "@solid-primitives/drag-drop",
+      "version": "0.1.0-next.0",
+      "integrity": "sha512-1OOKH+QHItwDmZNdKCqajhuoL8uSmZMPIyCI6qC+qDSafkH0q3NljEvblBQLskcBBZrq6FIbLs6ct1AYUDKbig==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/drag-drop@0.1.0-next.0|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "0.1.0-next.0",
+      "solid2Releases": 1,
+      "nextBranch": {
+        "directory": "drag-drop",
+        "version": "0.1.0-next.2",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 21,
+      "package": "@solid-primitives/event-bus",
+      "version": "3.0.0-next.3",
+      "integrity": "sha512-MX58khCyijfCecmlSDQSrwTTFGKE0yTQZaOpbHj/JEJ0Ep+cpWJNQ8DeUaqq8h+1fkFECPT4j3Vu1Rt+LLV9qQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/event-bus@3.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "event-bus",
+        "version": "3.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 22,
+      "package": "@solid-primitives/event-dispatcher",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-VRRDrWXhCClRD3HJMIA8PBYy828Io8aA385QF77CF3gnpwCvufGJVQMWXB3OaMLt86/kW6E26WzRA63yhT9agg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "event-dispatcher",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 23,
+      "package": "@solid-primitives/event-listener",
+      "version": "3.0.0-next.5",
+      "integrity": "sha512-P8GdbTwt422PHkWeKIEQVMB3Yz2agE49bfN8ChXVNQBD0fzKQF8FfmAh8y33la5k+Ap7oshNJ0Db001dJhCqTw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/event-listener@3.0.0-next.5|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.5",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "event-listener",
+        "version": "3.0.0-next.6",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 24,
+      "package": "@solid-primitives/event-props",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-GtUKt/EXvsw/371fFPNciA1D247bT8vqRd2zMnKp4KvY63e7ZjXz+XRDz85Q+Zjzt47IPMDE2yh+fLSin7wjrA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/event-props@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "event-props",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 25,
+      "package": "@solid-primitives/favicon",
+      "version": "1.0.0-next.1",
+      "integrity": "sha512-GZppiwc16YgX8IHYnk7cUTpGX/f28kxse9eTC5HYlStZCHHPVbaAlwofjrPCb9n1HTyaDUzcQbSCbMlag2mLBw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/favicon@1.0.0-next.1|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 2,
+      "nextBranch": {
+        "directory": "favicon",
+        "version": "1.0.0-next.2",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 26,
+      "package": "@solid-primitives/filesystem",
+      "version": "3.0.0-next.3",
+      "integrity": "sha512-qdGO1YVaUwT87jGiFhEZgzecdHKTZNUo3vk+lmLBdZZcHsdX81NQYPMiBRqP1+T5K/ivhqJaqK88lB0OppdofA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/filesystem@3.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "filesystem",
+        "version": "3.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 27,
+      "package": "@solid-primitives/flux-store",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-04L5Xgp3+E/kYsiPLg50a6Jilfb9qZkZ6ioe+X7SDXPIuBwtuH4DBpV0PI1fJNwZWnbrsn/KNi74qG9MxVtC4Q==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/flux-store@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "flux-store",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 28,
+      "package": "@solid-primitives/focus",
+      "version": "1.0.0-next.4",
+      "integrity": "sha512-OPi75QpOJ3L/Ea9oT1MYrpsGz5z0nyeR40MAjAzcP6lKxPSrpN/3UbFL2I/oLKbPM+7fgIBfW0iwyvzSjVxtsg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/focus@1.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "focus",
+        "version": "1.0.0-next.5",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 29,
+      "package": "@solid-primitives/form",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-EdR9Vqtdge1V3YoxhvqWNYpDf0eVrK9z5qNnm8laYvMp2DnoCy244VwqKxhSbS2+U0AhhKROX8cDJqXmdGCp+A==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/form@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "form",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 30,
+      "package": "@solid-primitives/fullscreen",
+      "version": "2.0.0-next.3",
+      "integrity": "sha512-r4ZvgouItI0Y4jZEh05FNkOqrszkpnsUUP2/eQ6OqwB/FIQksJcj/lfaUbvJ95nOcV4Tdk5w/y7mlfGaOen3iA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/fullscreen@2.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.3",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "fullscreen",
+        "version": "2.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 31,
+      "package": "@solid-primitives/geolocation",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-KCeYAbH7VE7OK+54ViwHy9pjHIkWKXu7Jyyehz7blMK3hATlDxx3QxBpLxo8cKwIul57NNSsvi0rfUw2iVP9KQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/geolocation@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "geolocation",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 32,
+      "package": "@solid-primitives/gestures",
+      "version": "3.0.0-next.3",
+      "integrity": "sha512-Q7tOcowDI5E0WdSdUlixGB19XiSN7WHB3IitlepLbLMDrulsW3fZW+GbMEjWrJBTxxB65mUVFnUs/P/w6SeVeA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/gestures@3.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "gestures",
+        "version": "3.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 33,
+      "package": "@solid-primitives/history",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-bSigepNsLx1M30c+pCdjgamlOuwJoeGROvQJS9nk+TykeR8cmklzfQ9l4J/zFxpaI8KDW6trEZ2hgj/HcSQsYQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/history@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "history",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 34,
+      "package": "@solid-primitives/i18n",
+      "version": "3.0.0-next.4",
+      "integrity": "sha512-r5ZwXcxsE0NEC4MCs5nphs9gnEdDkvZ5zp3P/I0h0wHHXBQi1fuXkQv857HBgTi2Mwja7vS5D6nePyQQxd9q/A==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/i18n@3.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.4",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "i18n",
+        "version": "3.0.0-next.5",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 35,
+      "package": "@solid-primitives/idle",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-xqD7+WjpEeUoahp7n3MNzy755miSRRbxoJW6jD0GAnkf/TyFf+xnt3shKT1E4+Wi24IUxW50YeZ/u86wZTGJ0g==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/idle@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "idle",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 36,
+      "package": "@solid-primitives/input-mask",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-5pAsXCHOw6TQjtfTUmXmnjajmGBTIYmsMtPoZBtRI0+Siqh6p9aR/ESnaqIeEaim36dEV8NW4j5tnCX7Vw0AxA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/input-mask@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "input-mask",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 37,
+      "package": "@solid-primitives/interaction",
+      "version": "1.0.0-next.4",
+      "integrity": "sha512-V+kos+abAkAJLNAvj3A7iitNcSvbosFsjBoXh7K8GdWoABWEfPEf3DZsN+01UQOAf+4G0XLXPN4Y/IRe2EOBZQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/interaction@1.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "interaction",
+        "version": "1.0.0-next.5",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 38,
+      "package": "@solid-primitives/intersection-observer",
+      "version": "3.0.0-next.3",
+      "integrity": "sha512-aov3naMTab/bRnXSKRlxedeQmlswLnM+3jPTCdKWJ21NZD4QHSNE2mEiybI3gvVnwqwvY1Ad5jKrSpwBHb9SVw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/intersection-observer@3.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "intersection-observer",
+        "version": "3.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 39,
+      "package": "@solid-primitives/jsx-tokenizer",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-fT05hB6R2KSgwyAVatwpKy5dZaSPiURuElz0/FljEnGzvuGWXDpzer40ejPl7FDooFyY6A7gShTN0zv9QXAS4g==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "jsx-tokenizer",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 40,
+      "package": "@solid-primitives/keyboard",
+      "version": "2.0.0-next.5",
+      "integrity": "sha512-kTdYQNMqVBzsZdSxzxlVPRAfuR3ENmkPw04WIEoIeV5rNDJYFRQQw7LaD4YWum4tLPtquzBWvYG3maPduSCc5g==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/keyboard@2.0.0-next.5|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.5",
+      "solid2Releases": 6,
+      "nextBranch": {
+        "directory": "keyboard",
+        "version": "2.0.0-next.6",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 41,
+      "package": "@solid-primitives/keyed",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-FvEYVbX0PpeCTKyL3x7e2wnbb8muIKMgU+cQue+UrkhRkg1HLrBbimymvMuyQgPeBSEdgMYaaMnQI/uCUHS4NQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/keyed@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "keyed",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": true
+    },
+    {
+      "rank": 42,
+      "package": "@solid-primitives/lifecycle",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-ifkep0MGrO8Fqyy+XuJSYtxU/uFVcQuPTzaBUrtTlCqYkcPxRlrwoN/B45JnfcZ+J4L5noL6yuwKqtjXbTxepw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/lifecycle@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "lifecycle",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 43,
+      "package": "@solid-primitives/list",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-IuQm+xZaZLGb93nxp8JRuQpBqhrhXxoU94FNbAw8F5CtFyb1fQ73bPG9nBrosLyG68QLTVkskjCiQhvSSipZ0A==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/list@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "list",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 44,
+      "package": "@solid-primitives/list-state",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-HaMWXOF9/EVTSIjTGsG4mxjlVo9rRffD06VqCdvVriZnF+GmkgSESGSEg6O2UvBjfhB3RUkvDQ/lvwXDHtdx2A==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/list-state@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "list-state",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 45,
+      "package": "@solid-primitives/map",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-9TipViAZvtT9sNCJuriC7SbKTDA9THKseAxeGWmtvEcWEupwdCTsb/mA8qoobmo+rTgkkhYLyc2N+jHGH4KykQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/map@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "map",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 46,
+      "package": "@solid-primitives/marker",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-Ogce24Mbow9or2cI+fCh4eP9H6OWCX8zWJFo8y5z390IUBdTeA+QGYaK6QY/VpeUwCR1yVvJemyA2DvmwFMSzQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/marker@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "marker",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": true
+    },
+    {
+      "rank": 47,
+      "package": "@solid-primitives/masonry",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-tCnd9g86/wrWRyl1J92+askdCB8Cse9oBVpgUA1fPpoe/BOcwAv1H+4hR+7XbadHJyojipd2nq9iusOANOrNLA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/masonry@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "masonry",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 48,
+      "package": "@solid-primitives/match",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-T/OCS5HwHS1jeAcZL+5g5UX0gNi1KdoiHZb81ngwgmoTqohxG9hNHqNtmIPPMf5pTAuxEHZOvrnYjcScuRjwFw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/match@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "match",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 49,
+      "package": "@solid-primitives/media",
+      "version": "4.0.0-next.2",
+      "integrity": "sha512-jTua+YRSAe2u3z1kZRPIunANI+JSQl0U2pOsDVqCzKgp/nzZC1WsodyFluiSARD9SICgFnzHqlD+EmXzKgp/Mg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/media@4.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "4.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "media",
+        "version": "4.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 50,
+      "package": "@solid-primitives/mediastream",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-wr6gc3nzuFjkI4uIWNBM5pnbqwKnqwm09ZLooyS6xax+supflokg4GFJT9JUfjlNqUVqiF/FiF+i2Hn1cFpZSA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/mediastream@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "mediastream",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 51,
+      "package": "@solid-primitives/memo",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-ybYxnf+rR1voO5C4ok5bSarmiee/XBDHOsikcmhW7K0QxJKI0H2PiHu4qLnv1Z03T6/5kDT1LBizgHGWNYy6jA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/memo@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "memo",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": true
+    },
+    {
+      "rank": 52,
+      "package": "@solid-primitives/mouse",
+      "version": "4.0.0-next.3",
+      "integrity": "sha512-ukVga/cYHJdcPtS04gmtgc/37a5j6RDEo5n78jh4ZwJFEqduTkoJPYmCpg8Nk/uZh3IxQMXahg+gGvthS0gJyw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/mouse@4.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "4.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "mouse",
+        "version": "4.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 53,
+      "package": "@solid-primitives/mutable",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-g2ws6/1zUTF8ck8FrA+tZXxmZerAd/VWAWUrAxXgMIgFbFytYLl6aiHSD0n6IwjFGQSPVv1b2EabmHOnhZ7Qjw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/mutable@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "mutable",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 54,
+      "package": "@solid-primitives/mutation-observer",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-QbBVd/3B4vLJh7Hbd2nbW2AVXOrWeRNvXIojkS8cr2DfnnT2/+MAOl7gJmowuIfbZmoLBvgCFmaBnNXg31BzVQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/mutation-observer@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "mutation-observer",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 55,
+      "package": "@solid-primitives/notification",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-2/8+AQb9k7mXhu38p2TCxosKbllnDND4Z/avIDwl1XkU8vwOlWlv4+uVPuDo+IF8XmYWULwW1wkmxEqTyCNfYQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/notification@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "notification",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 56,
+      "package": "@solid-primitives/orientation",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-pkC2QC31+sk9VfrwMoFc9ByCUGLQFxBFg2iYW/HtbvFaui5W7vreV34U1ajeX1fCuDT6AZeU4E30G9veAa9GbA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/orientation@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "orientation",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 57,
+      "package": "@solid-primitives/page-utilities",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-Jq6lq6nQmy+cIH/eyX/VtsfB/YDYp23PdkTsKVP4TQL4bLLqtw87U+HJg3Sr7Is0JEkbKhgtuIIIAfvEEaefTw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/page-utilities@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.0",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "page-utilities",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 58,
+      "package": "@solid-primitives/pagination",
+      "version": "1.0.0-next.8",
+      "integrity": "sha512-b8XsohMgzCVgEI12YXIGikxMmiWIGd5zf88KYHIus/SzoY1vAf2MhWTVMgPE3fM5Bv5d/esos1YZHEjGvEJzdA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/pagination@1.0.0-next.8|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.8",
+      "solid2Releases": 8,
+      "nextBranch": {
+        "directory": "pagination",
+        "version": "1.0.0-next.9",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 59,
+      "package": "@solid-primitives/permission",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-A72TtCSGZG6X05W4ROczf2j/ERy+3WSzPNACDwN2wiyuo1ijGVN1ZElGllBDC9dHXUx6kViTl6LZgVuoOnzR+w==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/permission@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "permission",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": true
+    },
+    {
+      "rank": 60,
+      "package": "@solid-primitives/platform",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-LzV2/ZFKU3uMIFMvVhj6iH2Bjf60QnVDCwK3lXbFhZIzBbb002k4ZNhqXVPRMQRkWlpjq1Otxe9p2qBIKfIyXQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/platform@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "platform",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": true
+    },
+    {
+      "rank": 61,
+      "package": "@solid-primitives/pointer",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-BaNEkQW8hmrAslMZD6Z41jlza2XxW85TTevAa9W6kpwNkNbRFbAUAFX+jVMq4mdEtVdYM4On7b25nE8tAB+zIQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/pointer@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "pointer",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 62,
+      "package": "@solid-primitives/presence",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-p8uYuwV7JkR7DCa+ytkDz3EyhTaraZgg+KjU4Li/KCFthKA801kp+XUhRF+LctLNc6wY5HAQBwgAQZfMTHYMHA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/presence@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "presence",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 63,
+      "package": "@solid-primitives/promise",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-+RHW7pHv6Dg94S5dO7y2Dk0UFnyU1Tx1BoN2fb/7fZeqDJ4IBi6uFE0dws21qTTk30vsfHyvTPBymTLSfflRoQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/promise@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "promise",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 64,
+      "package": "@solid-primitives/props",
+      "version": "4.0.0-next.3",
+      "integrity": "sha512-V2Gn96sQLLhwyiAcGogExqP8+5++Itv0/KBQMNiNp/ldNwbQkr8Q11Ku5VXswYFiFmuiHJ/pGANfwzgsla7zpA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/props@4.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "4.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "props",
+        "version": "4.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 65,
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-6mhXiSQK2gasBIOCj1weeUPjKQP6uEy1dCMqEnC92jARiOcCAyB9jiNb6k8LEI/XXc0bnjp7gF6Zqtf8I4efYg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/queue@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "queue",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 66,
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "integrity": "sha512-YCM5TEhlOKoGke02sv5q5bet5rNRpX7itg4MyaKG28h2y2PvmaVuZSMF6UOICN/kpTwbHRUvqdhCSCkTSn0Ldw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/raf@4.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "4.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "raf",
+        "version": "4.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 67,
+      "package": "@solid-primitives/range",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-oGOMz78SA2U427/p62BdBtU7HW2DUEammjMmS10SYucr7x/bFj/2BCaebm8rHh76pGHptiTuoip41+m3zSO8fQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/range@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "range",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 68,
+      "package": "@solid-primitives/refs",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-lrDQ6cR/FY2cV4OfoyAcrc1TnmcHrQkaWvF1lxcI1S/BkLKTcnOfZG0KAQJ138eo/N4Bq9Eqx9yva/W5Rih9/A==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/refs@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "refs",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 69,
+      "package": "@solid-primitives/resize-observer",
+      "version": "4.0.0-next.3",
+      "integrity": "sha512-g7aKa5xgXd2wXC2EtJzYdx5k9pZCPRDuG+m5Kndfmi9f6yLhe1g1d0y4L6jE6Zxjwxz7a+wRnjpnTLbsP3JvRw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/resize-observer@4.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "4.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "resize-observer",
+        "version": "4.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 70,
+      "package": "@solid-primitives/rootless",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-QGoy8R+8v+9I8mET50wMwu0uawkQvFFcv67S+vKJ8xP5jPrQXdxuNMckUTKUy2shR3rIRpR0oLzss0Vy0oLkPg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/rootless@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "rootless",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": true
+    },
+    {
+      "rank": 71,
+      "package": "@solid-primitives/scheduled",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-vf1yRmo9gAIl/FirPlb3uE3MKtfJ/yY5MjE29PLk/hpdfcqI0n2EZVKAXyBepsW2qxBsIBKjug1eczLYaydNrw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/scheduled@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "scheduled",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": true
+    },
+    {
+      "rank": 72,
+      "package": "@solid-primitives/script-loader",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-1kGnz61K0hARjbrhhr5eZuYIXQ7qQs+dWFIjGyfCC8s+7qVPt9vf+OYtGhyQNHpq4zMODxEY+JQJTN2aRG+wpA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/script-loader@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "script-loader",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 73,
+      "package": "@solid-primitives/scroll",
+      "version": "3.0.0-next.4",
+      "integrity": "sha512-6Zod2Q2YPnkZhijVMSOhU2e1ip5hzOSQNhZIaKh7Kx7HcocYrzhn1NqYJlaUr464o1hFZweEQVkhALi9EHvt/Q==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/scroll@3.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.4",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "scroll",
+        "version": "3.0.0-next.5",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 74,
+      "package": "@solid-primitives/selection",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-Je/EokdP5ULTBaskSFIogo0xAbHwnZqvQNYkjvp/nwA/xPt7jN9iS1m4TDo376k0hTwqvlpFqTcPfAK5+em/cw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/selection@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "selection",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 75,
+      "package": "@solid-primitives/sensors",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-xnRR/KyM/Uf/MZQEKArR1oQ06cFOX41xUHHH+RcxXyk7nMXcGy6+NsbjhA1EvNwD6jTYuhoEXbnlkPlCgD3AeQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/sensors@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "sensors",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 76,
+      "package": "@solid-primitives/set",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-9TbOGc0RXegsNx9CwU93C0TzbRm9pO6pVHL0K2OlPk3dZ7744bua7IEANNyYlzdXKp/5GThUcihtZOO6LjeYMQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/set@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "set",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 77,
+      "package": "@solid-primitives/share",
+      "version": "4.0.0-next.4",
+      "integrity": "sha512-nShTpX4tMPu4PbYj/dsN9RyZbmV4VyUlqQ82JloJ0qE/CR6SeBfaHD1NltW5qSit7VfGQdbHinuFeT/GrvehXQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/share@4.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "4.0.0-next.4",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "share",
+        "version": "4.0.0-next.5",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 78,
+      "package": "@solid-primitives/signal-builders",
+      "version": "1.0.0-next.4",
+      "integrity": "sha512-OOBGqXNVa7wvjPL+DAAlYUdVznGIClMSvoylnHt8FpC2SsdBHpQPq7k6jMUoeK6AGVMnoAT5abbL971z0+SlZQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/signal-builders@1.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.4",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "signal-builders",
+        "version": "1.0.0-next.5",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 79,
+      "package": "@solid-primitives/sortable",
+      "version": "1.0.0-next.0",
+      "integrity": "sha512-86tLOWTpGznhVND1BNiQNpCIu+hT90y/9Wm0Bh8HUSZki2Fimk61YzR9aHdtwhuiWB4CK7n4nBJLrx/8Gtjcrw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/sortable@1.0.0-next.0|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 1,
+      "nextBranch": {
+        "directory": "sortable",
+        "version": "1.0.0-next.1",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 80,
+      "package": "@solid-primitives/spring",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-CiEgYEu4kyPitDOkLGUd/yTi3wRFguiNIu2ctcuX7mMkCr/4tp3sqLUmIzcDzxK4UaSiJst0pzyo0Seq6R6qdQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/spring@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.3",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "spring",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 81,
+      "package": "@solid-primitives/sse",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-pHQWMTpuWuI8OUCuE61e65rVVk3nx5/xOeMU5m+LRSlBGcnZVP161DMjmPBr4fCOqWkYWWTW6fJGTC8/Cx+tww==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/sse@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "sse",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 82,
+      "package": "@solid-primitives/state-machine",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-Mq+kO73ntIPGhqvQVx0zYnoLFqnyfiL38Bcn1WtXtFiu4JlGM8iyhBC5AhWO3cV8t849Uu4ypXlgHffOkU/nng==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/state-machine@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "state-machine",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 83,
+      "package": "@solid-primitives/static-store",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-cyMzFe39VMVF9zVYgZEck1TESbIB4Tnpp00vNQlaOYuhOr4nstRBSS3zsBqZMuF+a5qWlKqS0RHO48FwLScX9w==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/static-store@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "static-store",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 84,
+      "package": "@solid-primitives/storage",
+      "version": "5.0.0-next.4",
+      "integrity": "sha512-Y9lWlvHhilhZgnUUr+ESGqQ3rbV7I6Ut3mHp6Hj0h3bohMm4fsJgKYpFRwbUsatDKcQIdo6B0Me9imvDIcU6nw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/storage@5.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "5.0.0-next.4",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "storage",
+        "version": "5.0.0-next.5",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": true
+    },
+    {
+      "rank": 85,
+      "package": "@solid-primitives/styles",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-pTCiTvjKH4CzyySLWKiB0ABX4jvrfg4P6byWD9p/cA+8Tw+7uLwDxMFhBQWi/6ci5V4Xftftq9U//vrBccdWdw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/styles@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "styles",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 86,
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "integrity": "sha512-+nDGvEk/9d+uC6hrjuDpKH393hWR9tMhHfFso9qKa3/Q2xdoKXHvH+gmslP01/HBs2OGwPkriHxg892gFbJ6Kg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/timer@1.4.5-next.1|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.4.5-next.1",
+      "solid2Releases": 2,
+      "nextBranch": {
+        "directory": "timer",
+        "version": "1.4.5-next.2",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": true
+    },
+    {
+      "rank": 87,
+      "package": "@solid-primitives/transition-group",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-ez+4Ma+ivgw/yboEe+pLWpBKAK03+jRjkPwXUbGV0fftr8xiCR/m+0ToFiQ4aZh368M9vLZJ6bGmyMAnwRXbHQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/transition-group@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "transition-group",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 88,
+      "package": "@solid-primitives/trigger",
+      "version": "3.0.0-next.2",
+      "integrity": "sha512-YhTGBKEPP7XI7Bk6/2gWxfZmwMWQEwfZsTiMO2dt9X/AQ9bmLk+xuRbT2QDOPg2IBe0D3uh/uguHUMYOLYGpbQ==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/trigger@3.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "3.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "trigger",
+        "version": "3.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": true
+    },
+    {
+      "rank": 89,
+      "package": "@solid-primitives/tween",
+      "version": "2.0.0-next.2",
+      "integrity": "sha512-eE64OwV3Ybeiun1RfR0bQOxeyT/xk8X5eq8dQyEH4/qEphrb0o5FCTd/S40hlbh2yaxGW+x02/w1KaRUXKQe/Q==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/tween@2.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.2",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "tween",
+        "version": "2.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": true
+    },
+    {
+      "rank": 90,
+      "package": "@solid-primitives/upload",
+      "version": "1.0.0-next.4",
+      "integrity": "sha512-txKL0cGGsEsd/WZqga8xxsKEr0YNTLH4sd71wRtJa0/mJIRn8l/MMuVIzV3R8jBNP68WxFm/jUMf8Aef2Rd4Gw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/upload@1.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.4",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "upload",
+        "version": "1.0.0-next.6",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 91,
+      "package": "@solid-primitives/url",
+      "version": "0.2.0-next.2",
+      "integrity": "sha512-CwbYLKp9Lm/I8IPeoS6xkEAaOGbESsNxk3L8HnAFAZztqza1unm15b6faRXKkX9T13jS4vMhKjucuarrqnYeqg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/url@0.2.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "0.2.0-next.0",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "url",
+        "version": "0.2.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 92,
+      "package": "@solid-primitives/utils",
+      "version": "7.0.0-next.4",
+      "integrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/utils@7.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "7.0.0-next.4",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "utils",
+        "version": "7.0.0-next.5",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": true
+    },
+    {
+      "rank": 93,
+      "package": "@solid-primitives/vibrate",
+      "version": "1.0.0-next.2",
+      "integrity": "sha512-ni5srTKSzfwZTZ5Sq3SikOgTNCgSvqBgCh7PxclXrf7OeM+UYPybWju7SIYMDkThaW3x67ebf5hLdAikqwx9Iw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/vibrate@1.0.0-next.2|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "vibrate",
+        "version": "1.0.0-next.3",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 94,
+      "package": "@solid-primitives/video",
+      "version": "1.0.0-next.3",
+      "integrity": "sha512-M+R6HGvKMqRXy9mGEwpyq+IAZew7kBEJYfL58i+1QGuuTGtiCQjeXGME7fe4UG/mDldW56WA/TRSJEGeF8kQxg==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/video@1.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.0",
+      "solid2Releases": 4,
+      "nextBranch": {
+        "directory": "video",
+        "version": "1.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 95,
+      "package": "@solid-primitives/virtual",
+      "version": "1.0.0-next.4",
+      "integrity": "sha512-OyVTjCSUj7f8xJr5xGJxQhKDoRVf87BjxY/z3MrvlNfDK4Z3ldqFKjQ3mYqDN9t+cm4LKb4PtELBa8TGkdtEeA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/virtual@1.0.0-next.4|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "1.0.0-next.4",
+      "solid2Releases": 5,
+      "nextBranch": {
+        "directory": "virtual",
+        "version": "1.0.0-next.5",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    },
+    {
+      "rank": 96,
+      "package": "@solid-primitives/websocket",
+      "version": "2.0.0-next.3",
+      "integrity": "sha512-x5wKmCnZeKrUQmy0au5MlFjDcXnQqcAYmMctPXxceTvtY7YJXlAykaf7Sx+XknNvzlbl+UrOZ2zGNRD8BNeOxw==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/websocket@2.0.0-next.3|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.0-next.3",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "websocket",
+        "version": "2.0.0-next.4",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": true,
+      "inCensus": false
+    },
+    {
+      "rank": 97,
+      "package": "@solid-primitives/workers",
+      "version": "2.0.1-next.1",
+      "integrity": "sha512-rbzg3Pn8iN0gcRlhwF2FaE3afvLiHCUIE6A+UgfGQVnv34lwasU+dwaXX0Ru+kSoK2ulayuiV6ObifyWF78uOA==",
+      "family": "solid-primitives",
+      "weeklyDownloads": null,
+      "probe": "@solid-primitives/workers@2.0.1-next.1|solid2|head",
+      "probeKind": "head",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.13",
+        "solid-js": "2.0.0-rc.13"
+      },
+      "solidPeer": "^2.0.0-rc.0",
+      "nextDistTag": "2.0.1-next.1",
+      "solid2Releases": 3,
+      "nextBranch": {
+        "directory": "workers",
+        "version": "2.0.1-next.2",
+        "solidPeer": "catalog:peer"
+      },
+      "inMetricCorpus": false,
+      "inCensus": false
+    }
+  ],
+  "withoutSolid2": [
+    {
+      "package": "@solid-primitives/autofocus",
+      "distTags": {
+        "beta": "0.0.102-beta.0",
+        "latest": "0.1.5"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/composites",
+      "distTags": {
+        "latest": "1.1.1"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/cookies-store",
+      "distTags": {
+        "latest": "1.1.11"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/countdown",
+      "distTags": {
+        "latest": "1.0.9"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/date-difference",
+      "distTags": {
+        "latest": "1.0.2"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/db-store",
+      "distTags": {
+        "latest": "1.1.4"
+      },
+      "nextBranch": {
+        "directory": "db-store",
+        "version": "1.1.4",
+        "solidPeer": "^1.6.12"
+      }
+    },
+    {
+      "package": "@solid-primitives/debounce",
+      "distTags": {
+        "latest": "1.3.0"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/fetch",
+      "distTags": {
+        "latest": "2.5.2"
+      },
+      "nextBranch": {
+        "directory": "fetch",
+        "version": "2.5.2",
+        "solidPeer": "^1.6.12"
+      }
+    },
+    {
+      "package": "@solid-primitives/graphql",
+      "distTags": {
+        "beta": "1.5.4-beta.0",
+        "latest": "2.2.6",
+        "next": "3.0.0-next.0"
+      },
+      "nextBranch": {
+        "directory": "graphql",
+        "version": "3.0.0-next.0",
+        "solidPeer": "^1.6.12"
+      }
+    },
+    {
+      "package": "@solid-primitives/immutable",
+      "distTags": {
+        "beta": "0.1.8-beta.0",
+        "latest": "1.1.5",
+        "next": "2.0.0-next.0"
+      },
+      "nextBranch": {
+        "directory": "immutable",
+        "version": "2.0.0-next.0",
+        "solidPeer": "^1.6.12"
+      }
+    },
+    {
+      "package": "@solid-primitives/jsx-parser",
+      "distTags": {
+        "latest": "0.2.0",
+        "beta": "0.1.3-beta.0"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/local-store",
+      "distTags": {
+        "latest": "1.1.4"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/page-visibility",
+      "distTags": {
+        "beta": "2.0.6-beta.0",
+        "latest": "2.1.6"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/reducer",
+      "distTags": {
+        "latest": "0.0.101"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/resource",
+      "distTags": {
+        "latest": "0.4.3"
+      },
+      "nextBranch": {
+        "directory": "resource",
+        "version": "0.4.3",
+        "solidPeer": "^1.6.0"
+      }
+    },
+    {
+      "package": "@solid-primitives/start",
+      "distTags": {
+        "latest": "0.0.4"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/stream",
+      "distTags": {
+        "beta": "0.6.6-beta.0",
+        "latest": "0.7.4"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/throttle",
+      "distTags": {
+        "latest": "1.2.0"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/until",
+      "distTags": {
+        "latest": "0.1.1"
+      },
+      "nextBranch": null
+    },
+    {
+      "package": "@solid-primitives/visibility-observer",
+      "distTags": {
+        "latest": "2.0.1"
+      },
+      "nextBranch": null
+    }
+  ]
+}

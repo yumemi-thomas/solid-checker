@@ -1,0 +1,137 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 582,
+      "end": 591,
+      "fixes": 0,
+      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run; the enclosing callback is owned only on its first run and runs with no owner on any later run, so solid-checker cannot prove every execution has an owner",
+      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component. Create owned work in the effect's compute, or keep the apply callback free of primitives and cleanups that a later run would leave detached."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 758,
+      "end": 770,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the enclosing callback is owned only on its first run and runs with no owner on any later run, so solid-checker cannot prove every execution has an owner",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Create owned work in the effect's compute, or keep the apply callback free of primitives and cleanups that a later run would leave detached."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 983,
+      "end": 998,
+      "fixes": 0,
+      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run; the enclosing callback is owned only on its first run and runs with no owner on any later run, so solid-checker cannot prove every execution has an owner",
+      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component. Create owned work in the effect's compute, or keep the apply callback free of primitives and cleanups that a later run would leave detached."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 1301,
+      "end": 1310,
+      "fixes": 0,
+      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run; the enclosing callback is owned only on its first run and runs with no owner on any later run, so solid-checker cannot prove every execution has an owner",
+      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component. Create owned work in the effect's compute, or keep the apply callback free of primitives and cleanups that a later run would leave detached."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 1596,
+      "end": 1605,
+      "fixes": 0,
+      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run; the enclosing callback is owned only on its first run and runs with no owner on any later run, so solid-checker cannot prove every execution has an owner",
+      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component. Create owned work in the effect's compute, or keep the apply callback free of primitives and cleanups that a later run would leave detached."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 2408,
+      "end": 2417,
+      "fixes": 0,
+      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
+      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 2903,
+      "end": 2911,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createRenderEffect apply callback, which does not track; the read sees the current value once and never updates when \"shared\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3063,
+      "end": 3071,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createRenderEffect apply callback, which does not track; the read sees the current value once and never updates when \"shared\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3190,
+      "end": 3198,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createRenderEffect apply callback, which does not track; the read sees the current value once and never updates when \"shared\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3362,
+      "end": 3370,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createEffect apply callback, which does not track; the read sees the current value once and never updates when \"shared\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3571,
+      "end": 3579,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in effect apply callback, which does not track; the read sees the current value once and never updates when \"shared\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    }
+  ]
+}

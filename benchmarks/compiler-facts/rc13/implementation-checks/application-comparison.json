@@ -1,0 +1,127 @@
+{
+  "authority": false,
+  "certification": false,
+  "observation": {
+    "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/development-focus-benchmark-v1/1-chromium/results.json",
+    "sha256": "sha256:e607239fa61898d2f20f7689cfb079207ebc43070dd01b621b8e51b4e422a8b9"
+  },
+  "implementationInputs": [
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/benchmarks/reviewed-package-models/development/feedback-cli-replay.mjs",
+      "sha256": "sha256:2e997a701432181600fb34d354dd5d65d3bae324a38dd772d404721c1db724ba"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/development-feedback.mjs",
+      "sha256": "sha256:e9881eb405a3b94cb1917fa602a4ad19cb5496b71114f667f58431470650e8dd"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/bin/launcher.mjs",
+      "sha256": "sha256:dc78b1fd8eb1deeec2ae13bd18022ee23c684d8cdf2766294eed41f3eec2114b"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/target/debug/solid-checker-rust",
+      "sha256": "sha256:43ad6afa27cffa624f90121551db60989953a8a663f82c99d5b3c3e0111605df"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts",
+      "sha256": "sha256:ad06b3d0d4b6057283ceaaf8edd9f0913c775f421842429aa13c0dd33757c545"
+    }
+  ],
+  "analysisCompiler": "local RC.13 candidate; original browser execution retains RC.9",
+  "summary": {
+    "applications": 8,
+    "typingErrors": 0,
+    "nativeFindings": 18,
+    "observations": 8
+  },
+  "results": [
+    {
+      "id": "async-body-return-serial-adopted-child-object-deferred",
+      "typingErrors": 0,
+      "nativeFindings": 3,
+      "nativeViolations": 0,
+      "runtimeEvents": 1,
+      "observations": 1,
+      "durationMs": 7695.898917,
+      "historicalHintCount": 1,
+      "excluded": null
+    },
+    {
+      "id": "async-body-return-serial-reaction-read-deferred",
+      "typingErrors": 0,
+      "nativeFindings": 2,
+      "nativeViolations": 0,
+      "runtimeEvents": 1,
+      "observations": 1,
+      "durationMs": 7676.766375000001,
+      "historicalHintCount": 1,
+      "excluded": null
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-named-allocation-open",
+      "typingErrors": 0,
+      "nativeFindings": 2,
+      "nativeViolations": 0,
+      "runtimeEvents": 1,
+      "observations": 1,
+      "durationMs": 7652.042207999999,
+      "historicalHintCount": 0,
+      "excluded": null
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-identity-control-open",
+      "typingErrors": 0,
+      "nativeFindings": 2,
+      "nativeViolations": 0,
+      "runtimeEvents": 1,
+      "observations": 1,
+      "durationMs": 7647.244917,
+      "historicalHintCount": 1,
+      "excluded": null
+    },
+    {
+      "id": "async-body-return-concurrent-adopted-child-object-deferred",
+      "typingErrors": 0,
+      "nativeFindings": 3,
+      "nativeViolations": 0,
+      "runtimeEvents": 1,
+      "observations": 1,
+      "durationMs": 7663.258583000003,
+      "historicalHintCount": 1,
+      "excluded": null
+    },
+    {
+      "id": "async-body-return-concurrent-reaction-read-deferred",
+      "typingErrors": 0,
+      "nativeFindings": 2,
+      "nativeViolations": 0,
+      "runtimeEvents": 1,
+      "observations": 1,
+      "durationMs": 7648.76425,
+      "historicalHintCount": 1,
+      "excluded": null
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-named-allocation-open",
+      "typingErrors": 0,
+      "nativeFindings": 2,
+      "nativeViolations": 0,
+      "runtimeEvents": 1,
+      "observations": 1,
+      "durationMs": 7661.737208999999,
+      "historicalHintCount": 0,
+      "excluded": null
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-identity-control-open",
+      "typingErrors": 0,
+      "nativeFindings": 2,
+      "nativeViolations": 0,
+      "runtimeEvents": 1,
+      "observations": 1,
+      "durationMs": 7947.949458000003,
+      "historicalHintCount": 1,
+      "excluded": null
+    }
+  ]
+}
