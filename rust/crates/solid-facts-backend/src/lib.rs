@@ -103,6 +103,7 @@ pub mod fixture_authorization;
 mod host_config;
 pub mod host_constants;
 mod host_inline;
+mod host_invocation;
 mod host_loadable;
 mod host_plugins;
 mod inferred_contract;

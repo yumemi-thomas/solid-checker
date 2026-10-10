@@ -37,9 +37,15 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
     )
     .unwrap();
     let project = fs::canonicalize(scratch.join("app")).unwrap();
-    fs::copy(
-        project.join("tsconfig.json"),
+    let application_manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.join("package.json")).unwrap()).unwrap();
+    let mut analyzed_config: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.join("tsconfig.json")).unwrap()).unwrap();
+    analyzed_config["compilerOptions"]["noEmit"] = true.into();
+    analyzed_config["compilerOptions"]["allowImportingTsExtensions"] = true.into();
+    fs::write(
         project.join("tsconfig.app.json"),
+        serde_json::to_vec(&analyzed_config).unwrap(),
     )
     .unwrap();
     let package = project.join("node_modules/@solidjs/web");
@@ -64,11 +70,16 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
             .unwrap();
     let trust = project.join("trust.json");
     fs::write(&trust, authorization.trust_configuration).unwrap();
-    let source = "import {isServer} from '@solidjs/web'; import {startClosed} from 'reactive-package'; new Date(); if (!isServer) startClosed();";
+    let source = "import {isServer} from '@solidjs/web'; import {startClosed} from 'reactive-package'; import {run} from './selected.ts'; new Date(); if (!isServer) { startClosed(); run(); }";
     fs::write(project.join("src/main.ts"), source).unwrap();
+    let helper =
+        "import {startClosed} from 'reactive-package'; export function run() { startClosed(); }";
+    fs::write(project.join("src/selected.ts"), helper).unwrap();
     fs::write(
         project.join("src/shadow.js"),
-        "export const isServer = true;",
+        // Both browser-map replacements retain the requested export surface:
+        // the local twin links successfully but its run never registers.
+        "export const isServer = true; export function run() {}",
     )
     .unwrap();
     fs::write(
@@ -76,7 +87,7 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
         r#"{"compilerOptions":{"paths":{"@solidjs/web":["./src/shadow.js"]}}}"#,
     )
     .unwrap();
-    let cases: serde_json::Value =
+    let mut cases: serde_json::Value =
         serde_json::from_slice(
             &fs::read(repository.join(
                 "fixtures/reactive-ir/inferred-host-reachability/resolver-selection-cases.json",
@@ -84,8 +95,73 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
             .unwrap(),
         )
         .unwrap();
+    let conventional: serde_json::Value = serde_json::from_slice(
+        &fs::read(repository.join(
+            "fixtures/reactive-ir/inferred-host-reachability/conventional-selection-cases.json",
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    for mut case in conventional.as_array().unwrap().iter().cloned() {
+        case["resolver"] = false.into();
+        if case.get("runtime").is_none() {
+            case["runtime"] = "absent".into();
+        }
+        case["tsconfig"] = serde_json::json!({});
+        cases.as_array_mut().unwrap().push(case);
+    }
     let start = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
     for case in cases.as_array().unwrap() {
+        if !cfg!(unix)
+            && ["manifestSymlink", "workspaceSymlink", "configSymlink"]
+                .iter()
+                .any(|key| case[*key] == true)
+        {
+            continue;
+        }
+        for path in [
+            project.join("package.json"),
+            scratch.join("package.json"),
+            project.join("vite.config.ts"),
+        ] {
+            if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink()) {
+                fs::remove_file(path).unwrap();
+            }
+        }
+        if let Some(config) = case["outsideConfig"].as_str() {
+            fs::write(scratch.join("other.ts"), config).unwrap();
+        }
+        let mut app_manifest = application_manifest.clone();
+        if let Some(scripts) = case.get("scripts") {
+            app_manifest["scripts"] = scripts.clone();
+        }
+        if let Some(browser) = case.get("browserMap") {
+            app_manifest["browser"] = browser.clone();
+        }
+        fs::write(
+            project.join("package.json"),
+            serde_json::to_vec(&app_manifest).unwrap(),
+        )
+        .unwrap();
+        let mut workspace = serde_json::json!({"private":true});
+        if let Some(scripts) = case.get("workspaceScripts") {
+            workspace["scripts"] = scripts.clone();
+        }
+        if let Some(browser) = case.get("workspaceBrowser") {
+            workspace["browser"] = browser.clone();
+        }
+        fs::write(
+            scratch.join("package.json"),
+            serde_json::to_vec(&workspace).unwrap(),
+        )
+        .unwrap();
+        if let Some(name) = case["configFile"].as_str() {
+            fs::write(
+                project.join(name),
+                "export default {plugins:[],resolve:{tsconfigPaths:true}};",
+            )
+            .unwrap();
+        }
         let expected = case["browser"].as_bool().unwrap();
         fs::write(
             project.join("vite.config.ts"),
@@ -103,6 +179,29 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
             serde_json::to_vec(&case["tsconfig"]).unwrap(),
         )
         .unwrap();
+        #[cfg(unix)]
+        for (key, path, target) in [
+            (
+                "manifestSymlink",
+                project.join("package.json"),
+                scratch.join("app-manifest.json"),
+            ),
+            (
+                "workspaceSymlink",
+                scratch.join("package.json"),
+                scratch.join("workspace-manifest.json"),
+            ),
+            (
+                "configSymlink",
+                project.join("vite.config.ts"),
+                scratch.join("linked-config.ts"),
+            ),
+        ] {
+            if case[key] == true {
+                fs::rename(&path, &target).unwrap();
+                std::os::unix::fs::symlink(target, path).unwrap();
+            }
+        }
         let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
         command.env_remove("SOLID_CHECKER_RUNTIME_RESOLVER");
         if case["runtime"] != "absent" {
@@ -138,17 +237,49 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
             expected,
             "{case}: {result:#?}"
         );
+        let helper_start = u64::try_from(helper.find("startClosed()").unwrap()).unwrap();
+        assert_eq!(
+            result["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|finding| finding["id"] == "SC4001"
+                    && finding["kind"] == "violation"
+                    && finding["primaryLocation"]["startByte"].as_u64() == Some(helper_start)
+                    && finding["primaryLocation"]["path"]
+                        .as_str()
+                        .is_some_and(|path| path.ends_with("src/selected.ts"))),
+            expected,
+            "helper: {case}: {result:#?}"
+        );
+        if let Some(note) = case["note"].as_str() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(stderr.contains(note), "{case}: {stderr}");
+            if case.get("scripts").is_some() || case.get("workspaceScripts").is_some() {
+                assert!(stderr.contains("package.json:"), "{stderr}");
+            }
+            if let Some(name) = case["configFile"].as_str() {
+                assert!(stderr.contains(name), "{stderr}");
+            }
+        }
         if !expected {
             assert_eq!(result["status"], "uncertifiable");
             if case["runtime"] == "absent"
                 && case["configRefused"] != true
                 && case["processRefused"] != true
+                && case.get("note").is_none()
+                && case["resolver"] != false
             {
+                let stderr = String::from_utf8_lossy(&output.stderr);
                 assert!(
-                    String::from_utf8_lossy(&output.stderr)
-                        .contains("active tsconfig resolver requires authenticated file selection")
+                    stderr
+                        .contains("active tsconfig resolver requires authenticated file selection"),
+                    "{case}: {stderr}"
                 );
             }
+        }
+        if let Some(name) = case["configFile"].as_str() {
+            fs::remove_file(project.join(name)).unwrap();
         }
     }
     fs::remove_dir_all(scratch).unwrap();

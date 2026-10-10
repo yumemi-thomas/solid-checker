@@ -1,5 +1,35 @@
 # Precision backlog
 
+ADR 0270 conventional-config/browser-map review closure (owner option A,
+2026-10-10): the app-built-with-conventional-Vite-config premise is named and
+enforced where visible. App/enclosing scripts (all hooks and launcher forms),
+config/mode/loader overrides, different or unknown roots, nonliteral scripts,
+alternate/mode-specific filenames and unsupported config imports refuse with
+site notes. Nonempty importer/enclosing browser object maps conservatively
+withhold default selection, package identity and host constants for all requests
+in scope; exact opted-in ADR 0220 agreement plus existing constant authentication
+alone recovers authority. Every inspected manifest, lookup and candidate
+presence is enrolled before cache reuse and replay. Symlinked app/enclosing
+manifests and conventional configs refuse before their untracked target bytes
+can supply selection authority. The 61 new fixture controls
+join the 22 resolver controls; main/helper process sites and published boolean
+typing are retained. Exact map dispatch and externally supplied build commands
+without visible evidence remain open/conditional on the named premise. This
+supersedes the alternate-config limitation in the preceding implementation.
+
+Final measurements/checks: Error Menu retains 65 inferred scopes, Helge 18;
+three alternating daemon-off release runs versus 6009dceb9 give median deltas
++0.5641 s and +0.2646 s. Error Menu still misses the earlier +0.3 s goal.
+All seven candidate decision notes are unchanged. Coverage remains 239 projects
+/ 1583 findings; the 49-project corpus retains 538 violations / 3504
+uncertifiable findings with zero added/removed violation sites or multiplicities.
+Only the pre-existing Helge SC9005 column move differs from the old baseline.
+Two focused admission/cache tests and 83 armed process controls pass; published
+rc.13 typings produce zero TypeScript diagnostics. Final-source Rust: 1753
+passed, zero failed/ignored; scripts: 355; CLI: 381 plus adapter tsc. Workspace
+Clippy preceded full make verify, green at TOTAL 218.55 s with no failed steps.
+No snapshots, public contracts, schemas or manifests changed.
+
 ADR 0270 tsconfig resolver file-selection boundary (2026-10-10): the tokenized
 `${configDir}` baseUrl review falsified request-specific resolver modeling and
 its cache closure. That modeling and the resolver-scope inventory are removed.
@@ -15,9 +45,9 @@ server and unknown answers cannot recover authority. Build/start never proves
 selection. No-resolver inference is unchanged. Fixture and armed process twins
 pin tokenized baseUrl, inherited paths, package extends, unrelated/empty options,
 no-resolver controls and runtime agreement/disagreement. No diagnostic or
-published typing is introduced. Alternate `vite --config` invocation remains
-outside the app-local conventional-config discovery grammar; its selection is
-not authenticated. Runtime selection cannot prove unknown package behavior or
+published typing is introduced. This earlier measurement predates the owner
+option-A conventional-config/browser-map closure above. Runtime selection
+cannot prove unknown package behavior or
 admit an unsupported executable config. Verification: four focused Rust tests
 and 22 armed process cases passed; real published rc.13 typings produced zero
 TypeScript diagnostics. Coverage remains 239 projects / 1583 findings. The
@@ -28972,6 +29002,22 @@ producers remain uncertifiable. No general dictionary dispatch or state model is
 claimed. Measured: ledger browser 98 -> 99; the namespace-created dictionary
 case stays uncertifiable (more conservative than predicted).
 ## Inferred browser host (2026-10-10, ADR 0270; implemented and measured)
+
+Owner decision A adds the named conventional-config premise, enforced at every
+visible app/enclosing manifest script and conventional config candidate. Config,
+mode and loader selection, different/undecidable roots, nonliteral scripts,
+mode-specific/alternate files and unsupported config imports refuse with a site
+note, including with ADR 0220 enabled. Every inspected manifest, directory lookup
+and candidate presence is a cache/proof input. Importer/enclosing `browser`
+object maps independently withhold default file selection, package identity and
+host constants; exact opted-in canonical agreement alone recovers selection,
+with existing constant byte authentication unchanged. Nonempty maps deliberately
+over-withhold every request in scope, including unrelated keys, extension/index
+forms and false maps; exact browser-map dispatch remains open. External commands
+without visible evidence remain conditional on the conventional-config premise.
+Fixture table conventional-selection-cases.json and armed process twins pin
+main/helper sites, refusal notes, clean controls and agreement/shadow/server/
+unknown answers. No new diagnostic or published-signature relaxation.
 
 Independent-review repairs: `??`/`??=` compose left completion and withhold unknown
 nullish selection/right completion; throwing constructors/functions cannot lend

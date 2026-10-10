@@ -7,11 +7,12 @@ const request = JSON.parse(input);
 const choice = process.env.SOLID_CHECKER_TEST_RESOLVER_CHOICE;
 const rows = request.loads.map(load => {
   const target = load.specifier === '@solidjs/web'
-    ? choice === 'client' ? 'node_modules/@solidjs/web/dist/web.js'
+    ? choice === 'client' || choice === 'local-shadow' ? 'node_modules/@solidjs/web/dist/web.js'
       : choice === 'server' ? 'node_modules/@solidjs/web/dist/server.js'
       : choice === 'shadow' ? 'src/shadow.js'
       : choice === 'token-shadow' ? '../shadow-base/@solidjs/web.js' : null
-    : load.specifier === 'reactive-package' ? 'node_modules/reactive-package/index.js' : null;
+    : load.specifier === 'reactive-package' ? 'node_modules/reactive-package/index.js'
+    : load.specifier === './selected.ts' ? choice === 'local-shadow' ? 'src/shadow.js' : 'src/selected.ts' : null;
   const path = target && join(request.root, target);
   return { id: load.id, outcome: path
     ? { kind: 'file', path, physicalPath: path }

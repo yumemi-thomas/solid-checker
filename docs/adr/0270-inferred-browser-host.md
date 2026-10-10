@@ -106,9 +106,15 @@ targets whose authenticated bytes prove the constant. Unknown, shadow, server or
 disagreeing selections cannot recover it. Successful build/start premises cannot
 discharge file selection. Runtime identity does not establish package behavior
 or make an unsupported executable config admissible. No-resolver apps retain
-their existing inference. Selection of an alternate config by an invocation
-such as `vite --config ../other.ts` is not authenticated by this discovery grammar;
-only the app-local conventional Vite config is admitted.
+their existing inference, subject to the conventional-config premise below.
+Importer/enclosing package `browser` object mappings independently withhold
+default selection, package identity and host constants. Any nonempty object
+map conservatively affects every request in its enclosing scope, including
+relative files, bare packages and `false` mappings; exact dispatch is not
+modeled. Empty maps and string entry points do not rewrite importer requests.
+Only opted-in ADR 0220 canonical runtime agreement recovers a selected edge;
+constants retain their independent authenticated-byte requirement. A shadow,
+server, false/unknown or disagreeing answer cannot recover authority.
 Explicit aliases of package imports remain baseline until their exact runtime
 export surface is authenticated; local edge answers cannot replace that proof.
 Requested CSS resolution must also agree with its reviewed local input.
@@ -130,6 +136,47 @@ production-build or transformed-source attestation. The independent bundler
 draft's mandatory build graph and second build flag are omitted per decision B;
 no build is run automatically. Unknown transformations and unreviewed provider
 bytes still refuse root/proof admission.
+
+## Conventional-config premise (owner decision A, 2026-10-10)
+
+**The app is built with its conventional Vite config.** This named premise is
+enforced wherever selection is visible. Every application manifest script,
+including pre/post lifecycle hooks, is checked as literal command data. Direct
+`vite`, build/dev/serve/preview and npx/bunx/pnpm exec/local-bin invocations
+refuse when they select `--config`/`-c`, `--mode`/`-m` (any mode), an explicit
+`--configLoader`, or a root/working directory other than the application.
+Explicit loaders are conservatively refused even for `native`. Nonliteral
+scripts, expansion/substitution, opaque shell syntax and undecidable invocation
+options refuse with a decision note naming `package.json` and the script.
+Enclosing manifests are checked too, including workspace `--filter` and `-C`
+selection. Exact unrelated package-name filters may be excluded; uncertain
+filters and enclosing Vite invocations otherwise refuse conservatively.
+
+Exactly one of the six conventional `vite.config.*` files is admitted. Other
+`vite.config.*` variants and `vite.<mode>.config.*` files refuse, even when not
+selected by a script. Imported config objects, other config files and package
+plugins outside the existing closed config grammar refuse at their import
+site. Symlinked app/enclosing manifests and conventional configs also refuse;
+pointer identity cannot authenticate mutable target bytes. ADR 0220 does not
+override any of these configuration refusals.
+All inspected manifests, root/directory lookup identities, conventional config
+candidates and directory membership (including alternate-file additions) are
+cache/proof inputs. Browser-map checks also enroll every importer/enclosing
+manifest and its absence. Configurations selected externally without visible
+evidence remain conditional on this named premise; inference does not observe
+an arbitrary build command or attest a production build.
+
+The implementation pins 61 invocation/config/browser-map controls plus 22
+resolver controls, including exact main/helper process sites and link-target
+mutation with unchanged pointer identity. Published rc.13 web typings produce
+zero TypeScript diagnostics. Final coverage remains 239 projects / 1583 findings;
+the 49-project no-target corpus adds/removes zero violation sites or
+multiplicities (538 violations / 3504 uncertifiable findings). Error Menu and
+Helge retain 65 and 18 scopes; paired median deltas over 6009dceb9 are +0.5641 s
+and +0.2646 s. Error Menu's earlier +0.3 s goal remains unmet. Final-source
+handoff is green: 1753 Rust tests, 355 script tests, 381 CLI tests plus adapter
+typechecking, workspace Clippy before full make verify (TOTAL 218.55 s).
+No generated snapshot or public contract was changed.
 
 ## Successful-build premise (owner decision, 2026-10-10)
 

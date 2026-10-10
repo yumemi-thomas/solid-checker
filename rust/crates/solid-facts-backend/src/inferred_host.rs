@@ -235,6 +235,9 @@ fn inferred_host_graph_input_paths(
         .map(Path::to_path_buf)
         .collect::<BTreeSet<_>>();
     for ancestor in &ancestors {
+        // Importer/enclosing browser maps are file-selection inputs, including
+        // absent nested manifests and manifests above the application.
+        paths.push(ancestor.join("package.json"));
         paths.extend(
             ["~", "~.js", "~.json", "~.node"]
                 .iter()
@@ -595,6 +598,12 @@ fn application_inputs(
 ) -> Result<(), DiscoveryRefusal> {
     let path = directory.join("package.json");
     inputs.push(path.clone());
+    if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink()) {
+        return Err(DiscoveryRefusal::new(
+            &path,
+            "symlinked application manifest has unknown config selection",
+        ));
+    }
     let package: serde_json::Value = serde_json::from_slice(
         &fs::read(&path)
             .ok()
@@ -608,12 +617,25 @@ fn application_inputs(
             "published entry points permit unknown execution hosts",
         ));
     }
+    let app_name = package.get("name").and_then(serde_json::Value::as_str);
+    if let Some(scripts) = package.get("scripts")
+        && let Some(reason) =
+            crate::host_invocation::refusal(scripts, directory, directory, app_name, inputs)
+    {
+        return Err(DiscoveryRefusal::new(&path, reason));
+    }
     // A workspace leaf has its own application roots and project inventory.
     // Published enclosing packages can still expose the leaf to unknown hosts.
     for ancestor in directory.ancestors().skip(1) {
         let path = ancestor.join("package.json");
         inputs.push(path.clone());
         if path.exists() {
+            if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink()) {
+                return Err(DiscoveryRefusal::new(
+                    &path,
+                    "symlinked enclosing manifest has unknown config selection",
+                ));
+            }
             let package: serde_json::Value = serde_json::from_slice(
                 &fs::read(&path)
                     .ok()
@@ -626,6 +648,12 @@ fn application_inputs(
                     &path,
                     "published enclosing package permits unknown execution hosts",
                 ));
+            }
+            if let Some(scripts) = package.get("scripts")
+                && let Some(reason) =
+                    crate::host_invocation::refusal(scripts, ancestor, directory, app_name, inputs)
+            {
+                return Err(DiscoveryRefusal::new(&path, reason));
             }
         }
     }
@@ -776,6 +804,36 @@ fn configuration_in_generation(
     generation: Option<&BTreeMap<String, String>>,
 ) -> Result<Config, DiscoveryRefusal> {
     side_inputs(directory, inputs)?;
+    // Observe directory membership even on refusal: adding an alternate or
+    // mode-specific config must invalidate a cached conventional answer.
+    inputs.push(directory.to_owned());
+    let entries = fs::read_dir(directory)
+        .ok()
+        .required(directory, "cannot enumerate Vite config variants")?;
+    let mut variants = Vec::new();
+    for entry in entries {
+        let entry = entry
+            .ok()
+            .required(directory, "cannot enumerate Vite config variant")?;
+        let name = entry.file_name();
+        let name = name
+            .to_str()
+            .required(directory, "non-UTF-8 config candidate")?;
+        if name.starts_with("vite.")
+            && (name.contains(".config.") || name.starts_with("vite.config."))
+            && !CONFIGS.contains(&name)
+        {
+            variants.push(entry.path());
+        }
+    }
+    variants.sort();
+    inputs.extend(variants.iter().cloned());
+    if let Some(path) = variants.first() {
+        return Err(DiscoveryRefusal::new(
+            path,
+            "non-conventional or mode-specific Vite config",
+        ));
+    }
     let configs = CONFIGS
         .iter()
         .map(|name| directory.join(name))
@@ -788,6 +846,12 @@ fn configuration_in_generation(
             format!("expected one Vite config, found {}", configs.len()),
         ));
     };
+    if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_symlink()) {
+        return Err(DiscoveryRefusal::new(
+            path,
+            "symlinked Vite config is outside the closed selection grammar",
+        ));
+    }
     let source = fs::read_to_string(path)
         .ok()
         .required(path, "cannot read Vite config")?;
@@ -1393,7 +1457,10 @@ fn execution_constants(
             .iter()
             .filter(|import| !import.type_only && import.module == candidate_export.module)
         {
-            if config.tsconfig_paths && facts.runtime_resolutions.is_none() {
+            if (config.tsconfig_paths
+                || browser_selection_required(Path::new(file.path.as_str()), manifest))
+                && facts.runtime_resolutions.is_none()
+            {
                 continue;
             }
             if config.aliases.keys().any(|alias| {
@@ -2369,6 +2436,44 @@ struct DiscoveryInputs {
     config_inputs: Vec<PathBuf>,
 }
 
+/// Browser object maps can select bare requests, resolved relative files,
+/// extension probes and false modules. Until that dispatch is modeled exactly,
+/// any nonempty enclosing object map withholds every default request selection.
+/// String browser entry points do not rewrite the importer's requests.
+fn browser_selection_required(importer: &Path, manifest: &mut BrowserRootManifest) -> bool {
+    let Some(parent) = importer.parent() else {
+        return true;
+    };
+    for ancestor in parent.ancestors() {
+        let path = ancestor.join("package.json");
+        let Some(observed) = graph_identity(manifest, &path) else {
+            return true;
+        };
+        if observed == "absent" {
+            continue;
+        }
+        // Pointer identity is not target content. Do not consume mutable
+        // browser-map bytes behind a link as default selection authority.
+        if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink()) {
+            return true;
+        }
+        let Some(package) = fs::read(&path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        else {
+            return true;
+        };
+        if let Some(browser) = package.get("browser") {
+            match browser {
+                serde_json::Value::Object(map) if map.is_empty() => {}
+                serde_json::Value::String(_) | serde_json::Value::Null => {}
+                _ => return true,
+            }
+        }
+    }
+    false
+}
+
 fn resolver_selection_required(config: &Config, request: &str) -> bool {
     config.tsconfig_paths
         && (!(request.starts_with("./") || request.starts_with("../") || request.starts_with('/'))
@@ -2879,13 +2984,20 @@ fn discovered_index_with_inputs(
             // Resolver activity is app-wide. Do not approximate tsconfig
             // discovery, inheritance, tokens, patterns or negative lookups.
             // Only ADR 0220 can authenticate bare/aliased file selection.
-            if resolver_selection_required(&config, text) && facts.runtime_resolutions.is_none() {
+            let browser_map = browser_selection_required(Path::new(path), &mut manifest);
+            if (resolver_selection_required(&config, text) || browser_map)
+                && facts.runtime_resolutions.is_none()
+            {
                 module.refused = true;
                 blocked_imports.insert((path.into(), text.into()));
                 unproven_semantics.insert(path.into());
                 withheld_loads.insert(
                     (path.to_owned(), text.to_owned()),
-                    "active tsconfig resolver requires authenticated file selection",
+                    if browser_map {
+                        "importer/enclosing browser map requires authenticated file selection"
+                    } else {
+                        "active tsconfig resolver requires authenticated file selection"
+                    },
                 );
                 continue;
             }
@@ -3093,7 +3205,7 @@ fn discovered_index_with_inputs(
                 );
             } else if row.resolution == ImportResolution::NodeModules {
                 let mut package_inputs = Vec::new();
-                let resolver_active = config.tsconfig_paths;
+                let resolver_active = config.tsconfig_paths || browser_map;
                 if packages.is_none() {
                     // The provisional graph schedules package analysis; its
                     // optimistic edges are not final linking authority. Even
@@ -3218,7 +3330,10 @@ fn discovered_index_with_inputs(
             let (Some(text), Some(span)) = (load.specifier.as_deref(), load.specifier_span) else {
                 continue;
             };
-            if resolver_selection_required(&config, text) && facts.runtime_resolutions.is_none() {
+            if (resolver_selection_required(&config, text)
+                || browser_selection_required(Path::new(path), &mut manifest))
+                && facts.runtime_resolutions.is_none()
+            {
                 unproven_semantics.insert(path.into());
                 continue;
             }
@@ -4380,6 +4495,210 @@ mod tests {
     }
 
     #[test]
+    fn conventional_invocation_fixture_twins_name_the_refusal_site() {
+        let scratch = std::env::temp_dir().join(format!(
+            "host-conventional-selection-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(scratch.join("app")).unwrap();
+        let scratch = fs::canonicalize(scratch).unwrap();
+        fs::create_dir_all(scratch.join("shadow-base")).unwrap();
+        let app = fs::canonicalize(scratch.join("app")).unwrap();
+        let project = app.join("tsconfig.json");
+        fs::write(&project, "{}").unwrap();
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let cases: serde_json::Value = serde_json::from_slice(
+            &fs::read(repository.join(
+                "fixtures/reactive-ir/inferred-host-reachability/conventional-selection-cases.json",
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        for case in cases.as_array().unwrap() {
+            if case.get("browserMap").is_some() || case.get("workspaceBrowser").is_some() {
+                continue;
+            }
+            if !cfg!(unix)
+                && ["manifestSymlink", "workspaceSymlink", "configSymlink"]
+                    .iter()
+                    .any(|key| case[*key] == true)
+            {
+                continue;
+            }
+            for path in [
+                app.join("package.json"),
+                scratch.join("package.json"),
+                app.join("vite.config.ts"),
+            ] {
+                if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink()) {
+                    fs::remove_file(path).unwrap();
+                }
+            }
+            if let Some(config) = case["outsideConfig"].as_str() {
+                fs::write(scratch.join("other.ts"), config).unwrap();
+            }
+            let mut package = serde_json::json!({"private":true,"name":"inferred-host-spa"});
+            if let Some(scripts) = case.get("scripts") {
+                package["scripts"] = scripts.clone();
+            }
+            fs::write(
+                app.join("package.json"),
+                serde_json::to_vec(&package).unwrap(),
+            )
+            .unwrap();
+            let mut workspace = serde_json::json!({"private":true});
+            if let Some(scripts) = case.get("workspaceScripts") {
+                workspace["scripts"] = scripts.clone();
+            }
+            fs::write(
+                scratch.join("package.json"),
+                serde_json::to_vec(&workspace).unwrap(),
+            )
+            .unwrap();
+            fs::write(
+                app.join("vite.config.ts"),
+                case["config"]
+                    .as_str()
+                    .unwrap_or("export default {plugins:[]};"),
+            )
+            .unwrap();
+            if let Some(name) = case["configFile"].as_str() {
+                fs::write(app.join(name), "export default {};").unwrap();
+            }
+            #[cfg(unix)]
+            for (key, path, target) in [
+                (
+                    "manifestSymlink",
+                    app.join("package.json"),
+                    scratch.join("app-manifest.json"),
+                ),
+                (
+                    "workspaceSymlink",
+                    scratch.join("package.json"),
+                    scratch.join("workspace-manifest.json"),
+                ),
+                (
+                    "configSymlink",
+                    app.join("vite.config.ts"),
+                    scratch.join("linked-config.ts"),
+                ),
+            ] {
+                if case[key] == true {
+                    fs::rename(&path, &target).unwrap();
+                    std::os::unix::fs::symlink(target, path).unwrap();
+                }
+            }
+            let mut inputs = Vec::new();
+            let decision = application_inputs(&app, &project, &mut inputs)
+                .and_then(|()| configuration(&app, &mut inputs, false));
+            assert_eq!(
+                decision.is_ok(),
+                case["browser"] == true,
+                "{case}: {decision:?}"
+            );
+            if let Some(note) = case["note"].as_str() {
+                let refusal = decision.unwrap_err();
+                assert!(refusal.message().contains(note), "{case}: {refusal:?}");
+                assert!(inputs.contains(&refusal.path));
+            }
+            #[cfg(unix)]
+            for (key, path, target) in [
+                (
+                    "manifestSymlink",
+                    app.join("package.json"),
+                    scratch.join("app-manifest.json"),
+                ),
+                (
+                    "workspaceSymlink",
+                    scratch.join("package.json"),
+                    scratch.join("workspace-manifest.json"),
+                ),
+                (
+                    "configSymlink",
+                    app.join("vite.config.ts"),
+                    scratch.join("linked-config.ts"),
+                ),
+            ] {
+                if case[key] == true {
+                    let pointer = inferred_host_input_digest(&path).unwrap();
+                    let bytes = inferred_host_input_digest(&target).unwrap();
+                    fs::write(&target, "different mutable target bytes").unwrap();
+                    assert_eq!(pointer, inferred_host_input_digest(&path).unwrap());
+                    assert_ne!(bytes, inferred_host_input_digest(&target).unwrap());
+                    assert!(
+                        application_inputs(&app, &project, &mut Vec::new())
+                            .and_then(|()| configuration(&app, &mut Vec::new(), false))
+                            .is_err()
+                    );
+                }
+            }
+            if let Some(name) = case["configFile"].as_str() {
+                fs::remove_file(app.join(name)).unwrap();
+            }
+        }
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn conventional_selection_and_browser_map_inputs_invalidate_authority() {
+        let scratch =
+            std::env::temp_dir().join(format!("host-selection-cache-{}", std::process::id()));
+        let app = scratch.join("app");
+        fs::create_dir_all(app.join("src")).unwrap();
+        let scratch = fs::canonicalize(scratch).unwrap();
+        let app = fs::canonicalize(app).unwrap();
+        let project = app.join("tsconfig.json");
+        let package = app.join("package.json");
+        fs::write(&project, "{}").unwrap();
+        fs::write(
+            &package,
+            r#"{"private":true,"scripts":{"build":"vite build"}}"#,
+        )
+        .unwrap();
+        fs::write(scratch.join("package.json"), r#"{"private":true}"#).unwrap();
+        fs::write(app.join("vite.config.ts"), "export default {plugins:[]};").unwrap();
+        let source = app.join("src/main.ts");
+        fs::write(&source, "export const selected = true;").unwrap();
+        let inputs = inferred_host_input_paths_for_project(&app, &project);
+        assert!(inputs.contains(&app));
+        assert!(inputs.contains(&package));
+        assert!(inputs.contains(&scratch.join("package.json")));
+        assert!(inputs.contains(&app.join("src/package.json")));
+        let before = inferred_host_input_digest(&app).unwrap();
+        let variant = app.join("vite.config.production.ts");
+        fs::write(&variant, "export default {plugins:[]};").unwrap();
+        assert_ne!(before, inferred_host_input_digest(&app).unwrap());
+        assert!(inferred_host_input_paths_for_project(&app, &project).contains(&variant));
+        fs::remove_file(&variant).unwrap();
+        let before = inferred_host_input_digest(&package).unwrap();
+        fs::write(
+            &package,
+            r#"{"private":true,"scripts":{"build":"vite build --mode production"}}"#,
+        )
+        .unwrap();
+        assert_ne!(before, inferred_host_input_digest(&package).unwrap());
+        assert!(application(&app, &project).is_err());
+        for path in [
+            &package,
+            &scratch.join("package.json"),
+            &app.join("src/package.json"),
+        ] {
+            let before = inferred_host_input_digest(path).unwrap();
+            fs::write(path, r#"{"private":true,"browser":{"@solidjs/web":false}}"#).unwrap();
+            assert_ne!(before, inferred_host_input_digest(path).unwrap());
+            let mut manifest = BrowserRootManifest::default();
+            assert!(browser_selection_required(&source, &mut manifest));
+            assert!(manifest.inputs.contains_key(path.to_str().unwrap()));
+            fs::write(path, r#"{"private":true,"browser":{}}"#).unwrap();
+            assert!(!browser_selection_required(
+                &source,
+                &mut BrowserRootManifest::default()
+            ));
+        }
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
     fn tsconfig_resolver_activity_inputs_invalidate_cached_authority() {
         let scratch = std::env::temp_dir().join(format!(
             "host-resolver-activity-inputs-{}",
@@ -4492,7 +4811,7 @@ mod tests {
         );
         // One package plus 20 PostCSS candidates per ancestor, six Vite
         // candidates, one tsconfig and the fixture premise marker.
-        assert!(before.len() <= app.ancestors().count() * 21 + 8);
+        assert!(before.len() <= app.ancestors().count() * 21 + 9);
         assert!(CONFIGS.iter().all(|name| before.contains(&app.join(name))));
         assert!(before.contains(&project));
         assert!(!before.contains(&app.join("src")));

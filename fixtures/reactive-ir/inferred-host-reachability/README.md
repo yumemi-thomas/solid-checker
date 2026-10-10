@@ -1,5 +1,21 @@
 # Inferred host: static loadability and reachability
 
+conventional-selection-cases.json adds visible invocation/config selection and
+importer/enclosing browser-map twins. All scripts (including hooks), launcher
+forms, config/mode/loader switches, roots, workspace filters/directories,
+nonliteral commands, alternate filenames and unsupported config imports have
+native admission and armed process controls. Browser maps cover bare and local
+shadow/false/empty twins, enclosing maps, and opted-in canonical agreement,
+shadow/server/unknown answers. Nonempty maps conservatively withhold every
+default request; dispatch is not modeled. The controlled worker authenticates
+transport/identity only, not an installed Vite resolver. Process tests copy an
+authorized SPA and assert exact guarded main/helper missing-owner sites. The
+isServer declaration remains the published boolean signature; startClosed's
+void ownership requirement is outside TypeScript. No signature is loosened.
+Generated symlinked app/enclosing manifests and configs refuse; target-byte
+mutation with an unchanged pointer digest cannot restore authority. These
+filesystem twins run on Unix rather than committing platform-specific links.
+
 resolver-selection-cases.json supplies native host-proof twins in temporary
 projects analyzed with tsconfig.app.json, while the enabled resolver discovers
 tsconfig.json. Both native Vite and default vite-tsconfig-paths configuration
