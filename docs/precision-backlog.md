@@ -1,5 +1,26 @@
 # Precision backlog
 
+ADR 0270 visible script selection, review 6 (2026-10-10): replaced the shell
+tokenizer and cwd/filter simulation with an exact plain Vite command/flag
+allowlist. Every app/enclosing script and hook must be admitted or satisfy the
+narrow unrelated-script ignore predicate; all other scripts refuse at their
+manifest/script site. Path-qualified shell/npx payloads and conditional cd
+cannot bypass refusal. Launcher/root/filter admissions are deliberately
+withdrawn, including opaque helpers without a Vite spelling. Alternate config,
+mode-file, linked-manifest/config and config-import refusals, plus manifest and
+candidate cache enrollment, remain. App/enclosing process twins and outside
+config mutation controls pin this boundary. Measurements and final checks are
+recorded in rust/target/research/HANDOFF-infer-host-RESULT-10.md; the numbers below
+predate this fix. The 90 conventional-selection controls plus 22 resolver
+controls retain exact guarded main/helper process checks. Error Menu and Helge
+still infer 65/18 scopes, with paired medians versus d543a823a of 1.2753/0.3587 s
+(-0.0073/-0.0016 s). Queue Management/Jar Hell/Beacon refuse scripts.test=vitest;
+Lutra refuses enclosing scripts.build=pnpm --filter @lutra/console build.
+Compass retains the boot-native.ts initialization refusal. Coverage stays
+239 projects / 1583 findings; all 49 corpus projects succeed with 538 violations
+and 3504 uncertifiable findings. No violation site/multiplicity changes; the
+previous Helge SC9005 column move is the only location delta. No snapshots move.
+
 ADR 0270 conventional-config/browser-map review closure (owner option A,
 2026-10-10): the app-built-with-conventional-Vite-config premise is named and
 enforced where visible. App/enclosing scripts (all hooks and launcher forms),

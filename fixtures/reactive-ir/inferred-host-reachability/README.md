@@ -16,6 +16,14 @@ Generated symlinked app/enclosing manifests and configs refuse; target-byte
 mutation with an unchanged pointer digest cannot restore authority. These
 filesystem twins run on Unix rather than committing platform-specific links.
 
+Review 6 replaces shell tokenization/cwd simulation with exact plain Vite
+commands and a small flag allowlist. Former launcher/root/filter admissions now
+refuse. App/enclosing twins cover path-qualified shell and npx quoted payloads,
+conditional cd, quoted Vite, env/cross-env, pnpm filters, turbo and Node helpers,
+case-insensitive Vite and newlines. Plain `vite build --outDir dist` and
+unrelated `tsc -b` remain admitted. Outside-config mutation cannot restore
+authority after script refusal. No source entry or finding snapshot changes.
+
 resolver-selection-cases.json supplies native host-proof twins in temporary
 projects analyzed with tsconfig.app.json, while the enabled resolver discovers
 tsconfig.json. Both native Vite and default vite-tsconfig-paths configuration

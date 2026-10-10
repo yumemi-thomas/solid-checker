@@ -617,10 +617,8 @@ fn application_inputs(
             "published entry points permit unknown execution hosts",
         ));
     }
-    let app_name = package.get("name").and_then(serde_json::Value::as_str);
     if let Some(scripts) = package.get("scripts")
-        && let Some(reason) =
-            crate::host_invocation::refusal(scripts, directory, directory, app_name, inputs)
+        && let Some(reason) = crate::host_invocation::refusal(scripts)
     {
         return Err(DiscoveryRefusal::new(&path, reason));
     }
@@ -650,8 +648,7 @@ fn application_inputs(
                 ));
             }
             if let Some(scripts) = package.get("scripts")
-                && let Some(reason) =
-                    crate::host_invocation::refusal(scripts, ancestor, directory, app_name, inputs)
+                && let Some(reason) = crate::host_invocation::refusal(scripts)
             {
                 return Err(DiscoveryRefusal::new(&path, reason));
             }
@@ -4600,6 +4597,17 @@ mod tests {
                 let refusal = decision.unwrap_err();
                 assert!(refusal.message().contains(note), "{case}: {refusal:?}");
                 assert!(inputs.contains(&refusal.path));
+            }
+            if case.get("outsideConfig").is_some() {
+                // A refused invocation cannot regain authority when the
+                // unselected outside config changes into an innocuous one.
+                fs::write(scratch.join("other.ts"), "export default {plugins:[]};").unwrap();
+                assert!(
+                    application_inputs(&app, &project, &mut Vec::new())
+                        .and_then(|()| configuration(&app, &mut Vec::new(), false))
+                        .is_err(),
+                    "{case}"
+                );
             }
             #[cfg(unix)]
             for (key, path, target) in [
