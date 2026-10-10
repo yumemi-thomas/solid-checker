@@ -80,40 +80,27 @@ fn shell_syntax(source: &str) -> bool {
     source.chars().any(|ch| {
         matches!(
             ch,
-            '&' | '|' | ';' | '<' | '>' | '$' | '\u{60}' | '\'' | '"' | '(' | ')' | '\n' | '\r'
+            '<' | '>' | '$' | '\u{60}' | '\'' | '"' | '(' | ')' | '\\' | '\n' | '\r'
         )
     })
 }
 
-fn ignored(source: &str) -> bool {
-    let mut words = source.split_ascii_whitespace();
-    // This is a positive tool allowlist, not absence of known launchers.
-    // Audit notes: docs/adr/0270-inferred-host-script-tools.md. Tools with
-    // configured command hooks, app servers, or unknown dispatch stay closed.
-    matches!(
-        words.next(),
-        Some(
-            "tsc"
-                | "eslint"
-                | "prettier"
-                | "oxlint"
-                | "oxfmt"
-                | "biome"
-                | "stylelint"
-                | "rimraf"
-                | "rm"
-                | "mkdir"
-                | "cp"
-                | "echo"
-                | "true"
-                | "openapi-typescript"
-                | "depcheck"
-                | "syncpack"
-        )
-    ) && !source.to_ascii_lowercase().contains("vite")
-        && !shell_syntax(source)
-        // Check every word, including the executable, before shell expansion.
-        && source.split_ascii_whitespace().all(plain_word)
+/// A case-insensitive `vite` word: `vite`, `vite.js`, `VITE_X`, but not
+/// `vitest` or `@vitejs`. Scripts that never name Vite are covered by the
+/// premise, whatever tool they run.
+fn names_vite(source: &str) -> bool {
+    // Quotes and escapes vanish before execution: `vit"e"` runs `vite`.
+    let lower: String = source
+        .chars()
+        .filter(|ch| !matches!(ch, '\'' | '"' | '\\'))
+        .collect::<String>()
+        .to_ascii_lowercase();
+    lower.match_indices("vite").any(|(index, _)| {
+        let before = lower[..index].bytes().next_back();
+        let after = lower.as_bytes().get(index + 4).copied();
+        !before.is_some_and(|ch| ch.is_ascii_alphanumeric())
+            && !after.is_some_and(|ch| ch.is_ascii_alphanumeric())
+    })
 }
 
 /// Check every app/enclosing manifest script, including lifecycle hooks.
@@ -124,6 +111,10 @@ pub(super) enum ManifestRole {
     Enclosing,
 }
 
+/// ADR 0270 premises the conventional Vite config; this vetoes only where a
+/// script visibly selects another one. A script naming Vite must split on
+/// plain separators into commands, each either Vite-free or an exact
+/// conventional `vite` command, with no directory change.
 pub(super) fn refusal(scripts: &serde_json::Value, role: ManifestRole) -> Option<String> {
     let Some(scripts) = scripts.as_object() else {
         return Some("scripts is not a literal object".into());
@@ -132,23 +123,28 @@ pub(super) fn refusal(scripts: &serde_json::Value, role: ManifestRole) -> Option
         let Some(source) = value.as_str() else {
             return Some(format!("scripts.{name}: non-literal script"));
         };
-        // Inspect before trimming: even a trailing newline is shell syntax.
-        if ignored(source) {
+        if !names_vite(source) {
             continue;
         }
-        if !shell_syntax(source) && admitted(source.trim()) {
-            if role == ManifestRole::Application {
-                continue;
-            }
-            // Package scripts run in their manifest's directory. Even with no
-            // parent config, this invocation cannot select the app's config.
+        if role == ManifestRole::Enclosing {
+            // Package scripts run in their manifest's directory, so this
+            // invocation cannot select the app's config.
             return Some(format!(
                 "scripts.{name}: enclosing manifest launches Vite from a different directory"
             ));
         }
-        return Some(format!(
-            "scripts.{name}: script is outside the exact conventional Vite allowlist"
-        ));
+        let commands: Vec<_> = source.split(['&', '|', ';']).map(str::trim).collect();
+        let conventional = !shell_syntax(source)
+            && commands.iter().all(|command| {
+                let first = command.split_ascii_whitespace().next();
+                !matches!(first, Some("cd" | "pushd"))
+                    && (!names_vite(command) || admitted(command))
+            });
+        if !conventional {
+            return Some(format!(
+                "scripts.{name}: script may select a non-conventional Vite config"
+            ));
+        }
     }
     None
 }
@@ -157,8 +153,40 @@ pub(super) fn refusal(scripts: &serde_json::Value, role: ManifestRole) -> Option
 mod tests {
     use super::*;
 
+    fn app(source: &str) -> Option<String> {
+        refusal(
+            &serde_json::json!({"build": source}),
+            ManifestRole::Application,
+        )
+    }
+
     #[test]
-    fn exact_scripts_only() {
+    fn vite_free_scripts_are_premised() {
+        for source in [
+            "tsc -b",
+            "eslint .",
+            "playwright test",
+            "vitest",
+            "vp build",
+            "node scripts/build.mjs",
+            "npm run i18n && tsr generate",
+            "rm -rf dist && echo 'ok'",
+            "pnpm add @vitejs/plugin-react",
+        ] {
+            assert!(app(source).is_none(), "{source}");
+            assert!(
+                refusal(
+                    &serde_json::json!({"build": source}),
+                    ManifestRole::Enclosing
+                )
+                .is_none(),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_vite_commands_only() {
         for source in [
             " vite build --outDir dist ",
             "vite",
@@ -167,18 +195,11 @@ mod tests {
             "vite preview",
             "vite build --port 3000 --host localhost --open --strictPort --base /app/ --outDir=dist --emptyOutDir --sourcemap --minify terser --logLevel warn --clearScreen false --force --cors --watch",
             "vite --host --minify",
-            "tsc -b",
-            "eslint src",
-            "prettier --check .",
+            "tsc -b && vite build",
+            "npm run i18n && tsr generate && tsc -b && vite build",
+            "vite build; tsc -p tsconfig.build.json",
         ] {
-            assert!(
-                refusal(
-                    &serde_json::json!({"build":source}),
-                    ManifestRole::Application
-                )
-                .is_none(),
-                "{source}"
-            );
+            assert!(app(source).is_none(), "{source}");
         }
         for source in [
             "vite build --config other.ts",
@@ -187,166 +208,57 @@ mod tests {
             "vite .",
             "vite --configLoader native",
             "vite --unknown",
-            "vite --port",
             "vite --port nope",
-            "vite --clearScreen maybe",
-            "vite --logLevel debug",
-            "vite --minify unknown",
             "vite --outDir --config",
-            "vite --outDir=",
             "vite --open=foo",
-            "vite --",
             "VITE build",
-            "echo VITE",
+            "VITE_MODE=x vite",
             "vite build\n",
             "vite build *.ts",
-            "vite build dist\\ dir",
-            "vite build --base https://example.test/?x",
-            "echo $COMMAND",
-            "echo 'safe'",
-            "echo safe && tsc",
-            "(tsc)",
-            "tsc > out",
-            "tsc; eslint",
-            "cd app",
-            "/bin/sh script",
-            "bash script",
-            "zsh script",
-            "node script",
-            "n\\ode scripts/build.mjs",
-            "n?de scripts/build.mjs",
-            "npx tool",
-            "bunx tool",
-            "pnpm build",
-            "npm test",
-            "yarn test",
-            "bun test",
-            "deno run script",
-            "env X=1 tsc",
-            "cross-env X=1 tsc",
-            "exec tsc",
-            "run build",
-            "concurrently tsc",
-            "npm-run-all build",
-            "turbo run build",
-            "nx build",
-            "lerna build",
+            "vite build $VITE_FLAGS",
+            "vite build $(cat flags)",
+            "\"vite\" build",
+            "v\\ite build",
+            "tsc && vite build --mode staging",
+            "cd .. && vite build",
+            "cd .. || cd app && vite build",
+            "npx vite build",
+            "pnpm --dir ../.. exec vite build",
+            "pnpm -C.. exec vite dev",
+            "node node_modules/vite/bin/vite.js build",
+            "sh -c 'vite build'",
+            "sh -c 'vit\"e\" build --config ../other.ts'",
+            "electron-vite build",
+            "env X=1 vite",
         ] {
-            assert!(
-                refusal(
-                    &serde_json::json!({"postbuild":source}),
-                    ManifestRole::Application
-                )
-                .unwrap()
-                .contains("scripts.postbuild"),
-                "{source}"
-            );
+            assert!(app(source).unwrap().contains("scripts.build"), "{source}");
         }
+        assert!(
+            refusal(
+                &serde_json::json!({"build": ["vite"]}),
+                ManifestRole::Application
+            )
+            .unwrap()
+            .contains("non-literal")
+        );
     }
 
     #[test]
-    fn enclosing_manifests_admit_only_ignored_scripts() {
+    fn enclosing_manifests_refuse_vite() {
         for source in [
             "vite",
             "vite build",
-            "vite dev",
-            "vite serve",
-            "vite preview",
-            "vite build --outDir dist",
+            "tsc && vite build",
+            "pnpm --filter app exec vite",
         ] {
-            let scripts = serde_json::json!({"postbuild": source});
-            assert!(refusal(&scripts, ManifestRole::Application).is_none());
             assert_eq!(
-                refusal(&scripts, ManifestRole::Enclosing).unwrap(),
+                refusal(
+                    &serde_json::json!({"postbuild": source}),
+                    ManifestRole::Enclosing
+                )
+                .unwrap(),
                 "scripts.postbuild: enclosing manifest launches Vite from a different directory"
             );
-        }
-        for source in ["tsc -b", "eslint src", "prettier --check ."] {
-            assert!(
-                refusal(
-                    &serde_json::json!({"build": source}),
-                    ManifestRole::Enclosing
-                )
-                .is_none()
-            );
-        }
-        for source in ["vitest", "node build.mjs", "echo safe && tsc", "VITE build"] {
-            assert!(
-                refusal(
-                    &serde_json::json!({"build": source}),
-                    ManifestRole::Enclosing
-                )
-                .unwrap()
-                .contains("scripts.build")
-            );
-        }
-    }
-
-    #[test]
-    fn ignored_tools_require_an_exact_audited_first_word() {
-        for source in [
-            "tsc --noEmit",
-            "eslint .",
-            "prettier --check .",
-            "oxlint src",
-            "oxfmt --check .",
-            "biome check .",
-            "stylelint src/app.css",
-            "rimraf dist",
-            "rm -rf dist",
-            "mkdir -p dist",
-            "cp src/app.css dist/app.css",
-            "echo ready",
-            "true",
-            "openapi-typescript http://localhost:3000/openapi.json --output ./src/api/schema.gen.ts",
-            "depcheck --json",
-            "syncpack list",
-            // Arguments are data for these tools, not executable dispatch.
-            "echo node",
-        ] {
-            assert!(ignored(source), "{source}");
-            for role in [ManifestRole::Application, ManifestRole::Enclosing] {
-                assert!(refusal(&serde_json::json!({"check":source}), role).is_none());
-            }
-        }
-        for source in [
-            "vp build",
-            "vp",
-            "vp build --config ../other.ts",
-            "vp -C .. build",
-            "vp build --mode production",
-            "playwright test",
-            "cypress run",
-            "vitest",
-            "storybook dev",
-            "astro dev",
-            "lint-staged",
-            "tsx build.ts",
-            "ts-node build.ts",
-            "husky",
-            "graphql-codegen",
-            "knip",
-            "changeset publish",
-            "unknown-tool build",
-            "./tsc --noEmit",
-            "TSC --noEmit",
-            "",
-            "  ",
-            "tsc --noEmit\n",
-            "eslint *.ts",
-            "echo `command`",
-            "echo safe\\ word",
-            "echo VITE",
-        ] {
-            assert!(!ignored(source), "{source}");
-            for role in [ManifestRole::Application, ManifestRole::Enclosing] {
-                assert!(
-                    refusal(&serde_json::json!({"check":source}), role)
-                        .unwrap()
-                        .contains("scripts.check"),
-                    "{source}"
-                );
-            }
         }
     }
 }

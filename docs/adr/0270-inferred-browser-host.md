@@ -139,34 +139,35 @@ bytes still refuse root/proof admission.
 
 ## Conventional-config premise (owner decision A, 2026-10-10)
 
-**The app is built with its conventional Vite config.** This named premise is
-enforced wherever selection is visible. Every application manifest script,
-including pre/post lifecycle hooks, is checked against an exact allowlist.
-After trimming, only `vite`, `vite build`, `vite dev`, `vite serve`, and
-`vite preview` admit flags: `--port` (numeric), `--host` (optional literal),
-`--open`, `--strictPort`, `--base`/`--outDir` (literal), `--emptyOutDir`,
-`--sourcemap`, `--minify` (optional esbuild/terser/false), `--logLevel`
-(info/warn/error/silent), `--clearScreen` (true/false), `--force`, `--cors`,
-and `--watch`. Required/optional values can use `=`. Words contain only ASCII
-letters, digits and `._:/=@-`; values cannot start with `-`. No config, mode,
-root, loader or cwd option is admitted, even for the conventional directory.
-Shell metacharacters, quotes and newlines refuse before trimming.
-An unrelated script is ignored only when it contains no case-insensitive
-`vite` substring, only plain words, no shell metacharacter/quote/escape/glob or
-newline, and its exact first word belongs to the positive audited tool
-allowlist in host_invocation.rs. The per-tool decisions and documented dispatch
-boundaries are in [script-tool audit NOTES](0270-inferred-host-script-tools.md).
-Unknown tools, Vite launchers such as `vp`, and configured command runners
-such as Playwright, lint-staged and graphql-codegen are never ignored. Every other script
-refuses with a decision note naming `package.json` and the script. The same
-classifier distinguishes manifest roles: in every enclosing (non-app) manifest,
-only the ignored class passes. Even an exact plain `vite build` refuses there:
-package scripts run in their manifest directory and select that directory's
-config, including when no parent config exists. The note names the enclosing
-manifest and script. Parent config bytes cannot restore admission while this
-launch remains visible, so no uninspected parent config supplies cached browser
-authority. No launcher, filter, shell or cwd simulation remains, and unrelated
-workspace filters do not prove exclusion.
+**The app is built with its conventional Vite config.** This is a named
+premise, vetoed only where a manifest script visibly selects another config.
+It covers every invocation the checker cannot see, and every tool that does
+not name Vite: linters, formatters, test runners, task runners, `vp` and
+local `.bin` wrappers are taken to build the app, if at all, with its
+conventional config, like the standard-runtime premise of ADR 0266.
+
+A script is inspected only when it names Vite: a case-insensitive `vite`
+word, after removing quotes and backslashes (so `vite.js` and `vit"e"` count,
+`vitest` and `@vitejs/...` do not). In the application manifest, including
+lifecycle hooks, such a script must contain no shell syntax beyond the
+separators `&`, `|` and `;` (no quotes, escapes, `$`, backticks, parentheses,
+redirection or newlines), no `cd`/`pushd` command, and every command naming
+Vite must be exactly `vite`, `vite build`, `vite dev`, `vite serve` or
+`vite preview` with only these flags: `--port` (numeric), `--host` (optional
+literal), `--open`, `--strictPort`, `--base`/`--outDir` (literal),
+`--emptyOutDir`, `--sourcemap`, `--minify` (optional esbuild/terser/false),
+`--logLevel` (info/warn/error/silent), `--clearScreen` (true/false), `--force`,
+`--cors` and `--watch`. No config, mode, root, loader, positional root or
+launcher wrapper (`npx vite`, `pnpm exec vite`, `node .../vite.js`) is
+admitted. So `tsc -b && vite build` passes and `vite build --mode staging`
+refuses. In an enclosing manifest any script naming Vite refuses, because it
+runs from that directory and selects that directory's config. Each refusal
+names `package.json` and the script.
+
+Round 9's per-tool allowlist was replaced by this rule after review 9 showed
+that a name-based tool audit cannot end: a local `.bin` wrapper or a linter's
+executable config could select another Vite config without naming it. Those
+channels are covered by the premise, not by script inspection.
 
 Exactly one of the six conventional `vite.config.*` files is admitted. Other
 `vite.config.*` variants and `vite.<mode>.config.*` files refuse, even when not
@@ -178,42 +179,22 @@ override any of these configuration refusals.
 All inspected manifests, lookup identities, conventional config
 candidates and directory membership (including alternate-file additions) are
 cache/proof inputs. Browser-map checks also enroll every importer/enclosing
-manifest and its absence. Configurations selected externally without visible
-evidence remain conditional on this named premise; inference does not observe
-an arbitrary build command or attest a production build.
+manifest and its absence.
 
-The implementation pins 105 invocation/config/browser-map controls plus 22
-resolver controls, including exact main/helper process sites and link-target
-mutation with unchanged pointer identity. Review-6 shell/npx payload and
-conditional-cwd twins remain refused after outside-config mutation.
-Enclosing plain-Vite twins refuse with a parent tsconfigPaths config, with no
-parent config, and after parent config mutation with unchanged manifests;
-retained daemon and fresh one-shot checks agree. App-local commands retain the
-exact allowlist and enclosing unrelated scripts retain the ignore predicate.
-Published rc.13 web typings produce zero TypeScript diagnostics. Coverage remains 239 projects / 1583 findings;
-the 49-project no-target corpus adds/removes zero violation sites or
-multiplicities (538 violations / 3504 uncertifiable findings). Error Menu and
-Helge retain 65 and 18 scopes; three alternating daemon-off release runs versus
-d543a823a give medians 1.2753 s (-0.0073 s) and 0.3587 s (-0.0016 s).
-Queue Management, Jar Hell and Beacon now refuse scripts.test (`vitest` contains
-`vite`); Lutra refuses its enclosing scripts.build (`pnpm --filter @lutra/console build`).
-Compass retains its boot-native.ts initialization refusal. The grammar is not
-widened for these apps. Error Menu's earlier +0.3 s goal over 6009dceb9 remains
-unmet; this paired measurement isolates review 6's fix. Handoff checks and the
-local commit for review 6 are recorded in rust/target/research/HANDOFF-infer-host-RESULT-10.md.
-Review 7's role-aware fix retains these seven decisions (Error Menu and Helge
-still infer 65/18 scopes) and the same corpus/coverage totals, with zero changed
-violation sites or multiplicities. Its release decision measurements and final
-handoff checks are recorded in rust/target/research/HANDOFF-infer-host-RESULT-11.md.
-No generated snapshot or public contract was changed.
-
-Review 8 replaces the ignored-script deny-list with the audited first-word
-allowlist. App/enclosing `vp build`, bare `vp`, Playwright and unknown-tool
-twins refuse; `tsc --noEmit`, `eslint .` and the app's openapi-typescript control
-remain ignored. Parent `vp build` stays refused after config mutation with
-unchanged manifests. Final candidate decisions, corpus comparison and handoff
-checks are recorded in rust/target/research/HANDOFF-infer-host-RESULT-12.md;
-the Error Menu/Helge measurements above are historical review-6/7 results.
+The implementation pins 104 invocation/config/browser-map controls plus 22
+resolver controls, with exact main/helper process sites. Enclosing plain-Vite
+twins refuse with a parent tsconfigPaths config, with no parent config, and
+after parent config mutation with unchanged manifests; retained daemon and
+fresh one-shot checks agree. Published rc.13 web typings produce zero
+TypeScript diagnostics. Coverage remains 239 projects / 1583 findings; the
+49-project no-target corpus keeps 538 violations / 3504 uncertifiable findings
+with zero changed violation sites (helge-dev's package-level SC9005 notice
+moves from column 1 to 10, as in rounds 9-11 when it inferred).
+Candidate decisions: Error Menu infers 65 scopes and Helge 18. Queue
+Management refuses on a Vite alias / Type Facts disagreement, Jar Hell on an
+unproved runtime export surface, Beacon and Lutra on `virtual:file-routes`,
+Compass on boot-native.ts initialization. Evidence:
+rust/target/research/infer-host-simplify/.
 
 ## Successful-build premise (owner decision, 2026-10-10)
 

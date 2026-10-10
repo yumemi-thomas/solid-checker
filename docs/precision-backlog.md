@@ -1,11 +1,21 @@
 # Precision backlog
 
+ADR 0270 script inspection simplified (2026-10-10, supersedes the review-8
+allowlist below): the conventional Vite config is a named premise, vetoed only
+where an app script names Vite and departs from the exact conventional `vite`
+command grammar (`tsc -b && vite build` passes; `--config`, `--mode`, roots,
+launchers, `cd` and shell quoting refuse), or an enclosing script names Vite.
+Scripts that do not name Vite are premised, whatever tool they run, including
+`.bin` wrappers and executable tool configs (review 9). The per-tool audit
+document was deleted. Error Menu and Helge infer 65/18 scopes; coverage and
+the no-target corpus are unchanged (538 violations / 3504 uncertifiable).
+
 ADR 0270 ignored-script allowlist, review 8 (2026-10-10): absence of a Vite
 spelling or known launcher is no longer sufficient. Only an exact audited
 first tool word, with plain words, no shell syntax/quotes/escapes/globs or
 newlines, and no case-insensitive `vite` substring, is ignored. The per-tool
 audit and its documented-dispatch boundary are in
-docs/adr/0270-inferred-host-script-tools.md. Command runners (including vp,
+docs/adr/0270-inferred-host-script-tools.md (since deleted). Command runners (including vp,
 Playwright, lint-staged and graphql-codegen) and unknown tools refuse. App and
 enclosing manifest roles remain distinct; only app-local exact Vite commands
 are admitted. There are 105 conventional-selection and 22 resolver controls,
