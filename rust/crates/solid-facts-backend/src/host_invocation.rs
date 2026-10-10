@@ -123,7 +123,13 @@ fn ignored(source: &str) -> bool {
 
 /// Check every app/enclosing manifest script, including lifecycle hooks.
 /// The caller enrolls the manifest before inspection and names it in the note.
-pub(super) fn refusal(scripts: &serde_json::Value) -> Option<String> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ManifestRole {
+    Application,
+    Enclosing,
+}
+
+pub(super) fn refusal(scripts: &serde_json::Value, role: ManifestRole) -> Option<String> {
     let Some(scripts) = scripts.as_object() else {
         return Some("scripts is not a literal object".into());
     };
@@ -132,8 +138,18 @@ pub(super) fn refusal(scripts: &serde_json::Value) -> Option<String> {
             return Some(format!("scripts.{name}: non-literal script"));
         };
         // Inspect before trimming: even a trailing newline is shell syntax.
-        if (!shell_syntax(source) && admitted(source.trim())) || ignored(source) {
+        if ignored(source) {
             continue;
+        }
+        if !shell_syntax(source) && admitted(source.trim()) {
+            if role == ManifestRole::Application {
+                continue;
+            }
+            // Package scripts run in their manifest's directory. Even with no
+            // parent config, this invocation cannot select the app's config.
+            return Some(format!(
+                "scripts.{name}: enclosing manifest launches Vite from a different directory"
+            ));
         }
         return Some(format!(
             "scripts.{name}: script is outside the exact conventional Vite allowlist"
@@ -161,7 +177,11 @@ mod tests {
             "prettier --check .",
         ] {
             assert!(
-                refusal(&serde_json::json!({"build":source})).is_none(),
+                refusal(
+                    &serde_json::json!({"build":source}),
+                    ManifestRole::Application
+                )
+                .is_none(),
                 "{source}"
             );
         }
@@ -218,10 +238,51 @@ mod tests {
             "lerna build",
         ] {
             assert!(
-                refusal(&serde_json::json!({"postbuild":source}))
-                    .unwrap()
-                    .contains("scripts.postbuild"),
+                refusal(
+                    &serde_json::json!({"postbuild":source}),
+                    ManifestRole::Application
+                )
+                .unwrap()
+                .contains("scripts.postbuild"),
                 "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn enclosing_manifests_admit_only_ignored_scripts() {
+        for source in [
+            "vite",
+            "vite build",
+            "vite dev",
+            "vite serve",
+            "vite preview",
+            "vite build --outDir dist",
+        ] {
+            let scripts = serde_json::json!({"postbuild": source});
+            assert!(refusal(&scripts, ManifestRole::Application).is_none());
+            assert_eq!(
+                refusal(&scripts, ManifestRole::Enclosing).unwrap(),
+                "scripts.postbuild: enclosing manifest launches Vite from a different directory"
+            );
+        }
+        for source in ["tsc -b", "eslint src", "prettier --check ."] {
+            assert!(
+                refusal(
+                    &serde_json::json!({"build": source}),
+                    ManifestRole::Enclosing
+                )
+                .is_none()
+            );
+        }
+        for source in ["vitest", "node build.mjs", "echo safe && tsc", "VITE build"] {
+            assert!(
+                refusal(
+                    &serde_json::json!({"build": source}),
+                    ManifestRole::Enclosing
+                )
+                .unwrap()
+                .contains("scripts.build")
             );
         }
     }

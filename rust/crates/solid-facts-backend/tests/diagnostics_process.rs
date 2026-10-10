@@ -131,6 +131,12 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
         if let Some(config) = case["outsideConfig"].as_str() {
             fs::write(scratch.join("other.ts"), config).unwrap();
         }
+        let parent_config = scratch.join("vite.config.ts");
+        if let Some(config) = case["parentConfig"].as_str() {
+            fs::write(&parent_config, config).unwrap();
+        } else if parent_config.exists() {
+            fs::remove_file(&parent_config).unwrap();
+        }
         let mut app_manifest = application_manifest.clone();
         if let Some(scripts) = case.get("scripts") {
             app_manifest["scripts"] = scripts.clone();
@@ -211,7 +217,14 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
         }
         let output = command
             .env("SOLID_TYPEFACTS_BIN", &typefacts)
-            .env("SOLID_CHECKER_DAEMON", "0")
+            .env(
+                "SOLID_CHECKER_DAEMON",
+                if case.get("mutatedParentConfig").is_some() {
+                    "1"
+                } else {
+                    "0"
+                },
+            )
             .args(["--format", "json", "--project"])
             .arg(project.join("tsconfig.app.json"))
             .arg("--receipt-trust-configuration")
@@ -258,6 +271,12 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
             if case.get("scripts").is_some() || case.get("workspaceScripts").is_some() {
                 assert!(stderr.contains("package.json:"), "{stderr}");
             }
+            if case.get("workspaceScripts").is_some() {
+                assert!(
+                    stderr.contains(&format!("{}:", scratch.join("package.json").display())),
+                    "{stderr}"
+                );
+            }
             if let Some(name) = case["configFile"].as_str() {
                 assert!(stderr.contains(name), "{stderr}");
             }
@@ -276,6 +295,41 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
                         .contains("active tsconfig resolver requires authenticated file selection"),
                     "{case}: {stderr}"
                 );
+            }
+        }
+        if let Some(config) = case["mutatedParentConfig"].as_str() {
+            let app_manifest = fs::read(project.join("package.json")).unwrap();
+            let parent_manifest = fs::read(scratch.join("package.json")).unwrap();
+            let before = fs::read(&parent_config).unwrap();
+            fs::write(&parent_config, config).unwrap();
+            assert_ne!(before, fs::read(&parent_config).unwrap());
+            assert_eq!(
+                app_manifest,
+                fs::read(project.join("package.json")).unwrap()
+            );
+            assert_eq!(
+                parent_manifest,
+                fs::read(scratch.join("package.json")).unwrap()
+            );
+            // Repeat against retained daemon state and a fresh one-shot check.
+            // A parent-config edit with unchanged manifests can never admit
+            // browser authority while the enclosing Vite launch is visible.
+            for daemon in ["1", "0"] {
+                let output = command
+                    .env("SOLID_CHECKER_DAEMON", daemon)
+                    .output()
+                    .unwrap();
+                assert!(output.status.success());
+                let after: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+                assert_eq!(after["status"], "uncertifiable");
+                assert_eq!(after["findings"], result["findings"], "{case}: {after:#?}");
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                assert!(stderr.contains(case["note"].as_str().unwrap()), "{stderr}");
+                assert!(
+                    stderr.contains(&format!("{}:", scratch.join("package.json").display())),
+                    "{stderr}"
+                );
+                assert!(!stderr.contains("daemon unavailable"), "{stderr}");
             }
         }
         if let Some(name) = case["configFile"].as_str() {

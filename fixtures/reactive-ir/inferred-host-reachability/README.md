@@ -20,9 +20,16 @@ Review 6 replaces shell tokenization/cwd simulation with exact plain Vite
 commands and a small flag allowlist. Former launcher/root/filter admissions now
 refuse. App/enclosing twins cover path-qualified shell and npx quoted payloads,
 conditional cd, quoted Vite, env/cross-env, pnpm filters, turbo and Node helpers,
-case-insensitive Vite and newlines. Plain `vite build --outDir dist` and
-unrelated `tsc -b` remain admitted. Outside-config mutation cannot restore
+case-insensitive Vite and newlines. Plain `vite build --outDir dist` in the
+app's own manifest and unrelated `tsc -b` remain admitted. Outside-config mutation cannot restore
 authority after script refusal. No source entry or finding snapshot changes.
+
+Review 7 classifies scripts by manifest role. Every enclosing manifest admits
+only ignored scripts; even exact plain Vite launches refuse because their cwd
+selects a different configuration. Parent-resolver, absent-parent-config and
+unchanged-manifest parent-config mutation twins pin refusal at the enclosing
+manifest/script. The mutation process twin checks retained daemon and fresh
+one-shot results. Enclosing tsc/eslint/prettier scripts remain ignored.
 
 resolver-selection-cases.json supplies native host-proof twins in temporary
 projects analyzed with tsconfig.app.json, while the enabled resolver discovers

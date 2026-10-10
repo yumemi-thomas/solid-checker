@@ -156,8 +156,14 @@ An unrelated script is ignored only when it contains no case-insensitive
 Node, a package manager, env/cross-env, exec/run, concurrently/npm-run-all,
 turbo/nx/lerna (the exact list is in host_invocation.rs). Every other script
 refuses with a decision note naming `package.json` and the script. The same
-classifier checks all enclosing manifests; no launcher, filter, shell or cwd
-simulation remains, and unrelated workspace filters do not prove exclusion.
+classifier distinguishes manifest roles: in every enclosing (non-app) manifest,
+only the ignored class passes. Even an exact plain `vite build` refuses there:
+package scripts run in their manifest directory and select that directory's
+config, including when no parent config exists. The note names the enclosing
+manifest and script. Parent config bytes cannot restore admission while this
+launch remains visible, so no uninspected parent config supplies cached browser
+authority. No launcher, filter, shell or cwd simulation remains, and unrelated
+workspace filters do not prove exclusion.
 
 Exactly one of the six conventional `vite.config.*` files is admitted. Other
 `vite.config.*` variants and `vite.<mode>.config.*` files refuse, even when not
@@ -173,11 +179,15 @@ manifest and its absence. Configurations selected externally without visible
 evidence remain conditional on this named premise; inference does not observe
 an arbitrary build command or attest a production build.
 
-The implementation pins 90 invocation/config/browser-map controls plus 22
+The implementation pins 94 invocation/config/browser-map controls plus 22
 resolver controls, including exact main/helper process sites and link-target
 mutation with unchanged pointer identity. Review-6 shell/npx payload and
-conditional-cwd twins remain refused after outside-config mutation. Published
-rc.13 web typings produce zero TypeScript diagnostics. Coverage remains 239 projects / 1583 findings;
+conditional-cwd twins remain refused after outside-config mutation.
+Enclosing plain-Vite twins refuse with a parent tsconfigPaths config, with no
+parent config, and after parent config mutation with unchanged manifests;
+retained daemon and fresh one-shot checks agree. App-local commands retain the
+exact allowlist and enclosing unrelated scripts retain the ignore predicate.
+Published rc.13 web typings produce zero TypeScript diagnostics. Coverage remains 239 projects / 1583 findings;
 the 49-project no-target corpus adds/removes zero violation sites or
 multiplicities (538 violations / 3504 uncertifiable findings). Error Menu and
 Helge retain 65 and 18 scopes; three alternating daemon-off release runs versus
@@ -187,7 +197,11 @@ Queue Management, Jar Hell and Beacon now refuse scripts.test (`vitest` contains
 Compass retains its boot-native.ts initialization refusal. The grammar is not
 widened for these apps. Error Menu's earlier +0.3 s goal over 6009dceb9 remains
 unmet; this paired measurement isolates review 6's fix. Handoff checks and the
-local commit are recorded in rust/target/research/HANDOFF-infer-host-RESULT-10.md.
+local commit for review 6 are recorded in rust/target/research/HANDOFF-infer-host-RESULT-10.md.
+Review 7's role-aware fix retains these seven decisions (Error Menu and Helge
+still infer 65/18 scopes) and the same corpus/coverage totals, with zero changed
+violation sites or multiplicities. Its release decision measurements and final
+handoff checks are recorded in rust/target/research/HANDOFF-infer-host-RESULT-11.md.
 No generated snapshot or public contract was changed.
 
 ## Successful-build premise (owner decision, 2026-10-10)

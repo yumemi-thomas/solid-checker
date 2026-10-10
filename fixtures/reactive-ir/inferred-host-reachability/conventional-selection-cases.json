@@ -88,5 +88,9 @@
   {"name":"enclosing-newline-command","browser":false,"note":"scripts.postbuild: script is outside the exact conventional Vite allowlist","workspaceScripts":{"postbuild":"vite build\n"}},
   {"name":"invalid-flag-value","scripts":{"build":"vite --port --config=../other.ts"},"browser":false,"note":"scripts.build: script is outside the exact conventional Vite allowlist"},
   {"name":"enclosing-invalid-flag-value","browser":false,"note":"scripts.postbuild: script is outside the exact conventional Vite allowlist","workspaceScripts":{"postbuild":"vite --port --config=../other.ts"}},
-  {"name":"enclosing-plain-vite-control","workspaceScripts":{"build":"vite build --outDir dist"},"browser":true}
+  {"name":"enclosing-plain-vite-control","workspaceScripts":{"build":"vite build --outDir dist"},"browser":false,"note":"scripts.build: enclosing manifest launches Vite from a different directory"},
+  {"name":"enclosing-vite-parent-resolver","workspaceScripts":{"build":"vite build"},"parentConfig":"export default {root:'./app',plugins:[],resolve:{tsconfigPaths:true}};","browser":false,"note":"scripts.build: enclosing manifest launches Vite from a different directory"},
+  {"name":"enclosing-vite-no-parent-config","workspaceScripts":{"build":"vite build"},"browser":false,"note":"scripts.build: enclosing manifest launches Vite from a different directory"},
+  {"name":"enclosing-vite-parent-config-mutation","workspaceScripts":{"build":"vite build"},"parentConfig":"export default {root:'./app',plugins:[]};","mutatedParentConfig":"export default {root:'./app',plugins:[],resolve:{tsconfigPaths:true}};","browser":false,"note":"scripts.build: enclosing manifest launches Vite from a different directory"},
+  {"name":"enclosing-ignored-control","workspaceScripts":{"build":"tsc -b","lint":"eslint src","format":"prettier --check ."},"browser":true}
 ]

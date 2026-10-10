@@ -618,7 +618,10 @@ fn application_inputs(
         ));
     }
     if let Some(scripts) = package.get("scripts")
-        && let Some(reason) = crate::host_invocation::refusal(scripts)
+        && let Some(reason) = crate::host_invocation::refusal(
+            scripts,
+            crate::host_invocation::ManifestRole::Application,
+        )
     {
         return Err(DiscoveryRefusal::new(&path, reason));
     }
@@ -648,7 +651,10 @@ fn application_inputs(
                 ));
             }
             if let Some(scripts) = package.get("scripts")
-                && let Some(reason) = crate::host_invocation::refusal(scripts)
+                && let Some(reason) = crate::host_invocation::refusal(
+                    scripts,
+                    crate::host_invocation::ManifestRole::Enclosing,
+                )
             {
                 return Err(DiscoveryRefusal::new(&path, reason));
             }
@@ -4534,6 +4540,12 @@ mod tests {
             if let Some(config) = case["outsideConfig"].as_str() {
                 fs::write(scratch.join("other.ts"), config).unwrap();
             }
+            let parent_config = scratch.join("vite.config.ts");
+            if let Some(config) = case["parentConfig"].as_str() {
+                fs::write(&parent_config, config).unwrap();
+            } else if parent_config.exists() {
+                fs::remove_file(&parent_config).unwrap();
+            }
             let mut package = serde_json::json!({"private":true,"name":"inferred-host-spa"});
             if let Some(scripts) = case.get("scripts") {
                 package["scripts"] = scripts.clone();
@@ -4597,6 +4609,27 @@ mod tests {
                 let refusal = decision.unwrap_err();
                 assert!(refusal.message().contains(note), "{case}: {refusal:?}");
                 assert!(inputs.contains(&refusal.path));
+                if case.get("workspaceScripts").is_some() {
+                    assert_eq!(refusal.path, scratch.join("package.json"));
+                }
+            }
+            if let Some(config) = case["mutatedParentConfig"].as_str() {
+                let app_manifest = inferred_host_input_digest(&app.join("package.json"));
+                let parent_manifest = inferred_host_input_digest(&scratch.join("package.json"));
+                let before = inferred_host_input_digest(&parent_config);
+                fs::write(&parent_config, config).unwrap();
+                assert_ne!(before, inferred_host_input_digest(&parent_config));
+                assert_eq!(
+                    app_manifest,
+                    inferred_host_input_digest(&app.join("package.json"))
+                );
+                assert_eq!(
+                    parent_manifest,
+                    inferred_host_input_digest(&scratch.join("package.json"))
+                );
+                let refusal = application_inputs(&app, &project, &mut Vec::new()).unwrap_err();
+                assert_eq!(refusal.path, scratch.join("package.json"));
+                assert!(refusal.message().contains(case["note"].as_str().unwrap()));
             }
             if case.get("outsideConfig").is_some() {
                 // A refused invocation cannot regain authority when the

@@ -1,5 +1,23 @@
 # Precision backlog
 
+ADR 0270 enclosing-manifest selection, review 7 (2026-10-10): the exact Vite
+allowlist applies only to the analyzed app's own manifest. Every enclosing
+manifest admits only the ignored script class; all Vite launches and other
+non-ignored scripts refuse inference with a manifest/script note. Plain parent
+`vite build` runs from a different cwd even without a parent config. The
+former enclosing admission control now refuses, with parent tsconfigPaths,
+absent-config and unchanged-manifest config-mutation twins. Native discovery
+and armed main/helper process checks cover these controls, including retained
+daemon and one-shot mutation results. No new premise, package signature or
+diagnostic claim is introduced. Results and final checks are recorded in
+rust/target/research/HANDOFF-infer-host-RESULT-11.md.
+Error Menu and Helge still infer 65/18 scopes; the other five candidate apps
+retain their prior refusal notes. Coverage remains 239 projects / 1583 findings.
+All 49 no-target corpus projects succeed with 538 violations and 3504
+uncertifiable findings; zero violation sites or multiplicities change. The
+previous Helge SC9005 column move remains the only location delta. The 94
+conventional-selection and 22 resolver controls pass without snapshot updates.
+
 ADR 0270 visible script selection, review 6 (2026-10-10): replaced the shell
 tokenizer and cwd/filter simulation with an exact plain Vite command/flag
 allowlist. Every app/enclosing script and hook must be admitted or satisfy the
