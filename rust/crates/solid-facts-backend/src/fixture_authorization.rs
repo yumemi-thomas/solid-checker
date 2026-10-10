@@ -93,6 +93,10 @@ pub struct FixtureContractRequest {
     /// Absolute path to the contract document the catalog will point at.
     pub document: PathBuf,
     resolved: ResolvedImport,
+    /// Opt-in fixture-only artifact admission. Existing fixtures retain their
+    /// importer-only authorization byte for byte. Host fixtures sign an exact
+    /// empty dependency environment and the package snapshot they supplied.
+    browser_case: bool,
 }
 
 impl FixtureContractRequest {
@@ -142,6 +146,22 @@ pub fn read_fixture_contract_request(
     project: &Path,
 ) -> Result<FixtureContractRequest, FixtureAuthorizationError> {
     let request = project.join(AUTHORIZATION_REQUEST);
+    let browser_case = if request.is_file() {
+        let bytes = fs::read(&request).map_err(|error| io(&error, &request))?;
+        let value: Value = serde_json::from_slice(&bytes)
+            .map_err(|error| FixtureAuthorizationError::Malformed(error.to_string()))?;
+        match value.get("exportConditions") {
+            None => false,
+            Some(conditions) if conditions == &serde_json::json!(["browser", "import"]) => true,
+            Some(_) => {
+                return Err(FixtureAuthorizationError::Malformed(
+                    "fixture exportConditions must be [browser, import]".into(),
+                ));
+            }
+        }
+    } else {
+        false
+    };
     let (document, mut import) = if request.is_file() {
         let bytes = fs::read(&request).map_err(|error| io(&error, &request))?;
         let value: Value = serde_json::from_slice(&bytes).map_err(|error| {
@@ -216,6 +236,7 @@ pub fn read_fixture_contract_request(
     Ok(FixtureContractRequest {
         document: project.join(document),
         resolved,
+        browser_case,
     })
 }
 
@@ -235,17 +256,31 @@ pub fn authorize_fixture_contract(
         .map_err(|error| FixtureAuthorizationError::Malformed(format!("{error}")))?;
 
     let resolved = &request.resolved;
+    let conditions = if request.browser_case {
+        vec!["browser".into(), "import".into()]
+    } else {
+        vec!["import".into()]
+    };
     let refused =
         |error: crate::Policy2ReceiptError| FixtureAuthorizationError::Refused(format!("{error}"));
     let bindings = Policy2ReceiptBindings {
         importer: resolved.importer.clone(),
         specifier: resolved.specifier.clone(),
         resolved_import_root: policy2_resolved_import_root(resolved).map_err(refused)?,
-        artifact_acceptance_root: policy2_artifact_acceptance_root(resolved, &["import".into()])
+        artifact_acceptance_root: policy2_artifact_acceptance_root(resolved, &conditions)
             .map_err(refused)?,
         semantic_digest: policy2_main_semantic_digest(&canonical_main).map_err(refused)?,
         artifact_provenance_root: stand_in(1),
-        snapshot_root: stand_in(2),
+        snapshot_root: if request.browser_case {
+            crate::installed_package_snapshot_root(
+                Path::new(&resolved.package_root),
+                &resolved.package_name,
+                &resolved.package_version,
+            )
+            .map_err(FixtureAuthorizationError::Refused)?
+        } else {
+            stand_in(2)
+        },
         package_root: stand_in(3),
         manifest_root: stand_in(4),
         artifacts_root: stand_in(5),
@@ -274,12 +309,14 @@ pub fn authorize_fixture_contract(
         closed_claims_root: policy2_main_closed_claims_root(&canonical_main).map_err(refused)?,
         verifier_source_digest: stand_in(17),
         verifier_build_digest: stand_in(18),
-        // States none, so the published catalog applies by importer only:
-        // project-wide admission by artifact requires a signed environment the
-        // consumer's tree reproduces, and a fixture's hand-written resolution
-        // names no environment to reproduce. Every authorizing fixture imports
-        // its package from the one file the receipt binds.
-        dependency_environment_root: String::new(),
+        // Existing fixtures state no environment and remain importer-only.
+        // Host fixtures explicitly sign an empty environment for artifact
+        // admission, reproduced against their supplied package snapshot.
+        dependency_environment_root: if request.browser_case {
+            crate::policy2_dependency_environment_root(&[])
+        } else {
+            String::new()
+        },
         cited_acceptances: Vec::new(),
     };
 
@@ -306,6 +343,13 @@ pub fn authorize_fixture_contract(
     if catalog_path.exists() {
         fs::remove_file(&catalog_path).map_err(|error| io(&error, &catalog_path))?;
     }
+    let authenticated = if request.browser_case {
+        authenticated
+            .with_dependency_environment(Vec::new())
+            .map_err(refused)?
+    } else {
+        authenticated
+    };
     publish_policy2_catalog(
         &project.join(".solid-checker"),
         &canonical_main,
@@ -313,7 +357,7 @@ pub fn authorize_fixture_contract(
         &authenticated,
         resolved,
         // The same set `artifact_acceptance_root` was computed over above.
-        std::slice::from_ref(&"import".to_owned()),
+        &conditions,
         &trust,
     )
     .map_err(|error| FixtureAuthorizationError::Refused(format!("{error}")))?;

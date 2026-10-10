@@ -77,6 +77,23 @@ fn plan_file(
             add_symbol(binding.local.span, true);
         }
     }
+    // Host discovery reads reference space at exact binder-selected uses.
+    // Request those rows too, rather than interpreting missing demand as a
+    // negative. The consumer separately guards aggregate server/client uses.
+    let import_bindings = file
+        .ast
+        .imports
+        .iter()
+        .flat_map(|import| &import.bindings)
+        .map(|binding| binding.local.span)
+        .collect::<HashSet<_>>();
+    let import_references = file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, declaration)| import_bindings.contains(declaration))
+        .map(|(reference, _)| *reference)
+        .collect::<HashSet<_>>();
     for binding in &file.ast.bindings {
         for name in &binding.names {
             add_symbol(name.span, true);
@@ -666,6 +683,14 @@ fn plan_file(
             add_symbol(*slot, true);
         }
     }
+    // Reference-space discovery must not introduce symbol observations at
+    // otherwise undemanded uses (for example a typeof constructor wrapper).
+    // Those observations can alter independent baseline dispatch findings.
+    for reference in &import_references {
+        let mut planned = demand(typefacts_location(&path, *reference));
+        planned.reference_space = true;
+        demands.push(planned);
+    }
     for (span, references) in symbol_spans {
         let mut planned = demand(typefacts_location(&path, span)).symbol(references);
         planned.structural_accessor = structural_accessors.contains(&span);
@@ -687,13 +712,9 @@ fn plan_file(
         planned.array_shape = array_shape_spans.contains(&span);
         planned.tuple_shape = tuple_shape_spans.contains(&span);
         planned.library_types = library_type_spans.contains(&span);
-        planned.reference_space = file.ast.imports.iter().any(|import| {
-            import
-                .bindings
-                .iter()
-                .any(|binding| binding.local.span == span)
-        });
-        planned.runtime_identity = planned.reference_space
+        planned.reference_space =
+            import_bindings.contains(&span) || import_references.contains(&span);
+        planned.runtime_identity = import_bindings.contains(&span)
             || file.ast.exports.iter().any(|export| {
                 export
                     .namespace_binding

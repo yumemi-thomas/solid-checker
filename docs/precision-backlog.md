@@ -1,5 +1,77 @@
 # Precision backlog
 
+ADR 0270 round-6 bounded call-completion review (schema 56):
+
+Bounded exact synchronous call completion now distinguishes CertainExit from
+MaybeNormal under authenticated client constants. Host/literal guards, simple
+unwritten literal inputs, nested exact calls, early returns, unconditional throws
+and while-true nontermination pin dead caller continuations. Async/generator
+allocation, recursion, method/dynamic/external calls, process-exit-like builtins,
+unsupported parameters/control and depth/size exhaustion remain
+feasible-if-returning under the accepted premise A, not termination proofs.
+Class/namespace initialization lacks a positive normal-completion premise and
+withholds its tail; eager composites conservatively withhold projections when
+certainly exiting. Module completion and independent prefixes remain distinct.
+Focused facts tests and host fixture twins are authored, unrun. No snapshot or
+published contract changed; acceptance still needs the pinned native build and
+non-updating coverage/ownership comparison. This changes host authority only;
+it adds no checker diagnostic duplicating TypeScript.
+The final adversarial pass also found HTML meta CSP could forbid all admitted
+scripts; meta http-equiv now refuses discovery, with clear/denied parser twins.
+Vite dev's mutable env object is another closed blocker: env/meta escapes,
+computed access, writes/delete/update and unsupported property shapes withhold
+the whole file's authority. Unchanged/escaped env fixtures pin the distinction.
+
+ADR 0270 round-5 proposed static-loadability gate (schema 55): all value static
+imports/re-exports must link before evaluation can strengthen findings. Unknown
+and provably-unloadable loads both retain baseline; local dependencies propagate
+refusals, unknown/certain-failed initialization and cyclic evaluation withhold
+importers. Bare declaration resolution is insufficient without browser artifact
+admission. Generated manifests and opaque evaluation remain baseline. Independent
+module prefixes and ordinary possibly-throwing prior calls retain feasibility.
+Focused unit/fixture expectations are authored but unrun. No snapshots changed.
+The callback consumer's declaration-only Solid stub is now a loadability refusal,
+so its positive invocation integration needs independently admitted runtime
+artifacts. The round-6 bounded predicate addresses the reported host-dependent
+call-completion blocker; arbitrary termination remains unproved. Historical
+round-5 FINDINGS.md is not the updated acceptance verdict.
+
+ADR 0270 host-execution fact draft (schema 54): direct exact host tests and
+same-block return/throw completion constrain per-site client/server execution.
+Calls, JSX, members and dynamic loads carry predicates; default initializers
+are separate scopes activated by known omitted/void-zero arguments. Unknown
+argument evaluation and earlier parameter initialization withhold transitions;
+inert literal defaults preserve the precise positive path. Unknown
+tests remain potentially live on both hosts but cannot strengthen inferred
+findings. Imported booleans require dialect vocabulary, exact declaration and
+attested rc.13 runtime byte/condition agreement. Namespace/member constants,
+computed tests, complex conditions, loop/try/optional execution, nested
+destructuring defaults, bare undefined identity and ambiguous calls remain
+baseline. This draft addresses review Blocker 1; callback invocation, route
+loading, runtime-target congruence and .tsrx review blockers remain independent.
+No build, unit test, native fixture run or snapshot update was performed.
+Core no-target browser-strength suppression is a separate, unimplemented gain.
+
+ADR 0270 round 3 selects browser findings from positive execution reachability.
+Server/test/unknown callers, omitted implementations and nonliteral dynamic
+loads cannot cancel that witness. Module initialization and function bodies are
+separate; exact calls/JSX and feasible exact callback invocations reach bodies,
+literal dynamic imports reach initialization, and RPC scopes never propagate.
+Type Facts/Vite alias disagreement withholds its edge and source proof authority;
+vite-tsconfig-paths cannot override Vite's earlier explicit alias rewrite.
+Two independent solver views preserve baseline results at unreached scopes.
+Context-premised imports remain baseline. Inference affects findings only:
+clean browser execution does not establish server cleanliness, --certify refuses
+inferred applications, and receipt production never consumes inferred views.
+Eighteen small authorized fixtures state positive/refusal and explicit-target
+criteria. No native test, build, published-typing oracle or coverage comparison
+was run in this read-only delivery; zero existing movement and compilation are
+acceptance requirements, not observed results. New snapshots await a reviewed
+non-updating comparison. SSR, opaque config/plugins, unsupported installed
+closures, ambiguous callable/member targets, factory-returned component bodies,
+mixed route lowering, class/namespace providers and host-specific context proof
+remain fail closed. No existing approximation is claimed closed.
+
 ## Standard hydration host (2026-10-09, ADR 0268)
 
 The owner extends ADR 0266 with an assumed standard serializer/hydration host.
@@ -28850,3 +28922,182 @@ missing/inherited/dynamic keys, custom resolvers/handlers, wrappers and opaque
 producers remain uncertifiable. No general dictionary dispatch or state model is
 claimed. Measured: ledger browser 98 -> 99; the namespace-created dictionary
 case stays uncertifiable (more conservative than predicted).
+## Inferred browser host (2026-10-10, ADR 0270; implemented and measured)
+
+The round notes below are historical read-only deliveries. Native implementation
+now passes a 239-project coverage comparison (1,583 findings) with no differences
+and no existing snapshot changes. Only the new congruent-alias helper and
+first-default-extension reachability snapshots changed after reviewing their
+live, unowned registration sites. Nineteen synthetic package fixtures gained
+linking-only entries without changing declarations or behavior-contract pins.
+
+The resource repair includes already-audited Vite/vitest config-loader imports
+in CSS compatibility and inspects installed Tailwind 4.3.3/Vite 8.3.0 bytes.
+Unknown plugins, executable directives, nested CSS imports and mismatched
+resolution still refuse. Optional read-only env scalars no longer imply object
+escape; optional branch constants and eager chain completion remain unknown.
+Compass now stops at analytics/config.ts's env-object escape rather than
+store.ts's deferred DEV inspection.
+
+Adversarial review reproduced an unreachable inferred registration after a
+throwing constructor. NewExpression now withholds completion pending an exact
+constructor proof, including normal constructors, while preserving the prefix.
+No constructor-name or general completion premise was added. Reference-space
+demands are isolated from new symbol observations to preserve baseline findings.
+Audit hashes are reused only within a fresh pass, input bytes are rehashed with
+at most eight workers, and two solver views retain one outer before/after
+validation boundary. Existing performance/work bounds remain unchanged.
+
+Measured no-target corpus: 49 projects, 538 -> 538 violations (zero site deltas),
+3,504 -> 3,504 uncertifiable findings. Helge's router SC9005 remains uncertifiable
+but moves from absent-contract column 1 to unknown-claims column 10; its 18
+inferred scopes add no violation. Exact timings and full handoff checks are
+recorded in ADR 0270's implementation measurements.
+
+Paired three-run medians add 0.1133–0.6246 s versus HEAD across the seven nominated
+apps. Helge is at the edge of the approximate budget (earlier +0.5843 s, unpaired
+final +0.6715 s); no strict 0.6000 s claim or repository performance exemption is
+made. The armed diagnostic suite passes 19 tests. Refusals preserve full baseline
+snapshots rather than requiring a manufactured uncertainty finding; three rc.9
+controls encounter default-runtime release refusal before host admission, so
+their native coverage remains partial. The lower-level graph tests exercise the
+SSR/library/override boundaries separately.
+
+Handoff checks pass: armed `make test-rust` has 1,735 passing tests and no
+failures/skips; workspace Clippy denies warnings; CLI has 381 passing tests.
+Full `make verify` is green (TOTAL 210.76 s, zero "FAILED during step" lines),
+including coverage, ownership, contracts/conformance, TypeScript oracle,
+performance certification and all 354 script tests. The standalone archive
+environment failure does not recur under verify.sh's archive bindings. No public
+contract or bundled artifact was regenerated. These results preserve the
+partial/refused paths above rather than claiming complete inference.
+
+Round 8 separates static package loadability from receipt-issued behavior.
+Exact Type Facts installed identity, ordered client exports/subpaths, canonical
+regular entries and the explicit published-export premise admit core rc.13 and
+other installed packages without granting external call semantics. Unreviewed
+releases remain subject to SC9014. CommonJS uses Vite optimizeDeps; excluded
+CommonJS, false browser maps, hidden/missing entries and escaped roots refuse.
+All lookup candidates, canonical paths and manifest/client bytes enter cache
+inputs. Array exports, directory-package resolution and explicit dedupe remain
+unknown. A closed inline-script independence grammar admits Jar Hell's theme
+bootstrap and literal-throw siblings, while navigation/document replacement,
+alias/computed interference and opaque calls remain refused. Audited all-lazy
+virtual routes can link; eager $$route/codeSplitting:false graphs still cannot.
+
+Focused manifest/installed-identity/store, inline HTML and lazy/eager routing
+twins are authored, unrun. No package signatures, contract artifacts or snapshots
+change. The lead measured the seven earlier refusals; post-patch source/manifest
+inspection predicts an Error Menu root, with other nominated apps retaining
+class-completion, asset, eager-route or alias blockers. Compilation, armed
+native comparisons, coverage/ownership/oracle and full handoff gates are deferred
+to the lead under the read-only/no-build instruction. See ADR 0270 for premises
+and exact remaining limits; no TypeScript diagnostic is newly reported.
+
+Round-4 read-only review adds refusal regressions for lazy JSX demand and
+parameter initialization, ownerless cleanup registration, permanently pending
+continuations, exact immediate-throw tails, and provably inert effect/error
+triggers. Ordinary extensionless/index imports now require an unambiguous
+installed-Vite default probe agreeing with the Type Facts target; competing
+files, package directories, resolver overrides, aliases and realpaths are tested
+as refusals. Native unit/index/diagnostic twins are authored but unrun. Both
+expanded fixtures type-check without diagnostics in memory against installed
+published rc.13 typings. No native verdict or new snapshot is asserted.
+
+Exact roots, local import/call edges, authenticated live-branch predicates and
+reviewed callback triggers establish existential browser execution. A callback
+registered by browser-executed code with a host trigger CAN run; this is the
+same some-path standard as strict-read/write findings. It does not establish
+guaranteed delivery, ownership, tracking, disposal or certification. Exact
+same-block cancellation, client-dead guards, false/empty control-flow demand,
+ignored/server-only props and unregistered module-level cleanup retain baseline.
+Existing baseline violations survive a clean browser view; closure may resolve
+only eligible baseline uncertifiable results. Explicit targets always win.
+
+Default discovery executes no configuration and requires exact local edges plus
+congruent aliases. ADR 0220 runtime-resolution required supplies optional fresh
+client resolver edges, including aliases, but cannot bypass provider/root
+admission. Route-manifest-only pages remain baseline in both modes. Published
+entries, server roots, unsupported selected .tsrx and unknown transformations
+refuse inference. Certification still requires an explicit target.
+
+Open: callback factories/defaults/destructuring/imported targets, cross-file prop
+forwarding, lazy memo demand, operation-trigger chains, context specialization,
+unknown standard-library member declarations, opaque frameworks and route
+lowering. These remain baseline; unresolved identity never proves a violation.
+The synthetic Route/after cases test authored Call rows, not a Router audit.
+AstFacts 54 keeps Oxc confined to syntax facts. Nineteen consumer documents have
+correct computation selectors; the live Phase19 pin is 223. No snapshots,
+public contract formats or bundled artifacts changed. The callback fixture passes
+an in-memory no-emit TypeScript 6.0.3 check against installed published rc.13
+Solid/signals/web typings and real web JSX. Rust compilation, native fixture
+comparison, repository-wide TypeScript oracle and expensive gates are unrun.
+
+### Round 7: inference decision notes and repaired recall (read-only, unrun)
+
+Native diagnostic analyses without an explicit target now explain their one
+inference decision through the existing run-note channel, including retained
+daemon answers and the ESLint/Oxlint contract-note rule. Refusals carry a path,
+line when available, and the missing premise. Notes are never finding or
+certification inputs.
+
+Repair missing exact import-use reference-space demands, allow the exact
+analyzed application config filename, preserve its inheritance chain in daemon
+inputs, and admit Vite's first matching extension/index probe when Type Facts
+agrees. Empty project reference lists add no execution boundary; nonempty lists
+remain refused. Congruent aliases still require a loadable static target. An absent
+target entity can join the canonical symbol's one exact declaration; conflicting
+entities remain refused. NodeModules store links reach independent artifact
+admission rather than the local-symlink veto. Balanced passive SVG no longer
+blocks Error Menu's HTML entry; executable foreign content and inline scripts
+remain refused. Adapter evidence assertions use ESLint's messageId/data descriptor.
+
+Read-only corpus inspection predicts no inferred scope for the seven nominated
+apps after these repairs. All configured installed plugin closure digests match
+existing pins. Ordinary authored artifact acquisition carries no exact core
+Solid/@solidjs/meta runtime export premise; built-in runtime semantics alone
+cannot prove static linking. Client-start route manifests remain unattested;
+Jar Hell's index.html:11 inline script remains a sound refusal. Queue's /src
+Vite alias versus application-relative TS paths remains unproved without fresh
+congruent resolver facts. Mixed server/client import bindings also stay baseline
+because aggregate value usage cannot identify the surviving client use.
+
+Embedded demand/index/HTML regressions and adapter note/evidence tests are
+authored, not executed. No snapshots, contracts, pins, manifests or binaries
+change. Rust parsing/formatting and JavaScript syntax checks are the only code
+checks permitted for this delivery; compilation, Clippy, armed native tests,
+coverage/ownership/oracle gates and CLI tests remain for the lead's worktree.
+
+### Round 9: bound host extraction and admit inert resources/classes (unrun)
+
+The lead measured a >120 s release hang in Beacon (HEAD about 1 s); sample hot
+frames were completion expression/body/guard extraction and predicate vectors.
+The draft replaces per-query resets/reanalysis with exact-span per-file memos,
+cached block prefixes/ancestor summaries and constant-sized predicates. Global
+node/step/depth counters fail closed for execution; bounded body completion
+remains MaybeNormal under ADR 0270 A. No time budget, benchmark ceiling, or
+50 µs cached Reactive IR reuse requirement is relaxed. Deterministic Rust tests
+assert visit and emitted-predicate bounds on deep/wide inputs and repeated calls.
+
+Exact Vite CSS/module and asset/raw/url files now link independently of Type
+Facts declaration wildcards and callable semantics. Bare installed Scalar CSS
+uses exact package exports; ordinary escaped CSS names are admitted. Missing
+files, CSS-to-JS redirects, claimed SVG transforms, unproved imports/preprocessor
+closures, unknown named surfaces and requested resolver disagreements refuse.
+Candidates/absence/canonical bytes are observed before cache reuse. No contract,
+receipt, public typing, plugin pin or generated snapshot changes.
+
+Inert no-extends classes now complete; exact private local constructor heritage
+is also bounded/proved. Static work, decorators, effectful keys, TDZ/ambient,
+escaped or unresolved/imported constructors remain unproved. Jar Hell's global
+Error constructor still needs exact semantic/runtime authority; its name alone
+does not close HttpError initialization. The class repair is explicitly partial.
+
+Beacon is predicted to reach its eager-route refusal once the hang is removed;
+Compass, Error Menu and Helge are candidate positive roots conditional on fresh
+facts and remaining source completion. Jar Hell retains its heritage refusal;
+Lutra/Queue retain eager routes and Queue its divergent alias. These are revised
+source predictions, not post-patch measurements or scope counts. New JSON proof
+inputs are outside src; all Rust/fixture/native/performance tests are authored
+but unrun under the read-only/no-build task. rustfmt parsing, frozen-byte and
+patch checks are the only validation claimed in the research handoff.

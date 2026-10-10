@@ -4,6 +4,396 @@ mod support;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
+    use solid_facts_backend::fixture_authorization::{
+        authorize_fixture_contract, read_fixture_contract_request,
+    };
+    use std::{fs, path::Path, process::Command};
+
+    fn copy_tree(from: &Path, to: &Path) {
+        fs::create_dir_all(to).unwrap();
+        for entry in fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            let destination = to.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy_tree(&entry.path(), &destination);
+            } else {
+                fs::copy(entry.path(), destination).unwrap();
+            }
+        }
+    }
+
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let repository = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let scratch = repository.join(format!(
+        "rust/target/inferred-host-process-{}",
+        std::process::id()
+    ));
+    copy_tree(
+        &repository.join("fixtures/reactive-ir/node_modules"),
+        &scratch.join("node_modules"),
+    );
+    for (name, browser) in [
+        ("client-start", true),
+        ("spa", true),
+        ("server-scopes", true),
+        ("ssr", false),
+        ("library", false),
+        ("override", false),
+        ("metadata", true),
+        ("metadata-published", false),
+        ("alias", false),
+        ("alias-unresolved", false),
+        ("dynamic", true),
+        ("dynamic-unknown", false),
+        ("workspace", true),
+        ("workspace-published", false),
+        ("reachability", false),
+        ("alias-congruent", true),
+        ("alias-divergent", false),
+        ("certification-clean", false),
+        ("callback-invocation", false),
+    ] {
+        let project = scratch.join(name);
+        copy_tree(
+            &repository.join(format!("fixtures/reactive-ir/inferred-host-{name}")),
+            &project,
+        );
+        let project = fs::canonicalize(project).unwrap();
+        if name.starts_with("workspace") {
+            fs::write(scratch.join("package.json"), "{\"workspaces\":[\"*\"]}").unwrap();
+        }
+        let authorization =
+            authorize_fixture_contract(&project, &read_fixture_contract_request(&project).unwrap())
+                .unwrap();
+        let trust = scratch.join(format!("{name}-trust.json"));
+        fs::write(&trust, authorization.trust_configuration).unwrap();
+        let analyze = |target: Option<&str>| {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
+            command
+                .env("SOLID_TYPEFACTS_BIN", &typefacts)
+                .args(["--format", "json", "--project"])
+                .arg(project.join("tsconfig.json"))
+                .arg("--receipt-trust-configuration")
+                .arg(&trust);
+            if let Some(target) = target {
+                command.args(["--runtime-target", target]);
+            }
+            let output = command.output().unwrap();
+            assert!(
+                output.status.success(),
+                "{name}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()
+        };
+        let snapshot = analyze((name == "override").then_some("node"));
+        let findings = snapshot["findings"].as_array().unwrap();
+        if name == "certification-clean" {
+            assert!(findings.is_empty(), "{findings:#?}");
+            assert_eq!(snapshot["status"], "uncertifiable");
+            let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+                .env("SOLID_TYPEFACTS_BIN", &typefacts)
+                .args(["--format", "json", "--certify", "--project"])
+                .arg(project.join("tsconfig.json"))
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(1));
+            assert_eq!(analyze(Some("browser"))["status"], "certified");
+            continue;
+        }
+        let source = if name == "callback-invocation" {
+            "src/main.tsx"
+        } else if name == "reachability" {
+            "src/loaded.ts"
+        } else if ["alias-congruent", "alias-divergent"].contains(&name) {
+            "src/helper.ts"
+        } else if [
+            "spa",
+            "metadata",
+            "metadata-published",
+            "alias",
+            "alias-unresolved",
+            "dynamic",
+            "dynamic-unknown",
+            "workspace",
+            "workspace-published",
+        ]
+        .contains(&name)
+        {
+            "src/main.ts"
+        } else {
+            "src/App.tsx"
+        };
+        let inferred = |finding: &serde_json::Value| {
+            finding["evidence"].as_array().is_some_and(|steps| {
+                steps.iter().any(|step| {
+                    step["message"]
+                        .as_str()
+                        .is_some_and(|message| message.starts_with("inferred browser:"))
+                })
+            })
+        };
+        if name == "reachability" {
+            for (path, marker, expected) in [
+                ("src/runtime-helper.ts", "optional resolver target", false),
+                (
+                    "src/probe/folder/index.ts",
+                    "congruent directory index browser target",
+                    false,
+                ),
+                (
+                    "src/probe/competing.ts",
+                    "first Vite extension agrees with Type Facts",
+                    true,
+                ),
+            ] {
+                let source = fs::read_to_string(project.join(path)).unwrap();
+                let marker = source.find(marker).unwrap();
+                let start =
+                    u64::try_from(source[..marker].rfind("startClosed()").unwrap()).unwrap();
+                assert_eq!(
+                    findings.iter().any(|finding| {
+                        finding["rule"] == "missing-owner"
+                            && finding["kind"] == "violation"
+                            && inferred(finding)
+                            && finding["primaryLocation"]["path"]
+                                .as_str()
+                                .is_some_and(|p| p.ends_with(path))
+                            && finding["primaryLocation"]["startByte"].as_u64() == Some(start)
+                    }),
+                    expected,
+                    "{path}: {findings:#?}"
+                );
+            }
+        }
+        if name == "callback-invocation" {
+            let source = fs::read_to_string(project.join("src/main.tsx")).unwrap();
+            for marker in [
+                "ignored prop",
+                "cancelled timer",
+                "server-only callback",
+                "Show never selected",
+                "empty For",
+                "empty Repeat",
+                "cancelled animation",
+                "removed listener",
+                "client-dead timer",
+                "RPC-only callback",
+                "non-Call callback row",
+                "shadowed timer",
+                "immediately consumed handle",
+                "inert-prefix cancellation",
+                "client-guarded cancellation",
+                "unregistered top-level cleanup",
+                "event under dead Show",
+                "argument never registers timer",
+                "explicit capture object removed",
+                "nested component under dead Show",
+                "nested component under ignored prop",
+                "JSX parameter initialization never completes",
+                "unregistered helper cleanup",
+                "unregistered fresh-stack cleanup",
+                "permanently pending continuation",
+                "deferred constant effect never applies",
+                "inert bundle never errors",
+                "exact throwing IIFE dead continuation",
+            ] {
+                let marker_start = source.find(marker).unwrap();
+                let call_start =
+                    u64::try_from(source[..marker_start].rfind("startClosed()").unwrap()).unwrap();
+                assert!(
+                    !findings.iter().any(|finding| finding["kind"] == "violation"
+                        && inferred(finding)
+                        && finding["primaryLocation"]["startByte"].as_u64() == Some(call_start)),
+                    "{marker}: {findings:#?}"
+                );
+            }
+            for marker in [
+                "noncancelable microtask",
+                "feasible timer",
+                "feasible animation",
+                "authored deferred callback",
+                "different handle stays feasible",
+                "direct intrinsic child selected",
+                "browser prefix before await",
+                "constant effect initial apply",
+                "throwing bundle error feasible",
+                "browser prefix before exact throw",
+            ] {
+                let marker = source.find(marker).unwrap();
+                let start =
+                    u64::try_from(source[..marker].rfind("startClosed()").unwrap()).unwrap();
+                // No registration is reached until every static package import
+                // has a loadability witness. These declaration-only stubs do
+                // not supply that witness, even for reviewed feasible triggers.
+                assert!(
+                    !findings
+                        .iter()
+                        .any(|finding| finding["rule"] == "missing-owner"
+                            && finding["kind"] == "violation"
+                            && inferred(finding)
+                            && finding["primaryLocation"]["startByte"].as_u64() == Some(start)),
+                    "{findings:#?}"
+                );
+            }
+        }
+        let module_violation = findings.iter().any(|finding| {
+            finding["rule"] == "missing-owner"
+                && finding["kind"] == "violation"
+                && inferred(finding)
+                && finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with(source))
+        });
+        assert_eq!(module_violation, browser, "{name}: {findings:#?}");
+        // Refused inference preserves baseline, including its release refusal,
+        // open claims, existing violations or empty findings. Snapshot coverage
+        // pins that complete result; absence of a host is not itself a finding.
+        // Reachability has an independent re-export root even though loaded.ts
+        // remains baseline. Callback cleanup violations are baseline findings.
+        assert_eq!(
+            findings.iter().any(inferred),
+            browser || name == "reachability",
+            "{name}: {findings:#?}"
+        );
+        if name == "spa" {
+            fs::write(project.join("src/main.ts"), "import {startClosed} from 'reactive-package'; class Stop {constructor(){throw 0}} new Stop(); startClosed();").unwrap();
+            let constructor_refused = analyze(None);
+            assert!(
+                !constructor_refused["findings"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|finding| finding["kind"] == "violation" && inferred(finding)),
+                "constructor continuation must stay baseline: {constructor_refused:#?}"
+            );
+            // Use the independently authorized browser artifact, without Solid
+            // declaration-only imports that would refuse module evaluation.
+            for (twin, expected) in [("dead", false), ("live", true)] {
+                let source = fs::read_to_string(repository.join(format!(
+                    "fixtures/reactive-ir/inferred-host-reachability/src/completion-diagnostic-{twin}.ts"
+                ))).unwrap();
+                fs::write(project.join("src/main.ts"), &source).unwrap();
+                let result = analyze(None);
+                let findings = result["findings"].as_array().unwrap();
+                let call = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
+                let violation = |finding: &serde_json::Value| {
+                    finding["rule"] == "missing-owner"
+                        && finding["kind"] == "violation"
+                        && finding["primaryLocation"]["path"]
+                            .as_str()
+                            .is_some_and(|path| path.ends_with("src/main.ts"))
+                        && finding["primaryLocation"]["startByte"].as_u64() == Some(call)
+                };
+                assert_eq!(
+                    findings
+                        .iter()
+                        .any(|finding| violation(finding) && inferred(finding)),
+                    expected,
+                    "{twin}: {result:#?}"
+                );
+                if !expected {
+                    assert!(!findings.iter().any(violation), "{result:#?}");
+                    // A certainly dead call needs neither a violation nor
+                    // an open package-behavior claim when no live import use
+                    // remains. Do not manufacture uncertainty for dead code.
+                }
+                // Positive explicit target confirms the fixture's owner claim
+                // is admitted independently of the inferred-host projection.
+                if expected {
+                    let explicit = analyze(Some("browser"));
+                    assert!(
+                        explicit["findings"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(violation),
+                        "{explicit:#?}"
+                    );
+                }
+            }
+        }
+        if name == "server-scopes" {
+            for finding in findings.iter().filter(|finding| {
+                finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| {
+                        path.ends_with("src/Document.tsx") || path.ends_with("src/server.ts")
+                    })
+            }) {
+                assert!(!inferred(finding));
+            }
+            // No target input changes for the baseline: remove the config on
+            // this private copy and compare every server-side finding byte for
+            // byte, including evidence. ADR 0241 remains in force there.
+            fs::rename(
+                project.join("vite.config.ts"),
+                project.join("config.disabled"),
+            )
+            .unwrap();
+            let baseline = analyze(None);
+            let server_findings = |snapshot: &serde_json::Value| {
+                snapshot["findings"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|finding| {
+                        finding["primaryLocation"]["path"]
+                            .as_str()
+                            .is_some_and(|path| {
+                                path.ends_with("src/Document.tsx")
+                                    || path.ends_with("src/server.ts")
+                            })
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            };
+            let expected = server_findings(&baseline);
+            assert!(!expected.is_empty(), "server baseline must be observed");
+            assert_eq!(server_findings(&snapshot), expected);
+        }
+        let explicit = analyze(Some("browser"));
+        let source_text = fs::read_to_string(project.join(source)).unwrap();
+        assert!(
+            !explicit["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(inferred)
+        );
+        assert!(
+            explicit["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|finding| finding["rule"] == "missing-owner"
+                    && finding["kind"] == "violation"
+                    && finding["primaryLocation"]["path"]
+                        .as_str()
+                        .is_some_and(|path| path.ends_with(source))
+                    && finding["primaryLocation"]["startByte"]
+                        .as_u64()
+                        .zip(finding["primaryLocation"]["endByte"].as_u64())
+                        .is_some_and(|(start, end)| source_text.get(start as usize..end as usize)
+                            == Some("startClosed()")))
+        );
+        if name == "client-start" {
+            // The generated client wrapper cannot invoke the default export
+            // when importing App certainly throws during initialization.
+            fs::write(project.join("src/App.tsx"),
+                "import {startClosed} from 'reactive-package';\nthrow 0;\nexport default function App(){setTimeout(()=>startClosed(),0);return <div/>;}\n"
+            ).unwrap();
+            let failed = analyze(None);
+            assert!(!failed["findings"].as_array().unwrap().iter().any(inferred));
+        }
+    }
+    fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn write_scope_diagnostics_have_semantic_locations() {
     let Some(findings) = diagnostic_fixture("write-scope") else {
         return;

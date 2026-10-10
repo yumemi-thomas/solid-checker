@@ -60,6 +60,20 @@ impl RuntimeResolutionIndex {
         }
     }
 
+    /// Deterministic native cache identity; includes unknown and text-mismatched rows.
+    #[must_use]
+    pub fn identity_rows(&self) -> Vec<String> {
+        let mut rows = self
+            .by_site
+            .iter()
+            .map(|((path, start, end), (text, outcome))| {
+                format!("{path:?}:{start}:{end}:{text:?}:{outcome:?}")
+            })
+            .collect::<Vec<_>>();
+        rows.sort();
+        rows
+    }
+
     /// The number of answered occurrences.
     #[must_use]
     pub fn len(&self) -> usize {

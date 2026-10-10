@@ -1,0 +1,11 @@
+{
+  "status": "hand-stated, unrun; compare before recording snapshots",
+  "kind": "violation versus uncertifiable",
+  "browserSource": "src/loaded.ts",
+  "browserViolation": false,
+  "certifyInferred": false,
+  "browserUpgrade": false,
+  "noTarget": [
+    "main.tsx has unproved static dependencies; its top-level and solely-reached modules retain baseline. Independent HTML entries retain independently proved prefixes."
+  ]
+}

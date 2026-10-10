@@ -696,17 +696,44 @@ fn answer(
         &check.accepted_contract_catalog,
         trust.is_some(),
     )?;
-    let notice: Arc<str> = selection.notice().unwrap_or_default().into();
-    let contracts = solid_facts_backend::project_accepted_contracts(
-        directory,
-        &selection.admitted,
-        &selection.nested,
-        trust.as_ref(),
-        check.bundled_contracts,
-        &check.runtime.selected_conditions(),
-        &facts,
-        requirements,
-    )?;
+    // Capture discovery's exact input generation before it runs. A refusal
+    // needs only its witness; success retains the complete graph-input closure.
+    let mut inference_inputs = inference_inputs_for_check(state, check);
+    let (contracts, inference_note) =
+        solid_facts_backend::inferred_project_accepted_contracts_with_note(
+            directory,
+            &selection.admitted,
+            &selection.nested,
+            trust.as_ref(),
+            check.bundled_contracts,
+            &check.runtime,
+            state.dialect.vocabulary,
+            &facts,
+            requirements,
+        )?;
+    if let Some(inputs) = &mut inference_inputs
+        && let Some(hosts) = contracts.inferred_hosts()
+    {
+        // Final package admission can observe additional canonical targets.
+        // Retain the identities actually used, rather than a post-analysis
+        // rediscovery that could bless another generation of filesystem bytes.
+        inputs.extend(
+            hosts
+                .manifest
+                .inputs
+                .iter()
+                .map(|(path, identity)| (PathBuf::from(path), content_hash(identity.as_bytes()))),
+        );
+        inputs.sort();
+        inputs.dedup();
+    }
+    let notice: Arc<str> = selection
+        .notice()
+        .into_iter()
+        .chain(inference_note)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .into();
     let analysis = state
         .diagnostics
         .analyze_accepted_measured_with_enablement(
@@ -736,27 +763,33 @@ fn answer(
     let modules = imported_package_roots(&facts);
     let install_lookups =
         solid_facts_backend::importer_admission_inputs(directory, &selection.nested, &facts)?;
-    state.last = Some(CachedAnswer {
-        generation: state.session.generation(),
-        explicit: explicit_inputs(check),
-        contract_files: contract_files(
-            state,
-            &modules,
-            &catalog_scopes,
-            &install_lookups,
-            &check.accepted_contract_catalog,
-            &check.receipt_trust_configuration,
-        )?,
-        catalog_scopes,
-        install_lookups,
-        notice: Arc::clone(&notice),
-        presets: check.presets.clone(),
-        enable_rules: check.enable_rules.clone(),
-        runtime: check.runtime.clone(),
-        modules,
-        status: Arc::clone(&status),
-        body: Arc::clone(&body),
-    });
+    // An unreadable witness, or a change while discovery/analysis ran, prevents
+    // caching. The ordinary answer still follows the existing refusal path.
+    state.last = match inference_inputs.filter(|inputs| inference_inputs_current(inputs)) {
+        Some(inference_inputs) => Some(CachedAnswer {
+            generation: state.session.generation(),
+            explicit: explicit_inputs(check),
+            contract_files: contract_files(
+                state,
+                &modules,
+                &catalog_scopes,
+                &install_lookups,
+                &check.accepted_contract_catalog,
+                &check.receipt_trust_configuration,
+            )?,
+            inference_inputs,
+            catalog_scopes,
+            install_lookups,
+            notice: Arc::clone(&notice),
+            presets: check.presets.clone(),
+            enable_rules: check.enable_rules.clone(),
+            runtime: check.runtime.clone(),
+            modules,
+            status: Arc::clone(&status),
+            body: Arc::clone(&body),
+        }),
+        None => None,
+    };
     state.diagnostics.retain_for_idle(state.cache_retention);
     Ok(Answer {
         status,
@@ -778,6 +811,15 @@ fn cached_answer(
     let Some(cached) = &state.last else {
         return Ok(None);
     };
+    if cached.generation != state.session.generation()
+        || cached.explicit != explicit_inputs(check)
+        || cached.presets != check.presets
+        || cached.enable_rules != check.enable_rules
+        || cached.runtime != check.runtime
+        || !inference_inputs_current(&cached.inference_inputs)
+    {
+        return Ok(None);
+    }
     let current = contract_files(
         state,
         &cached.modules,
@@ -794,6 +836,44 @@ fn cached_answer(
         &check.enable_rules,
         &check.runtime,
     ))
+}
+
+fn inference_inputs_for_check(state: &State, check: &CheckRequest) -> Option<Vec<ContractFile>> {
+    let runtime = &check.runtime;
+    if runtime.target.is_some()
+        || !runtime.selected_conditions().is_empty()
+        || runtime.program_boundary == Some(solid_reactive_ir::ProgramBoundary::Open)
+    {
+        return Some(Vec::new());
+    }
+    let directory = state.project.parent()?;
+    let mut paths =
+        solid_facts_backend::inferred_host_input_paths_for_project(directory, &state.project);
+    // Nested execution boundaries are facts even without an accepted catalog.
+    paths.extend(state.sources.iter().flat_map(|source| {
+        Path::new(&source.path)
+            .parent()
+            .into_iter()
+            .flat_map(Path::ancestors)
+            .map(|ancestor| ancestor.join("package.json"))
+    }));
+    paths.sort();
+    paths.dedup();
+    paths
+        .into_iter()
+        .map(|path| {
+            Some((
+                path.clone(),
+                solid_facts_backend::inferred_host_input_digest(&path)?,
+            ))
+        })
+        .collect()
+}
+
+fn inference_inputs_current(inputs: &[ContractFile]) -> bool {
+    inputs.iter().all(|(path, expected)| {
+        solid_facts_backend::inferred_host_input_digest(path).as_ref() == Some(expected)
+    })
 }
 
 /// Every catalog the local tier holds, or the one the caller named.
@@ -919,7 +999,12 @@ fn contract_files(
         // must still be an input -- creating one changes what is admitted --
         // and a contract file deleted between runs should invalidate the cache
         // rather than fail the check.
-        let hash = match hash_file(&path) {
+        let hash = match if path.is_dir() {
+            solid_facts_backend::inferred_host_directory_digest(&path)
+                .ok_or_else(|| "cannot fingerprint inferred host directory".into())
+        } else {
+            hash_file(&path)
+        } {
             Ok(hash) => hash,
             Err(_) if !path.exists() => [0_u8; 32],
             Err(error) => return Err(error),
@@ -1103,16 +1188,16 @@ mod tests {
         cell::Cell,
         ffi::OsStr,
         fs,
-        path::Path,
+        path::{Path, PathBuf},
         time::Duration,
         time::{SystemTime, UNIX_EPOCH},
     };
 
     use super::{
         CheckHeader, CheckRequest, FileRefresh, ProcessMemory, cache_retention_from, enabled_from,
-        explicit_inputs, fingerprint_file, normalize_enablement, parse_process_memory,
-        process_tree_resident_bytes_from, refresh_file_with, retained_format, socket_path,
-        timing_value,
+        explicit_inputs, fingerprint_file, inference_inputs_current, normalize_enablement,
+        parse_process_memory, process_tree_resident_bytes_from, refresh_file_with, retained_format,
+        socket_path, timing_value,
     };
     use solid_reactive_ir::{CacheRetention, RuntimeEnvironment};
 
@@ -1208,6 +1293,63 @@ mod tests {
                 "{expected} is not an admission input"
             );
         }
+    }
+
+    #[test]
+    fn retained_inference_closure_observes_content_absence_membership_and_symlinks() {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let scratch = std::env::temp_dir().join(format!(
+            "daemon-inference-inputs-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        ));
+        fs::create_dir_all(&scratch).unwrap();
+        let source = scratch.join("source.ts");
+        fs::write(&source, "one").unwrap();
+        let observed = |paths: &[PathBuf]| {
+            paths
+                .iter()
+                .map(|path| {
+                    (
+                        path.clone(),
+                        solid_facts_backend::inferred_host_input_digest(path).unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let files = observed(std::slice::from_ref(&source));
+        assert!(inference_inputs_current(&files));
+        let modified = fs::metadata(&source).unwrap().modified().unwrap();
+        fs::write(&source, "two").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(&source)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        assert!(
+            !inference_inputs_current(&files),
+            "same size/mtime/inode cannot bless new bytes"
+        );
+        let absent = scratch.join("vite.config.js");
+        let missing = observed(std::slice::from_ref(&absent));
+        fs::write(&absent, "export default {};").unwrap();
+        assert!(!inference_inputs_current(&missing));
+        let directories = observed(std::slice::from_ref(&scratch));
+        fs::write(scratch.join("excluded-server.ts"), "import './source';").unwrap();
+        assert!(!inference_inputs_current(&directories));
+        let alternate = scratch.join("alternate.ts");
+        fs::write(&alternate, "two").unwrap();
+        let link = scratch.join("linked.ts");
+        std::os::unix::fs::symlink(&source, &link).unwrap();
+        let links = observed(std::slice::from_ref(&link));
+        fs::remove_file(&link).unwrap();
+        std::os::unix::fs::symlink(&alternate, &link).unwrap();
+        assert!(
+            !inference_inputs_current(&links),
+            "equal target bytes do not imply equal link identity"
+        );
+        fs::remove_dir_all(scratch).unwrap();
     }
 
     #[test]

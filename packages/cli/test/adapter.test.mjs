@@ -15,6 +15,94 @@ import { Linter } from "eslint";
 const require = createRequire(import.meta.url);
 const plugin = require("../eslint.cjs");
 
+test("inferred host cache identity follows config, roots and sources", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-inferred-host-"));
+  try {
+    mkdirSync(join(root, "src"));
+    const project = join(root, "tsconfig.json");
+    writeFileSync(project, "{}");
+    writeFileSync(join(root, "package.json"), JSON.stringify({ private: true, scripts: { build: "vite build" } }));
+    const config = join(root, "vite.config.ts");
+    writeFileSync(config, "export default {};");
+    const filename = join(root, "src", "main.ts");
+    writeFileSync(filename, "export {};");
+    const counter = join(root, "count.txt");
+    const analyzer = join(root, "analyzer.mjs");
+    writeFileSync(analyzer, `import {readFileSync, writeFileSync, existsSync} from 'node:fs';
+const path = process.argv[2];
+writeFileSync(path, String(existsSync(path) ? Number(readFileSync(path, 'utf8')) + 1 : 1));
+process.stdout.write(JSON.stringify({status:'certified',findings:[]}));`);
+    const context = runtime => ({ filename, physicalFilename: filename, settings: { solidChecker: { project, command: process.execPath, commandArgs: [analyzer, counter], ...(runtime ? { runtime } : {}) } } });
+    plugin._testing.snapshotCache.clear();
+    plugin._testing.loadSnapshot(context());
+    plugin._testing.loadSnapshot(context());
+    assert.equal(readFileSync(counter, "utf8"), "2", "native revalidates installed plugin closure on every inferred request");
+    writeFileSync(join(root, "src", "entry-server.tsx"), '"use server";');
+    plugin._testing.loadSnapshot(context());
+    assert.equal(readFileSync(counter, "utf8"), "3");
+    writeFileSync(config, "export default {ssr:true};");
+    plugin._testing.loadSnapshot(context());
+    assert.equal(readFileSync(counter, "utf8"), "4");
+    plugin._testing.loadSnapshot(context({ target: "browser" }));
+    writeFileSync(filename, "export const changed = true;");
+    plugin._testing.loadSnapshot(context({ target: "browser" }));
+    assert.equal(readFileSync(counter, "utf8"), "5", "explicit target bypasses inference identity");
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Oxlint messages retain native inferred-host evidence", () => {
+  const filename = "/project/App.tsx";
+  const finding = {
+    id: "SC4001", rule: "missing-owner", kind: "violation", message: "missing owner",
+    primaryLocation: { path: filename, startByte: 0, endByte: 4 },
+    evidence: [{ message: "inferred browser: Vite index.html module entry" }]
+  };
+  const reports = run({ status: "violation", findings: [finding] }, filename, "call");
+  assert.equal(reports[0].messageId, "finding");
+  assert.match(reports[0].data.message, /inferred browser: Vite index.html module entry/);
+  const baseline = run({ status: "violation", findings: [{ ...finding, evidence: [] }] }, filename, "call");
+  assert.doesNotMatch(baseline[0].data.message, /inferred browser/);
+});
+
+test("native inference decisions project through the run-note rule", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-host-note-"));
+  try {
+    const project = join(root, "tsconfig.json");
+    const filename = join(root, "App.tsx");
+    const analyzer = join(root, "analyzer.mjs");
+    writeFileSync(project, "{}");
+    writeFileSync(filename, "export {};");
+    writeFileSync(analyzer, `process.stderr.write(process.argv[2] + '\\n');
+process.stdout.write(JSON.stringify({status:'certified',findings:[]}));`);
+    for (const decision of [
+      "browser host inferred for 2 scopes from roots /project/src/main.ts#init",
+      "browser host not inferred: /project/index.html:4: inline or non-module script"
+    ]) {
+      plugin._testing.snapshotCache.clear();
+      const reports = [];
+      const context = {
+        filename, physicalFilename: filename, options: [],
+        sourceCode: sourceCode("export {};"),
+        settings: { solidChecker: { project, command: process.execPath,
+          commandArgs: [analyzer, `solid-checker: note: ${decision}`] } },
+        report: descriptor => reports.push(descriptor)
+      };
+      plugin.rules["contract-note"].create(context).Program({ type: "Program" });
+      assert.equal(reports.length, 1);
+      assert.equal(reports[0].messageId, "notice");
+      assert.equal(reports[0].data.message, `[solid-checker note] ${decision}`);
+      assert.equal(plugin._testing.loadSnapshot(context).status, "certified");
+      assert.deepEqual(plugin._testing.loadSnapshot(context).findings, []);
+    }
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function sourceCode(text) {
   return {
     text,

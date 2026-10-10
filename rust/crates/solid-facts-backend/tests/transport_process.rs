@@ -25,6 +25,9 @@ fn timing_lines_are_valid_json() {
     let stderr = String::from_utf8(output.stderr).expect("timings are UTF-8");
     let timings = stderr
         .lines()
+        // Host inference uses the existing textual run-note channel beside
+        // timing records. Every other line must still be valid timing JSON.
+        .filter(|line| !line.starts_with("solid-checker: note: browser host "))
         .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("valid timing JSON"))
         .collect::<Vec<_>>();
     assert!(

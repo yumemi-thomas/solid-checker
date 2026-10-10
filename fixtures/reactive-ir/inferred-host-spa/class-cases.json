@@ -1,0 +1,107 @@
+[
+  {
+    "name": "class-decorator",
+    "source": "@decorate class C {} closed();",
+    "normal": false
+  },
+  {
+    "name": "parameter-decorator",
+    "source": "class C { method(@decorate x:unknown){} } closed();",
+    "normal": false
+  },
+  {
+    "name": "plain",
+    "source": "class C { x=unknownCall(); method(){} } closed();",
+    "normal": true
+  },
+  {
+    "name": "named-export",
+    "source": "export class C { method(){} } closed();",
+    "normal": true
+  },
+  {
+    "name": "default-export",
+    "source": "export default class C { method(){} } closed();",
+    "normal": true
+  },
+  {
+    "name": "literal-computed-key",
+    "source": "class C { ['method'](){} [1]=unknownCall() } closed();",
+    "normal": true
+  },
+  {
+    "name": "static-method",
+    "source": "class C { static method(){} static x:number } closed();",
+    "normal": true
+  },
+  {
+    "name": "exact-local-class",
+    "source": "class Base{} class Child extends Base{} closed();",
+    "normal": true
+  },
+  {
+    "name": "wrapped-local-class",
+    "source": "class Base{} class Child extends (Base as typeof Base){} closed();",
+    "normal": true
+  },
+  {
+    "name": "exact-local-function",
+    "source": "function Base(){} class Child extends Base{} closed();",
+    "normal": true
+  },
+  {
+    "name": "static-block",
+    "source": "class C {static{unknownCall()}} closed();",
+    "normal": false
+  },
+  {
+    "name": "static-field",
+    "source": "class C {static x=unknownCall()} closed();",
+    "normal": false
+  },
+  {
+    "name": "computed-effect",
+    "source": "class C {[unknownCall()](){}} closed();",
+    "normal": false
+  },
+  {
+    "name": "unknown-heritage",
+    "source": "declare const Base:any; class C extends Base{} closed();",
+    "normal": false
+  },
+  {
+    "name": "unresolved-global-heritage",
+    "source": "class HttpError extends Error {} closed();",
+    "normal": false
+  },
+  {
+    "name": "tdz-heritage",
+    "source": "class Child extends Base{} class Base{} closed();",
+    "normal": false
+  },
+  {
+    "name": "declared-heritage",
+    "source": "declare class Base{} class Child extends Base{} closed();",
+    "normal": false
+  },
+  {
+    "name": "async-heritage",
+    "source": "async function Base(){} class Child extends Base{} closed();",
+    "normal": false
+  },
+  {
+    "name": "mutated-function-prototype",
+    "source": "function Base(){} Base.prototype=0; class Child extends Base{} closed();",
+    "normal": false
+  },
+  {
+    "name": "exported-heritage",
+    "source": "export function Base(){} class Child extends Base{} closed();",
+    "normal": false
+  },
+  {
+    "name": "class-expression",
+    "source": "const C=class{}; closed();",
+    "normal": false
+  }
+]

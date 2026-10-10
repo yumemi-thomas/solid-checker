@@ -3412,6 +3412,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // shipped one -- and no gate here runs a release binary against an
     // unsupported install, so nothing would have caught it.
     if let Some((installed, manifest, refusal)) = unsupported_runtime {
+        if request.runtime.target.is_none() {
+            eprintln!(
+                "solid-checker: note: browser host not inferred: {}: unsupported installed Solid runtime {installed}",
+                manifest.display()
+            );
+        }
         let snapshot =
             solid_facts_backend::unsupported_runtime_snapshot(&installed, &manifest, refusal);
         let emission = snapshot_emission::emit(
@@ -3765,6 +3771,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 })
             );
         }
+        if request.runtime.target.is_none() {
+            eprintln!(
+                "solid-checker: note: browser host not inferred: {}: contract emission requires explicit artifact conditions",
+                request.project_id
+            );
+        }
         return Ok(0);
     }
     let (mut facts, native_timings) = {
@@ -3846,6 +3858,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         .as_nanos()
         .saturating_sub(facts_complete_ns);
     if diagnostics && request.check_contracts {
+        if request.runtime.target.is_none() {
+            eprintln!(
+                "solid-checker: note: browser host not inferred: {}: contract coverage inspection uses explicit artifact conditions",
+                facts.project_id
+            );
+        }
         let project = Path::new(&facts.project_id);
         let directory = if project.is_dir() {
             project
@@ -4049,16 +4067,40 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         // not the export-condition names the package happens to use. Declaring
         // nothing still admits nothing, so the zero-configuration path is
         // unchanged.
-        let contracts = solid_facts_backend::project_accepted_contracts(
-            directory,
-            &discovered_catalogs,
-            &selection.nested,
-            trust.as_ref(),
-            request.bundled_contracts,
-            &request.runtime.selected_conditions(),
-            &facts,
-            requirements,
-        )?;
+        let (contracts, inference_note) = if request.emit_contract.is_empty()
+            && request.emit_contract_batch.is_empty()
+        {
+            solid_facts_backend::inferred_project_accepted_contracts_with_note(
+                directory,
+                &discovered_catalogs,
+                &selection.nested,
+                trust.as_ref(),
+                request.bundled_contracts,
+                &request.runtime,
+                dialect.vocabulary,
+                &facts,
+                requirements,
+            )?
+        } else {
+            // Contract generation has its own explicit artifact conditions.
+            (
+                    solid_facts_backend::project_accepted_contracts(
+                        directory,
+                        &discovered_catalogs,
+                        &selection.nested,
+                        trust.as_ref(),
+                        request.bundled_contracts,
+                        &request.runtime.selected_conditions(),
+                        &facts,
+                        requirements,
+                    )?,
+                    request.runtime.target.is_none().then(|| format!("solid-checker: note: browser host not inferred: {}: contract emission requires explicit artifact conditions", facts.project_id)),
+                )
+        };
+        if let Some(note) = inference_note {
+            eprintln!("{note}");
+        }
+
         let contracts = if request.proposal_dependency_catalog.is_empty() {
             contracts
         } else {

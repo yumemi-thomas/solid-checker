@@ -273,6 +273,10 @@ function materializeAuthorized(project) {
   rmSync(base, { recursive: true, force: true });
   mkdirSync(base, { recursive: true });
   cpSync(project.directory, destination, { recursive: true });
+  if (existsSync(join(project.directory, ".solid-checker", "shared-host-plugin.json"))) {
+    cpSync(join(root, "fixtures/reactive-ir/node_modules/@solidjs/vite-plugin"),
+      join(destination, "node_modules/@solidjs/vite-plugin"), { recursive: true });
+  }
   const trust = join(base, "trust.json");
   execFileSync(authorizeTool, ["--project", destination, "--trust-output", trust], {
     encoding: "utf8"
@@ -378,6 +382,7 @@ const unitParts = (project) => () => [
   `project:${project.id}`,
   `wording:${KEEPS_WORDING.has(project.id)}`,
   hashTree(project.directory),
+  hashTree(join(root, "fixtures/reactive-ir/node_modules/@solidjs/vite-plugin")),
   ancestorChainDigest(project.directory, "node_modules/solid-js/package.json"),
   // The installation review reads two more manifests the same way
   // (`resolved_releases` in dialect.rs): `@solidjs/web` from the project, and

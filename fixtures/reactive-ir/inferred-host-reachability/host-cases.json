@@ -1,0 +1,386 @@
+[
+  {
+    "path": "src/main.tsx",
+    "text": "host SSR call",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host client call",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host ternary server",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host ternary client",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host and server",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host and client",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host or client",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host server JSX",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host server member",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host client tail",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host dead tail",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host thrown tail",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host default skipped",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host default omitted",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host default void zero",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host default bare undefined",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host default prior unknown",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "host default prior literal",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/server-guarded.ts",
+    "text": "host server dynamic target",
+    "browser": false
+  },
+  {
+    "path": "src/shared.ts",
+    "text": "indirect callable export",
+    "browser": false
+  },
+  {
+    "path": "src/shared.ts",
+    "text": "unconstructed instance field",
+    "browser": false
+  },
+  {
+    "path": "src/shared.ts",
+    "text": "uncalled class method",
+    "browser": false
+  },
+  {
+    "path": "src/shared.ts",
+    "text": "uncalled namespace function",
+    "browser": false
+  },
+  {
+    "path": "src/server-import-only.ts",
+    "text": "RPC-only dependency",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "argument callback",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "nested uncalled",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "Router child",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "JSX prop",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "server function",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "callback in server function",
+    "browser": false
+  },
+  {
+    "path": "src/main.tsx",
+    "text": "RPC-only argument stays baseline",
+    "browser": false
+  },
+  {
+    "path": "src/shared.ts",
+    "text": "browser helper",
+    "browser": false
+  },
+  {
+    "path": "src/shared.ts",
+    "text": "server-only body",
+    "browser": false
+  },
+  {
+    "path": "src/shared.ts",
+    "text": "shared top level",
+    "browser": false
+  },
+  {
+    "path": "src/loaded.ts",
+    "text": "loaded module",
+    "browser": false
+  },
+  {
+    "path": "src/loaded.ts",
+    "text": "uncalled dynamic default",
+    "browser": false
+  },
+  {
+    "path": "src/never-loaded.ts",
+    "text": "nonliteral target",
+    "browser": false
+  },
+  {
+    "path": "src/server.ts",
+    "text": "RPC body",
+    "browser": false
+  },
+  {
+    "path": "src/runtime-helper.ts",
+    "text": "optional resolver target",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/probe/competing.ts",
+    "text": "first Vite extension agrees with Type Facts",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/probe/folder/index.ts",
+    "text": "congruent directory index browser target",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/independent.ts",
+    "text": "independent live module prefix",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/independent.ts",
+    "text": "independent feasible timer",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/independent.ts",
+    "text": "independent certain throw tail",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/reexport-entry.ts",
+    "text": "static reexport agrees with the first Vite extension",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/cycle-a.ts",
+    "text": "cyclic entry remains baseline",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/cycle-b.ts",
+    "text": "cyclic dependency remains baseline",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/dependency-entry.ts",
+    "text": "throwing static dependency prevents importer evaluation",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion client exit prefix",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion client exit tail",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion client exit nested timer",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion server exit client tail",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion server exit feasible timer",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion literal exit tail",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion unconditional exit tail",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion infinite loop tail",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion literal argument exit tail",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion literal argument normal tail",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion normal return tail",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion async rejection tail",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion generator allocation tail",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion recursion feasible if returning",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion method feasible if returning",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion nested exact exit tail",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/completion-cases.ts",
+    "text": "completion unknown class initialization tail",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/env-escaped.ts",
+    "text": "escaped env cannot grant continuation authority",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/env-escaped.ts",
+    "text": "escaped env cannot register browser timer",
+    "browser": false,
+    "proof": false
+  },
+  {
+    "path": "src/env-unchanged.ts",
+    "text": "unchanged env supplies client continuation",
+    "browser": true,
+    "proof": true
+  },
+  {
+    "path": "src/env-unchanged.ts",
+    "text": "unchanged env supplies feasible timer",
+    "browser": true,
+    "proof": true
+  }
+]

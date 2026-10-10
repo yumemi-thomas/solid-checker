@@ -367,7 +367,9 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // ADR 0258's pins of exact constructor-instance prototypes.
       // 203 adds package-closed-map-owner-consumer's hand-stated document.
       // 204 adds package-captured-lookup-consumer's hand-stated document.
-      stableMainDocuments: 204,
+      // 222 adds eighteen inferred-host consumer hand-stated documents (ADR 0270).
+      // 223 adds inferred-host-callback-invocation (the prior 18 add 204 -> 222).
+      stableMainDocuments: 223,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

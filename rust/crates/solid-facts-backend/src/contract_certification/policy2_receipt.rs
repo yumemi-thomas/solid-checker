@@ -953,7 +953,7 @@ impl AuthenticatedPolicy2Receipt {
 
     /// Attaches the environment this process computed, after checking it is
     /// the one the receipt binds.
-    pub(super) fn with_dependency_environment(
+    pub(crate) fn with_dependency_environment(
         mut self,
         entries: Vec<DependencyEnvironmentEntry>,
     ) -> Result<Self, Policy2ReceiptError> {

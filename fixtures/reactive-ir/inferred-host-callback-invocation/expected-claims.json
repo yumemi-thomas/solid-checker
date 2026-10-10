@@ -1,0 +1,9 @@
+{
+  "status": "hand-stated, unrun; compare before recording snapshots",
+  "browserUpgrade": false,
+  "violations": [],
+  "noTarget": [
+    "Solid declaration-only stubs have no browser runtime artifact admission; every registration remains baseline."
+  ],
+  "explicitTarget": "browser remains the callback-delivery control"
+}

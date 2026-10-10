@@ -100,8 +100,13 @@ mod first_party_bundles;
 /// analysis: the trust it mints is returned to the caller, not written
 /// into the project.
 pub mod fixture_authorization;
+mod host_config;
 pub mod host_constants;
+mod host_inline;
+mod host_loadable;
+mod host_plugins;
 mod inferred_contract;
+mod inferred_host;
 mod installed_patches;
 mod package_requirements;
 mod phase16_benchmark;
@@ -191,6 +196,11 @@ pub use evidence_sidecars::{
 pub use first_party_bundles::{
     BundleSelector, FirstPartyBundle, FirstPartyBundleError, bundled_first_party_contract_index,
     solid2_rc3_bundles,
+};
+pub use inferred_host::{
+    inferred_host_directory_digest, inferred_host_input_digest, inferred_host_input_paths,
+    inferred_host_input_paths_for_project, inferred_project_accepted_contracts,
+    inferred_project_accepted_contracts_with_note,
 };
 pub use package_requirements::external_package_contract_requirements;
 pub use phase16_benchmark::phase16_benchmark_report;
@@ -2317,6 +2327,28 @@ mod tests {
         }
     }
 
+    #[test]
+    fn imported_reference_space_does_not_add_baseline_symbol_observations() {
+        let source = "import { Constructor } from 'package'; const wrapped = new (Constructor as typeof Constructor)();";
+        let file = test_file_facts("src/main.ts", source);
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            &[file],
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let start = source.rfind("Constructor").unwrap() as u64;
+        let row = demands
+            .iter()
+            .find(|demand| {
+                demand.location.start_byte == start && demand.location.end_byte == start + 11
+            })
+            .unwrap();
+        assert!(row.reference_space);
+        assert!(!row.symbol);
+        assert!(!row.runtime_identity);
+    }
+
     fn test_file_facts(path: &str, source: &str) -> FileFacts {
         let ast = solid_facts::ast::extract(path, source).unwrap();
         FileFacts::new(
@@ -2336,6 +2368,44 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn import_use_spaces_are_demanded_at_exact_binder_selected_references() {
+        let file = test_file_facts(
+            "src/main.ts",
+            "import { value } from './helper'; console.log(value); type T = typeof value; function server() { 'use server'; return value; } function shadow(value: number) { return value; }",
+        );
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        let binding = file.ast.imports[0].bindings[0].local.span;
+        let mut imported = 0;
+        let mut shadowed = 0;
+        for (reference, declaration) in &file.ast.reference_declarations {
+            let location = typefacts_location(file.path.as_str(), *reference);
+            let classified = demands
+                .iter()
+                .any(|demand| demand.location == location && demand.reference_space);
+            if *declaration == binding {
+                imported += 1;
+                assert!(
+                    classified,
+                    "value, type-query, and server uses all need exact classification"
+                );
+            } else {
+                shadowed += 1;
+                assert!(
+                    !classified,
+                    "a shadowed binding cannot become an import use"
+                );
+            }
+        }
+        assert_eq!(imported, 3);
+        assert_eq!(shadowed, 1);
     }
 
     #[test]

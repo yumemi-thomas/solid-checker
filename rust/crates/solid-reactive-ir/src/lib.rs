@@ -46,6 +46,9 @@ pub use returns_walk::{
 
 pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};
 
+pub mod callback_host;
+pub mod hosts;
+
 pub use findings::{
     DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,
     assert_rules_have_documentation, direct_mutation_wording, finish_findings, rule_manifest_json,

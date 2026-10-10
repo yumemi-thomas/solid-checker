@@ -92,6 +92,10 @@ impl AcceptedContractUse<'_> {
 /// before construction; consumers ask only for one exact import/export use.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AcceptedContractIndex {
+    /// A complete browser view, consulted only at positively proved execution
+    /// importers. The no-target view remains this index and receives no browser
+    /// fallback, even when the selected view has no acceptance for a package.
+    inferred_browser: Option<Box<InferredBrowserContracts>>,
     imports: BTreeMap<(String, String), Vec<AcceptedContract>>,
     /// Acceptances reachable by the artifact they were proven about, rather
     /// than by the file that imported it during certification. An entry here
@@ -156,6 +160,13 @@ struct ScopedAcceptances {
     index: AcceptedContractIndex,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct InferredBrowserContracts {
+    hosts: crate::hosts::ProjectHostIndex,
+    contracts: AcceptedContractIndex,
+    project_findings: bool,
+}
+
 impl ScopedAcceptances {
     fn covers(&self, importer: &str) -> bool {
         std::path::Path::new(importer).starts_with(&self.directory)
@@ -171,6 +182,51 @@ impl ScopedAcceptances {
 }
 
 impl AcceptedContractIndex {
+    #[must_use]
+    pub fn with_inferred_browser(
+        mut self,
+        hosts: crate::hosts::ProjectHostIndex,
+        contracts: Self,
+    ) -> Self {
+        self.inferred_browser = Some(Box::new(InferredBrowserContracts {
+            hosts,
+            contracts,
+            project_findings: true,
+        }));
+        self
+    }
+
+    #[must_use]
+    pub fn inferred_hosts(&self) -> Option<&crate::hosts::ProjectHostIndex> {
+        self.inferred_browser.as_ref().map(|view| &view.hosts)
+    }
+
+    /// Separate execution views keep uncalled bodies on today's no-target answer.
+    #[must_use]
+    pub fn execution_views(&self) -> Option<(Self, Self)> {
+        self.inferred_browser
+            .as_ref()
+            .filter(|view| view.project_findings)?;
+        let mut baseline = self.clone();
+        baseline.inferred_browser = None;
+        let mut browser = self.clone();
+        browser.inferred_browser.as_mut()?.project_findings = false;
+        Some((baseline, browser))
+    }
+
+    fn browser_view_at(&self, importer: &str, specifier: &str) -> Option<&Self> {
+        self.inferred_browser
+            .as_ref()
+            .filter(|view| {
+                view.hosts.browser_at(importer)
+                    && !view
+                        .hosts
+                        .blocked_imports
+                        .contains(&(importer.into(), specifier.into()))
+            })
+            .map(|view| &view.contracts)
+    }
+
     /// Adds the acceptances of the project catalogs found in `directory`'s
     /// `.solid-checker/`, applying to the files below `directory` only.
     ///
@@ -277,6 +333,9 @@ impl AcceptedContractIndex {
     /// it, and otherwise as the project-wide tier does.
     #[must_use]
     pub fn admission_refusal_at(&self, importer: &str, specifier: &str) -> Option<&str> {
+        if let Some(view) = self.browser_view_at(importer, specifier) {
+            return view.admission_refusal_at(importer, specifier);
+        }
         self.scopes_for(importer)
             .find_map(|scope| scope.own_admission_refusal(importer, specifier))
             .or_else(|| self.own_admission_refusal(importer, specifier))
@@ -312,6 +371,7 @@ impl AcceptedContractIndex {
             && self.admitted_at.is_empty()
             && self.admission_refusals_at.is_empty()
             && self.scopes.is_empty()
+            && self.inferred_browser.is_none()
         {
             return std::borrow::Cow::Borrowed(self);
         }
@@ -363,6 +423,9 @@ impl AcceptedContractIndex {
         for scope in &mut external.scopes {
             scope.index.retain_external();
         }
+        if let Some(view) = &mut external.inferred_browser {
+            view.contracts.retain_external();
+        }
     }
 
     /// Acceptances a project never imported by name: each one is reachable
@@ -391,6 +454,7 @@ impl AcceptedContractIndex {
         });
         Self {
             imports: BTreeMap::new(),
+            inferred_browser: None,
             by_artifact,
             admitted: BTreeMap::new(),
             admitted_at: BTreeMap::new(),
@@ -448,6 +512,7 @@ impl AcceptedContractIndex {
         identity.sort();
         Ok(Self {
             imports,
+            inferred_browser: None,
             by_artifact,
             admitted: BTreeMap::new(),
             admitted_at: BTreeMap::new(),
@@ -486,6 +551,9 @@ impl AcceptedContractIndex {
         importer: &str,
         specifier: &str,
     ) -> Option<UncertifiableImportReason> {
+        if let Some(view) = self.browser_view_at(importer, specifier) {
+            return view.uncertifiable_reason(importer, specifier);
+        }
         let key = (importer.to_owned(), specifier.to_owned());
         self.scopes_for(importer)
             .chain(std::iter::once(self))
@@ -771,6 +839,13 @@ impl AcceptedContractIndex {
                 hash.update(scope.index.cache_fingerprint());
             }
         }
+        if let Some(view) = &self.inferred_browser {
+            hash.update(b"inferred-browser-host-v1");
+            // Deterministic BTree collections; include config, integration,
+            // source inventory, roots and the final conservative join.
+            hash.update(serde_json::to_vec(&view.hosts).expect("host index is serializable"));
+            hash.update(view.contracts.cache_fingerprint());
+        }
         hash.finalize().into()
     }
 
@@ -780,6 +855,9 @@ impl AcceptedContractIndex {
         specifier: &str,
         identity: &ExportIdentity,
     ) -> Result<AcceptedContractUse<'a>, SemanticQueryError> {
+        if let Some(view) = self.browser_view_at(importer, specifier) {
+            return view.resolve(importer, specifier, identity);
+        }
         let key = (importer.to_owned(), specifier.to_owned());
         let contract = self
             .scopes_for(importer)
@@ -830,6 +908,9 @@ impl AcceptedContractIndex {
         importer: &str,
         specifier: &str,
     ) -> Result<&AcceptedContract, SemanticQueryError> {
+        if let Some(view) = self.browser_view_at(importer, specifier) {
+            return view.contract(importer, specifier);
+        }
         self.scopes_for(importer)
             .find_map(|scope| scope.own_contract(importer, specifier))
             .or_else(|| self.own_contract(importer, specifier))

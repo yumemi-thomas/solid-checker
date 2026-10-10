@@ -1813,6 +1813,24 @@ pub enum TrackedCallbackTiming {
     AfterCall,
 }
 
+/// Invocation trigger, not an execution-role or ownership assertion. Except
+/// DuringCall, every variant needs a separate feasible-delivery premise.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum BrowserCallbackTrigger {
+    DuringCall,
+    ComputationDemand,
+    EffectFlush,
+    ComputationError,
+    OwnerDisposal,
+    Settlement,
+    RenderSelection,
+    DomEvent,
+    TimerTask,
+    AnimationFrame,
+    IdleTask,
+    ContractTrigger,
+}
+
 /// The complete callback contract for one argument of one concrete primitive
 /// call. Consumers ask one question and receive the execution, ownership,
 /// reachability, dormancy, tracking, and callback-parameter source semantics
@@ -1843,11 +1861,28 @@ pub enum RuntimeConfigurationApi {
     HydrationHost,
 }
 
+/// Candidate host booleans. This vocabulary is not authority: the host
+/// consumer must resolve the exact declaration and authenticate every runtime
+/// target under both hosts before supplying the values to syntax predicates.
+pub struct HostBooleanExport {
+    pub module: &'static str,
+    pub export: &'static str,
+    pub version: &'static str,
+    pub client: bool,
+    pub server: bool,
+    pub runtime_targets: &'static [&'static str],
+}
+
 /// One Solid language version's vocabulary.
 ///
 /// Implementors are stateless; a dialect is a set of tables, and every method
 /// is a lookup.
 pub trait Dialect: Sync {
+    /// Exact candidates only. Missing vocabulary supplies no package constant.
+    fn host_boolean_exports(&self) -> &'static [HostBooleanExport] {
+        &[]
+    }
+
     /// Classify an exact canonical declaration file and name-node byte span.
     /// No answer is not a veto: this is a conditional premise, not a census.
     fn runtime_configuration_api(
@@ -2103,6 +2138,55 @@ pub trait Dialect: Sync {
     /// `argument_count` arguments runs during the call, synchronously and
     /// inline: the primitive [runs its callback synchronously](Self::runs_callback_synchronously)
     /// and this slot's row is [`Execution::Inline`].
+    /// A callback slot's invocation trigger under the ordinary runtime
+    /// configuration. Defaults only reuse the proven synchronous slot.
+    fn browser_callback_trigger(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<BrowserCallbackTrigger> {
+        self.synchronous_callback_slot(primitive, argument, argument_count)
+            .then_some(BrowserCallbackTrigger::DuringCall)
+    }
+
+    /// Function children are not invoked merely because a tag is constructed.
+    fn browser_children_trigger(&self, _primitive: Primitive) -> Option<BrowserCallbackTrigger> {
+        None
+    }
+
+    /// Exact reviewed object-member callback slots; no guessed member dispatch.
+    fn browser_callback_member_trigger(
+        &self,
+        _primitive: Primitive,
+        _argument: usize,
+        _argument_count: usize,
+        _member: &str,
+    ) -> Option<BrowserCallbackTrigger> {
+        None
+    }
+
+    /// Options slot whose exact `defer: true` withholds initial delivery of
+    /// this callback. Future dependency demand needs a separate witness.
+    fn browser_callback_defer_options(
+        &self,
+        _primitive: Primitive,
+        _argument: usize,
+    ) -> Option<usize> {
+        None
+    }
+
+    /// A dialect control-flow condition can prove children never selected.
+    fn browser_children_dead(
+        &self,
+        _primitive: Primitive,
+        _when_false: bool,
+        _each_empty: bool,
+        _count_zero: bool,
+    ) -> bool {
+        false
+    }
+
     fn synchronous_callback_slot(
         &self,
         primitive: Primitive,

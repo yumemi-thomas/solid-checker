@@ -90,6 +90,7 @@ function nativeInvocation(command) {
   }
 
   const env = { ...process.env };
+  env.SOLID_CHECKER_RUNTIME_RESOLVER ??= join(packageRoot, "scripts", "runtime-resolver.mjs");
   if (!env.SOLID_TYPEFACTS_BIN) {
     const packagedTypeFacts = packagedBinary("solid-typefacts");
     if (existsSync(packagedTypeFacts)) {

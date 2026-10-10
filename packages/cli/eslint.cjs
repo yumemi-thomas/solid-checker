@@ -1,6 +1,6 @@
 "use strict";
 
-const { existsSync, readFileSync, readdirSync } = require("node:fs");
+const { existsSync, readFileSync, readdirSync, readlinkSync } = require("node:fs");
 const { dirname, isAbsolute, join, parse, resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
@@ -202,6 +202,57 @@ function receiptTrust(config) {
   return { path, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
+// Identity only; native owns recognition and host proof. Inventory/presence is
+// recomputed before every lookup, including directory additions and symlinks.
+// No config execution, second checker run, parser or adapter host policy.
+function inferenceFingerprint(project, runtime) {
+  if (runtime?.target || runtime?.conditions?.length || runtime?.frameworkTransforms?.length ||
+      runtime?.build || runtime?.rendering || runtime?.programBoundary === "open") return null;
+  const directory = dirname(project);
+  const configs = ["ts", "js", "mts", "mjs", "cts", "cjs"].map(ext => `vite.config.${ext}`);
+  if (!["index.html", ...configs].some(name => existsSync(join(directory, name)))) return null;
+  const hash = createHash("sha256");
+  hash.update("inferred-host-inputs-v1\0");
+  const record = (path, bytes, kind = "file") => {
+    hash.update(JSON.stringify([path, kind, bytes.length]));
+    hash.update(bytes);
+  };
+  const file = path => {
+    try { record(path, readFileSync(path)); }
+    catch (error) { record(path, Buffer.from(error.code ?? "unreadable"), "unreadable"); }
+  };
+  const visit = path => {
+    let entries;
+    try { entries = readdirSync(path, { withFileTypes: true }); }
+    catch (error) { record(path, Buffer.from(error.code ?? "unreadable"), "unreadable-directory"); return; }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const child = join(path, entry.name);
+      if ([".git", "node_modules"].includes(entry.name)) continue;
+      if (entry.isSymbolicLink()) {
+        try { record(child, Buffer.from(readlinkSync(child)), "symlink"); }
+        catch (error) { record(child, Buffer.from(error.code ?? "unreadable"), "unreadable-symlink"); }
+      } else if (entry.isDirectory()) {
+        visit(child);
+      } else if (entry.isFile() && /\.(?:[cm]?[jt]sx?|tsrx|json|html)$/.test(entry.name)) {
+        file(child);
+      }
+    }
+  };
+  visit(directory);
+  for (let ancestor = dirname(directory); ; ancestor = dirname(ancestor)) {
+    const path = join(ancestor, "package.json");
+    if (existsSync(path)) file(path);
+    else record(path, Buffer.alloc(0), "absent");
+    if (dirname(ancestor) === ancestor) break;
+  }
+  for (const name of ["package.json", "dist/esm/index.mjs", "dist/cjs/index.cjs"]) {
+    const path = join(directory, "node_modules", "@solidjs", "vite-plugin", name);
+    if (existsSync(path)) file(path);
+    else record(path, Buffer.alloc(0), "absent");
+  }
+  return hash.digest("hex");
+}
+
 function loadSnapshot(context) {
   const config = configuration(context);
   if (config.snapshot != null) return config.snapshot;
@@ -224,6 +275,12 @@ function loadSnapshot(context) {
   const dialect = config.dialect ?? null;
   const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
   const runtime = runtimeConfiguration(config);
+  const runtimeResolution = config.runtimeResolution ?? "off";
+  if (!["required", "off"].includes(runtimeResolution)) {
+    throw new Error("settings.solidChecker.runtimeResolution must be required or off");
+  }
+  const observesRuntime = runtimeResolution === "required" || commandArgs.includes("--runtime-resolution");
+  const inferredHostInputs = inferenceFingerprint(project, runtime);
   const configuredRules = Array.isArray(config.enableRule) ? config.enableRule : [];
   const activeDefaultDisabled = [...(ownedRules.get(contextFilename(context)) ?? [])]
     .filter(rule => manifestEntriesByRule.get(rule)?.defaultEnabled === false);
@@ -237,9 +294,14 @@ function loadSnapshot(context) {
     dialect,
     presets,
     enableRules,
-    runtime
+    runtime,
+    runtimeResolution,
+    inferredHostInputs
   });
-  if (snapshotCache.has(key)) {
+  // Inference now depends on installed transitive plugin bytes. Let native
+  // validate that closure on every request instead of duplicating its resolver
+  // and allowlist in this adapter's in-process cache.
+  if (!observesRuntime && inferredHostInputs === null && snapshotCache.has(key)) {
     const cached = snapshotCache.get(key);
     if (cached instanceof Error) throw cached;
     return cached;
@@ -262,6 +324,7 @@ function loadSnapshot(context) {
     "json"
   ];
   if (dialect) args.push("--dialect", dialect);
+  if (runtimeResolution === "required") args.push("--runtime-resolution", "required");
   if (acceptedContracts) args.push("--accepted-contracts", acceptedContracts);
   if (trust) args.push("--receipt-trust-configuration", trust.path);
   for (const preset of presets) args.push("--preset", preset);
@@ -281,7 +344,11 @@ function loadSnapshot(context) {
   const result = spawnSync(command, args, {
     cwd: dirname(project),
     encoding: "utf8",
-    env: process.env
+    env: {
+      ...process.env,
+      SOLID_CHECKER_RUNTIME_RESOLVER: process.env.SOLID_CHECKER_RUNTIME_RESOLVER
+        ?? join(__dirname, "scripts", "runtime-resolver.mjs")
+    }
   });
   if (result.error) {
     throw failure(`solid-checker adapter could not start analysis: ${result.error.message}`);
@@ -304,6 +371,9 @@ function loadSnapshot(context) {
     throw failure(`solid-checker adapter received invalid JSON: ${error.message}`);
   }
   const notices = stderrNotices(result.stderr);
+  if (inferredHostInputs !== inferenceFingerprint(project, runtime)) {
+    throw failure("solid-checker adapter inferred-host inputs changed during analysis; retry lint");
+  }
   if (notices.length > 0 && snapshot && typeof snapshot === "object") {
     snapshotNotices.set(snapshot, notices);
   }
@@ -340,7 +410,11 @@ function findingMessage(finding) {
   const hint = finding.hint ? `\n\n${finding.hint}` : "";
   const docsUrl = finding.documentationUrl ?? docsUrlsByRule.get(finding.rule);
   const docs = docsUrl ? `\n\nDocs: ${docsUrl}` : "";
-  return `[${finding.id}] ${finding.message}${hint}${docs}`;
+  const host = (finding.evidence ?? [])
+    .filter(step => step.message?.startsWith("inferred browser:"))
+    .map(step => `\n\n${step.message}`)
+    .join("");
+  return `[${finding.id}] ${finding.message}${hint}${host}${docs}`;
 }
 
 function fixForFinding(fixer, finding, sourceCode, filename) {
@@ -507,7 +581,7 @@ const contractNote = {
     type: "suggestion",
     docs: {
       description:
-        "Report solid-checker run notes, such as a project contract catalog withheld for want of receipt trust",
+        "Report solid-checker run notes, including browser-host inference decisions and withheld project contract catalogs",
       recommended: true
     },
     schema: adapterSchema,

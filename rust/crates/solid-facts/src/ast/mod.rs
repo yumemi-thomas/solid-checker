@@ -29,17 +29,20 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 53;
+pub const AST_FACTS_SCHEMA: u32 = 56;
 
 mod binding_references;
 mod class_obligation;
 mod completion_call_cover;
 mod component_value_flow;
 mod emission;
+mod host_call_completion;
 mod host_constants;
+mod host_execution;
 mod import_reexport;
 mod inert_erasure;
 mod inert_javascript;
+mod module_requests;
 mod object_binding;
 mod primitive_completion;
 mod reexport_chain;
@@ -56,6 +59,10 @@ pub use host_constants::{
     HostConstantFold, HostConstantImport, HostConstantScope, exported_boolean_constant,
     fold_host_constant_branches, named_value_imports,
 };
+pub use host_execution::{
+    HostCallSequence, HostConstantIdentity, HostDefaultInitializer, HostExecutionFact,
+    HostExecutionPredicate, HostExecutionSiteKind,
+};
 pub use import_reexport::reexport_only_import_names;
 pub use inert_erasure::{
     ImportFreeErasure, InertErasure, RelativeImportErasure, import_free_erasure, inert_erasure,
@@ -65,6 +72,7 @@ pub use inert_javascript::{
     InertJavaScriptModule, InertJavaScriptRefusal, inert_javascript_module,
     inert_javascript_module_with_export_all,
 };
+pub use module_requests::static_module_requests;
 pub use object_binding::{
     UnwrittenObjectBinding, UnwrittenPrimitiveBinding, unwritten_object_binding,
     unwritten_primitive_binding,
@@ -92,6 +100,22 @@ pub struct AstFacts {
     pub schema: u32,
     pub source: SourceIdentity,
     pub calls: Vec<CallFact>,
+    /// Host-sensitive execution, facts schema 56. Absent old tables confer no
+    /// browser authority. Runtime constant values belong to the host consumer.
+    #[serde(default)]
+    pub host_execution: Vec<HostExecutionFact>,
+    #[serde(default)]
+    pub host_defaults: Vec<HostDefaultInitializer>,
+    #[serde(default)]
+    pub host_call_sequences: Vec<HostCallSequence>,
+    #[serde(default)]
+    pub host_empty_arrays: Vec<Span>,
+    #[serde(default)]
+    pub host_zero_values: Vec<Span>,
+    /// Exact `void 0` runtime values. In particular, an unresolved identifier
+    /// spelled undefined is not positive input-value evidence.
+    #[serde(default)]
+    pub host_undefined_arguments: Vec<Span>,
     pub bindings: Vec<BindingFact>,
     pub functions: Vec<FunctionFact>,
     /// Direct named function declarations, including overload signatures whose
@@ -1496,6 +1520,12 @@ impl AstFacts {
             source,
             span_index: LazySpanIndex::default(),
             calls: Vec::new(),
+            host_execution: Vec::new(),
+            host_defaults: Vec::new(),
+            host_call_sequences: Vec::new(),
+            host_empty_arrays: Vec::new(),
+            host_zero_values: Vec::new(),
+            host_undefined_arguments: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
             function_declarations: Vec::new(),
@@ -1630,10 +1660,20 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
     // GetSymbolAtLocation deliberately returns no symbol for `use:name`.
     // Build Oxc's semantic scope tree once and retain the exact declaration
     // chosen by its binder instead of approximating scope with source text.
-    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let built = SemanticBuilder::new().build(&parsed.program);
+    let execution_semantics_valid = built.errors.is_empty();
+    let semantic = built.semantic;
     let mut collector = Collector::new(source, semantic.scoping());
     collector.visit_program(&parsed.program);
-    Ok(collector.finish(identity))
+    let mut facts = collector.finish(identity);
+    if execution_semantics_valid {
+        (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
+        facts.host_undefined_arguments = host_execution::undefined_values(&semantic);
+        facts.host_call_sequences = host_execution::call_sequences(&semantic);
+        (facts.host_empty_arrays, facts.host_zero_values) =
+            host_execution::empty_and_zero_values(&semantic);
+    }
+    Ok(facts)
 }
 
 struct Collector<'s, 'semantic> {
@@ -1915,6 +1955,12 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             source,
             span_index: LazySpanIndex::default(),
             calls: self.calls,
+            host_execution: Vec::new(),
+            host_defaults: Vec::new(),
+            host_call_sequences: Vec::new(),
+            host_empty_arrays: Vec::new(),
+            host_zero_values: Vec::new(),
+            host_undefined_arguments: Vec::new(),
             bindings: self.bindings,
             functions: self.functions,
             function_declarations: self.function_declarations,

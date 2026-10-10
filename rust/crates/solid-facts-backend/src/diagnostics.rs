@@ -177,6 +177,49 @@ impl Default for DiagnosticSession {
     }
 }
 
+/// Preserve every baseline violation; a stronger host can replace its proof,
+/// but a clean browser view cannot erase a defect of another execution.
+fn merge_host_findings(
+    baseline: &[SnapshotFinding],
+    browser: &[SnapshotFinding],
+    eligible: &impl Fn(&SnapshotFinding) -> bool,
+    reason: &str,
+) -> Vec<SnapshotFinding> {
+    let selected = browser
+        .iter()
+        .filter(|finding| eligible(finding))
+        .collect::<Vec<_>>();
+    let same_claim = |left: &SnapshotFinding, right: &SnapshotFinding| {
+        left.id == right.id
+            && left.rule == right.rule
+            && left.kind == right.kind
+            && left.primary_location.path == right.primary_location.path
+            && left.primary_location.start_byte == right.primary_location.start_byte
+            && left.primary_location.end_byte == right.primary_location.end_byte
+            && left.analysis_context == right.analysis_context
+            && left.subject_kind == right.subject_kind
+    };
+    let mut result = baseline
+        .iter()
+        .filter(|finding| {
+            !eligible(finding)
+                || (finding.kind == "violation"
+                    && !selected
+                        .iter()
+                        .any(|selected| same_claim(finding, selected)))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    result.extend(selected.into_iter().cloned().map(|mut finding| {
+        finding.evidence.push(SnapshotEvidence {
+            message: reason.into(),
+            location: None,
+        });
+        finding
+    }));
+    result
+}
+
 impl DiagnosticSession {
     #[must_use]
     pub fn new(dialect: &'static Dialect) -> Self {
@@ -215,8 +258,103 @@ impl DiagnosticSession {
         contracts: &AcceptedContractIndex,
         enablement: RequestedRuleEnablement<'_>,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        self.analyze_accepted_inner(project, sources, facts, contracts, enablement, true)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn analyze_accepted_inner(
+        &mut self,
+        project: &Path,
+        sources: &[SourceFile],
+        facts: &ProjectFacts,
+        contracts: &AcceptedContractIndex,
+        enablement: RequestedRuleEnablement<'_>,
+        validate_host_inputs: bool,
+    ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        if let Some((baseline, browser)) = contracts.execution_views() {
+            let hosts = contracts
+                .inferred_hosts()
+                .expect("execution views carry hosts");
+            crate::inferred_host::validate_inputs(hosts)?;
+            // The outer transaction validates the complete input generation
+            // before and after both views; nested checks add no new boundary.
+            let (ordinary, mut timings) = self.analyze_accepted_inner(
+                project,
+                sources,
+                facts,
+                &baseline,
+                enablement.clone(),
+                false,
+            )?;
+            // A separate builder/solver owns the browser view. No summary or
+            // admission from this run can replace the ordinary program handed
+            // to certification or the findings of a no-target function body.
+            let (selected, selected_timings) = DiagnosticSession::new(self.dialect)
+                .analyze_accepted_inner(project, sources, facts, &browser, enablement, false)?;
+            let browser_site = |location: &SourceLocation| {
+                hosts.browser_proof_site(&location.path, location.start_byte, location.end_byte)
+            };
+            let browser_proof = |finding: &SnapshotFinding| {
+                browser_site(&finding.primary_location)
+                    && finding
+                        .related_locations
+                        .iter()
+                        .chain(
+                            finding
+                                .evidence
+                                .iter()
+                                .filter_map(|step| step.location.as_ref()),
+                        )
+                        .filter(|location| {
+                            !Path::new(&location.path)
+                                .components()
+                                .any(|part| part.as_os_str() == "node_modules")
+                                && (facts
+                                    .files
+                                    .iter()
+                                    .any(|file| file.path.as_str() == location.path)
+                                    || project.parent().is_some_and(|directory| {
+                                        Path::new(&location.path).starts_with(directory)
+                                    }))
+                        })
+                        .all(browser_site)
+            };
+            let mut snapshot = ordinary.snapshot.clone();
+            snapshot.findings = merge_host_findings(
+                &ordinary.snapshot.findings,
+                &selected.snapshot.findings,
+                &browser_proof,
+                &hosts.manifest.reason,
+            );
+            // Inference changes findings only. Even a clean browser execution
+            // cannot certify the server execution or an explicit target premise.
+            snapshot.status = if snapshot
+                .findings
+                .iter()
+                .any(|finding| finding.kind == "violation")
+            {
+                "violation"
+            } else {
+                "uncertifiable"
+            }
+            .into();
+            crate::inferred_host::validate_inputs(hosts)?;
+            timings.reactive_ir += selected_timings.reactive_ir;
+            timings.solve_and_snapshot += selected_timings.solve_and_snapshot;
+            timings.reused = false;
+            return Ok((
+                Arc::new(DiagnosticAnalysis {
+                    program: Arc::clone(&ordinary.program),
+                    snapshot,
+                }),
+                timings,
+            ));
+        }
         let external_contracts = contracts.external_packages();
         let contracts = external_contracts.as_ref();
+        if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
+            crate::inferred_host::validate_inputs(hosts)?;
+        }
         let ir_started = Instant::now();
         let mut rule_options = discover_rule_options(project)?;
         rule_options.request_presets(enablement.presets.iter().cloned());
@@ -252,6 +390,9 @@ impl DiagnosticSession {
             rule_options: rule_options.clone(),
             release_notice: release_notice.clone(),
         };
+        if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
+            crate::inferred_host::validate_inputs(hosts)?;
+        }
         if let Some(retained) = &self.retained
             && retained.identity == identity
         {
@@ -275,6 +416,9 @@ impl DiagnosticSession {
             findings.push(unaudited_release_finding(notice));
         }
         let metrics = analysis_metrics(facts, &program, contracts);
+        if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
+            crate::inferred_host::validate_inputs(hosts)?;
+        }
         let mut snapshot = snapshot_with_package_summaries(
             sources,
             accepted_package_summaries(facts, contracts),
@@ -3637,6 +3781,38 @@ pub fn discovered_rule_options_path(project_directory: &Path) -> Option<PathBuf>
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn inferred_projection_is_monotone_for_existing_violations() {
+        use super::{SnapshotFinding, merge_host_findings};
+        let finding = |kind: &str| {
+            serde_json::from_value::<SnapshotFinding>(serde_json::json!({
+            "id":"SC4001", "rule":"missing-owner", "kind":kind, "severity":"error", "message":"baseline",
+            "primaryLocation":{"path":"app.ts", "startByte":0, "endByte":1, "line":1, "column":1}
+        })).unwrap()
+        };
+        let baseline = [finding("violation"), finding("uncertifiable")];
+        let kept = merge_host_findings(&baseline, &[], &|_| true, "inferred browser: root");
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].message, "baseline");
+        let selected = merge_host_findings(
+            &baseline,
+            &[finding("violation")],
+            &|_| true,
+            "inferred browser: root",
+        );
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].evidence.len(), 1);
+        let refused = merge_host_findings(
+            &baseline,
+            &[finding("violation")],
+            &|_| false,
+            "inferred browser: root",
+        );
+        assert_eq!(refused.len(), 2);
+        assert!(refused.iter().all(|finding| finding.evidence.is_empty()));
+    }
+
     use std::{path::Path, sync::Arc};
 
     use solid_facts::core::Generation;

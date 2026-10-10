@@ -1,0 +1,12 @@
+{
+  "status": "hand-stated, unrun; compare before recording a findings snapshot",
+  "browserUpgrade": false,
+  "violations": [],
+  "noTarget": [
+    "all source sites"
+  ],
+  "explicitTarget": null,
+  "rule": "missing-owner",
+  "code": "SC4001",
+  "kind": "uncertifiable contract gap"
+}

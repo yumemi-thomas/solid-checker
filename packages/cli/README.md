@@ -231,10 +231,39 @@ client-mode custom `Document`), and for libraries. With SSR (`ssr: true`) the
 App also runs in the browser, so browser findings there are real, but the
 project's server-only files would be analyzed as browser code too.
 
+Without an explicit target, native analysis can infer browser execution for a
+restricted Vite application or workspace leaf: audited client start mode or local
+HTML module entries, with exact executed source edges. Browser authority
+applies to reached top levels and function bodies, including exact local calls,
+literal dynamic imports and reviewed feasible callback triggers (ADR 0270).
+Additional server/test/unknown callers never cancel
+a browser witness; uncalled bodies retain today's no-target analysis.
+Inference evidence names the root in JSON and ESLint/Oxlint messages. Exact
+installed plugin identities and literal config branches are supported under
+closed admission checks. Route manifests never establish page execution. Opaque
+configs, unknown plugins, server routes, SSR and unsupported integration bytes
+keep today's treatment. An explicit target disables inference and still applies
+to the whole project. Inference affects findings only: a clean inferred browser
+scope says nothing about its server execution, and `--certify` keeps requiring
+an explicit target for an inferred application. Contract receipts never use the
+inferred view. See [ADR 0270](../../docs/adr/0270-inferred-browser-host.md).
+
 The adapter discovers the nearest `tsconfig.json`, runs native project analysis
-once, caches its snapshot, and projects matching findings into Oxlint. Set
+and projects matching findings into Oxlint. Inferred requests revalidate native
+plugin inputs before reuse; explicit-target snapshots retain the adapter cache. Set
 `settings.solidChecker.project` when the project uses a nonstandard config name
 or a solution-style root config that only references application configs.
+
+Default import edges require exact local file paths; alias edges additionally
+require congruent Vite/TypeScript mappings. Nothing executes project config.
+An Oxlint JS-plugin user can opt into ADR 0220 client resolver answers with
+`"settings": { "solidChecker": { "runtimeResolution": "required" } }` in
+`.oxlintrc.json`. ESLint uses the same setting; CLI users pass
+`--runtime-resolution required`. This executes project Vite config and client
+resolver hooks, admits agreeing alias/file edges and bypasses cached snapshots.
+Unknown or disagreeing answers retain baseline analysis. The packaged worker is
+supplied automatically; `SOLID_CHECKER_RUNTIME_RESOLVER` overrides it. Resolution
+is serve/development observation, with no automatic production build.
 
 By default the analysis picks its dialect from the `solid-js` version the
 project resolves. This build analyzes **Solid 2.0 only**: a project whose

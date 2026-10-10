@@ -1,0 +1,7 @@
+[
+  {
+    "path": "src/helper.ts",
+    "text": "alias target",
+    "browser": true
+  }
+]

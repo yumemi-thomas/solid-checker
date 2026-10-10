@@ -49,6 +49,8 @@ export interface SolidCheckerSettings {
   dialect?: "solid-v2" | (string & {});
   /** Exact runtime selection used for artifact cases and rendering proofs. */
   runtime?: SolidCheckerRuntimeSettings;
+  /** Opt-in Vite client resolver observation; executes project config. Off by default. */
+  runtimeResolution?: "required" | "off";
   /** Read a canonical JSON snapshot instead of starting an analysis process. */
   snapshotPath?: string;
 }

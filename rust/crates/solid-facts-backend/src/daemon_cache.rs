@@ -26,6 +26,10 @@ pub(crate) struct CachedAnswer {
     /// each one's manifest and lockfiles.
     pub(crate) install_lookups: Vec<(PathBuf, String)>,
     pub(crate) contract_files: Vec<ContractFile>,
+    /// The inference closure observed before analysis, including absent probes
+    /// and directory/symlink identities. Rehash it on reuse; do not rediscover
+    /// or reparse the application for an unchanged answer.
+    pub(crate) inference_inputs: Vec<ContractFile>,
     pub(crate) presets: Vec<String>,
     pub(crate) enable_rules: Vec<String>,
     pub(crate) runtime: RuntimeEnvironment,
@@ -71,6 +75,7 @@ mod tests {
             catalog_scopes: vec![PathBuf::from("packages/a")],
             install_lookups: vec![(PathBuf::from("packages/a"), "pkg".into())],
             contract_files: vec![(PathBuf::from("solid-reactivity.json"), [7; 32])],
+            inference_inputs: Vec::new(),
             presets: vec!["preferences".into()],
             enable_rules: vec!["prefer-show".into()],
             runtime: RuntimeEnvironment::default(),

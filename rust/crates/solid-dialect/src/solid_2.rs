@@ -6989,6 +6989,24 @@ static NEGATIVE_AUTHORITY: DialectNegativeAuthority = DialectNegativeAuthority {
 };
 
 impl Dialect for Solid2 {
+    fn host_boolean_exports(&self) -> &'static [crate::HostBooleanExport] {
+        &[crate::HostBooleanExport {
+            module: "@solidjs/web",
+            export: "isServer",
+            version: "2.0.0-rc.13",
+            client: false,
+            server: true,
+            runtime_targets: &[
+                "dist/web.js",
+                "dist/web.dev.js",
+                "dist/web.observe.js",
+                "dist/server.js",
+                "dist/server.dev.js",
+                "dist/server.observe.js",
+            ],
+        }]
+    }
+
     fn runtime_configuration_api(
         &self,
         path: &str,
@@ -7974,6 +7992,95 @@ impl Dialect for Solid2 {
         primitive == Primitive::Merge
     }
 
+    /// Reuses the audited slot and schedule facts below. Deferred slots retain
+    /// their exact trigger; registration alone cannot establish delivery.
+    fn browser_callback_trigger(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<crate::BrowserCallbackTrigger> {
+        use crate::BrowserCallbackTrigger as Trigger;
+        self.callback_execution_at(primitive, argument, argument_count)?;
+        // The public MemoOptions excludes lazy, but JS and an assertion can
+        // still pass it to computed(compute, options). No option object is
+        // proved by an argument-count-only question.
+        if primitive == Primitive::CreateMemo && argument == 0 && argument_count > 1 {
+            return Some(Trigger::ComputationDemand);
+        }
+        if self.synchronous_callback_slot(primitive, argument, argument_count) {
+            return Some(Trigger::DuringCall);
+        }
+        match (primitive, argument) {
+            (
+                Primitive::CreateMemo | Primitive::CreateEffect | Primitive::CreateRenderEffect,
+                0,
+            ) if self.tracked_callback_timing(primitive, argument, argument_count)
+                == Some(TrackedCallbackTiming::DuringCall) =>
+            {
+                Some(Trigger::DuringCall)
+            }
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
+            | (Primitive::CreateTrackedEffect, 0) => Some(Trigger::EffectFlush),
+            (Primitive::OnCleanup, 0) => Some(Trigger::OwnerDisposal),
+            (Primitive::OnSettled, 0) => Some(Trigger::Settlement),
+            _ => None,
+        }
+    }
+
+    fn browser_children_trigger(
+        &self,
+        primitive: Primitive,
+    ) -> Option<crate::BrowserCallbackTrigger> {
+        (self.renders_children_through_callback(primitive)
+            || matches!(primitive, Primitive::Loading | Primitive::Errored))
+        .then_some(crate::BrowserCallbackTrigger::RenderSelection)
+    }
+
+    fn browser_callback_member_trigger(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+        member: &str,
+    ) -> Option<crate::BrowserCallbackTrigger> {
+        (matches!(
+            primitive,
+            Primitive::CreateEffect | Primitive::CreateRenderEffect
+        ) && argument == 1
+            && argument_count >= 2
+            && matches!(member, "effect" | "error"))
+        .then_some(if member == "error" {
+            crate::BrowserCallbackTrigger::ComputationError
+        } else {
+            crate::BrowserCallbackTrigger::EffectFlush
+        })
+    }
+
+    fn browser_callback_defer_options(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> Option<usize> {
+        (matches!(
+            primitive,
+            Primitive::CreateEffect | Primitive::CreateRenderEffect
+        ) && argument == 1)
+            .then_some(2)
+    }
+
+    fn browser_children_dead(
+        &self,
+        primitive: Primitive,
+        when_false: bool,
+        each_empty: bool,
+        count_zero: bool,
+    ) -> bool {
+        (when_false && matches!(primitive, Primitive::Show | Primitive::Match))
+            || (each_empty && primitive == Primitive::For)
+            || (count_zero && primitive == Primitive::Repeat)
+    }
+
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)] {
         match primitive {
             Primitive::CreateMemo
@@ -8775,6 +8882,87 @@ const NAMESPACE_SOLIDJS_WEB: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_callback_triggers_keep_registration_separate_from_delivery() {
+        use crate::BrowserCallbackTrigger as Trigger;
+        let dialect = Solid2::default();
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::Untrack, 0, 1),
+            Some(Trigger::DuringCall)
+        );
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::CreateRoot, 0, 1),
+            Some(Trigger::DuringCall)
+        );
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::CreateMemo, 0, 1),
+            Some(Trigger::DuringCall)
+        );
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::CreateMemo, 0, 2),
+            Some(Trigger::ComputationDemand)
+        );
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::CreateEffect, 0, 2),
+            Some(Trigger::DuringCall)
+        );
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::CreateEffect, 1, 2),
+            Some(Trigger::EffectFlush)
+        );
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::OnCleanup, 0, 1),
+            Some(Trigger::OwnerDisposal)
+        );
+        assert_eq!(
+            dialect.browser_callback_defer_options(Primitive::CreateEffect, 1),
+            Some(2)
+        );
+        assert_eq!(
+            dialect.browser_callback_defer_options(Primitive::CreateEffect, 0),
+            None
+        );
+        assert_eq!(
+            dialect.browser_callback_member_trigger(Primitive::CreateEffect, 1, 2, "error"),
+            Some(Trigger::ComputationError)
+        );
+        assert_eq!(
+            dialect.browser_callback_member_trigger(Primitive::CreateEffect, 1, 2, "effect"),
+            Some(Trigger::EffectFlush)
+        );
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::OnSettled, 0, 1),
+            Some(Trigger::Settlement)
+        );
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::Lazy, 0, 1),
+            None
+        );
+        assert_eq!(
+            dialect.browser_callback_trigger(Primitive::CreateEffect, 2, 2),
+            None
+        );
+        for primitive in [
+            Primitive::For,
+            Primitive::Repeat,
+            Primitive::Show,
+            Primitive::Switch,
+            Primitive::Match,
+            Primitive::Loading,
+            Primitive::Errored,
+        ] {
+            assert_eq!(
+                dialect.browser_children_trigger(primitive),
+                Some(Trigger::RenderSelection)
+            );
+        }
+        assert!(dialect.browser_children_dead(Primitive::Show, true, false, false));
+        assert!(!dialect.browser_children_dead(Primitive::Show, false, false, false));
+        assert!(!dialect.browser_children_dead(Primitive::For, true, false, false));
+        assert!(dialect.browser_children_dead(Primitive::For, false, true, false));
+        assert!(dialect.browser_children_dead(Primitive::Repeat, false, false, true));
+    }
 
     /// The package-contract words this dialect states, pinned exactly.
     ///
