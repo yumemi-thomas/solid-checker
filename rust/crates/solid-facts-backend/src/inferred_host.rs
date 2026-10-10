@@ -2855,13 +2855,42 @@ fn discovered_index_with_inputs(
                     "unresolved static module request",
                 );
             } else if row.resolution == ImportResolution::NodeModules {
+                let mut package_inputs = Vec::new();
                 if packages.is_none() {
-                    // Provisional discovery optimistically admits this edge.
-                    // Its installed-load proof and fingerprints cannot affect
-                    // that graph, and are required by the final pass instead.
+                    // The provisional graph schedules package analysis; its
+                    // optimistic edges are not final linking authority. Even
+                    // here a selected non-executable loader cannot be admitted.
+                    let unsupported_loader = crate::host_loadable::candidates(
+                        Path::new(path),
+                        text,
+                        &mut package_inputs,
+                    )
+                    .is_some_and(|(_, _, entries)| {
+                        !entries
+                            .iter()
+                            .all(|entry| crate::host_loadable::executable_entry(entry))
+                    });
+                    for input in package_inputs {
+                        let key = input
+                            .to_str()
+                            .required(&input, "non-UTF-8 provisional package input")?
+                            .to_owned();
+                        manifest.inputs.insert(
+                            key,
+                            identity(&input)
+                                .required(&input, "cannot fingerprint provisional package input")?,
+                        );
+                    }
+                    if unsupported_loader {
+                        module.refused = true;
+                        blocked_imports.insert((path.into(), text.into()));
+                        withheld_loads.insert(
+                            (path.to_owned(), text.to_owned()),
+                            "canonical installed package entry uses an unproved Vite loader",
+                        );
+                    }
                     continue;
                 }
-                let mut package_inputs = Vec::new();
                 let entries = crate::host_loadable::loadable(
                     Path::new(path),
                     text,
@@ -3724,31 +3753,32 @@ mod tests {
             let cases: serde_json::Value =
                 serde_json::from_slice(&fs::read(directory.join("host-cases.json")).unwrap())
                     .unwrap();
+            let mut mismatches = Vec::new();
             for case in cases.as_array().unwrap() {
                 let path = directory.join(case["path"].as_str().unwrap());
                 let source = fs::read_to_string(&path).unwrap();
                 let text = case["text"].as_str().unwrap();
                 let start = u64::try_from(source.find(text).unwrap()).unwrap();
-                assert_eq!(
-                    index.browser_site(
+                let actual = index.browser_site(
+                    path.to_str().unwrap(),
+                    start,
+                    start + u64::try_from(text.len()).unwrap(),
+                );
+                if actual != case["browser"].as_bool().unwrap() {
+                    mismatches.push(format!("{name}: {case}; browser actual={actual}"));
+                }
+                if let Some(proof) = case.get("proof").and_then(serde_json::Value::as_bool) {
+                    let actual = index.browser_proof_site(
                         path.to_str().unwrap(),
                         start,
-                        start + u64::try_from(text.len()).unwrap()
-                    ),
-                    case["browser"].as_bool().unwrap(),
-                    "{name}: {case}"
-                );
-                if let Some(proof) = case.get("proof").and_then(serde_json::Value::as_bool) {
-                    assert_eq!(
-                        index.browser_proof_site(
-                            path.to_str().unwrap(),
-                            start,
-                            start + u64::try_from(text.len()).unwrap()
-                        ),
-                        proof
+                        start + u64::try_from(text.len()).unwrap(),
                     );
+                    if actual != proof {
+                        mismatches.push(format!("{name}: {case}; proof actual={actual}"));
+                    }
                 }
             }
+            assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
             if name == "reachability" || name == "alias-divergent" {
                 use solid_facts::runtime_resolution::{RuntimeOutcome, RuntimeResolutionIndex};
                 let importer = directory.join(if name == "reachability" {

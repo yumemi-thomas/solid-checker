@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::host_call_completion::{
-    State as CallState, argument_completion, assignment_completion, expression_completion,
+    State as CallState, argument_completion, assignment_completion, declarator_completion,
+    expression_completion, primitive_conversion, static_member_completion, variable_completion,
 };
 use crate::core::Span;
 
@@ -92,8 +93,8 @@ pub enum HostExecutionPredicate {
     All(Vec<Self>),
     Any(Vec<Self>),
     /// A call continuation is feasible if the call returns (ADR 0270 A).
-    /// Only a certain synchronous exit can make it dead; missing constants
-    /// and bounded/unsupported completion never assert certain non-return.
+    /// Recognized ordinary invocation uses premise A; a certain synchronous
+    /// exit is dead. Unsupported eager forms/bodies remain unproved here.
     CallCompletion(Box<Self>),
 }
 
@@ -105,7 +106,7 @@ impl HostExecutionPredicate {
             Self::Live => Some(true),
             Self::Dead => Some(false),
             Self::Unknown => None,
-            Self::CallCompletion(predicate) => Some(predicate.evaluate(value) != Some(false)),
+            Self::CallCompletion(predicate) => predicate.evaluate(value),
             Self::Constant { identity, expected } => {
                 value(identity).map(|value| value == *expected)
             }
@@ -644,12 +645,9 @@ fn completion_inner<'a>(
         Statement::ExpressionStatement(statement) => {
             expression_completion(semantic, &statement.expression, &mut state.calls)
         }
-        Statement::VariableDeclaration(statement) => all(statement
-            .declarations
-            .iter()
-            .filter_map(|declaration| declaration.init.as_ref())
-            .map(|value| expression_completion(semantic, value, &mut state.calls))
-            .collect()),
+        Statement::VariableDeclaration(statement) => {
+            variable_completion(semantic, statement, &mut state.calls)
+        }
         Statement::BlockStatement(block) => {
             let mut result = HostExecutionPredicate::Live;
             for item in &block.body {
@@ -664,27 +662,34 @@ fn completion_inner<'a>(
             result
         }
         Statement::ExportNamedDeclaration(export) => match export.declaration.as_ref() {
-            Some(oxc_ast::ast::Declaration::VariableDeclaration(declaration)) => all(declaration
-                .declarations
-                .iter()
-                .filter_map(|item| item.init.as_ref())
-                .map(|value| expression_completion(semantic, value, &mut state.calls))
-                .collect()),
+            Some(oxc_ast::ast::Declaration::VariableDeclaration(declaration)) => {
+                variable_completion(semantic, declaration, &mut state.calls)
+            }
             Some(oxc_ast::ast::Declaration::ClassDeclaration(class)) => {
                 class_completion(semantic, class, depth, state)
             }
             Some(oxc_ast::ast::Declaration::TSModuleDeclaration(_)) => {
                 HostExecutionPredicate::Unknown
             }
-            _ => HostExecutionPredicate::Live,
+            None
+            | Some(
+                oxc_ast::ast::Declaration::FunctionDeclaration(_)
+                | oxc_ast::ast::Declaration::TSTypeAliasDeclaration(_)
+                | oxc_ast::ast::Declaration::TSInterfaceDeclaration(_),
+            ) => HostExecutionPredicate::Live,
+            _ => HostExecutionPredicate::Unknown,
         },
         Statement::ExportDefaultDeclaration(export) => match &export.declaration {
             oxc_ast::ast::ExportDefaultDeclarationKind::ClassDeclaration(class) => {
                 class_completion(semantic, class, depth, state)
             }
+            oxc_ast::ast::ExportDefaultDeclarationKind::FunctionDeclaration(_)
+            | oxc_ast::ast::ExportDefaultDeclarationKind::TSInterfaceDeclaration(_) => {
+                HostExecutionPredicate::Live
+            }
             declaration => declaration
                 .as_expression()
-                .map_or(HostExecutionPredicate::Live, |value| {
+                .map_or(HostExecutionPredicate::Unknown, |value| {
                     expression_completion(semantic, value, &mut state.calls)
                 }),
         },
@@ -727,7 +732,15 @@ fn completion_inner<'a>(
         | Statement::ContinueStatement(_)
         | Statement::TSModuleDeclaration(_)
         | Statement::WithStatement(_) => HostExecutionPredicate::Unknown,
-        _ => HostExecutionPredicate::Live,
+        Statement::EmptyStatement(_)
+        | Statement::FunctionDeclaration(_)
+        | Statement::ImportDeclaration(_)
+        | Statement::ExportAllDeclaration(_)
+        | Statement::TSTypeAliasDeclaration(_)
+        | Statement::TSInterfaceDeclaration(_)
+        | Statement::TSGlobalDeclaration(_)
+        | Statement::TSNamespaceExportDeclaration(_) => HostExecutionPredicate::Live,
+        _ => HostExecutionPredicate::Unknown,
     }
 }
 
@@ -860,12 +873,14 @@ fn composite_completion_inner<'a>(
             .elements
             .iter()
             .map(|item| match item {
-                oxc_ast::ast::ArrayExpressionElement::SpreadElement(spread) => {
-                    expression_completion(semantic, &spread.argument, &mut state.calls)
-                }
+                oxc_ast::ast::ArrayExpressionElement::SpreadElement(spread) => all(vec![
+                    expression_completion(semantic, &spread.argument, &mut state.calls),
+                    HostExecutionPredicate::Unknown,
+                ]),
+                oxc_ast::ast::ArrayExpressionElement::Elision(_) => HostExecutionPredicate::Live,
                 _ => item
                     .as_expression()
-                    .map_or(HostExecutionPredicate::Live, |value| {
+                    .map_or(HostExecutionPredicate::Unknown, |value| {
                         expression_completion(semantic, value, &mut state.calls)
                     }),
             })
@@ -874,17 +889,21 @@ fn composite_completion_inner<'a>(
             .properties
             .iter()
             .map(|item| match item {
-                oxc_ast::ast::ObjectPropertyKind::SpreadProperty(spread) => {
-                    expression_completion(semantic, &spread.argument, &mut state.calls)
-                }
+                oxc_ast::ast::ObjectPropertyKind::SpreadProperty(spread) => all(vec![
+                    expression_completion(semantic, &spread.argument, &mut state.calls),
+                    HostExecutionPredicate::Unknown,
+                ]),
                 oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property) => all(vec![
                     if property.computed {
-                        property
-                            .key
-                            .as_expression()
-                            .map_or(HostExecutionPredicate::Live, |value| {
-                                expression_completion(semantic, value, &mut state.calls)
-                            })
+                        property.key.as_expression().map_or(
+                            HostExecutionPredicate::Unknown,
+                            |value| {
+                                all(vec![
+                                    expression_completion(semantic, value, &mut state.calls),
+                                    primitive_conversion(value),
+                                ])
+                            },
+                        )
                     } else {
                         HostExecutionPredicate::Live
                     },
@@ -895,24 +914,19 @@ fn composite_completion_inner<'a>(
         AstKind::TemplateLiteral(expression) => Some(all(expression
             .expressions
             .iter()
-            .map(|value| expression_completion(semantic, value, &mut state.calls))
+            .map(|value| {
+                all(vec![
+                    expression_completion(semantic, value, &mut state.calls),
+                    primitive_conversion(value),
+                ])
+            })
             .collect())),
         AstKind::AssignmentExpression(expression) => Some(assignment_completion(
             semantic,
             expression,
             &mut state.calls,
         )),
-        AstKind::TaggedTemplateExpression(expression) => Some(all(std::iter::once(
-            expression_completion(semantic, &expression.tag, &mut state.calls),
-        )
-        .chain(
-            expression
-                .quasi
-                .expressions
-                .iter()
-                .map(|value| expression_completion(semantic, value, &mut state.calls)),
-        )
-        .collect())),
+        AstKind::TaggedTemplateExpression(_) => Some(HostExecutionPredicate::Unknown),
         _ => None,
     }
 }
@@ -1045,6 +1059,14 @@ fn execution_inner<'a>(
                 if declaration.declarations.len() > WIDTH {
                     return (None, HostExecutionPredicate::Unknown);
                 }
+                if !matches!(
+                    declaration.kind,
+                    oxc_ast::ast::VariableDeclarationKind::Var
+                        | oxc_ast::ast::VariableDeclarationKind::Let
+                        | oxc_ast::ast::VariableDeclarationKind::Const
+                ) {
+                    conditions.push(HostExecutionPredicate::Unknown);
+                }
                 for item in &declaration.declarations {
                     if is(item.span) {
                         break;
@@ -1052,10 +1074,25 @@ fn execution_inner<'a>(
                     if may_suspend(suspensions, item.span) {
                         conditions.push(HostExecutionPredicate::Unknown);
                     }
-                    if let Some(value) = &item.init {
-                        conditions.push(expression_completion(semantic, value, &mut state.calls));
-                    }
+                    conditions.push(declarator_completion(semantic, item, &mut state.calls));
                 }
+            }
+            AstKind::UnaryExpression(expression)
+                if !matches!(
+                    expression.operator,
+                    UnaryOperator::LogicalNot | UnaryOperator::Void | UnaryOperator::Typeof
+                ) =>
+            {
+                conditions.push(HostExecutionPredicate::Unknown)
+            }
+            AstKind::BinaryExpression(expression)
+                if !matches!(
+                    expression.operator,
+                    oxc_ast::ast::BinaryOperator::StrictEquality
+                        | oxc_ast::ast::BinaryOperator::StrictInequality
+                ) =>
+            {
+                conditions.push(HostExecutionPredicate::Unknown)
             }
             AstKind::BinaryExpression(expression) if is(expression.right.span()) => {
                 if may_suspend(suspensions, expression.left.span()) {
@@ -1134,6 +1171,7 @@ fn execution_inner<'a>(
                 }
             }
             AstKind::NewExpression(call) => {
+                conditions.push(HostExecutionPredicate::Unknown);
                 if call.arguments.len() > WIDTH {
                     return (None, HostExecutionPredicate::Unknown);
                 }
@@ -1162,7 +1200,14 @@ fn execution_inner<'a>(
             {
                 conditions.push(HostExecutionPredicate::Unknown)
             }
-            AstKind::ChainExpression(_)
+            AstKind::UpdateExpression(_)
+            | AstKind::AwaitExpression(_)
+            | AstKind::YieldExpression(_)
+            | AstKind::SpreadElement(_)
+            | AstKind::ImportExpression(_)
+            | AstKind::PrivateInExpression(_)
+            | AstKind::PrivateFieldExpression(_)
+            | AstKind::ChainExpression(_)
             | AstKind::Class(_)
             | AstKind::TSModuleBlock(_)
             | AstKind::TryStatement(_)
@@ -1174,7 +1219,29 @@ fn execution_inner<'a>(
             | AstKind::DoWhileStatement(_)
             | AstKind::SwitchStatement(_)
             | AstKind::WithStatement(_) => conditions.push(HostExecutionPredicate::Unknown),
-            _ => {}
+            AstKind::ExpressionStatement(_)
+            | AstKind::ReturnStatement(_)
+            | AstKind::ThrowStatement(_)
+            | AstKind::VariableDeclarator(_)
+            | AstKind::ObjectProperty(_)
+            | AstKind::StaticMemberExpression(_)
+            | AstKind::ComputedMemberExpression(_)
+            | AstKind::UnaryExpression(_)
+            | AstKind::LogicalExpression(_)
+            | AstKind::ParenthesizedExpression(_)
+            | AstKind::TSAsExpression(_)
+            | AstKind::TSSatisfiesExpression(_)
+            | AstKind::TSTypeAssertion(_)
+            | AstKind::TSNonNullExpression(_)
+            | AstKind::TSInstantiationExpression(_)
+            | AstKind::ExportDefaultDeclaration(_)
+            | AstKind::ExportNamedDeclaration(_)
+            | AstKind::JSXExpressionContainer(_)
+            | AstKind::JSXAttribute(_)
+            | AstKind::JSXOpeningElement(_)
+            | AstKind::JSXElement(_)
+            | AstKind::JSXFragment(_) => {}
+            _ => conditions.push(HostExecutionPredicate::Unknown),
         }
         // Include the child-to-parent edge first: the predicate of an if node
         // itself does not include the test controlling its consequent.
@@ -1356,6 +1423,26 @@ fn host_execution_with_state(
         // Composite expressions lack a separately indexed sibling-order table.
         // Conservatively gate their entire projection on bounded completion;
         // separate-statement prefixes and the exiting call itself stay eligible.
+        if let AstKind::CallExpression(call) = node.kind() {
+            predicate = all(vec![
+                predicate,
+                expression_completion(semantic, &call.callee, &mut state.calls),
+                all(call
+                    .arguments
+                    .iter()
+                    .map(|argument| argument_completion(semantic, argument, &mut state.calls))
+                    .collect()),
+            ]);
+        }
+        match node.kind() {
+            AstKind::StaticMemberExpression(member) => {
+                predicate = all(vec![predicate, static_member_completion(member)])
+            }
+            AstKind::ComputedMemberExpression(_) | AstKind::PrivateFieldExpression(_) => {
+                predicate = all(vec![predicate, HostExecutionPredicate::Unknown])
+            }
+            _ => {}
+        }
         let composite = composite_completion(semantic, node.kind(), state);
         if let Some(completion) = composite {
             predicate = all(vec![predicate, completion]);
@@ -1417,6 +1504,147 @@ fn host_execution_with_state(
 mod tests {
     use super::*;
     use crate::ast::extract;
+
+    #[test]
+    fn every_oxc_statement_variant_has_an_explicit_completion_classification() {
+        let samples = [
+            ("BlockStatement", "{const x=1;}", Some(true)),
+            ("BreakStatement", "while(true){break;}", None),
+            ("ContinueStatement", "while(true){continue;}", None),
+            ("DebuggerStatement", "debugger;", None),
+            ("DoWhileStatement", "do {} while(false);", None),
+            ("EmptyStatement", ";", Some(true)),
+            ("ExpressionStatement", "1;", Some(true)),
+            ("ForInStatement", "for(const x in {}){}", None),
+            ("ForOfStatement", "for(const x of []){}", None),
+            ("ForStatement", "for(;;){}", None),
+            ("IfStatement", "if(true){}", Some(true)),
+            ("LabeledStatement", "label: {};", None),
+            ("ReturnStatement", "return 0;", Some(false)),
+            ("SwitchStatement", "switch(0){}", None),
+            ("ThrowStatement", "throw 0;", Some(false)),
+            ("TryStatement", "try{}catch{}", None),
+            ("WhileStatement", "while(false){}", None),
+            ("WithStatement", "with({}){}", None),
+            ("VariableDeclaration", "const x=1;", Some(true)),
+            ("FunctionDeclaration", "function normal(){}", Some(true)),
+            ("ClassDeclaration", "class Normal{}", Some(true)),
+            ("TSTypeAliasDeclaration", "type X=number;", Some(true)),
+            ("TSInterfaceDeclaration", "interface X{}", Some(true)),
+            ("TSEnumDeclaration", "enum X{A}", None),
+            ("TSModuleDeclaration", "namespace X{}", None),
+            (
+                "TSGlobalDeclaration",
+                "declare global {interface X{}}",
+                Some(true),
+            ),
+            ("TSImportEqualsDeclaration", "import X=require('x');", None),
+            ("ImportDeclaration", "import 'x';", Some(true)),
+            ("ExportAllDeclaration", "export * from 'x';", Some(true)),
+            ("ExportDefaultDeclaration", "export default 1;", Some(true)),
+            ("ExportNamedDeclaration", "export const x=1;", Some(true)),
+            ("TSExportAssignment", "export = 1;", None),
+            (
+                "TSNamespaceExportDeclaration",
+                "export as namespace X;",
+                Some(true),
+            ),
+        ];
+        let mut variants = std::collections::HashSet::new();
+        for (variant, source, expected) in samples {
+            let allocator = oxc_allocator::Allocator::default();
+            let parsed = oxc_parser::Parser::new(
+                &allocator,
+                source,
+                oxc_span::SourceType::ts().with_module(variant != "WithStatement"),
+            )
+            .with_options(oxc_parser::ParseOptions {
+                allow_return_outside_function: true,
+                ..Default::default()
+            })
+            .parse();
+            assert!(parsed.errors.is_empty(), "{source}: {:?}", parsed.errors);
+            let built = oxc_semantic::SemanticBuilder::new().build(&parsed.program);
+            let mut statement = &parsed.program.body[0];
+            if matches!(variant, "BreakStatement" | "ContinueStatement") {
+                let Statement::WhileStatement(item) = statement else {
+                    panic!("{source}")
+                };
+                let Statement::BlockStatement(block) = &item.body else {
+                    panic!("{source}")
+                };
+                statement = &block.body[0];
+            }
+            assert!(
+                format!("{statement:?}").starts_with(variant),
+                "{variant}: {statement:?}"
+            );
+            assert!(variants.insert(format!("{:?}", std::mem::discriminant(statement))));
+            assert_eq!(
+                completion(
+                    &built.semantic,
+                    &[],
+                    statement,
+                    0,
+                    &mut ExtractionState::new()
+                )
+                .evaluate(&|_| None),
+                expected,
+                "{variant}: {source}"
+            );
+        }
+        assert_eq!(variants.len(), 33);
+    }
+
+    #[test]
+    fn completion_allowlist_withholds_unsupported_forms_in_every_eager_position() {
+        let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../../../fixtures/reactive-ir/inferred-host-spa/completion-cases.json"
+        ))
+        .unwrap();
+        for case in cases {
+            for form in ["{};", "const result={};", "consume({});"] {
+                let source = format!(
+                    "prefix(); {}; function consume(value:unknown){{}} {} closed();",
+                    case["declaration"].as_str().unwrap(),
+                    form.replace("{}", case["expression"].as_str().unwrap())
+                );
+                assert_eq!(observed(&source, "prefix()", false), Some(true), "{source}");
+                assert_eq!(
+                    observed(&source, "closed()", false),
+                    case["normal"].as_bool(),
+                    "{source}"
+                );
+                let (facts, _, _, _, _) = measured(&source, false);
+                assert_eq!(
+                    facts
+                        .iter()
+                        .find(|fact| fact.kind == HostExecutionSiteKind::ModuleCompletion)
+                        .unwrap()
+                        .predicate
+                        .evaluate(&|_| None),
+                    case["normal"].as_bool(),
+                    "{source}"
+                );
+            }
+        }
+        for source in [
+            "let selected=true; selected &&= closed();",
+            "let selected=false; selected ||= closed();",
+            "let selected=null; selected ??= closed();",
+            "let selected=false; selected &&= closed();",
+            "let selected=true; selected ||= closed();",
+            "class A{} ++new A()[closed()];",
+            "function tag(){} tag`${closed()}`;",
+            "({...[closed()]});",
+            "delete ({})[closed()];",
+            "const value={get x(){throw 0}}; const {x}=value, y=closed();",
+            "const value=[1]; const [x]=value, y=closed();",
+            "using value=closed();",
+        ] {
+            assert_eq!(observed(source, "closed()", false), None, "{source}");
+        }
+    }
 
     fn measured(
         source: &str,
@@ -1485,12 +1713,12 @@ mod tests {
         assert_eq!(overflow.evaluate(&|_| Some(false)), None);
         assert_eq!(
             HostExecutionPredicate::CallCompletion(Box::new(overflow)).evaluate(&|_| None),
-            Some(true)
+            None
         );
         // Literal specializations must not reuse a non-return proof for a
         // different invocation environment.
         let source = "function local(flag:boolean){if(flag)throw 0} local(true); function caller(){local(false);open()}";
-        assert_eq!(observed(source, "open()", false), Some(true));
+        assert_eq!(observed(source, "open()", false), None);
         let source = format!(
             "if({}import.meta.env.SSR{}) closed();",
             "(".repeat(100),
@@ -1653,7 +1881,6 @@ mod tests {
             "function stop(){throw 0} stop()[closed()];",
             "function stop(){throw 0} outer(...stop()); closed();",
             "function stop(){throw 0} outer(...stop(),closed());",
-            "function stop(){throw 0} tag`${stop()}`; closed();",
             "import {isServer as ssr} from '@solidjs/web'; function stop(){if(!ssr) throw 0} stop(); closed();",
         ] {
             assert_eq!(observed(source, "closed()", false), Some(false), "{source}");
@@ -1664,21 +1891,27 @@ mod tests {
             "function stop(){if(flag) return; throw 0} stop(); closed();",
             "function stop(x:boolean){if(x) throw 0} stop(false); closed();",
             "function stop(x:boolean){if(x) throw 0} stop(flag); closed();",
-            "function stop(x:boolean){x=false;if(x) throw 0} stop(true); closed();",
-            "function stop(x=flag){if(x) throw 0} stop(); closed();",
-            "function stop(){while(true){break}} stop(); closed();",
-            "async function stop(){if(true) throw 0} stop(); closed();",
+            "async function stop(){throw 0} stop(); closed();",
             "function* stop(){throw 0} stop(); closed();",
-            "function stop(){stop();throw 0} stop(); closed();",
-            "function a(){b();throw 0} function b(){a()} a(); closed();",
-            "function a(){b()} function b(){c()} function c(){d()} function d(){e()} function e(){throw 0} a(); closed();",
-            "const obj={stop(){throw 0}}; obj.stop(); closed();",
-            "declare const process:{exit():never}; process.exit(); closed();",
             "unknownCall(); closed();",
             "let stop=()=>{throw 0}; stop=()=>{}; stop(); closed();",
             "function stop(){throw 0} false && stop(); closed();",
         ] {
             assert_eq!(observed(source, "closed()", false), Some(true), "{source}");
+        }
+        for source in [
+            "function stop(){throw 0} tag`${stop()}`; closed();",
+            "async function stop(){if(true) throw 0} stop(); closed();",
+            "function stop(x:boolean){x=false;if(x) throw 0} stop(true); closed();",
+            "function stop(x=flag){if(x) throw 0} stop(); closed();",
+            "function stop(){while(true){break}} stop(); closed();",
+            "function stop(){stop();throw 0} stop(); closed();",
+            "function a(){b();throw 0} function b(){a()} a(); closed();",
+            "function a(){b()} function b(){c()} function c(){d()} function d(){e()} function e(){throw 0} a(); closed();",
+            "const obj={stop(){throw 0}}; obj.stop(); closed();",
+            "declare const process:{exit():never}; process.exit(); closed();",
+        ] {
+            assert_eq!(observed(source, "closed()", false), None, "{source}");
         }
         let source = "function stop(){if(!import.meta.env.SSR) throw 0} stop(); closed();";
         assert_eq!(observed(source, "closed()", true), Some(true));
@@ -1704,16 +1937,16 @@ mod tests {
             "function stop(){{{} throw 0}} stop(); closed();",
             "void 0;".repeat(300)
         );
-        assert_eq!(observed(&source, "closed()", false), Some(true));
+        assert_eq!(observed(&source, "closed()", false), None);
         let source = format!(
             "function stop(){{/*{}*/ throw 0}} stop(); closed();",
             "x".repeat(9000)
         );
-        assert_eq!(observed(&source, "closed()", false), Some(true));
+        assert_eq!(observed(&source, "closed()", false), None);
         assert_eq!(
             HostExecutionPredicate::CallCompletion(Box::new(HostExecutionPredicate::Unknown))
                 .evaluate(&|_| None),
-            Some(true)
+            None
         );
     }
 
@@ -1857,7 +2090,7 @@ mod tests {
     }
 
     fn observed(source: &str, needle: &str, server: bool) -> Option<bool> {
-        let ast = extract("host.tsx", source).unwrap();
+        let ast = extract("host.tsx", source).unwrap_or_else(|error| panic!("{source}: {error:?}"));
         let start = u32::try_from(source.find(needle).unwrap()).unwrap();
         let site = ast
             .host_execution
@@ -1900,11 +2133,6 @@ mod tests {
             ("!import.meta.env.SSR || closed()", "closed()", false),
             ("if(import.meta.env.SSR) <View/>", "<View/>", false),
             (
-                "if(import.meta.env.SSR) object.field",
-                "object.field",
-                false,
-            ),
-            (
                 "if(import.meta.env.SSR) import('./server.ts')",
                 "import('./server.ts')",
                 false,
@@ -1913,6 +2141,19 @@ mod tests {
             assert_eq!(observed(source, needle, false), Some(client), "{source}");
             assert_eq!(observed(source, needle, true), Some(!client), "{source}");
         }
+        assert_eq!(
+            observed(
+                "if(import.meta.env.SSR) object.field",
+                "object.field",
+                false
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            observed("if(import.meta.env.SSR) object.field", "object.field", true),
+            None,
+            "an arbitrary getter has no positive execution/completion authority"
+        );
     }
 
     #[test]

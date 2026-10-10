@@ -39,3 +39,13 @@ browser inference. Normal nullish returns stay unknown; normal non-nullish calls
 remain live controls. Error remains unresolved in the syntax-only
 heritage twin; a name is not constructor proof. These inputs add no findings or
 published-signature stubs. The node-count regressions live in host_execution.rs.
+
+completion-variants.json samples every Oxc 0.118 Expression variant (43).
+completion-cases.json covers unsupported completion in statements, initializers,
+eager arguments and nested bodies, with five normal controls. The statement
+catalog test samples all 33 Statement variants. Logical assignments, updates,
+getters, tags, spread/iteration, coercion and unproved selection withhold browser
+authority. Native tests mutate only private copies of this fixture and review
+the exact SC4001 site for every normal control. Package-root/extensionless CSS,
+conditional CSS and preprocessor entries have executable/raw twins there too.
+No published signature, snapshot or committed source diagnostic is added.

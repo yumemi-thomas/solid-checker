@@ -260,17 +260,28 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
             "{name}: {findings:#?}"
         );
         if name == "spa" {
-            let cases: Vec<serde_json::Value> = serde_json::from_slice(
+            let mut cases: Vec<serde_json::Value> = serde_json::from_slice(
                 &fs::read(
                     repository.join("fixtures/reactive-ir/inferred-host-spa/nullish-cases.json"),
                 )
                 .unwrap(),
             )
             .unwrap();
+            let completion_cases: Vec<serde_json::Value> = serde_json::from_slice(
+                &fs::read(
+                    repository.join("fixtures/reactive-ir/inferred-host-spa/completion-cases.json"),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            cases.extend(completion_cases.into_iter().map(|mut case| {
+                case["completion"] = case["normal"].clone();
+                case
+            }));
             for case in cases {
-                for form in ["{};", "const value = {};", "consume({});"] {
+                for form in ["{};", "const completion_result = {};", "consume({});"] {
                     let source = format!(
-                        "import {{startClosed}} from 'reactive-package'; {} function consume(value: unknown) {{}} {} startClosed();",
+                        "import {{startClosed}} from 'reactive-package'; {}; function consume(value: unknown) {{}} {} startClosed();",
                         case["declaration"].as_str().unwrap(),
                         form.replace("{}", case["expression"].as_str().unwrap())
                     );
@@ -295,6 +306,41 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
                         "{source}: {result:#?}"
                     );
                 }
+            }
+            // Every preceding declarator includes binding completion, not just
+            // initializer evaluation. A normal binding remains a live control.
+            for (body, expected) in [
+                (
+                    "const value={get x(){throw 0}}; const {x}=value, result=startClosed();",
+                    false,
+                ),
+                (
+                    "const value=[1]; const [x]=value, result=startClosed();",
+                    false,
+                ),
+                ("const x=1, result=startClosed();", true),
+            ] {
+                let source = format!("import {{startClosed}} from 'reactive-package'; {body}");
+                fs::write(project.join("src/main.ts"), &source).unwrap();
+                let result = analyze(None);
+                let call = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
+                assert_eq!(
+                    result["findings"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|finding| {
+                            finding["kind"] == "violation"
+                                && finding["rule"] == "missing-owner"
+                                && inferred(finding)
+                                && finding["primaryLocation"]["path"]
+                                    .as_str()
+                                    .is_some_and(|path| path.ends_with("src/main.ts"))
+                                && finding["primaryLocation"]["startByte"].as_u64() == Some(call)
+                        }),
+                    expected,
+                    "{source}: {result:#?}"
+                );
             }
             // The same bytes either require an unproved CSS transformation or
             // are acquired as inert raw text. Review every live twin's exact site.
@@ -327,6 +373,82 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
                         "{source}: {result:#?}"
                     );
                 }
+            }
+            let styles = project.join("node_modules/styles");
+            fs::create_dir_all(&styles).unwrap();
+            fs::write(styles.join("index.d.ts"), "export {};").unwrap();
+            fs::write(styles.join("index.js"), "export {};").unwrap();
+            fs::write(styles.join("style.css"), "@import './missing.css'; .x{").unwrap();
+            fs::write(styles.join("style.scss"), "$invalid: ; .x{").unwrap();
+            for (exports, text, expected) in [
+                (
+                    r#"{".":{"types":"./index.d.ts","default":"./style.css"}}"#,
+                    "styles",
+                    false,
+                ),
+                (
+                    r#"{"./theme":{"types":"./index.d.ts","default":"./style.css"}}"#,
+                    "styles/theme",
+                    false,
+                ),
+                (
+                    r#"{".":{"types":"./index.d.ts","production":"./style.css","default":"./index.js"}}"#,
+                    "styles",
+                    false,
+                ),
+                (
+                    r#"{".":{"types":"./index.d.ts","solid":"./style.css","default":"./index.js"}}"#,
+                    "styles",
+                    false,
+                ),
+                (
+                    r#"{".":{"types":"./index.d.ts","default":"./style.scss"}}"#,
+                    "styles",
+                    false,
+                ),
+                (
+                    r#"{".":{"types":"./index.d.ts","default":"./index.js"}}"#,
+                    "styles",
+                    true,
+                ),
+                (
+                    r#"{"./theme":{"types":"./index.d.ts","default":"./index.js"}}"#,
+                    "styles/theme",
+                    true,
+                ),
+                (
+                    r#"{".":{"types":"./index.d.ts","default":"./style.css"}}"#,
+                    "styles?raw",
+                    true,
+                ),
+                (
+                    r#"{"./theme":{"types":"./index.d.ts","default":"./style.css"}}"#,
+                    "styles/theme?raw",
+                    true,
+                ),
+            ] {
+                fs::write(styles.join("package.json"), format!(r#"{{"name":"styles","version":"1.0.0","type":"module","exports":{exports}}}"#)).unwrap();
+                let source = format!(
+                    "import '{text}'; import {{startClosed}} from 'reactive-package'; startClosed();"
+                );
+                fs::write(project.join("src/main.ts"), &source).unwrap();
+                let result = analyze(None);
+                let call = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
+                assert_eq!(
+                    result["findings"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|finding| finding["kind"] == "violation"
+                            && finding["rule"] == "missing-owner"
+                            && inferred(finding)
+                            && finding["primaryLocation"]["path"]
+                                .as_str()
+                                .is_some_and(|path| path.ends_with("src/main.ts"))
+                            && finding["primaryLocation"]["startByte"].as_u64() == Some(call)),
+                    expected,
+                    "{source}: {exports}: {result:#?}"
+                );
             }
             fs::write(project.join("src/main.ts"), "import {startClosed} from 'reactive-package'; class Stop {constructor(){throw 0}} new Stop(); startClosed();").unwrap();
             let constructor_refused = analyze(None);

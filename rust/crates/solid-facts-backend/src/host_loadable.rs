@@ -402,6 +402,15 @@ pub(super) fn resource_request(text: &str) -> bool {
         })
 }
 
+/// Classify the canonical selected file, never the authored package spelling.
+/// The general package premise covers executable entries only. All other Vite
+/// loaders require their own linking proof (compiled CSS has none today).
+pub(super) fn executable_entry(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"].contains(&ext))
+}
+
 /// Used before the daemon shortcut and again at admission. Exact package
 /// exports (including browser/condition refusals) or a literal local filename,
 /// not a .d.ts wildcard or an unresolved Type Facts row, prove acquisition.
@@ -605,6 +614,11 @@ pub(super) fn loadable(
     }
     let (name, _) = request(text)?;
     let (root, bytes, entries) = candidates(importer, text, inputs)?;
+    // Includes root exports, extensionless subpaths, legacy fields, browser
+    // redirects and every condition projection, after canonical selection.
+    if !entries.iter().all(|path| executable_entry(path)) {
+        return None;
+    }
     let manifest: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
     inputs.push(PathBuf::from(row.resolved_path.as_ref()));
     if let Some(path) = &row.package_manifest {
@@ -1084,6 +1098,73 @@ mod tests {
         assert!(
             serde_json::from_str::<Ordered>(r#"{"exports":"./a.js","exports":"./b.js"}"#).is_err()
         );
+    }
+
+    #[test]
+    fn canonical_package_loader_is_checked_for_every_selected_entry() {
+        let scratch =
+            std::env::temp_dir().join(format!("host-package-loader-{}", std::process::id()));
+        let root = scratch.join("node_modules/styles");
+        fs::create_dir_all(&root).unwrap();
+        let root = fs::canonicalize(root).unwrap();
+        fs::write(root.join("index.d.ts"), "export {};").unwrap();
+        fs::write(root.join("index.js"), "export {};").unwrap();
+        for ext in [
+            "css", "pcss", "postcss", "less", "sass", "scss", "styl", "stylus", "sss", "svg",
+            "json", "unknown",
+        ] {
+            fs::write(
+                root.join(format!("style.{ext}")),
+                "@import './missing.css'; .x{",
+            )
+            .unwrap();
+            for (text, exports) in [
+                ("styles", format!(r#"{{".":"./style.{ext}"}}"#)),
+                ("styles/theme", format!(r#"{{"./theme":"./style.{ext}"}}"#)),
+                (
+                    "styles",
+                    format!(r#"{{".":{{"production":"./style.{ext}","default":"./index.js"}}}}"#),
+                ),
+                (
+                    "styles",
+                    format!(r#"{{".":{{"solid":"./style.{ext}","default":"./index.js"}}}}"#),
+                ),
+            ] {
+                fs::write(root.join("package.json"), format!(r#"{{"name":"styles","version":"1.0.0","type":"module","exports":{exports}}}"#)).unwrap();
+                let mut inputs = Vec::new();
+                assert!(
+                    loadable(
+                        &scratch.join("main.ts"),
+                        text,
+                        &attested(&root, "styles", "1.0.0"),
+                        crate::dialect::default_dialect().vocabulary,
+                        &mut inputs,
+                        &Default::default()
+                    )
+                    .is_none(),
+                    "{text}: {exports}"
+                );
+                assert!(
+                    inputs.contains(&root.join(format!("style.{ext}"))),
+                    "withheld input still recorded"
+                );
+            }
+        }
+        fs::write(root.join("package.json"), r#"{"name":"styles","version":"1.0.0","type":"module","exports":{".":"./index.js","./theme":"./index.js"}}"#).unwrap();
+        for text in ["styles", "styles/theme"] {
+            assert!(
+                loadable(
+                    &scratch.join("main.ts"),
+                    text,
+                    &attested(&root, "styles", "1.0.0"),
+                    crate::dialect::default_dialect().vocabulary,
+                    &mut Vec::new(),
+                    &Default::default()
+                )
+                .is_some()
+            );
+        }
+        fs::remove_dir_all(scratch).unwrap();
     }
 
     #[test]

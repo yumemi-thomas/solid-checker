@@ -42,6 +42,8 @@ use crate::idle_memory;
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CheckRequest {
+    #[serde(default)]
+    implementation: String,
     project_id: String,
     #[serde(default)]
     accepted_contract_catalog: String,
@@ -69,6 +71,8 @@ const fn bundled_by_default() -> bool {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CheckHeader {
+    #[serde(default)]
+    implementation: String,
     ok: bool,
     #[serde(default)]
     status: String,
@@ -171,8 +175,118 @@ fn resolve_dialect(
     }
 }
 
-fn socket_path(project_id: &str, typefacts_executable: &str, dialect_id: &str) -> PathBuf {
+// Captured from the running image, not its replaceable pathname. This also
+// covers replacement between exec and the first socket selection/binding.
+fn implementation_identity() -> Result<&'static str, Box<dyn Error>> {
+    static IDENTITY: std::sync::OnceLock<Result<String, String>> = std::sync::OnceLock::new();
+    match IDENTITY.get_or_init(loaded_implementation_identity) {
+        Ok(identity) => Ok(identity),
+        Err(error) => Err(error.clone().into()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn loaded_implementation_identity() -> Result<String, String> {
+    // /proc/self/exe opens the executing inode even after unlink/replacement.
+    let digest = hash_file(Path::new("/proc/self/exe")).map_err(|error| error.to_string())?;
+    Ok(format!(
+        "sha256:{}",
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn loaded_implementation_identity() -> Result<String, String> {
+    // SDK mach-o/dyld.h and loader.h: image zero is the executable; LC_UUID
+    // is its linker-issued build identity, carried in the loaded image.
+    #[repr(C)]
+    struct Header {
+        magic: u32,
+        cpu_type: i32,
+        cpu_subtype: i32,
+        file_type: u32,
+        commands: u32,
+        command_bytes: u32,
+        flags: u32,
+        reserved: u32,
+    }
+    unsafe extern "C" {
+        fn _dyld_get_image_header(index: u32) -> *const Header;
+    }
+    // SAFETY: dyld owns the executable header and its mapped load commands for
+    // the process lifetime. No caller-supplied pointer or file bytes are read.
+    let header =
+        unsafe { _dyld_get_image_header(0).as_ref() }.ok_or("missing loaded executable header")?;
+    if header.magic != 0xfeed_facf || header.command_bytes > 1024 * 1024 || header.commands > 4096 {
+        return Err("unsupported loaded executable header".into());
+    }
+    // SAFETY: a validated native 64-bit Mach-O header's load commands follow
+    // the header in the same dyld mapping; their extent is provided by dyld.
+    let commands = unsafe {
+        std::slice::from_raw_parts(
+            (std::ptr::from_ref(header).cast::<u8>()).add(std::mem::size_of::<Header>()),
+            header.command_bytes as usize,
+        )
+    };
+    macho_build_identity(commands, header.commands)
+        .ok_or_else(|| "missing or ambiguous loaded executable build UUID".into())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn loaded_implementation_identity() -> Result<String, String> {
+    // A fresh one-shot check remains available; never reuse an unidentified actor.
+    Err("immutable loaded checker identity is unavailable on this platform".into())
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macho_build_identity(mut commands: &[u8], count: u32) -> Option<String> {
+    let mut uuid = None;
+    for _ in 0..count {
+        let kind = u32::from_le_bytes(commands.get(..4)?.try_into().ok()?);
+        let size = u32::from_le_bytes(commands.get(4..8)?.try_into().ok()?) as usize;
+        if size < 8 {
+            return None;
+        }
+        let command = commands.get(..size)?;
+        if kind == 0x1b {
+            if size != 24 || uuid.is_some() {
+                return None;
+            }
+            uuid = Some(format!(
+                "macho-uuid:{}",
+                command[8..24]
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            ));
+        }
+        commands = &commands[size..];
+    }
+    if !commands.is_empty() {
+        return None;
+    }
+    uuid
+}
+
+fn verify_implementation(expected: &str, actual: &str) -> Result<(), Box<dyn Error>> {
+    if expected.is_empty() || actual != expected {
+        return Err("daemon checker implementation identity mismatch".into());
+    }
+    Ok(())
+}
+
+fn socket_path(
+    project_id: &str,
+    typefacts_executable: &str,
+    dialect_id: &str,
+    implementation: &str,
+) -> PathBuf {
     let mut identity = Sha256::new();
+    identity.update(implementation.as_bytes());
+    identity.update([0]);
     identity.update(project_id.as_bytes());
     identity.update([0]);
     identity.update(typefacts_executable.as_bytes());
@@ -494,10 +608,12 @@ fn directory_stamp(path: &Path) -> Option<FileStamp> {
 }
 
 pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
+    let implementation = implementation_identity()?;
     let socket = socket_path(
         &request.project_id,
         &request.typefacts_executable,
         resolve_dialect(request)?.id,
+        implementation,
     );
     if UnixStream::connect(&socket).is_ok() {
         return Ok(0); // a live daemon already serves this project
@@ -561,6 +677,12 @@ fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<()
     let mut check: CheckRequest = serde_json::from_str(&line)?;
     normalize_enablement(&mut check);
     let mut stream = reader.into_inner();
+    if verify_implementation(implementation_identity()?, &check.implementation).is_err() {
+        return respond_error(
+            &mut stream,
+            "daemon checker implementation identity mismatch",
+        );
+    }
     if check.project_id != request.project_id {
         return respond_error(&mut stream, "daemon serves a different project");
     }
@@ -569,6 +691,7 @@ fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<()
         Ok(answer) => {
             let materialized = !answer.cache_hit;
             let header = serde_json::to_vec(&CheckHeader {
+                implementation: implementation_identity()?.to_owned(),
                 ok: true,
                 status: answer.status.to_string(),
                 error: String::new(),
@@ -604,6 +727,7 @@ fn normalize_enablement(check: &mut CheckRequest) {
 
 fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn Error>> {
     let header = serde_json::to_vec(&CheckHeader {
+        implementation: implementation_identity()?.to_owned(),
         ok: false,
         status: String::new(),
         error: message.into(),
@@ -1022,16 +1146,19 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     // `npm install` finishing between the calls) and split the client and
     // its daemon across two dialects.
     let dialect = resolve_dialect(request)?;
+    let implementation = implementation_identity()?;
     let socket = socket_path(
         &request.project_id,
         &request.typefacts_executable,
         dialect.id,
+        implementation,
     );
     let stream = match UnixStream::connect(&socket) {
         Ok(stream) => stream,
         Err(_) => spawn_and_connect(request, &socket, dialect)?,
     };
     let payload = serde_json::to_vec(&CheckRequest {
+        implementation: implementation_identity()?.to_owned(),
         project_id: request.project_id.clone(),
         accepted_contract_catalog: request.accepted_contract_catalog.clone(),
         receipt_trust_configuration: request.receipt_trust_configuration.clone(),
@@ -1048,6 +1175,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     let mut header_line = String::new();
     reader.read_line(&mut header_line)?;
     let header: CheckHeader = serde_json::from_str(&header_line)?;
+    verify_implementation(implementation, &header.implementation)?;
     if !header.ok {
         return Err(header.error.into());
     }
@@ -1195,9 +1323,10 @@ mod tests {
 
     use super::{
         CheckHeader, CheckRequest, FileRefresh, ProcessMemory, cache_retention_from, enabled_from,
-        explicit_inputs, fingerprint_file, inference_inputs_current, normalize_enablement,
-        parse_process_memory, process_tree_resident_bytes_from, refresh_file_with, retained_format,
-        socket_path, timing_value,
+        explicit_inputs, fingerprint_file, hash_file, inference_inputs_current,
+        macho_build_identity, normalize_enablement, parse_process_memory,
+        process_tree_resident_bytes_from, refresh_file_with, retained_format, socket_path,
+        timing_value, verify_implementation,
     };
     use solid_reactive_ir::{CacheRetention, RuntimeEnvironment};
 
@@ -1254,6 +1383,7 @@ mod tests {
         // reverse -- silently, because the two differ only in which contracts
         // were available, not in any input file.
         let request = |bundled: bool| CheckRequest {
+            implementation: String::from("test-checker"),
             project_id: "project".into(),
             accepted_contract_catalog: String::new(),
             receipt_trust_configuration: String::new(),
@@ -1355,6 +1485,7 @@ mod tests {
     #[test]
     fn daemon_enablement_order_and_duplicates_normalize_to_one_key() {
         let mut repeated = CheckRequest {
+            implementation: String::from("test-checker"),
             project_id: "project".into(),
             accepted_contract_catalog: String::new(),
             receipt_trust_configuration: String::new(),
@@ -1373,15 +1504,80 @@ mod tests {
     }
 
     #[test]
-    fn retained_actor_identity_includes_project_and_typefacts_build() {
-        let baseline = socket_path("/project/a/tsconfig.json", "/bin/typefacts-a", "solid-v2");
+    fn loaded_macho_identity_requires_one_complete_build_uuid() {
+        let mut command = Vec::new();
+        command.extend(0x1b_u32.to_le_bytes());
+        command.extend(24_u32.to_le_bytes());
+        command.extend([7_u8; 16]);
+        assert_eq!(
+            macho_build_identity(&command, 1).as_deref(),
+            Some("macho-uuid:07070707070707070707070707070707")
+        );
+        assert!(macho_build_identity(&command[..23], 1).is_none());
+        assert!(macho_build_identity(&command, 0).is_none());
+        assert!(macho_build_identity(&[], 0).is_none());
+        let mut duplicate = command.clone();
+        duplicate.extend(&command);
+        assert!(macho_build_identity(&duplicate, 2).is_none());
+        command[4..8].copy_from_slice(&0_u32.to_le_bytes());
+        assert!(macho_build_identity(&command, 1).is_none());
+    }
+
+    #[test]
+    fn same_path_replacement_cannot_reuse_an_older_implementation() {
+        let scratch =
+            std::env::temp_dir().join(format!("daemon-checker-identity-{}", std::process::id()));
+        fs::create_dir_all(&scratch).unwrap();
+        let path = scratch.join("checker");
+        fs::write(&path, "old checker bytes").unwrap();
+        let old = format!("{:x?}", hash_file(&path).unwrap());
+        let replacement = scratch.join("replacement");
+        fs::write(&replacement, "new checker bytes").unwrap();
+        fs::rename(&replacement, &path).unwrap();
+        let new = format!("{:x?}", hash_file(&path).unwrap());
+        assert_ne!(old, new);
         assert_ne!(
-            baseline,
-            socket_path("/project/b/tsconfig.json", "/bin/typefacts-a", "solid-v2")
+            socket_path("project", "typefacts", "solid-v2", &old),
+            socket_path("project", "typefacts", "solid-v2", &new)
+        );
+        assert!(verify_implementation(&new, &old).is_err());
+        assert!(
+            verify_implementation(&new, "").is_err(),
+            "pre-handshake daemon refused"
+        );
+        assert!(
+            verify_implementation(&old, &new).is_err(),
+            "server rejects a foreign client"
+        );
+        assert!(verify_implementation(&new, &new).is_ok());
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn retained_actor_identity_includes_project_and_typefacts_build() {
+        let baseline = socket_path(
+            "/project/a/tsconfig.json",
+            "/bin/typefacts-a",
+            "solid-v2",
+            "checker-a",
         );
         assert_ne!(
             baseline,
-            socket_path("/project/a/tsconfig.json", "/bin/typefacts-b", "solid-v2")
+            socket_path(
+                "/project/b/tsconfig.json",
+                "/bin/typefacts-a",
+                "solid-v2",
+                "checker-a"
+            )
+        );
+        assert_ne!(
+            baseline,
+            socket_path(
+                "/project/a/tsconfig.json",
+                "/bin/typefacts-b",
+                "solid-v2",
+                "checker-a"
+            )
         );
     }
 
@@ -1420,6 +1616,7 @@ mod tests {
     fn retained_timing_reports_cache_generation_and_payload() {
         let value = timing_value(
             &CheckHeader {
+                implementation: String::from("test-checker"),
                 ok: true,
                 status: "certified".into(),
                 error: String::new(),

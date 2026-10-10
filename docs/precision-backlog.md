@@ -29116,3 +29116,32 @@ source predictions, not post-patch measurements or scope counts. New JSON proof
 inputs are outside src; all Rust/fixture/native/performance tests are authored
 but unrun under the read-only/no-build task. rustfmt parsing, frozen-byte and
 patch checks are the only validation claimed in the research handoff.
+
+### Inferred-host completion, canonical loader and daemon review repair
+
+Completion now uses an explicit allowlist in both syntax composition and site
+ancestry. Unsupported expressions, statement containers, synchronous bodies and
+bounded refusals remain unproved through CallCompletion; no general fallback
+supplies normal completion. Logical assignments, updates, getters, tagged
+templates, constructors, optional chains, spread/iteration and coercion therefore
+withhold browser authority. Ordinary recognized calls retain ADR 0270 A. Catalog
+tests sample all 43 Expression and 33 Statement variants in Oxc 0.118, alongside
+statement/initializer/eager-argument and nested-body twins.
+Later initializer sites also compose each preceding declarator's binding proof;
+destructuring and unsupported declaration kinds cannot bypass the allowlist.
+
+Installed package linking classifies every canonical condition-selected file by
+loader before admission in both discovery passes. Executable entry extensions
+are allowlisted; CSS/preprocessors and other unproved loaders cannot bypass the
+resource boundary via package roots or extensionless subpaths. Inert raw
+acquisition remains separate. Withheld lookup and file inputs remain observed.
+
+Daemon sockets and response validation bind the loaded Mach-O build UUID on macOS
+or executing-inode SHA-256 on Linux, captured once before socket selection/binding.
+Same-path replacement with build id `dev` cannot
+reuse an older implementation; missing/different handshake identities refuse.
+Identity capture occurs outside cached Reactive IR reuse. Other platforms refuse
+daemon reuse and retain fresh one-shot checks. No premise, typing,
+contract, snapshot or performance ceiling is weakened. Measurements and final
+verification are recorded in HANDOFF-infer-host-RESULT-3.md; unsupported forms
+and compiled stylesheet transformation remain deliberate fail-closed cases.

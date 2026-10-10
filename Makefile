@@ -1,5 +1,9 @@
 RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
+# This producer/certification label is not checker implementation identity.
+# Daemon sockets and response handshakes bind the immutable loaded-image build
+# identity (Mach-O UUID / Linux executing-inode digest), so same-path rebuilds
+# with `dev` select a new actor without reading a replaceable executable path.
 RUST_MANIFEST := rust/Cargo.toml
 BUN ?= bun
 # nextest is an optional local accelerator. Keep the built-in runner as the

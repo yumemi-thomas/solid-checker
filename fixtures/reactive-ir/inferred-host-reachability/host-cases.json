@@ -218,14 +218,14 @@
   {
     "path": "src/independent.ts",
     "text": "independent live module prefix",
-    "browser": true,
-    "proof": true
+    "browser": false,
+    "proof": false
   },
   {
     "path": "src/independent.ts",
     "text": "independent feasible timer",
-    "browser": true,
-    "proof": true
+    "browser": false,
+    "proof": false
   },
   {
     "path": "src/independent.ts",
@@ -338,14 +338,14 @@
   {
     "path": "src/completion-cases.ts",
     "text": "completion recursion feasible if returning",
-    "browser": true,
-    "proof": true
+    "browser": false,
+    "proof": false
   },
   {
     "path": "src/completion-cases.ts",
     "text": "completion method feasible if returning",
-    "browser": true,
-    "proof": true
+    "browser": false,
+    "proof": false
   },
   {
     "path": "src/completion-cases.ts",

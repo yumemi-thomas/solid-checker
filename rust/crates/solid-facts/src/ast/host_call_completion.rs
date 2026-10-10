@@ -1,5 +1,6 @@
-//! Bounded synchronous call completion. Unknown means feasible-if-returning,
-//! never proof of non-return. Exact host constants are instantiated downstream.
+//! Bounded synchronous completion with an explicit allowlist. Unsupported forms
+//! withhold authority; ordinary dispatch retains ADR 0270 A. Exact host constants
+//! are instantiated downstream.
 
 use oxc_ast::AstKind;
 use oxc_ast::ast::{BindingPattern, Expression, FormalParameters, FunctionBody, Statement};
@@ -36,10 +37,10 @@ impl Flow {
         }
     }
 
-    fn maybe_normal() -> Self {
+    fn unproved() -> Self {
         Self {
-            next: Predicate::Live,
-            returns: Predicate::Live,
+            next: Predicate::Unknown,
+            returns: Predicate::Unknown,
         }
     }
 }
@@ -119,6 +120,24 @@ impl State {
 
 type Inputs = BTreeMap<Span, bool>;
 
+// A feasible normal arm is not proof that an unproved competing arm completes.
+// Dead alternatives have already been removed by `all`.
+fn completion_choice(items: Vec<Predicate>) -> Predicate {
+    fn unproved(item: &Predicate) -> bool {
+        match item {
+            Predicate::Unknown => true,
+            Predicate::All(items) | Predicate::Any(items) => items.iter().any(unproved),
+            Predicate::CallCompletion(item) => unproved(item),
+            _ => false,
+        }
+    }
+    if items.iter().any(unproved) {
+        Predicate::Unknown
+    } else {
+        any(items)
+    }
+}
+
 fn literal(expression: &Expression<'_>) -> Option<bool> {
     match inner(expression)? {
         Expression::BooleanLiteral(value) => Some(value.value),
@@ -193,10 +212,10 @@ fn sequence<'a>(
     for statement in statements {
         if state.visits - start >= NODE_BUDGET || state.remaining == 0 {
             state.refuse();
-            return Flow::maybe_normal();
+            return Flow::unproved();
         }
         let item = statement_flow(semantic, statement, inputs, state);
-        result.returns = any(vec![
+        result.returns = completion_choice(vec![
             result.returns,
             all(vec![result.next.clone(), item.returns]),
         ]);
@@ -216,7 +235,7 @@ fn statement_flow<'a>(
     // body. It cannot reuse an input-specific result or trigger another walk.
     if !state.statements.insert(extent) || !state.visit() {
         state.refuse();
-        return Flow::maybe_normal();
+        return Flow::unproved();
     }
     state.depth += 1;
     let result = statement_flow_inner(semantic, statement, inputs, state);
@@ -233,7 +252,7 @@ fn statement_flow_inner<'a>(
     if matches!(statement, Statement::VariableDeclaration(item) if item.declarations.len() > NODE_BUDGET)
     {
         state.refuse();
-        return Flow::maybe_normal();
+        return Flow::unproved();
     }
     match statement {
         Statement::ThrowStatement(_) => Flow::next(Predicate::Dead),
@@ -252,15 +271,12 @@ fn statement_flow_inner<'a>(
             inputs,
             state,
         )),
-        Statement::VariableDeclaration(declaration) => Flow::next(all(declaration
-            .declarations
-            .iter()
-            .map(|item| {
-                item.init.as_ref().map_or(Predicate::Live, |value| {
-                    expression_flow(semantic, value, inputs, state)
-                })
-            })
-            .collect())),
+        Statement::VariableDeclaration(declaration) => Flow::next(variable_completion_with_inputs(
+            semantic,
+            declaration,
+            inputs,
+            state,
+        )),
         Statement::BlockStatement(block) => sequence(semantic, &block.body, inputs, state),
         Statement::IfStatement(statement) => {
             let yes = statement_flow(semantic, &statement.consequent, inputs, state);
@@ -269,7 +285,7 @@ fn statement_flow_inner<'a>(
                 |item| statement_flow(semantic, item, inputs, state),
             );
             let select = |yes, no| {
-                any(vec![
+                completion_choice(vec![
                     all(vec![guard(semantic, &statement.test, true, inputs), yes]),
                     all(vec![guard(semantic, &statement.test, false, inputs), no]),
                 ])
@@ -281,13 +297,10 @@ fn statement_flow_inner<'a>(
             }
         }
         Statement::WhileStatement(statement) => {
-            // A stable literal/authenticated host/input guard remains true on
-            // every iteration. Unsupported control (including break) supplies
-            // a possible normal return, so cannot prove a non-returning loop.
             if guard(semantic, &statement.test, true, inputs) == Predicate::Live
                 && guard(semantic, &statement.test, false, inputs) == Predicate::Live
             {
-                return Flow::maybe_normal();
+                return Flow::unproved();
             }
             let body = statement_flow(semantic, &statement.body, inputs, state);
             let evaluated = expression_flow(semantic, &statement.test, inputs, state);
@@ -303,11 +316,69 @@ fn statement_flow_inner<'a>(
                 ]),
             }
         }
-        Statement::EmptyStatement(_) | Statement::FunctionDeclaration(_) => {
-            Flow::next(Predicate::Live)
-        }
-        _ => Flow::maybe_normal(),
+        Statement::EmptyStatement(_)
+        | Statement::FunctionDeclaration(_)
+        | Statement::TSTypeAliasDeclaration(_)
+        | Statement::TSInterfaceDeclaration(_) => Flow::next(Predicate::Live),
+        _ => Flow::unproved(),
     }
+}
+
+fn variable_completion_with_inputs<'a>(
+    semantic: &Semantic<'a>,
+    declaration: &oxc_ast::ast::VariableDeclaration<'a>,
+    inputs: &Inputs,
+    state: &mut State,
+) -> Predicate {
+    use oxc_ast::ast::VariableDeclarationKind;
+    if !matches!(
+        declaration.kind,
+        VariableDeclarationKind::Var
+            | VariableDeclarationKind::Let
+            | VariableDeclarationKind::Const
+    ) {
+        return Predicate::Unknown;
+    }
+    all(declaration
+        .declarations
+        .iter()
+        .map(|item| declarator_completion_with_inputs(semantic, item, inputs, state))
+        .collect())
+}
+
+fn declarator_completion_with_inputs<'a>(
+    semantic: &Semantic<'a>,
+    item: &oxc_ast::ast::VariableDeclarator<'a>,
+    inputs: &Inputs,
+    state: &mut State,
+) -> Predicate {
+    let evaluated = item.init.as_ref().map_or(Predicate::Live, |value| {
+        expression_flow(semantic, value, inputs, state)
+    });
+    all(vec![
+        evaluated,
+        if matches!(item.id, BindingPattern::BindingIdentifier(_)) {
+            Predicate::Live
+        } else {
+            Predicate::Unknown
+        },
+    ])
+}
+
+pub(super) fn declarator_completion<'a>(
+    semantic: &Semantic<'a>,
+    item: &oxc_ast::ast::VariableDeclarator<'a>,
+    state: &mut State,
+) -> Predicate {
+    declarator_completion_with_inputs(semantic, item, &Inputs::new(), state)
+}
+
+pub(super) fn variable_completion<'a>(
+    semantic: &Semantic<'a>,
+    declaration: &oxc_ast::ast::VariableDeclaration<'a>,
+    state: &mut State,
+) -> Predicate {
+    variable_completion_with_inputs(semantic, declaration, &Inputs::new(), state)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -326,7 +397,7 @@ fn body_flow<'a>(
         || state.stack.contains(&extent)
     {
         state.body_refusals = state.body_refusals.saturating_add(1);
-        return Predicate::Live;
+        return Predicate::Unknown;
     }
     if parameters.items.len() > 32
         || parameters.rest.is_some()
@@ -335,18 +406,18 @@ fn body_flow<'a>(
                 || !matches!(parameter.pattern, BindingPattern::BindingIdentifier(_))
         })
     {
-        return Predicate::Live;
+        return Predicate::Unknown;
     }
     let mut bound = Inputs::new();
     for (index, parameter) in parameters.items.iter().enumerate() {
         let BindingPattern::BindingIdentifier(binding) = &parameter.pattern else {
-            return Predicate::Live;
+            return Predicate::Unknown;
         };
         let Some(symbol) = binding.symbol_id.get() else {
-            return Predicate::Live;
+            return Predicate::Unknown;
         };
         if state.written(semantic, symbol) {
-            return Predicate::Live;
+            return Predicate::Unknown;
         }
         let referenced = semantic
             .scoping()
@@ -386,7 +457,7 @@ fn body_flow<'a>(
         return if *cached_inputs == bound {
             result.clone()
         } else {
-            Predicate::Live
+            Predicate::Unknown
         };
     }
     state.body_visits += 1;
@@ -400,27 +471,25 @@ fn body_flow<'a>(
             Some(Statement::ExpressionStatement(statement)) => {
                 expression_flow(semantic, &statement.expression, &bound, state)
             }
-            _ => Predicate::Live,
+            _ => Predicate::Unknown,
         }
     } else {
         let flow = sequence(semantic, &body.statements, &bound, state);
-        any(vec![flow.next, flow.returns])
+        completion_choice(vec![flow.next, flow.returns])
     };
     state.stack.pop();
     state.body_starts.pop();
-    // The entire body becomes MaybeNormal if a branch (possibly containing an
+    // The entire body becomes unproved if a branch (possibly containing an
     // early return) was truncated. Keeping a later throw would be unsound.
     let result = if state.refusals != refusals
         || state.body_refusals != body_refusals
         || state.visits - start > NODE_BUDGET
     {
-        // This is a call-completion refusal, not a positive execution witness.
-        // Isolate it from the expression's execution-order budget: ADR A makes
-        // the call's continuation feasible, while direct expression overflow
-        // still withholds a host witness. Enclosing bodies see the refusal.
+        // Truncation cannot prove either normal return or certain exit.
+        // Isolate the walk budget while retaining an unproved body result.
         state.refusals = refusals;
         state.body_refusals = state.body_refusals.saturating_add(1);
-        Predicate::Live
+        Predicate::Unknown
     } else {
         result
     };
@@ -435,10 +504,10 @@ fn invocation<'a>(
     state: &mut State,
 ) -> Predicate {
     if call.optional {
-        return Predicate::Live;
+        return Predicate::Unknown;
     }
     let Some(mut callee) = inner(&call.callee) else {
-        return Predicate::Live;
+        return Predicate::Unknown;
     };
     if let Expression::Identifier(reference) = callee {
         let scoping = semantic.scoping();
@@ -464,6 +533,14 @@ fn invocation<'a>(
                 };
                 callee = value;
             }
+            AstKind::Function(function) if function.generator => {
+                return generator_allocation(&function.params);
+            }
+            AstKind::Function(function) if function.r#async => {
+                return function.body.as_ref().map_or(Predicate::Unknown, |body| {
+                    async_completion(semantic, &function.params, body, false, state)
+                });
+            }
             AstKind::Function(function)
                 if function
                     .id
@@ -480,6 +557,21 @@ fn invocation<'a>(
         }
     }
     match callee {
+        Expression::FunctionExpression(function) if function.generator => {
+            generator_allocation(&function.params)
+        }
+        Expression::FunctionExpression(function) if function.r#async => {
+            function.body.as_ref().map_or(Predicate::Unknown, |body| {
+                async_completion(semantic, &function.params, body, false, state)
+            })
+        }
+        Expression::ArrowFunctionExpression(function) if function.r#async => async_completion(
+            semantic,
+            &function.params,
+            &function.body,
+            function.expression,
+            state,
+        ),
         Expression::FunctionExpression(function) if !function.r#async && !function.generator => {
             function.body.as_ref().map_or(Predicate::Live, |body| {
                 body_flow(semantic, &function.params, body, false, call, inputs, state)
@@ -494,9 +586,92 @@ fn invocation<'a>(
             inputs,
             state,
         ),
-        // External/builtin/method/dynamic dispatch, async promise return and
-        // generator allocation are all MaybeNormal for the call continuation.
+        // Ordinary opaque dispatch retains premise A. This cannot override
+        // the separate required proof for eager callee/argument evaluation.
         _ => Predicate::Live,
+    }
+}
+
+fn async_completion<'a>(
+    semantic: &Semantic<'a>,
+    parameters: &FormalParameters<'a>,
+    body: &FunctionBody<'a>,
+    expression: bool,
+    state: &mut State,
+) -> Predicate {
+    // An async function executes synchronously until suspension/termination.
+    // Its return type is not proof that this prefix returns. Only simple empty,
+    // literal-return and proved throw bodies establish promise allocation here;
+    // in particular unknown return values may have a non-returning then getter.
+    let extent = span(body.span);
+    if let Some((_, cached)) = state.bodies.get(&extent) {
+        return cached.clone();
+    }
+    if body.span.size() > BODY_BYTES
+        || body.statements.len() > NODE_BUDGET
+        || parameters.items.len() > 32
+        || generator_allocation(parameters) != Predicate::Live
+    {
+        return Predicate::Unknown;
+    }
+    state
+        .bodies
+        .insert(extent, (Inputs::new(), Predicate::Unknown));
+    state.body_visits += 1;
+    let mut result = Predicate::Live;
+    for statement in &body.statements {
+        if !state.visit() {
+            result = Predicate::Unknown;
+            break;
+        }
+        match statement {
+            Statement::EmptyStatement(_)
+            | Statement::FunctionDeclaration(_)
+            | Statement::TSTypeAliasDeclaration(_)
+            | Statement::TSInterfaceDeclaration(_) => {}
+            Statement::ThrowStatement(item) => {
+                result = if expression_flow(semantic, &item.argument, &Inputs::new(), state)
+                    == Predicate::Live
+                {
+                    Predicate::Live
+                } else {
+                    Predicate::Unknown
+                };
+                break;
+            }
+            Statement::ReturnStatement(item) => {
+                result = item
+                    .argument
+                    .as_ref()
+                    .map_or(Predicate::Live, primitive_conversion);
+                break;
+            }
+            Statement::ExpressionStatement(item) if expression => {
+                result = primitive_conversion(&item.expression);
+                break;
+            }
+            _ => {
+                result = Predicate::Unknown;
+                break;
+            }
+        }
+    }
+    state.bodies.insert(extent, (Inputs::new(), result.clone()));
+    result
+}
+
+fn generator_allocation(parameters: &FormalParameters<'_>) -> Predicate {
+    // Generator bodies are deferred, but defaults/destructuring run at call
+    // time and can prevent allocation from completing.
+    if parameters.rest.is_none()
+        && parameters.items.iter().all(|parameter| {
+            parameter.initializer.is_none()
+                && matches!(parameter.pattern, BindingPattern::BindingIdentifier(_))
+        })
+    {
+        Predicate::Live
+    } else {
+        Predicate::Unknown
     }
 }
 
@@ -557,14 +732,31 @@ fn expression_flow_inner<'a>(
         return Predicate::Unknown;
     }
     match expression {
+        Expression::BooleanLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::StringLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::BigIntLiteral(_)
+        | Expression::RegExpLiteral(_)
+        | Expression::Identifier(_)
+        | Expression::ThisExpression(_)
+        | Expression::MetaProperty(_)
+        | Expression::FunctionExpression(_)
+        | Expression::ArrowFunctionExpression(_) => Predicate::Live,
         Expression::CallExpression(call) if !call.optional => {
             let mut evaluated = vec![expression_flow(semantic, &call.callee, inputs, state)];
             for argument in &call.arguments {
-                if let oxc_ast::ast::Argument::SpreadElement(spread) = argument {
-                    evaluated.push(expression_flow(semantic, &spread.argument, inputs, state));
-                } else if let Some(value) = argument.as_expression() {
-                    evaluated.push(expression_flow(semantic, value, inputs, state));
-                }
+                evaluated.push(match argument {
+                    oxc_ast::ast::Argument::SpreadElement(spread) => all(vec![
+                        expression_flow(semantic, &spread.argument, inputs, state),
+                        Predicate::Unknown,
+                    ]),
+                    _ => argument
+                        .as_expression()
+                        .map_or(Predicate::Unknown, |value| {
+                            expression_flow(semantic, value, inputs, state)
+                        }),
+                });
             }
             evaluated.push(Predicate::CallCompletion(Box::new(invocation(
                 semantic, call, inputs, state,
@@ -576,21 +768,37 @@ fn expression_flow_inner<'a>(
             .iter()
             .map(|item| expression_flow(semantic, item, inputs, state))
             .collect()),
-        Expression::UnaryExpression(unary) => {
-            expression_flow(semantic, &unary.argument, inputs, state)
-        }
+        Expression::UnaryExpression(unary) => all(vec![
+            expression_flow(semantic, &unary.argument, inputs, state),
+            if matches!(
+                unary.operator,
+                oxc_ast::ast::UnaryOperator::LogicalNot
+                    | oxc_ast::ast::UnaryOperator::Void
+                    | oxc_ast::ast::UnaryOperator::Typeof
+            ) {
+                Predicate::Live
+            } else {
+                Predicate::Unknown
+            },
+        ]),
         Expression::BinaryExpression(binary) => all(vec![
             expression_flow(semantic, &binary.left, inputs, state),
             expression_flow(semantic, &binary.right, inputs, state),
+            if matches!(
+                binary.operator,
+                oxc_ast::ast::BinaryOperator::StrictEquality
+                    | oxc_ast::ast::BinaryOperator::StrictInequality
+            ) {
+                Predicate::Live
+            } else {
+                Predicate::Unknown
+            },
         ]),
         Expression::LogicalExpression(logical) => {
             let take = match logical.operator {
                 oxc_ast::ast::LogicalOperator::And => true,
                 oxc_ast::ast::LogicalOperator::Or => false,
                 oxc_ast::ast::LogicalOperator::Coalesce => {
-                    // The left operand always executes. Truthiness facts are
-                    // not nullish-selection facts; neither arm can supply a
-                    // continuation proof until that selection is exact.
                     return all(vec![
                         expression_flow(semantic, &logical.left, inputs, state),
                         Predicate::Unknown,
@@ -600,9 +808,9 @@ fn expression_flow_inner<'a>(
             all(vec![
                 expression_flow(semantic, &logical.left, inputs, state),
                 any(vec![
-                    guard(semantic, &logical.left, !take, inputs),
+                    test(semantic, &logical.left, !take),
                     all(vec![
-                        guard(semantic, &logical.left, take, inputs),
+                        test(semantic, &logical.left, take),
                         expression_flow(semantic, &logical.right, inputs, state),
                     ]),
                 ]),
@@ -615,10 +823,12 @@ fn expression_flow_inner<'a>(
             .elements
             .iter()
             .map(|item| match item {
-                oxc_ast::ast::ArrayExpressionElement::SpreadElement(spread) => {
-                    expression_flow(semantic, &spread.argument, inputs, state)
-                }
-                _ => item.as_expression().map_or(Predicate::Live, |value| {
+                oxc_ast::ast::ArrayExpressionElement::SpreadElement(spread) => all(vec![
+                    expression_flow(semantic, &spread.argument, inputs, state),
+                    Predicate::Unknown,
+                ]),
+                oxc_ast::ast::ArrayExpressionElement::Elision(_) => Predicate::Live,
+                _ => item.as_expression().map_or(Predicate::Unknown, |value| {
                     expression_flow(semantic, value, inputs, state)
                 }),
             })
@@ -627,102 +837,55 @@ fn expression_flow_inner<'a>(
             .properties
             .iter()
             .map(|item| match item {
-                oxc_ast::ast::ObjectPropertyKind::SpreadProperty(spread) => {
-                    expression_flow(semantic, &spread.argument, inputs, state)
-                }
-                oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property) => {
-                    let key = if property.computed {
+                oxc_ast::ast::ObjectPropertyKind::SpreadProperty(spread) => all(vec![
+                    expression_flow(semantic, &spread.argument, inputs, state),
+                    Predicate::Unknown,
+                ]),
+                oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property) => all(vec![
+                    if property.computed {
                         property
                             .key
                             .as_expression()
-                            .map_or(Predicate::Live, |value| {
-                                expression_flow(semantic, value, inputs, state)
+                            .map_or(Predicate::Unknown, |value| {
+                                all(vec![
+                                    expression_flow(semantic, value, inputs, state),
+                                    primitive_conversion(value),
+                                ])
                             })
                     } else {
                         Predicate::Live
-                    };
-                    all(vec![
-                        key,
-                        expression_flow(semantic, &property.value, inputs, state),
-                    ])
-                }
+                    },
+                    expression_flow(semantic, &property.value, inputs, state),
+                ]),
             })
             .collect()),
         Expression::TemplateLiteral(template) => all(template
             .expressions
             .iter()
-            .map(|value| expression_flow(semantic, value, inputs, state))
+            .map(|value| {
+                all(vec![
+                    expression_flow(semantic, value, inputs, state),
+                    primitive_conversion(value),
+                ])
+            })
             .collect()),
-        Expression::TaggedTemplateExpression(template) => {
-            all(
-                std::iter::once(expression_flow(semantic, &template.tag, inputs, state))
-                    .chain(
-                        template
-                            .quasi
-                            .expressions
-                            .iter()
-                            .map(|value| expression_flow(semantic, value, inputs, state)),
-                    )
-                    .collect(),
-            )
-        }
-        Expression::ImportExpression(import) => all(vec![
-            expression_flow(semantic, &import.source, inputs, state),
-            import.options.as_ref().map_or(Predicate::Live, |value| {
-                expression_flow(semantic, value, inputs, state)
-            }),
-        ]),
-        // Unsupported chain ordering must not lend the enclosing statement a
-        // completion premise. Its nested sites already carry an unknown guard.
-        Expression::ChainExpression(_) => Predicate::Unknown,
-        Expression::StaticMemberExpression(member) => {
-            expression_flow(semantic, &member.object, inputs, state)
-        }
-        Expression::ComputedMemberExpression(member) if !member.optional => all(vec![
-            expression_flow(semantic, &member.object, inputs, state),
-            expression_flow(semantic, &member.expression, inputs, state),
-        ]),
-        Expression::NewExpression(call) => {
-            all(
-                // Constructor bodies are not part of the exact local-call
-                // completion census. In particular a local constructor may
-                // certainly throw or never return. Eager inputs can execute,
-                // but construction supplies no continuation/completion proof.
-                std::iter::once(Predicate::Unknown)
-                    .chain(std::iter::once(expression_flow(
-                        semantic,
-                        &call.callee,
-                        inputs,
-                        state,
-                    )))
-                    .chain(call.arguments.iter().map(|argument| match argument {
-                        oxc_ast::ast::Argument::SpreadElement(spread) => {
-                            expression_flow(semantic, &spread.argument, inputs, state)
-                        }
-                        _ => argument.as_expression().map_or(Predicate::Live, |value| {
-                            expression_flow(semantic, value, inputs, state)
-                        }),
-                    }))
-                    .collect(),
-            )
-        }
-        Expression::ClassExpression(_) => Predicate::Unknown,
+        // The exact authenticated Vite constant is not an arbitrary getter.
+        Expression::StaticMemberExpression(member) => static_member_completion(member),
         Expression::ConditionalExpression(conditional) => all(vec![
             expression_flow(semantic, &conditional.test, inputs, state),
             any(vec![
                 all(vec![
-                    guard(semantic, &conditional.test, true, inputs),
+                    test(semantic, &conditional.test, true),
                     expression_flow(semantic, &conditional.consequent, inputs, state),
                 ]),
                 all(vec![
-                    guard(semantic, &conditional.test, false, inputs),
+                    test(semantic, &conditional.test, false),
                     expression_flow(semantic, &conditional.alternate, inputs, state),
                 ]),
             ]),
         ]),
-        // Allocations are not calls. Unsupported eager/short-circuit forms do
-        // not prove non-return; premise A admits the continuation if returning.
-        _ => Predicate::Live,
+        // Completion is an allowlist. New Oxc forms never inherit authority.
+        _ => Predicate::Unknown,
     }
 }
 
@@ -734,26 +897,29 @@ fn assignment_flow<'a>(
 ) -> Predicate {
     let left = match &assignment.left {
         oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(_) => Predicate::Live,
-        oxc_ast::ast::AssignmentTarget::StaticMemberExpression(member) => {
-            expression_flow(semantic, &member.object, inputs, state)
-        }
+        oxc_ast::ast::AssignmentTarget::StaticMemberExpression(member) => all(vec![
+            expression_flow(semantic, &member.object, inputs, state),
+            Predicate::Unknown,
+        ]),
         oxc_ast::ast::AssignmentTarget::ComputedMemberExpression(member) => all(vec![
             expression_flow(semantic, &member.object, inputs, state),
             expression_flow(semantic, &member.expression, inputs, state),
+            Predicate::Unknown,
         ]),
-        // Destructuring initialization needs an independent completion premise.
         _ => Predicate::Unknown,
     };
     if assignment.operator.is_logical() {
-        if assignment.operator == oxc_ast::ast::AssignmentOperator::LogicalNullish {
-            // Assignment uses the same unproved nullish selection as `??`.
-            return all(vec![left, Predicate::Unknown]);
-        }
-        return left;
+        // Exact target selection is absent for every logical assignment.
+        return all(vec![left, Predicate::Unknown]);
     }
     all(vec![
         left,
         expression_flow(semantic, &assignment.right, inputs, state),
+        if assignment.operator == oxc_ast::ast::AssignmentOperator::Assign {
+            Predicate::Live
+        } else {
+            Predicate::Unknown
+        },
     ])
 }
 
@@ -804,11 +970,108 @@ pub(super) fn argument_completion<'a>(
     state: &mut State,
 ) -> Predicate {
     match argument {
-        oxc_ast::ast::Argument::SpreadElement(spread) => {
-            expression_completion(semantic, &spread.argument, state)
+        oxc_ast::ast::Argument::SpreadElement(spread) => all(vec![
+            expression_completion(semantic, &spread.argument, state),
+            Predicate::Unknown,
+        ]),
+        _ => argument
+            .as_expression()
+            .map_or(Predicate::Unknown, |value| {
+                expression_completion(semantic, value, state)
+            }),
+    }
+}
+
+// Conversion of other values can invoke user code.
+pub(super) fn primitive_conversion(expression: &Expression<'_>) -> Predicate {
+    match inner(expression) {
+        Some(
+            Expression::BooleanLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::StringLiteral(_)
+            | Expression::NullLiteral(_)
+            | Expression::BigIntLiteral(_),
+        ) => Predicate::Live,
+        _ => Predicate::Unknown,
+    }
+}
+
+pub(super) fn static_member_completion(
+    member: &oxc_ast::ast::StaticMemberExpression<'_>,
+) -> Predicate {
+    if !member.optional
+        && member.property.name == "SSR"
+        && let Some(Expression::StaticMemberExpression(env)) = inner(&member.object)
+        && !env.optional
+        && env.property.name == "env"
+        && let Some(Expression::MetaProperty(meta)) = inner(&env.object)
+        && meta.meta.name == "import"
+        && meta.property.name == "meta"
+    {
+        Predicate::Live
+    } else {
+        Predicate::Unknown
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_oxc_expression_variant_has_an_explicit_completion_classification() {
+        let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../../../fixtures/reactive-ir/inferred-host-spa/completion-variants.json"
+        ))
+        .unwrap();
+        let mut variants = HashSet::new();
+        for case in &cases {
+            let source = case["source"].as_str().unwrap();
+            let allocator = oxc_allocator::Allocator::default();
+            let source_type = if case["jsx"] == true {
+                oxc_span::SourceType::tsx()
+            } else {
+                oxc_span::SourceType::ts()
+            };
+            let parsed = oxc_parser::Parser::new(&allocator, source, source_type)
+                .with_options(oxc_parser::ParseOptions {
+                    allow_v8_intrinsics: true,
+                    ..Default::default()
+                })
+                .parse();
+            assert!(parsed.errors.is_empty(), "{source}: {:?}", parsed.errors);
+            let built = oxc_semantic::SemanticBuilder::new().build(&parsed.program);
+            let mut expression = built.semantic.nodes().iter().find_map(|node| match node.kind() {
+                AstKind::VariableDeclarator(item) if matches!(&item.id, BindingPattern::BindingIdentifier(id) if id.name == "sample") => item.init.as_ref(),
+                _ => None,
+            }).unwrap();
+            if case["select"] == "callee" {
+                let Expression::CallExpression(call) = expression else {
+                    panic!("{source}")
+                };
+                expression = &call.callee;
+            }
+            if case["variant"] == "SequenceExpression" {
+                expression = inner(expression).unwrap();
+            }
+            let variant = case["variant"].as_str().unwrap();
+            assert!(
+                format!("{expression:?}").starts_with(variant),
+                "{variant}: {expression:?}"
+            );
+            assert!(
+                variants.insert(format!("{:?}", std::mem::discriminant(expression))),
+                "duplicate variant: {variant}"
+            );
+            assert_eq!(
+                expression_completion(&built.semantic, expression, &mut State::new())
+                    .evaluate(&|_| None),
+                case["normal"].as_bool(),
+                "{variant}: {source}"
+            );
         }
-        _ => argument.as_expression().map_or(Predicate::Live, |value| {
-            expression_completion(semantic, value, state)
-        }),
+        // Oxc 0.118: 40 direct + 3 inherited member variants. On an upgrade,
+        // audit the catalog again; the production fallback remains Unknown.
+        assert_eq!(variants.len(), 43);
     }
 }
