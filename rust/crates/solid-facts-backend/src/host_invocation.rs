@@ -90,10 +90,14 @@ fn shell_syntax(source: &str) -> bool {
 /// premise, whatever tool they run.
 fn names_vite(source: &str) -> bool {
     // Quotes, escapes and line continuations vanish before execution:
-    // `vit"e"` and `v\<newline>ite` both run `vite`.
+    // `vit"e"` and `v\<newline>ite` both run `vite`. A bare newline still
+    // separates commands, so it becomes a space rather than vanishing.
     let lower: String = source
+        .replace("\\\r\n", "")
+        .replace("\\\n", "")
         .chars()
-        .filter(|ch| !matches!(ch, '\'' | '"' | '\\' | '\n' | '\r'))
+        .filter(|ch| !matches!(ch, '\'' | '"' | '\\'))
+        .map(|ch| if matches!(ch, '\n' | '\r') { ' ' } else { ch })
         .collect::<String>()
         .to_ascii_lowercase();
     lower.match_indices("vite").any(|(index, _)| {
@@ -139,7 +143,7 @@ pub(super) fn refusal(scripts: &serde_json::Value, role: ManifestRole) -> Option
         // may move Vite to another root.
         let conventional = !shell_syntax(source)
             && !source
-                .split_ascii_whitespace()
+                .split(|ch: char| ch.is_ascii_whitespace() || matches!(ch, '&' | '|' | ';'))
                 .any(|word| matches!(word, "cd" | "pushd" | "popd"))
             && commands
                 .iter()
@@ -229,6 +233,9 @@ mod tests {
             "X=1 cd .. && vite build",
             "command cd ..; vite build",
             "builtin pushd ..; vite build",
+            "true;cd ..;vite build",
+            "cd;vite build",
+            "true\nvite build --config ../other.ts",
             "v\\\nite build --config ../other.ts",
             "npx vite build",
             "pnpm --dir ../.. exec vite build",
@@ -259,6 +266,7 @@ mod tests {
             "tsc && vite build",
             "pnpm --filter app exec vite",
             "v\\\nite build --config ../other.ts",
+            "true\nvite build --config ../other.ts",
         ] {
             assert_eq!(
                 refusal(

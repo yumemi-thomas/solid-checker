@@ -106,5 +106,8 @@
   {"name":"assignment-cd","scripts":{"build":"X=1 cd .. && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
   {"name":"builtin-cd","scripts":{"build":"command cd ..; vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
   {"name":"continued-vite","scripts":{"build":"v\\\nite build --config ../other.ts"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
-  {"name":"enclosing-continued-vite","browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory","workspaceScripts":{"postbuild":"v\\\nite build --config ../other.ts"}}
+  {"name":"enclosing-continued-vite","browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory","workspaceScripts":{"postbuild":"v\\\nite build --config ../other.ts"}},
+  {"name":"separator-attached-cd","scripts":{"build":"true;cd ..;vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"newline-separated-vite","scripts":{"build":"true\nvite build --config ../other.ts"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"enclosing-newline-separated-vite","browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory","workspaceScripts":{"postbuild":"true\nvite build --config ../other.ts"}}
 ]
