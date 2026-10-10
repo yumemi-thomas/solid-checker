@@ -78,7 +78,8 @@ fn admitted(source: &str) -> bool {
 
 /// A word that may change the shell's directory or which program `vite`
 /// names, in sh, zsh or cmd: `cd`, `CD`, `cd..`, `cd/d`, `chdir`, `pushd`,
-/// `popd`, a drive selector (`D:`), cmd's `path`/`set`, and any assignment
+/// `popd`, a drive selector (`D:`), cmd's `path`/`set` (also `path..`,
+/// `set/a`), and any assignment
 /// (`PATH=./bin`, `alias vite=...`, `set /a PATH-=1`). cmd's `@` echo prefix
 /// is ignored. `--outDir=dist` starts with `-` and is a flag value.
 fn shell_state_word(word: &str) -> bool {
@@ -89,34 +90,40 @@ fn shell_state_word(word: &str) -> bool {
     let drive =
         lower.len() == 2 && lower.as_bytes()[0].is_ascii_alphabetic() && lower.ends_with(':');
     drive
-        || matches!(lower.as_str(), "path" | "set")
-        || ["cd", "chdir", "pushd", "popd"].iter().any(|builtin| {
-            lower
-                .strip_prefix(builtin)
-                .is_some_and(|rest| !rest.starts_with(|ch: char| ch.is_ascii_alphanumeric()))
-        })
+        || ["cd", "chdir", "pushd", "popd", "path", "set"]
+            .iter()
+            .any(|builtin| {
+                lower
+                    .strip_prefix(builtin)
+                    .is_some_and(|rest| !rest.starts_with(|ch: char| ch.is_ascii_alphanumeric()))
+            })
 }
 
-/// A case-insensitive `vite` word: `vite`, `vite.js`, `VITE_X`, but not
-/// `vitest` or `@vitejs`. Scripts that never name Vite are covered by the
-/// premise, whatever tool they run.
+/// A case-insensitive `vite` not followed by a letter or digit: `vite`,
+/// `vite.js`, `VITE_X`, `-Svite`, `/cvite`, `bin\vite.cmd`, but not
+/// `vitest` or `@vitejs`. Nothing is required before it, so attached option
+/// payloads and path segments count (and so does `invite`, conservatively).
+/// Scripts that never name Vite are covered by the premise, whatever tool
+/// they run.
 fn names_vite(source: &str) -> bool {
     // Quotes, escapes and line continuations vanish before execution:
-    // `vit"e"`, cmd's `v^ite` and `v\<newline>ite` all run `vite`. A bare newline still
-    // separates commands, so it becomes a space rather than vanishing.
+    // `vit"e"`, cmd's `v^ite` and `v\<newline>ite` all run `vite`. A bare
+    // newline still separates commands, so it becomes a space.
     let lower: String = source
         .replace("\\\r\n", "")
         .replace("\\\n", "")
+        .replace("^\r\n", "")
+        .replace("^\n", "")
         .chars()
         .filter(|ch| !matches!(ch, '\'' | '"' | '\\' | '^'))
         .map(|ch| if matches!(ch, '\n' | '\r') { ' ' } else { ch })
         .collect::<String>()
         .to_ascii_lowercase();
     lower.match_indices("vite").any(|(index, _)| {
-        let before = lower[..index].bytes().next_back();
-        let after = lower.as_bytes().get(index + 4).copied();
-        !before.is_some_and(|ch| ch.is_ascii_alphanumeric())
-            && !after.is_some_and(|ch| ch.is_ascii_alphanumeric())
+        !lower
+            .as_bytes()
+            .get(index + 4)
+            .is_some_and(|ch| ch.is_ascii_alphanumeric())
     })
 }
 
@@ -272,6 +279,14 @@ mod tests {
             "set /a PATH-=1 && vite build",
             "v^ite build --config ../other.ts",
             "vi^te build --mode staging",
+            "env -Svite build --config ../other.ts",
+            "cd .. && env -Svite build",
+            "cmd /cvite build --config ../other.ts",
+            "node_modules\\.bin\\vite.cmd build --config ../other.ts",
+            "node node_modules\\vite\\bin\\vite.js build --config ../other.ts",
+            "path.. && vite build",
+            "path/alternate/bin && vite build",
+            "v^\nite build --config ../other.ts",
             "c^d ..&vite build",
             "! true && vite build",
             "# x && vite build",
@@ -311,6 +326,9 @@ mod tests {
             "v\\\nite build --config ../other.ts",
             "true\nvite build --config ../other.ts",
             "v^ite build --config ../other.ts",
+            "env -Svite build --config ../other.ts",
+            "node_modules\\.bin\\vite.cmd build --config ../other.ts",
+            "v^\nite build --config ../other.ts",
         ] {
             assert_eq!(
                 refusal(

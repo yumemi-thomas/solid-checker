@@ -39,7 +39,9 @@ enclosing scripts naming Vite refuse. Prefixed and separator-attached cd (`X=1 c
 `true;cd ..`), escaped-newline and newline-separated Vite twins refuse.
 The app grammar is then plain words joined by `&&`, so brace/glob-expanded
 chdir/cmd-spelled cd and PATH-assignment twins refuse too, as do the cmd
-`@cd`, drive-selector, `path`, `set /a` and caret-escaped Vite twins. There are 124 conventional-selection and
+`@cd`, drive-selector, `path`, `set /a` and caret-escaped Vite twins. Vite detection needs nothing before the word, so
+`env -Svite`, Windows `node_modules\.bin\vite.cmd` and compact `path..` twins
+refuse. There are 129 conventional-selection and
 22 resolver controls.
 
 resolver-selection-cases.json supplies native host-proof twins in temporary
