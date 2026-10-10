@@ -364,13 +364,21 @@ manifest candidates, canonical targets and lookup absence are fingerprinted
 before daemon reuse and again at admission. Requested resolver unknown/mismatch
 still refuses. No resource supplies a callable, component or initialization edge.
 
-Plain css/pcss/postcss and their module variants accept ordinary escaped class
-names. CSS module composes/@value and general @import closures, @config/@plugin (including escaped spellings),
-preprocessor side inputs, aliases and extension-claiming plugins remain refused;
-the existing audited local Tailwind import premise is preserved. SVG component
-plugins explicitly withhold the builtin URL premise. Asset default/namespace
-surfaces and CSS module default/namespace surfaces are admitted; unknown named
-exports remain unproved. Explicit raw/url files may have other extensions.
+Compiled stylesheets (including CSS module and CSS ?url) now withhold linking:
+audited loader identity does not prove successful transformation of arbitrary
+input. This refuses @reference, @apply and other unproved closures, including
+escaped spellings, without consuming an outside stylesheet. Tailwind discovery
+also records its inventory before refusing any stylesheet. Raw CSS remains inert
+text; every admitted raw/asset file, package dependency and absent lookup is
+recorded by the same resolver at discovery and before daemon reuse. Asset
+default/namespace surfaces are admitted; unknown named exports remain unproved.
+
+Nullish coalescing and nullish assignment always compose left completion. With no exact nullish facts,
+selection/right completion and tails remain unknown even for normal-return
+twins; certainly throwing left calls remain dead. Coverage result reuse is
+disabled for all units without an explicit runtime target, because the native
+inference closure includes inputs above the materialized analysis location that
+coverage's key does not yet enumerate. Explicit-target units retain caching.
 
 Classes with no eager static work, decorators or effectful computed keys complete
 normally; instance fields/methods are deferred allocation contents. Absent
@@ -396,15 +404,17 @@ unreviewed frameworks, SSR/hydration providers and mixed-route lowering remain
 fail closed. Compiler-owned function children must actually exist as exact
 normalized targets; this ADR does not permit ill-typed JSX to manufacture them.
 
-### Implementation measurements (2026-10-10)
+### Initial implementation measurements (2026-10-10)
 
 The earlier read-only rounds above describe their historical predictions. The
-implementation now audits the installed Tailwind 4.3.3 CSS transform together
+initial implementation audited the installed Tailwind 4.3.3 CSS transform together
 with Vite's style injection/export-map lowering. Config-loader imports `vite`
 and `vitest/config` were already closure-audited but incorrectly vetoed resource
 compatibility; including them removes that accidental refusal. Executable CSS
 directives, unknown resource plugins, nested stylesheet imports and mismatched
-resolutions still refuse.
+resolutions still refuse. Independent review subsequently showed that this did
+not establish successful transformation: compiled stylesheet linking is now
+withheld as described above.
 
 Read-only `import.meta.env?.DEV/SSR` scalar access no longer implies an env-object
 escape. Optional tests supply no host constant, and eager optional-chain

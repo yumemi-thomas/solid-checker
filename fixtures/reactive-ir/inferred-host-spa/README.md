@@ -27,10 +27,15 @@ is present.
 Expectations are hand-stated; tests and snapshot comparison are unrun in this
 read-only draft. Record only this fixture's snapshot after the first focused run.
 
-class-cases.json and resource-cases.json are small proof inputs consumed by the
-Rust unit tests, outside tsconfig's src include. They distinguish inert class
-allocation from eager static/decorator/key/heritage work, and Vite-generated CSS
-maps or asset strings from missing files, executable redirects, transforms and
-unsupported resource closure. Error remains unresolved in the syntax-only
+class-cases.json, nullish-cases.json and resource-cases.json are small proof inputs consumed by the
+Rust tests, outside tsconfig's src include. They distinguish inert class
+allocation from eager static/decorator/key/heritage work, nullish left completion
+from unknown selection in statements/initializers/eager arguments, and raw/asset
+strings from compiled CSS requiring unproved successful transformation.
+Missing/external/escaped @reference, invalid @apply and malformed module CSS
+all refuse; byte-identical raw twins are inert and live. Every diagnostic twin
+asserts the exact unowned registration site and violation kind under authorized
+browser inference. Normal nullish returns stay unknown; normal non-nullish calls
+remain live controls. Error remains unresolved in the syntax-only
 heritage twin; a name is not constructor proof. These inputs add no findings or
 published-signature stubs. The node-count regressions live in host_execution.rs.

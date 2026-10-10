@@ -260,6 +260,74 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
             "{name}: {findings:#?}"
         );
         if name == "spa" {
+            let cases: Vec<serde_json::Value> = serde_json::from_slice(
+                &fs::read(
+                    repository.join("fixtures/reactive-ir/inferred-host-spa/nullish-cases.json"),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            for case in cases {
+                for form in ["{};", "const value = {};", "consume({});"] {
+                    let source = format!(
+                        "import {{startClosed}} from 'reactive-package'; {} function consume(value: unknown) {{}} {} startClosed();",
+                        case["declaration"].as_str().unwrap(),
+                        form.replace("{}", case["expression"].as_str().unwrap())
+                    );
+                    fs::write(project.join("src/main.ts"), &source).unwrap();
+                    let result = analyze(None);
+                    let call = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
+                    let violation = result["findings"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|finding| {
+                            finding["kind"] == "violation"
+                                && inferred(finding)
+                                && finding["primaryLocation"]["path"]
+                                    .as_str()
+                                    .is_some_and(|path| path.ends_with("src/main.ts"))
+                                && finding["primaryLocation"]["startByte"].as_u64() == Some(call)
+                        });
+                    assert_eq!(
+                        violation,
+                        case["completion"] == true,
+                        "{source}: {result:#?}"
+                    );
+                }
+            }
+            // The same bytes either require an unproved CSS transformation or
+            // are acquired as inert raw text. Review every live twin's exact site.
+            for css in [
+                "@reference './missing.css';",
+                "@reference '../../outside.css';",
+                "@\\72 eference './missing.css';",
+                "@apply definitely-not-a-real-utility;",
+                ".x{",
+            ] {
+                fs::write(project.join("src/bad.module.css"), css).unwrap();
+                for raw in [false, true] {
+                    let source = format!(
+                        "import './bad.module.css{}'; import {{startClosed}} from 'reactive-package'; startClosed();",
+                        if raw { "?raw" } else { "" }
+                    );
+                    fs::write(project.join("src/main.ts"), &source).unwrap();
+                    let result = analyze(None);
+                    let call = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
+                    assert_eq!(
+                        result["findings"].as_array().unwrap().iter().any(
+                            |finding| finding["kind"] == "violation"
+                                && inferred(finding)
+                                && finding["primaryLocation"]["path"]
+                                    .as_str()
+                                    .is_some_and(|path| path.ends_with("src/main.ts"))
+                                && finding["primaryLocation"]["startByte"].as_u64() == Some(call)
+                        ),
+                        raw,
+                        "{source}: {result:#?}"
+                    );
+                }
+            }
             fs::write(project.join("src/main.ts"), "import {startClosed} from 'reactive-package'; class Stop {constructor(){throw 0}} new Stop(); startClosed();").unwrap();
             let constructor_refused = analyze(None);
             assert!(

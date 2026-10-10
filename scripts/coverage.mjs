@@ -34,6 +34,7 @@ import { promisify } from "node:util";
 import { dialectStubProblems } from "./lib/dialect-stubs.mjs";
 import { ancestorChainDigest, hashTree, openGateCache } from "./lib/gate-cache.mjs";
 import { gateConcurrency, mapPool } from "./lib/pool.mjs";
+import { runCoverageUnit } from "./lib/coverage-cache.mjs";
 
 const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
@@ -358,9 +359,10 @@ if (projects.length === 0) {
 // up now misses instead of replaying pre-install findings while `checkDialectStubs`
 // (the thing that catches a substituted dialect) never runs.
 //
-// With that added, a project's findings are a function of exactly its tree, the
-// dialect-selection chain above it, the two binaries, and the environment --
-// which is what makes running the 83 of them concurrently sound.
+// These keys cover explicit-target units. No-target units bypass result reuse:
+// inference additionally observes ancestors/dependencies of the materialized
+// project, including absent PostCSS/config/package candidates, that this key
+// does not enumerate. A native daemon's revalidation cannot protect a gate hit.
 // The authorization tool is an input wherever a project asks for an accepted
 // contract: it decides what the analyzed catalog says. It joins the key only
 // when some project asks, so a corpus with none of them is not invalidated by a
@@ -400,13 +402,13 @@ const unitParts = (project) => () => [
 const computed = await mapPool(
   projects,
   (project) =>
-    cache.run(unitParts(project), () => {
+    runCoverageUnit(cache, unitParts(project), () => {
       const authorized = project.authorizes ? materializeAuthorized(project) : undefined;
       const tsconfig = authorized
         ? join(authorized.directory, "tsconfig.json")
         : project.tsconfig;
       return analyze(tsconfig, KEEPS_WORDING.has(project.id), authorized);
-    }),
+    }, runtimeArguments(project.tsconfig)),
   { concurrency }
 );
 
@@ -470,6 +472,7 @@ for (const entry of readdirSync(snapshots)) {
 const verb = update ? "recorded" : "compared";
 console.log(`${verb} ${projects.length} fixture projects, ${total} findings`);
 console.log(`${cache.summary()}; concurrency ${concurrency}`);
+console.log(`inference cache bypass: ${computed.filter((unit) => unit.inferenceCacheBypassed).length} unit(s)`);
 if (changed > 0) {
   console.error(`${changed} project(s) differ -- re-run with --update if intended`);
   process.exit(1);

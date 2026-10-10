@@ -558,71 +558,13 @@ pub(super) fn resource(
     Some(Resource { kind, entries })
 }
 
-// Decode CSS escapes before checking build-time directives. Scalar's published
-// CSS uses many escaped class names; a blanket backslash veto rejects ordinary
-// CSS. Imports and executable plugin/config directives stay closed, including
-// escaped spellings and comments; no stylesheet dependency is silently ignored.
-fn passive_css(source: &str, tailwind: bool) -> bool {
-    let mut normalized = String::new();
-    let mut chars = source.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '/' && chars.peek() == Some(&'*') {
-            chars.next();
-            let mut closed = false;
-            while let Some(c) = chars.next() {
-                if c == '*' && chars.peek() == Some(&'/') {
-                    chars.next();
-                    closed = true;
-                    break;
-                }
-            }
-            if !closed {
-                return false;
-            }
-        } else if c == '\\' {
-            let mut hex = String::new();
-            while hex.len() < 6 && chars.peek().is_some_and(|c| c.is_ascii_hexdigit()) {
-                hex.push(chars.next().unwrap());
-            }
-            if hex.is_empty() {
-                let Some(c) = chars.next() else {
-                    return false;
-                };
-                normalized.push(c);
-            } else {
-                let Some(c) = u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) else {
-                    return false;
-                };
-                normalized.push(c);
-                if chars.peek().is_some_and(|c| c.is_whitespace()) {
-                    chars.next();
-                }
-            }
-        } else {
-            normalized.push(c);
-        }
-    }
-    let mut normalized = normalized.to_ascii_lowercase();
-    let compact = normalized
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .collect::<String>();
-    if compact.contains("composes:")
-        || compact.contains("compose-with:")
-        || compact.contains("@value")
-    {
-        return false;
-    }
-    if tailwind {
-        // Preserve the existing audited Tailwind application's exact builtin
-        // import premise. General nested imports still need a closure proof.
-        normalized = normalized
-            .replace("@import \"tailwindcss\";", "")
-            .replace("@import 'tailwindcss';", "");
-    }
-    !["@import", "@config", "@plugin"]
-        .iter()
-        .any(|directive| normalized.contains(directive))
+// Loader closure identity proves which code runs, not that arbitrary CSS
+// successfully transforms. Until a bounded transform-success fact exists,
+// compiled stylesheets (including CSS ?url) supply no linking authority.
+// Raw CSS remains an inert string and never calls this predicate. This also
+// withholds every directive/escape and every external stylesheet closure.
+fn passive_css(_source: &str, _tailwind: bool) -> bool {
+    false
 }
 
 /// Record even failed candidate lookups before the daemon's shortcut. The same
@@ -839,7 +781,7 @@ mod tests {
         );
         assert!(!passive_css("@\\69mport 'hidden.css';", false));
         assert!(!passive_css("@con/**/fig 'hidden.ts';", false));
-        assert!(passive_css("@import \"tailwindcss\"; .x{color:red}", true));
+        assert!(!passive_css("@import \"tailwindcss\"; .x{color:red}", true));
         assert!(!passive_css("@import \"tailwindcss\";", false));
         fs::remove_dir_all(app).unwrap();
     }

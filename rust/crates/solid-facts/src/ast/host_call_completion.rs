@@ -587,7 +587,15 @@ fn expression_flow_inner<'a>(
             let take = match logical.operator {
                 oxc_ast::ast::LogicalOperator::And => true,
                 oxc_ast::ast::LogicalOperator::Or => false,
-                oxc_ast::ast::LogicalOperator::Coalesce => return Predicate::Live,
+                oxc_ast::ast::LogicalOperator::Coalesce => {
+                    // The left operand always executes. Truthiness facts are
+                    // not nullish-selection facts; neither arm can supply a
+                    // continuation proof until that selection is exact.
+                    return all(vec![
+                        expression_flow(semantic, &logical.left, inputs, state),
+                        Predicate::Unknown,
+                    ]);
+                }
             };
             all(vec![
                 expression_flow(semantic, &logical.left, inputs, state),
@@ -737,6 +745,10 @@ fn assignment_flow<'a>(
         _ => Predicate::Unknown,
     };
     if assignment.operator.is_logical() {
+        if assignment.operator == oxc_ast::ast::AssignmentOperator::LogicalNullish {
+            // Assignment uses the same unproved nullish selection as `??`.
+            return all(vec![left, Predicate::Unknown]);
+        }
         return left;
     }
     all(vec![

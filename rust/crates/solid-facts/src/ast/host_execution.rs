@@ -1529,6 +1529,36 @@ mod tests {
     }
 
     #[test]
+    fn nullish_completion_composes_left_and_withholds_unknown_selection() {
+        let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../../../fixtures/reactive-ir/inferred-host-spa/nullish-cases.json"
+        ))
+        .unwrap();
+        for case in cases {
+            for form in ["{};", "const value = {};", "consume({});"] {
+                let source = format!(
+                    "{} function consume(value: unknown) {{}} prefix(); {} closed();",
+                    case["declaration"].as_str().unwrap(),
+                    form.replace("{}", case["expression"].as_str().unwrap())
+                );
+                let expected = case["completion"].as_bool();
+                assert_eq!(observed(&source, "prefix()", false), Some(true), "{source}");
+                assert_eq!(observed(&source, "closed()", false), expected, "{source}");
+                let (facts, _, _, _, _) = measured(&source, false);
+                let completion = facts
+                    .iter()
+                    .find(|fact| fact.kind == HostExecutionSiteKind::ModuleCompletion)
+                    .unwrap();
+                assert_eq!(
+                    completion.predicate.evaluate(&|_| None),
+                    expected,
+                    "{source}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn unproved_constructor_completion_preserves_its_prefix_and_withholds_tails() {
         for source in [
             "class Stop {constructor(){throw 0}} prefix(); new Stop(); closed();",

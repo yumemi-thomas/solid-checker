@@ -758,59 +758,22 @@ fn configuration(
         let mut inventory = Vec::new();
         inventory_paths(directory, &mut inventory)
             .required(directory, "cannot inventory Tailwind side inputs")?;
-        // All stylesheets are inspected, including unused ones. Imported
-        // package CSS is unsupported: it could hide @config/@plugin app loads.
-        for path in inventory
+        // Record the entire observed inventory before refusing: daemon hits
+        // must revalidate the refusal witness too. No stylesheet closure is
+        // admitted without successful-transform facts, so @reference, @apply,
+        // escaped directives and outside-app dependencies cannot grant authority.
+        inputs.extend(inventory.iter().cloned());
+        if let Some(path) = inventory
             .iter()
-            .filter(|path| path.extension().is_some_and(|ext| ext == "css"))
+            .find(|path| path.extension().is_some_and(|ext| ext == "css"))
         {
-            if !safe_css(directory, path).required(path, "cannot prove stylesheet side inputs")? {
-                return Err(DiscoveryRefusal::new(
-                    path,
-                    "stylesheet may load executable or external configuration",
-                ));
-            }
+            return Err(DiscoveryRefusal::new(
+                path,
+                "Tailwind stylesheet successful transformation is unproved",
+            ));
         }
-        inputs.extend(inventory);
     }
     Ok(config)
-}
-
-fn safe_css(directory: &Path, path: &Path) -> Option<bool> {
-    let source = fs::read_to_string(path).ok()?;
-    let mut normalized = String::new();
-    let mut rest = source.as_str();
-    while let Some(start) = rest.find("/*") {
-        normalized.push_str(&rest[..start]);
-        let tail = &rest[start + 2..];
-        rest = &tail[tail.find("*/")? + 2..];
-    }
-    normalized.push_str(rest);
-    let source = normalized.to_ascii_lowercase();
-    // Deliberately refuse escapes and comments masking directives rather than
-    // introducing another CSS parser/normalization authority.
-    if source.contains('\\') || source.contains("@config") || source.contains("@plugin") {
-        return Some(false);
-    }
-    for tail in source.split("@import").skip(1) {
-        let tail = tail.trim_start();
-        let quote = tail.chars().next()?;
-        if quote != '\'' && quote != '"' {
-            return Some(false);
-        }
-        let target = tail[1..].split(quote).next()?;
-        if target == "tailwindcss" {
-            continue;
-        }
-        if !target.starts_with('.') {
-            return Some(false);
-        }
-        let target = fs::canonicalize(path.parent()?.join(target)).ok()?;
-        if !target.starts_with(directory) || target.extension().is_none_or(|ext| ext != "css") {
-            return Some(false);
-        }
-    }
-    Some(true)
 }
 
 fn route_file(directory: &Path, config: &Config, file: &FileFacts) -> bool {
@@ -1103,7 +1066,7 @@ fn html_entries_at(path: &Path, source: &str) -> Result<Vec<String>, DiscoveryRe
             html = &html[end + 9..];
         } else if name == "style" {
             // Vite can turn inline styles into CSS proxy modules. Their
-            // executable preprocessor side inputs are outside safe_css.
+            // executable preprocessor side inputs have no transform proof.
             return Err(refusal("inline stylesheet preprocessing is unproved"));
         } else if name == "title" {
             let close = format!("</{name}>");
@@ -4036,6 +3999,44 @@ mod tests {
             inferred_host_input_paths_for_project(&scratch, &scratch.join("tsconfig.json")),
             vec![scratch.join("package.json")],
         );
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
+    #[test]
+    fn admitted_raw_resources_and_absent_lookups_are_daemon_inputs() {
+        let scratch = std::env::temp_dir().join(format!("host-raw-inputs-{}", std::process::id()));
+        fs::create_dir_all(scratch.join("src")).unwrap();
+        let app = fs::canonicalize(&scratch).unwrap();
+        fs::write(app.join("package.json"), "{\"private\":true}").unwrap();
+        fs::write(app.join("tsconfig.json"), "{}").unwrap();
+        fs::write(app.join("vite.config.ts"), "export default {plugins: []};").unwrap();
+        fs::write(
+            app.join("index.html"),
+            "<script type=\"module\" src=\"/src/main.ts\"></script>",
+        )
+        .unwrap();
+        fs::write(
+            app.join("src/main.ts"),
+            "import './present.css?raw'; import './absent.css?raw';",
+        )
+        .unwrap();
+        let present = app.join("src/present.css");
+        let absent = app.join("src/absent.css");
+        fs::write(&present, "@reference '../../outside.css';").unwrap();
+        let inputs = inferred_host_input_paths_for_project(&app, &app.join("tsconfig.json"));
+        assert!(inputs.contains(&present));
+        assert!(inputs.contains(&absent));
+        let paths = inputs.iter().map(PathBuf::as_path).collect::<Vec<_>>();
+        let before = identities(&paths);
+        fs::write(&present, "@apply unknown;").unwrap();
+        fs::write(&absent, ".x{").unwrap();
+        let after = identities(&paths);
+        for path in [&present, &absent] {
+            let index = inputs.iter().position(|input| input == path).unwrap();
+            assert_ne!(before[index], after[index]);
+        }
+        // Raw acquisition never interprets @reference or observes its target.
+        assert!(!inputs.contains(&app.parent().unwrap().join("outside.css")));
         fs::remove_dir_all(scratch).unwrap();
     }
 

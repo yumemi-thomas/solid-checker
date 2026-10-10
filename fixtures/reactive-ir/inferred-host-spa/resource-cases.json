@@ -1,19 +1,19 @@
 [
   {
-    "name": "vite-config-import-preserves-tailwind-css",
+    "name": "vite-config-does-not-prove-tailwind-transform",
     "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.css",
     "css": "@import \"tailwindcss\"; .x{color:red}",
-    "loadable": true,
+    "loadable": false,
     "kind": "Stylesheet",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "vitest-config-import-preserves-tailwind-css",
+    "name": "vitest-config-does-not-prove-tailwind-transform",
     "config": "import {defineConfig} from 'vitest/config';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.css",
     "css": "@import \"tailwindcss\"; .x{color:red}",
-    "loadable": true,
+    "loadable": false,
     "kind": "Stylesheet",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
@@ -67,7 +67,7 @@
     "name": "module-map-is-decided-by-the-resolved-file",
     "request": "styles/style.module.css",
     "css": ".x{}",
-    "loadable": true,
+    "loadable": false,
     "kind": "Stylesheet",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.module.css\":\"./dist/style.css\"}}"
   },
@@ -75,7 +75,7 @@
     "name": "package-css",
     "request": "styles/style.css",
     "css": ".x{color:red}",
-    "loadable": true,
+    "loadable": false,
     "kind": "Stylesheet",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
@@ -83,7 +83,7 @@
     "name": "relative-css",
     "request": "./local.css",
     "css": ".x{color:red}",
-    "loadable": true,
+    "loadable": false,
     "kind": "Stylesheet",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
@@ -91,7 +91,7 @@
     "name": "css-module",
     "request": "./local.module.css",
     "css": ".x{color:red}",
-    "loadable": true,
+    "loadable": false,
     "kind": "CssModule",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
@@ -99,7 +99,7 @@
     "name": "escaped-css-classes",
     "request": "styles/style.css",
     "css": ".w-\\\\[1px\\\\]{width:1px}",
-    "loadable": true,
+    "loadable": false,
     "kind": "Stylesheet",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
@@ -190,5 +190,107 @@
     "css": ".x{}",
     "loadable": false,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "reference-missing-transform-refused",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css",
+    "css": "@reference \"./missing.css\";",
+    "loadable": false,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "reference-missing-raw-twin",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css?raw",
+    "css": "@reference \"./missing.css\";",
+    "loadable": true,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
+    "kind": "String"
+  },
+  {
+    "name": "reference-external-transform-refused",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css",
+    "css": "@reference \"../../outside.css\";",
+    "loadable": false,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "reference-external-raw-twin",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css?raw",
+    "css": "@reference \"../../outside.css\";",
+    "loadable": true,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
+    "kind": "String"
+  },
+  {
+    "name": "reference-escaped-transform-refused",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css",
+    "css": "@\\72 eference \"./missing.css\";",
+    "loadable": false,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "reference-escaped-raw-twin",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css?raw",
+    "css": "@\\72 eference \"./missing.css\";",
+    "loadable": true,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
+    "kind": "String"
+  },
+  {
+    "name": "apply-unknown-transform-refused",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css",
+    "css": "@apply definitely-not-a-real-utility;",
+    "loadable": false,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "apply-unknown-raw-twin",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css?raw",
+    "css": "@apply definitely-not-a-real-utility;",
+    "loadable": true,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
+    "kind": "String"
+  },
+  {
+    "name": "apply-escaped-transform-refused",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css",
+    "css": "@\\61 pply definitely-not-a-real-utility;",
+    "loadable": false,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "apply-escaped-raw-twin",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css?raw",
+    "css": "@\\61 pply definitely-not-a-real-utility;",
+    "loadable": true,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
+    "kind": "String"
+  },
+  {
+    "name": "module-malformed-transform-refused",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css",
+    "css": ".x{",
+    "loadable": false,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "module-malformed-raw-twin",
+    "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
+    "request": "./local.module.css?raw",
+    "css": ".x{",
+    "loadable": true,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
+    "kind": "String"
   }
 ]

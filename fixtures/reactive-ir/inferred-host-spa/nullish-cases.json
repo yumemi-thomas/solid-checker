@@ -1,0 +1,10 @@
+[
+  {"name":"throwing-constructor","declaration":"class Stop { value?: number; constructor(){ throw 0; } }", "expression":"new Stop().value ?? 0", "completion":null},
+  {"name":"normal-constructor","declaration":"class Stop { value?: number; constructor(){} }", "expression":"new Stop().value ?? 0", "completion":null},
+  {"name":"certain-throw","declaration":"function stop(): number | undefined { throw 0; }", "expression":"stop() ?? 0", "completion":false},
+  {"name":"normal-return","declaration":"function stop(): number | undefined { return 1; }", "expression":"stop() ?? 0", "completion":null},
+  {"name":"right-certain-throw","declaration":"function stop(): number | undefined { return undefined; } function fail(): number {throw 0;}", "expression":"stop() ?? fail()", "completion":null},
+  {"name":"assignment-throw","declaration":"let selected: number | undefined; function fail(): number { throw 0; }", "expression":"(selected ??= fail())", "completion":null},
+  {"name":"assignment-normal","declaration":"let selected: number | undefined; function normal(): number { return 1; }", "expression":"(selected ??= normal())", "completion":null},
+  {"name":"normal-return-without-nullish","declaration":"function stop(): number | undefined { return 1; }", "expression":"stop()", "completion":true}
+]

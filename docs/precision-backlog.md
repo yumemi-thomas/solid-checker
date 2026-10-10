@@ -28924,6 +28924,20 @@ claimed. Measured: ledger browser 98 -> 99; the namespace-created dictionary
 case stays uncertifiable (more conservative than predicted).
 ## Inferred browser host (2026-10-10, ADR 0270; implemented and measured)
 
+Independent-review repairs: `??`/`??=` compose left completion and withhold unknown
+nullish selection/right completion; throwing constructors/functions cannot lend
+authority to unreachable tails. Normal-return nullish twins also withhold until
+exact facts exist. Compiled CSS, CSS modules and CSS ?url withhold linking until
+bounded successful-transform facts exist; audited Tailwind bytes alone do not
+establish this. Missing/external/escaped @reference, invalid/escaped @apply and
+malformed CSS have raw-string twins and exact native violation-site assertions.
+No stylesheet dependency is admitted. Discovery records Tailwind inventory
+before refusal; the shared resource resolver retains raw/asset dependencies and
+absent lookups for manifests and daemon revalidation. Coverage bypasses result
+reuse for every no-target unit, including refusal cases, pending a complete key
+for inference inputs at the materialized location. A warm/cold ancestor
+PostCSS/package mutation regression seeds the formerly stale entry.
+
 The round notes below are historical read-only deliveries. Native implementation
 now passes a 239-project coverage comparison (1,583 findings) with no differences
 and no existing snapshot changes. Only the new congruent-alias helper and
@@ -28931,8 +28945,9 @@ first-default-extension reachability snapshots changed after reviewing their
 live, unowned registration sites. Nineteen synthetic package fixtures gained
 linking-only entries without changing declarations or behavior-contract pins.
 
-The resource repair includes already-audited Vite/vitest config-loader imports
-in CSS compatibility and inspects installed Tailwind 4.3.3/Vite 8.3.0 bytes.
+The initial resource repair included already-audited Vite/vitest config-loader imports
+in CSS compatibility and inspected installed Tailwind 4.3.3/Vite 8.3.0 bytes;
+the review repairs above supersede its stylesheet admission.
 Unknown plugins, executable directives, nested CSS imports and mismatched
 resolution still refuse. Optional read-only env scalars no longer imply object
 escape; optional branch constants and eager chain completion remain unknown.
