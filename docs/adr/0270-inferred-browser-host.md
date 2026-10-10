@@ -155,7 +155,7 @@ payloads (`env -Svite`, `cmd /cvite`) and Windows paths
 `invite`, conservatively; `vitest` and `@vitejs/...` do not. A backslash is
 read both as an escape and as a Windows path separator, so
 `node_modules\vite\dist\node\cli.js` counts too. Deliberately synthesized
-spellings (`v$''ite`, `$(printf v)ite`, `.bin/v[i]te`, `env -S 'vite\c…'`) are
+spellings (`v$''ite`, `$(printf v)ite`, `.bin/v[i]te`) are
 not detected; they are adversarial encodings of the command name rather than
 a config a real project selects, and are accepted under the premise (review
 15, P2). In the application manifest, including
