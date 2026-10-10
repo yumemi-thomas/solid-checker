@@ -105,7 +105,6 @@ pub mod host_constants;
 mod host_inline;
 mod host_loadable;
 mod host_plugins;
-mod host_tsconfig;
 mod inferred_contract;
 mod inferred_host;
 mod installed_patches;

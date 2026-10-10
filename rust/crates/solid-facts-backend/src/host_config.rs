@@ -822,6 +822,58 @@ mod tests {
     use super::*;
 
     #[test]
+    fn tsconfig_resolver_activity_is_conservative() {
+        let path = Path::new("vite.config.ts");
+        for (source, active) in [
+            ("export default {plugins:[]}", false),
+            (
+                "export default {plugins:[],resolve:{tsconfigPaths:false}}",
+                false,
+            ),
+            (
+                "export default {plugins:[],resolve:{tsconfigPaths:true}}",
+                true,
+            ),
+            (
+                "export default {plugins:[],resolve:{tsconfigPaths:undefined}}",
+                true,
+            ),
+            (
+                "import {defineConfig} from 'vite'; export default defineConfig(({mode}) => ({plugins:[],resolve:{tsconfigPaths:mode}}))",
+                true,
+            ),
+            (
+                "import {defineConfig} from 'vite'; export default defineConfig(({mode}) => mode ? {plugins:[]} : {plugins:[],resolve:{tsconfigPaths:true}})",
+                true,
+            ),
+            (
+                "import paths from 'vite-tsconfig-paths'; export default {plugins:[paths()]}",
+                true,
+            ),
+            (
+                "import paths from 'vite-tsconfig-paths'; export default {plugins:[]}",
+                true,
+            ),
+        ] {
+            assert_eq!(
+                parse(path, source).unwrap().tsconfig_paths,
+                active,
+                "{source}"
+            );
+        }
+        for source in [
+            "export default unknown",
+            "export default {plugins:[],resolve:unknown}",
+            "export default {plugins:[],resolve:{tsconfigPaths:unknown}}",
+            "import paths from 'vite-tsconfig-paths'; export default {plugins:[paths({root:'..'})]}",
+            "import paths from 'vite-tsconfig-paths'; export default {plugins:[paths({projects:['./tsconfig.app.json']})]}",
+            "import paths from 'vite-tsconfig-paths'; export default {plugins:[paths(options)]}",
+        ] {
+            assert!(parse(path, source).is_none(), "{source}");
+        }
+    }
+
+    #[test]
     fn package_resolver_controls_and_branch_exclusions_remain_closed() {
         let path = Path::new("vite.config.ts");
         let default = parse(

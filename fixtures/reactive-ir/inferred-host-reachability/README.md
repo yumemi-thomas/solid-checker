@@ -4,14 +4,17 @@ resolver-selection-cases.json supplies native host-proof twins in temporary
 projects analyzed with tsconfig.app.json, while the enabled resolver discovers
 tsconfig.json. Both native Vite and default vite-tsconfig-paths configuration
 premises are exercised independently of installed-plugin byte admission.
-Matching exact/wildcard paths withhold package selection and isServer folding;
-unrelated paths remain admissible. Exact runtime client agreement recovers proof;
+Any active resolver withholds package selection and isServer folding app-wide,
+including unrelated/empty paths, tokenized baseUrl, relative inheritance and
+package extends. No-resolver controls remain admissible. Exact runtime client agreement recovers proof;
 shadow/server/unknown answers withhold it. The temporary isServer declaration is
 byte-faithful to @solidjs/web@2.0.0-rc.13's published boolean signature; synthetic
 runtime constants test file identity only, and assert no reactive diagnostic.
 Separate process twins assert the exact guarded SC4001 site with the existing
-unchanged startClosed(): void contract. Resolver unit tests pin nested,
-workspace, extends/reference and baseUrl inputs, including cache invalidation.
+unchanged startClosed(): void contract. resolver-selection-worker.mjs supplies
+controlled ADR 0220 process rows; it tests the transport and canonical agreement,
+not installed Vite behavior. The resolver-scope inventory is deliberately gone:
+Vite config/plugin identity decide activity, not guessed tsconfig resolution.
 
 Round 8 adds parser/proof-input twins, consumed by backend unit tests without
 changing this project's analyzed entry or expected findings. classic-independent

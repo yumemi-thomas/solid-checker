@@ -176,15 +176,6 @@ fn inferred_host_graph_input_paths(
     );
     paths.extend(CONFIGS.iter().map(|name| directory.join(name)));
     let _ = tsconfig_inputs(project, &mut paths, &mut BTreeSet::new());
-    let resolver_sources = facts
-        .into_iter()
-        .flat_map(|facts| &facts.files)
-        .map(|file| PathBuf::from(file.path.as_str()))
-        .chain(source_paths.iter().cloned())
-        .collect::<Vec<_>>();
-    let resolver_paths =
-        crate::host_tsconfig::discover(directory, resource_config, &mut paths, &resolver_sources)
-            .unwrap_or_default();
     for stem in [
         "entry-client",
         "entry-server",
@@ -283,7 +274,6 @@ fn inferred_host_graph_input_paths(
             continue;
         };
         for text in requests.iter().map(String::as_str) {
-            let _ = resolver_paths.could_rewrite(text, &mut paths);
             // Resolution depends on the importer directory and request, not
             // the source filename. Resource reads keep their occurrence path.
             let _ = crate::host_loadable::resource(
@@ -1390,7 +1380,6 @@ fn execution_constants(
 ) -> BTreeMap<Span, (bool, bool)> {
     let directory = &prepared.directory;
     let config = &prepared.config;
-    let resolver_paths = &prepared.resolver_paths;
     let mut values = BTreeMap::new();
     let Some(resolutions) = &facts.resolved_imports else {
         return values;
@@ -1404,16 +1393,7 @@ fn execution_constants(
             .iter()
             .filter(|import| !import.type_only && import.module == candidate_export.module)
         {
-            let mut resolver_inputs = Vec::new();
-            let rewritable = resolver_paths.could_rewrite(&import.module, &mut resolver_inputs);
-            for input in resolver_inputs {
-                let observed =
-                    graph_identity(manifest, &input).unwrap_or_else(|| "unreadable".into());
-                manifest
-                    .inputs
-                    .insert(input.to_string_lossy().into_owned(), observed);
-            }
-            if rewritable && facts.runtime_resolutions.is_none() {
+            if config.tsconfig_paths && facts.runtime_resolutions.is_none() {
                 continue;
             }
             if config.aliases.keys().any(|alias| {
@@ -1970,7 +1950,9 @@ fn local_edge(
             if path.as_ref() == target && physical_path.as_ref() == target
                 && fs::canonicalize(target).ok().as_deref() == Some(Path::new(target)));
     }
-    congruent_alias(config, paths, text) && exact_local_target(config, importer, text, target)
+    !resolver_selection_required(config, text)
+        && congruent_alias(config, paths, text)
+        && exact_local_target(config, importer, text, target)
 }
 
 fn body_symbol(
@@ -2384,8 +2366,18 @@ struct DiscoveryInputs {
     directory: PathBuf,
     config: Config,
     paths: BTreeMap<String, Vec<String>>,
-    resolver_paths: crate::host_tsconfig::ResolverPaths,
     config_inputs: Vec<PathBuf>,
+}
+
+fn resolver_selection_required(config: &Config, request: &str) -> bool {
+    config.tsconfig_paths
+        && (!(request.starts_with("./") || request.starts_with("../") || request.starts_with('/'))
+            || config.aliases.keys().any(|alias| {
+                request == alias
+                    || request
+                        .strip_prefix(alias)
+                        .is_some_and(|tail| tail.starts_with('/'))
+            }))
 }
 
 fn package_selection_agrees(
@@ -2394,9 +2386,9 @@ fn package_selection_agrees(
     span: Span,
     text: &str,
     entries: &[PathBuf],
-    rewritable: bool,
+    resolver_active: bool,
 ) -> bool {
-    facts.runtime_resolutions.as_ref().map_or(!rewritable, |runtime| {
+    facts.runtime_resolutions.as_ref().map_or(!resolver_active, |runtime| {
         matches!(runtime.outcome(importer, span, text),
             solid_facts::runtime_resolution::RuntimeOutcome::File { path, physical_path }
             if path == physical_path && entries.iter().any(|entry| Path::new(path.as_ref()) == entry.as_path()
@@ -2436,23 +2428,11 @@ fn discovery_inputs(
     // Refusal consumes only its witness. No app inventory, request parsing,
     // or manifest hashing is needed before the configuration can be admitted.
     let config = configuration(&directory, &mut paths_observed, fixture_authority)?;
-    let resolver_sources = facts
-        .files
-        .iter()
-        .map(|file| PathBuf::from(file.path.as_str()))
-        .collect::<Vec<_>>();
-    let resolver_paths =
-        crate::host_tsconfig::discover(&directory, &config, &mut paths_observed, &resolver_sources)
-            .required(
-                &directory,
-                "cannot enumerate tsconfig resolver scope or inheritance",
-            )?;
     let paths = paths_targets(&directory, &project)?;
     Ok(DiscoveryInputs {
         directory,
         config,
         paths,
-        resolver_paths,
         config_inputs: paths_observed,
     })
 }
@@ -2525,27 +2505,12 @@ fn attach_discovery_inputs(
         Some(&index.manifest.inputs),
     )?;
     let paths = paths_targets(directory, project)?;
-    let resolver_sources = facts
-        .files
-        .iter()
-        .map(|file| PathBuf::from(file.path.as_str()))
-        .collect::<Vec<_>>();
-    let resolver_paths =
-        crate::host_tsconfig::discover(directory, &current, &mut current_inputs, &resolver_sources)
-            .required(
-                directory,
-                "cannot replay tsconfig resolver scope or inheritance",
-            )?;
     current_inputs.sort();
     current_inputs.dedup();
     let mut previous_inputs = prepared.config_inputs.clone();
     previous_inputs.sort();
     previous_inputs.dedup();
-    if current != prepared.config
-        || paths != prepared.paths
-        || resolver_paths != prepared.resolver_paths
-        || current_inputs != previous_inputs
-    {
+    if current != prepared.config || paths != prepared.paths || current_inputs != previous_inputs {
         return Err(DiscoveryRefusal::new(
             directory,
             "configuration inputs changed; retry analysis",
@@ -2911,22 +2876,17 @@ fn discovered_index_with_inputs(
             .map(|(symbol, _)| symbol.clone())
             .collect::<BTreeSet<_>>();
         for (span, text, runtime) in static_loads(facts, file) {
-            let mut resolver_inputs = Vec::new();
-            let rewritable = prepared
-                .resolver_paths
-                .could_rewrite(text, &mut resolver_inputs);
-            for input in resolver_inputs {
-                let observed = graph_identity(&mut manifest, &input)
-                    .required(&input, "cannot fingerprint tsconfig baseUrl candidate")?;
-                manifest
-                    .inputs
-                    .insert(input.to_string_lossy().into_owned(), observed);
-            }
-            if rewritable && facts.runtime_resolutions.is_none() {
+            // Resolver activity is app-wide. Do not approximate tsconfig
+            // discovery, inheritance, tokens, patterns or negative lookups.
+            // Only ADR 0220 can authenticate bare/aliased file selection.
+            if resolver_selection_required(&config, text) && facts.runtime_resolutions.is_none() {
                 module.refused = true;
                 blocked_imports.insert((path.into(), text.into()));
                 unproven_semantics.insert(path.into());
-                withheld_loads.insert((path.to_owned(), text.to_owned()), "tsconfig resolver can rewrite the request without authenticated file selection");
+                withheld_loads.insert(
+                    (path.to_owned(), text.to_owned()),
+                    "active tsconfig resolver requires authenticated file selection",
+                );
                 continue;
             }
             // Even an unused value binding can survive client lowering.
@@ -3133,9 +3093,7 @@ fn discovered_index_with_inputs(
                 );
             } else if row.resolution == ImportResolution::NodeModules {
                 let mut package_inputs = Vec::new();
-                let rewritable = prepared
-                    .resolver_paths
-                    .could_rewrite(text, &mut package_inputs);
+                let resolver_active = config.tsconfig_paths;
                 if packages.is_none() {
                     // The provisional graph schedules package analysis; its
                     // optimistic edges are not final linking authority. Even
@@ -3143,7 +3101,7 @@ fn discovered_index_with_inputs(
                     let unsupported_loader = package_loads
                         .candidates(Path::new(path), text, &mut package_inputs)
                         .is_some_and(|(_, _, entries)| {
-                            (rewritable
+                            (resolver_active
                                 && !package_selection_agrees(
                                     facts, path, span, text, &entries, true,
                                 ))
@@ -3165,7 +3123,9 @@ fn discovered_index_with_inputs(
                             .required(&input, "cannot fingerprint provisional package input")?;
                         manifest.inputs.insert(key, observed);
                     }
-                    if unsupported_loader || (rewritable && facts.runtime_resolutions.is_none()) {
+                    if unsupported_loader
+                        || (resolver_active && facts.runtime_resolutions.is_none())
+                    {
                         module.refused = true;
                         blocked_imports.insert((path.into(), text.into()));
                         withheld_loads.insert(
@@ -3232,7 +3192,7 @@ fn discovered_index_with_inputs(
                             span,
                             text,
                             entries.entries(),
-                            rewritable,
+                            resolver_active,
                         )
                     });
                 if !loadable {
@@ -3258,6 +3218,10 @@ fn discovered_index_with_inputs(
             let (Some(text), Some(span)) = (load.specifier.as_deref(), load.specifier_span) else {
                 continue;
             };
+            if resolver_selection_required(&config, text) && facts.runtime_resolutions.is_none() {
+                unproven_semantics.insert(path.into());
+                continue;
+            }
             if facts.runtime_resolutions.is_none() && !congruent_alias(&config, &paths, text) {
                 unproven_semantics.insert(path.into());
                 continue;
@@ -3962,15 +3926,52 @@ mod tests {
     }
 
     #[test]
+    fn tsconfig_resolver_withholds_every_default_bare_or_aliased_selection() {
+        let mut config = host_config::parse(
+            Path::new("vite.config.ts"),
+            "export default {plugins:[],resolve:{tsconfigPaths:true}}",
+        )
+        .unwrap();
+        config.aliases.insert("/alias".into(), Some("/src".into()));
+        config.aliases.insert("./alias".into(), Some("/src".into()));
+        for (request, required) in [
+            ("@solidjs/web", true),
+            ("~/App.ts", true),
+            (".package", true),
+            ("/alias/App.ts", true),
+            ("./alias/App.ts", true),
+            ("./App.ts", false),
+            ("../App.ts", false),
+            ("/src/App.ts", false),
+        ] {
+            assert_eq!(
+                resolver_selection_required(&config, request),
+                required,
+                "{request}"
+            );
+        }
+        config.tsconfig_paths = false;
+        assert!(!resolver_selection_required(&config, "@solidjs/web"));
+        assert!(!resolver_selection_required(&config, "./alias/App.ts"));
+    }
+
+    #[test]
     fn tsconfig_resolver_selection_requires_exact_runtime_agreement() {
         use solid_facts::runtime_resolution::{RuntimeOutcome, RuntimeResolutionIndex};
         let Ok(producer) = std::env::var("SOLID_TYPEFACTS_BIN") else {
             return;
         };
         let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let directory =
+        let scratch =
             std::env::temp_dir().join(format!("host-tsconfig-selection-{}", std::process::id()));
+        let directory = scratch.join("app");
         fs::create_dir_all(directory.join("src")).unwrap();
+        fs::create_dir_all(scratch.join("shadow-base/@solidjs")).unwrap();
+        fs::write(
+            scratch.join("shadow-base/@solidjs/web.js"),
+            "export const isServer = true;",
+        )
+        .unwrap();
         let directory = fs::canonicalize(directory).unwrap();
         fs::write(directory.join("package.json"), "{\"private\":true}").unwrap();
         fs::write(
@@ -4029,28 +4030,45 @@ mod tests {
         .unwrap();
         for config_source in [
             "export default {plugins:[],resolve:{tsconfigPaths:true}}",
+            "import {defineConfig} from 'vite'; export default defineConfig(({mode}) => ({plugins:[],resolve:{tsconfigPaths:mode}}))",
+            "import {defineConfig} from 'vite'; export default defineConfig(({mode}) => mode ? {plugins:[]} : {plugins:[],resolve:{tsconfigPaths:true}})",
             "import paths from 'vite-tsconfig-paths'; export default {plugins:[paths()]}",
         ] {
             let config =
                 host_config::parse(&directory.join("vite.config.ts"), config_source).unwrap();
             assert!(config.tsconfig_paths);
             for case in cases.as_array().unwrap() {
-                fs::write(directory.join("tsconfig.json"), serde_json::to_vec(&serde_json::json!({"compilerOptions":{"baseUrl":".","paths":{case["pattern"].as_str().unwrap():["./src/shadow.js"]}},"include":["src"]})).unwrap()).unwrap();
-                let mut inputs = Vec::new();
-                let resolver_paths = crate::host_tsconfig::discover(
-                    &directory,
-                    &config,
-                    &mut inputs,
-                    std::slice::from_ref(&main),
+                fs::write(
+                    directory.join("tsconfig.json"),
+                    serde_json::to_vec(&case["tsconfig"]).unwrap(),
                 )
                 .unwrap();
-                assert!(inputs.contains(&directory.join("tsconfig.json")));
+                fs::write(
+                    directory.join("inherited.json"),
+                    r#"{"compilerOptions":{"paths":{"@solidjs/web":["./src/shadow.js"]}}}"#,
+                )
+                .unwrap();
+                let config = if let Some(source) = case["config"].as_str() {
+                    let parsed = host_config::parse(&directory.join("vite.config.ts"), source);
+                    if case["configRefused"] == true {
+                        assert!(parsed.is_none(), "{case}");
+                        continue;
+                    }
+                    parsed.unwrap()
+                } else if case["resolver"] == false {
+                    host_config::parse(
+                        &directory.join("vite.config.ts"),
+                        "export default {plugins:[]}",
+                    )
+                    .unwrap()
+                } else {
+                    config.clone()
+                };
                 let prepared = DiscoveryInputs {
                     directory: directory.clone(),
-                    config: config.clone(),
+                    config,
                     paths: BTreeMap::new(),
-                    resolver_paths,
-                    config_inputs: inputs,
+                    config_inputs: Vec::new(),
                 };
                 let mut observed = facts.as_ref().clone();
                 if case["runtime"] != "absent" {
@@ -4058,6 +4076,12 @@ mod tests {
                         "client" => Some(package.join("dist/web.js")),
                         "server" => Some(package.join("dist/server.js")),
                         "shadow" => Some(directory.join("src/shadow.js")),
+                        "token-shadow" => Some(
+                            directory
+                                .parent()
+                                .unwrap()
+                                .join("shadow-base/@solidjs/web.js"),
+                        ),
                         _ => None,
                     }
                     .map_or(RuntimeOutcome::Unknown, |path| {
@@ -4099,7 +4123,7 @@ mod tests {
                 );
             }
         }
-        fs::remove_dir_all(directory).unwrap();
+        fs::remove_dir_all(scratch).unwrap();
     }
 
     #[test]
@@ -4353,6 +4377,49 @@ mod tests {
         )
         .unwrap();
         assert!(!ast.imports[0].bindings[0].runtime_referenced);
+    }
+
+    #[test]
+    fn tsconfig_resolver_activity_inputs_invalidate_cached_authority() {
+        let scratch = std::env::temp_dir().join(format!(
+            "host-resolver-activity-inputs-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(scratch.join("src")).unwrap();
+        let app = fs::canonicalize(&scratch).unwrap();
+        let project = app.join("tsconfig.app.json");
+        fs::write(app.join("package.json"), "{\"private\":true}").unwrap();
+        fs::write(&project, "{}").unwrap();
+        let vite = app.join("vite.config.ts");
+        fs::write(&vite, "export default {plugins:[]}").unwrap();
+        let inputs = inferred_host_input_paths_for_project(&app, &project);
+        assert!(inputs.contains(&vite));
+        let before = inferred_host_input_digest(&vite).unwrap();
+        fs::write(
+            &vite,
+            "export default {plugins:[],resolve:{tsconfigPaths:true}}",
+        )
+        .unwrap();
+        assert_ne!(before, inferred_host_input_digest(&vite).unwrap());
+        fs::write(
+            &vite,
+            "import paths from 'vite-tsconfig-paths'; export default {plugins:[paths()]}",
+        )
+        .unwrap();
+        let inputs = inferred_host_input_paths_for_project(&app, &project);
+        let plugin = app.join("node_modules/vite-tsconfig-paths/package.json");
+        assert!(inputs.contains(&vite));
+        assert!(inputs.contains(&plugin));
+        let absent = inferred_host_input_digest(&plugin).unwrap();
+        fs::create_dir_all(plugin.parent().unwrap()).unwrap();
+        fs::write(
+            &plugin,
+            "{\"name\":\"vite-tsconfig-paths\",\"version\":\"unknown\"}",
+        )
+        .unwrap();
+        assert_ne!(absent, inferred_host_input_digest(&plugin).unwrap());
+        assert!(inferred_host_input_paths_for_project(&app, &project).contains(&plugin));
+        fs::remove_dir_all(scratch).unwrap();
     }
 
     #[test]

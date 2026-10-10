@@ -28,9 +28,15 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
         std::env::temp_dir().join(format!("tsconfig-shadow-process-{}", std::process::id()));
     copy(
         &repository.join("fixtures/reactive-ir/inferred-host-spa"),
-        &scratch,
+        &scratch.join("app"),
     );
-    let project = fs::canonicalize(scratch).unwrap();
+    fs::create_dir_all(scratch.join("shadow-base/@solidjs")).unwrap();
+    fs::write(
+        scratch.join("shadow-base/@solidjs/web.js"),
+        "export const isServer = true;",
+    )
+    .unwrap();
+    let project = fs::canonicalize(scratch.join("app")).unwrap();
     fs::copy(
         project.join("tsconfig.json"),
         project.join("tsconfig.app.json"),
@@ -66,18 +72,45 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
     )
     .unwrap();
     fs::write(
-        project.join("vite.config.ts"),
-        "export default {plugins:[],resolve:{tsconfigPaths:true}};",
+        project.join("inherited.json"),
+        r#"{"compilerOptions":{"paths":{"@solidjs/web":["./src/shadow.js"]}}}"#,
     )
     .unwrap();
+    let cases: serde_json::Value =
+        serde_json::from_slice(
+            &fs::read(repository.join(
+                "fixtures/reactive-ir/inferred-host-reachability/resolver-selection-cases.json",
+            ))
+            .unwrap(),
+        )
+        .unwrap();
     let start = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
-    for (pattern, expected) in [
-        ("@solidjs/web", false),
-        ("@solidjs/*", false),
-        ("~/*", true),
-    ] {
-        fs::write(project.join("tsconfig.json"), serde_json::to_vec(&serde_json::json!({"compilerOptions":{"baseUrl":".","paths":{pattern:["./src/shadow.js"]}},"include":["src"]})).unwrap()).unwrap();
-        let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+    for case in cases.as_array().unwrap() {
+        let expected = case["browser"].as_bool().unwrap();
+        fs::write(
+            project.join("vite.config.ts"),
+            if let Some(source) = case["config"].as_str() {
+                source
+            } else if case["resolver"] == false {
+                "export default {plugins:[]};"
+            } else {
+                "export default {plugins:[],resolve:{tsconfigPaths:true}};"
+            },
+        )
+        .unwrap();
+        fs::write(
+            project.join("tsconfig.json"),
+            serde_json::to_vec(&case["tsconfig"]).unwrap(),
+        )
+        .unwrap();
+        let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
+        command.env_remove("SOLID_CHECKER_RUNTIME_RESOLVER");
+        if case["runtime"] != "absent" {
+            command.args(["--runtime-resolution", "required"])
+                .env("SOLID_CHECKER_RUNTIME_RESOLVER", repository.join("fixtures/reactive-ir/inferred-host-reachability/resolver-selection-worker.mjs"))
+                .env("SOLID_CHECKER_TEST_RESOLVER_CHOICE", case["runtime"].as_str().unwrap());
+        }
+        let output = command
             .env("SOLID_TYPEFACTS_BIN", &typefacts)
             .env("SOLID_CHECKER_DAEMON", "0")
             .args(["--format", "json", "--project"])
@@ -103,16 +136,22 @@ fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
         assert_eq!(
             result["findings"].as_array().unwrap().iter().any(at_site),
             expected,
-            "{pattern}: {result:#?}"
+            "{case}: {result:#?}"
         );
         if !expected {
             assert_eq!(result["status"], "uncertifiable");
-            assert!(String::from_utf8_lossy(&output.stderr).contains(
-                "tsconfig resolver can rewrite the request without authenticated file selection"
-            ));
+            if case["runtime"] == "absent"
+                && case["configRefused"] != true
+                && case["processRefused"] != true
+            {
+                assert!(
+                    String::from_utf8_lossy(&output.stderr)
+                        .contains("active tsconfig resolver requires authenticated file selection")
+                );
+            }
         }
     }
-    fs::remove_dir_all(project).unwrap();
+    fs::remove_dir_all(scratch).unwrap();
 }
 
 #[test]

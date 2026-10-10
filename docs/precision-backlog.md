@@ -1,23 +1,32 @@
 # Precision backlog
 
-ADR 0270 tsconfig resolver file-selection boundary (2026-10-10): enabled native
-Vite and admitted default vite-tsconfig-paths now enroll their discoverable
-configs independently of the analyzed project, including extends, references,
-workspace markers and directory membership. Matching paths or existing baseUrl
-candidates withhold default package/host-constant strengthening. Exact runtime
-client-file agreement can recover it; shadow/server/unknown answers cannot.
-Build/start premises never discharge file identity. Different-project-config,
-wildcard, unrelated-path, runtime agreement/disagreement and input invalidation
-twins cover this boundary. Package/nonliteral config inheritance and symlinked
-or unreadable discovery scopes remain refused. No new diagnostic or published
-typing is introduced. Verification: 50 focused host tests, zero diagnostics
-against the real published @solidjs/web@2.0.0-rc.13 typings, unchanged coverage
-(239 projects / 1583 findings), and zero added or removed violations across the
-49-project no-target corpus. Complete findings match b69597043; the old Helge
-SC9005 span adjustment remains the only difference from rc13-head-notarget.
-Workspace Clippy preceded the green full make verify (225.71 seconds). Error
-Menu and Helge still infer; Error Menu's paired median remains +0.5525 seconds
-over 6009dceb9, so the earlier performance target is not fully achieved.
+ADR 0270 tsconfig resolver file-selection boundary (2026-10-10): the tokenized
+`${configDir}` baseUrl review falsified request-specific resolver modeling and
+its cache closure. That modeling and the resolver-scope inventory are removed.
+Either active native resolve.tsconfigPaths (including nonliteral/conditional
+enablement) or vite-tsconfig-paths withholds all default package identity,
+isServer strengthening and bare/aliased static-link selection app-wide, regardless
+of empty/unrelated paths, inherited options or package extends. Unknown activity
+or unsupported config/plugin options refuse inference. The activity decision's
+Vite config and audited plugin identity remain cache/replay inputs. Opted-in
+ADR 0220 exact canonical runtime agreement alone recovers file selection;
+host constants still require authenticated browser-constant bytes. Shadow,
+server and unknown answers cannot recover authority. Build/start never proves
+selection. No-resolver inference is unchanged. Fixture and armed process twins
+pin tokenized baseUrl, inherited paths, package extends, unrelated/empty options,
+no-resolver controls and runtime agreement/disagreement. No diagnostic or
+published typing is introduced. Alternate `vite --config` invocation remains
+outside the app-local conventional-config discovery grammar; its selection is
+not authenticated. Runtime selection cannot prove unknown package behavior or
+admit an unsupported executable config. Verification: four focused Rust tests
+and 22 armed process cases passed; real published rc.13 typings produced zero
+TypeScript diagnostics. Coverage remains 239 projects / 1583 findings. The
+49-project no-target sweep adds/removes zero violation sites (538 violations);
+the old Helge SC9005 span move is the only difference from rc13-head-notarget.
+Workspace Clippy preceded the green full make verify (227.61 seconds). Error
+Menu and Helge still infer 65 and 18 scopes without either resolver; paired
+median deltas over 6009dceb9 are +0.5804 and +0.2573 seconds respectively, so the
+earlier Error Menu performance goal remains unmet.
 
 ADR 0270 app-starts premise (schema 57, 2026-10-10): module-statement
 completion is explicitly marked in normalized facts. Inference consumes the
