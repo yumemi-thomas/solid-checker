@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 56;
+pub const AST_FACTS_SCHEMA: u32 = 57;
 
 mod binding_references;
 mod class_obligation;
@@ -100,7 +100,7 @@ pub struct AstFacts {
     pub schema: u32,
     pub source: SourceIdentity,
     pub calls: Vec<CallFact>,
-    /// Host-sensitive execution, facts schema 56. Absent old tables confer no
+    /// Host-sensitive execution, facts schema 57. Absent old tables confer no
     /// browser authority. Runtime constant values belong to the host consumer.
     #[serde(default)]
     pub host_execution: Vec<HostExecutionFact>,

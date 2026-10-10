@@ -24,8 +24,9 @@ issuer. Manifest, declaration and contract pins are unchanged. Declaration-only
 Solid imports in other fixtures remain negative controls where no runtime entry
 is present.
 
-Expectations are hand-stated; tests and snapshot comparison are unrun in this
-read-only draft. Record only this fixture's snapshot after the first focused run.
+Expectations are hand-stated and exercised by the armed native process test.
+Coverage compares this fixture without changing its snapshot; additional twins
+are generated only in private copies.
 
 class-cases.json, nullish-cases.json and resource-cases.json are small proof inputs consumed by the
 Rust tests, outside tsconfig's src include. They distinguish inert class
@@ -56,9 +57,21 @@ published-signature stubs. The node-count regressions live in host_execution.rs.
 completion-variants.json samples every Oxc 0.118 Expression variant (43).
 completion-cases.json covers unsupported completion in statements, initializers,
 eager arguments and nested bodies, with five normal controls. The statement
-catalog test samples all 33 Statement variants. Logical assignments, updates,
+catalog test samples all 33 Statement variants. Inside function bodies, logical assignments, updates,
 getters, tags, spread/iteration, coercion and unproved selection withhold browser
 authority. Native tests mutate only private copies of this fixture and review
 the exact SC4001 site for every normal control. Package-root/extensionless CSS,
 conditional CSS and preprocessor entries have executable/raw twins there too.
 No published signature, snapshot or committed source diagnostic is added.
+
+startup-cases.json pins ADR 0270's named app-starts premise with native twins:
+opaque package factories (the synthetic startup-factory has no behavior
+contract), unknown calls, heritage and top-level await permit later module
+statements. Certain root/dependency exits refuse with a contradiction note;
+client-dead throws remain dead. Function-body calls/await and unknown guards
+stay unproved. Dynamic-only, explicit type-only, unused and type-space value
+imports cannot supply startup membership. Every positive asserts only the exact immediate unowned
+startClosed registration, whose mandatory owner is not expressible by its
+unchanged void signature. Explicit Node twins assert no inferred authority.
+The earlier completion/nullish catalog is now exercised inside a function so
+its completion allowlist remains pinned independently of module startup.

@@ -87,7 +87,9 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
                 "{name}: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()
+            let mut result = serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap();
+            result["_stderr"] = String::from_utf8_lossy(&output.stderr).into_owned().into();
+            result
         };
         let snapshot = analyze((name == "override").then_some("node"));
         let findings = snapshot["findings"].as_array().unwrap();
@@ -281,7 +283,7 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
             for case in cases {
                 for form in ["{};", "const completion_result = {};", "consume({});"] {
                     let source = format!(
-                        "import {{startClosed}} from 'reactive-package'; {}; function consume(value: unknown) {{}} {} startClosed();",
+                        "import {{startClosed}} from 'reactive-package'; function run(){{ {}; function consume(value: unknown) {{}} {} startClosed(); }} run();",
                         case["declaration"].as_str().unwrap(),
                         form.replace("{}", case["expression"].as_str().unwrap())
                     );
@@ -526,7 +528,7 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
             }
             fs::write(&config_path, original_config).unwrap();
             fs::write(&tsconfig_path, original_tsconfig).unwrap();
-            fs::write(project.join("src/main.ts"), "import {startClosed} from 'reactive-package'; class Stop {constructor(){throw 0}} new Stop(); startClosed();").unwrap();
+            fs::write(project.join("src/main.ts"), "import {startClosed} from 'reactive-package'; function run(){ class Stop {constructor(){throw 0}} new Stop(); startClosed(); } run();").unwrap();
             let constructor_refused = analyze(None);
             assert!(
                 !constructor_refused["findings"]
@@ -536,6 +538,68 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
                     .any(|finding| finding["kind"] == "violation" && inferred(finding)),
                 "constructor continuation must stay baseline: {constructor_refused:#?}"
             );
+            let factory = project.join("node_modules/startup-factory");
+            fs::create_dir_all(&factory).unwrap();
+            fs::write(factory.join("package.json"), r#"{"name":"startup-factory","version":"1.0.0","types":"index.d.ts","module":"index.js"}"#).unwrap();
+            fs::write(factory.join("index.d.ts"), "export declare function createStore(value: unknown): unknown; export declare function createRouter(value: unknown): unknown;").unwrap();
+            fs::write(factory.join("index.js"), "export function createStore(value){return value} export function createRouter(value){return value}").unwrap();
+            let cases: Vec<serde_json::Value> = serde_json::from_slice(
+                &fs::read(
+                    repository.join("fixtures/reactive-ir/inferred-host-spa/startup-cases.json"),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            for case in cases {
+                fs::write(
+                    project.join("src/startup.ts"),
+                    case["dependency"].as_str().unwrap(),
+                )
+                .unwrap();
+                let source = format!(
+                    "{} import {{startClosed}} from 'reactive-package'; {}",
+                    case["load"].as_str().unwrap_or("import './startup';"),
+                    case["body"].as_str().unwrap()
+                );
+                fs::write(project.join("src/main.ts"), &source).unwrap();
+                let result = analyze(None);
+                let (site_source, site_path) = if case["site"] == "startup" {
+                    (case["dependency"].as_str().unwrap(), "src/startup.ts")
+                } else {
+                    (source.as_str(), "src/main.ts")
+                };
+                let call = u64::try_from(site_source.find("startClosed()").unwrap()).unwrap();
+                let at_site = |finding: &serde_json::Value| {
+                    finding["kind"] == "violation"
+                        && inferred(finding)
+                        && finding["primaryLocation"]["path"]
+                            .as_str()
+                            .is_some_and(|path| path.ends_with(site_path))
+                        && finding["primaryLocation"]["startByte"].as_u64() == Some(call)
+                };
+                assert_eq!(
+                    result["findings"].as_array().unwrap().iter().any(at_site),
+                    case["browser"] == true,
+                    "{case}: {result:#?}"
+                );
+                if case["contradiction"] == true {
+                    assert!(
+                        result["_stderr"]
+                            .as_str()
+                            .unwrap()
+                            .contains("certain top-level exit contradicts the app-starts premise"),
+                        "{result:#?}"
+                    );
+                }
+                assert!(
+                    !analyze(Some("node"))["findings"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(inferred)
+                );
+            }
+            fs::write(project.join("src/startup.ts"), "export {};").unwrap();
             // Use the independently authorized browser artifact, without Solid
             // declaration-only imports that would refuse module evaluation.
             for (twin, expected) in [("dead", false), ("live", true)] {

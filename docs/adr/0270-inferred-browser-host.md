@@ -123,8 +123,8 @@ premise excludes it. The checker does not run or attest a build.
 The premise proves only that loading the dependency does not prevent importer
 evaluation. CSS/asset contents supply no JavaScript initialization, callable,
 component or callback edges, and no behavior, ownership, tracking or certification
-authority. Local JavaScript dependency completion still needs its separate
-execution proof; a successful build does not prove successful runtime execution.
+authority. Local JavaScript dependency completion uses the separate app-starts
+premise below; a successful build does not prove successful runtime execution.
 Generated resource export surfaces are not guessed or used for behavior.
 
 Successful building cannot identify which file Vite selects. Divergent Vite/Type
@@ -148,6 +148,28 @@ CSS literals are transform failures excluded by successful building, with
 absence fingerprinted. Bounds are 256 files, 2 MiB/file and 8 MiB total, and
 overflow withholds inference. This closure grants no resource behavior edges.
 
+## App-starts premise (owner decision, 2026-10-10)
+
+**The analyzed app starts: module initialization completes.** Inference consumes
+this named premise only in the module-evaluation proof for modules on the static
+import/re-export graph of an otherwise admitted browser root. Initialization
+edges retain the existing surviving-value-import proof; unused, type-space and
+server-erased imports cannot premise a dynamically loaded module. Unknown top-level
+calls (including package store/router factories), class heritage and top-level
+await do not prevent reaching later top-level statements or importer
+continuations. The checker neither starts the app nor attests startup.
+
+A proved certain top-level exit contradicts the premise. An unconditional throw,
+including `throw await …` and a client-live `if (!import.meta.env.SSR) throw`, withholds that root
+with a decision note. A proven client-dead guarded throw remains dead and does
+not contradict startup. Unknown branch selection supplies no execution witness.
+Function bodies, callbacks, handlers, timers and later turns retain their
+existing completion allowlist and premise A; dynamic-only modules receive no
+startup premise. This grants no callable, ownership, tracking or certification
+authority. Exact file selection, alias congruence, static loadability, opaque
+evaluation and cyclic-graph refusals remain independent requirements. Explicit
+target wins; certification still requires one; inference remains monotone.
+
 ## C. Roots, baseline and certification
 
 Round-5 static-link gate: every non-type static import and export-from (including
@@ -169,8 +191,8 @@ this checker never reports that duplicate claim. This premise applies equally
 to named/default imports and export-from, while namespace/side-effect imports
 still require an entry. It is a linking premise, not receipt-issued behavior,
 byte authentication, completion, ownership, tracking or certification authority.
-External initialization remains feasible-if-returning under premise A; local
-static dependency completion is still separately required as described below.
+Top-level external calls use the app-starts module-evaluation premise; calls in
+function bodies retain premise A and their existing completion requirements.
 
 Join the exact Type Facts NodeModules row to an importer-relative installed
 manifest, matching its resolver package name/version and canonical declaration
@@ -222,9 +244,9 @@ manifest supplies no page initialization, navigation or body invocation edge.
 The ADR 0220 protocol reports virtual ids as Unknown, so opt-in still refuses
 them; missing requested answers never fall back to provider inference.
 
-Static dependencies must also have proved normal initialization completion.
-Unknown suspension/completion and a certain dependency throw withhold the
-importer's evaluation. Independent entry prefixes remain eligible. Circular
+Static dependencies use the app-starts premise for normal initialization
+completion. Certain top-level exits withhold the root and its importers, including
+otherwise live prefixes; unknown function-body completion stays unproved. Circular
 static graphs retain baseline pending binding-initialization/evaluation-order
 facts; no TypeScript symbol edge overrides a possible TDZ. Opaque evaluation
 withholds its module's outgoing authority too, since eval can change call targets.
@@ -524,3 +546,52 @@ tests. The known standalone audited-archives environment failure is absent in
 the correctly armed full gate. No public contract or bundled artifact was
 regenerated. Approximate/fail-closed cases above remain; the gate does not claim
 complete host inference or constructor coverage.
+
+### App-starts implementation measurements (2026-10-10)
+
+Schema 57 marks module-statement completion separately from branch execution and
+retains a bounded structural startup summary, including certain exits after
+top-level await. Native startup twins cover package factories, namespace calls,
+heritage, await, client-live/dead throws, unknown guards, function bodies and
+dynamic/type-only boundaries. Seven exact unowned registration positives were
+reviewed; twenty-one native twins and a published rc.13 Solid/router factory
+example pass strict/no-emit TypeScript 5.9.3 with zero diagnostics.
+
+Three alternating daemon-off release runs against retained `6009dceb9`; medians
+in seconds. Final patched binary SHA-256 is
+`7071b13d29ad9d03cb33711cb4ca4a31422f4c8b2bc9bf9553aa5bc486eb6bd3`.
+
+| App | Base | Patched | Delta | Decision |
+| --- | ---: | ---: | ---: | --- |
+| queue-management-ui/ui | .2062 | .4461 | +.2399 | App.tsx:13 divergent ~/app.css alias |
+| error-menu-web/web | .7088 | 1.9727 | +1.2639 | 65 inferred scopes |
+| jar-hell-web/web | .1998 | .4688 | +.2690 | api.ts:2 unproved ./utils/gav runtime export surface |
+| beacon-web/apps/web | .6683 | 1.0439 | +.3756 | router.ts:1 eager generated route graph |
+| compass-ui/apps/ui | 1.3241 | 1.9488 | +.6247 | boot-native.ts completion unproved |
+| helge-dev | .0972 | .7961 | +.6989 | 18 inferred scopes |
+| lutra-console/console | .1194 | .2617 | +.1423 | router.ts:1 eager generated route graph |
+
+Error Menu and Helge exceed the earlier approximate .1–.6 s incremental budget;
+Compass is slightly above it. No performance gate or proof input was relaxed.
+An Error Menu timing run reports 1.9015 s total, .3809 s source setup, .2493 s
+facts and .1104 s IR; roughly 1.16 s remains outside those instrumented stages.
+The timing output does not isolate host/contract admission within that remainder.
+Compass also retains the independent analytics/config.ts env-object escape;
+earlier measurements reached that refusal first. Final decision notes are
+recorded against the final binary rather than substituted from earlier runs.
+
+All seven retain violation counts. The 49-project no-target corpus comparison
+retains 538 violations and 3,504 uncertifiable findings; zero violation sites
+are added or removed, also with project identity included in the comparison.
+Helge's existing router SC9005 changes from App.tsx:1:1 absent accepted contract
+to App.tsx:1:10 explicit unknown claims; it remains uncertifiable. Coverage
+compares 239 projects / 1,583 findings unchanged, without snapshot updates.
+Handoff is green: 24 focused facts tests; armed Rust suite 1,744 passed, zero
+failed/ignored; scripts 355 passed; CLI 381 passed plus adapter typechecking;
+workspace Clippy with warnings denied; and full `make verify` (TOTAL 242.62 s,
+zero failed-step lines). The full gate includes unchanged coverage, ownership,
+contracts/conformance, TypeScript oracle, Go race tests, feature checks and
+performance certification. An obsolete verification was intentionally interrupted
+for the direct throw-await repair (go-rust-tests exit 130); it has no TOTAL and
+is not a green run. Final-source checks and exact-binary measurements were rerun.
+No generated snapshots, public contracts, JSON schemas or manifests changed.

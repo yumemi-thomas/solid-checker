@@ -1433,10 +1433,48 @@ fn execution_constants(
     values
 }
 
+fn static_loads<'a>(
+    facts: &'a ProjectFacts,
+    file: &'a FileFacts,
+) -> impl Iterator<Item = (Span, &'a str, bool)> {
+    file.ast
+        .imports
+        .iter()
+        .filter(|import| {
+            !import.type_only
+                && (import.bindings.is_empty()
+                    || import.bindings.iter().any(|binding| !binding.type_only))
+        })
+        .map(|import| {
+            (
+                import.span,
+                import.module.as_str(),
+                runtime_import(facts, file, import),
+            )
+        })
+        .chain(file.ast.exports.iter().filter_map(|export| {
+            export
+                .module
+                .as_deref()
+                .filter(|_| {
+                    !export.type_only
+                        && (export.kind == ExportKind::All
+                            || export.namespace.is_some()
+                            || export.specifiers.is_empty()
+                            || export
+                                .specifiers
+                                .iter()
+                                .any(|specifier| !specifier.type_only))
+                })
+                .map(|text| (export.span, text, true))
+        }))
+}
+
 fn execution_regions(
     file: &FileFacts,
     scope: Option<Span>,
     constants: &BTreeMap<Span, (bool, bool)>,
+    module_startup: bool,
 ) -> Vec<HostExecutionRegion> {
     let value = |identity: &HostConstantIdentity, server: bool| match identity {
         // Discovery has already admitted the closed Vite client configuration.
@@ -1448,10 +1486,19 @@ fn execution_regions(
     file.ast
         .host_execution
         .iter()
-        .filter(|fact| fact.scope == scope && fact.kind != HostExecutionSiteKind::ModuleCompletion)
+        .filter(|fact| {
+            fact.scope == scope
+                && !matches!(
+                    fact.kind,
+                    HostExecutionSiteKind::ModuleCompletion
+                        | HostExecutionSiteKind::ModuleStartupCompletion
+                )
+        })
         .map(|fact| HostExecutionRegion {
             span: fact.span,
-            client: fact.predicate.evaluate(&|identity| value(identity, false)),
+            client: fact
+                .predicate
+                .evaluate_with_startup(&|identity| value(identity, false), module_startup),
             server: fact.predicate.evaluate(&|identity| value(identity, true)),
         })
         .collect()
@@ -2005,6 +2052,12 @@ fn empty_graph_refusal(
             );
         };
         pending.extend(module.static_dependencies.iter().cloned());
+        if module.completion == Some(false) {
+            return DiscoveryRefusal::new(
+                Path::new(&path),
+                "certain top-level exit contradicts the app-starts premise; browser root withheld",
+            );
+        }
         if let Some(((path, text), reason)) =
             loads.iter().find(|((importer, _), _)| importer == &path)
         {
@@ -2172,7 +2225,7 @@ fn empty_graph_refusal(
                 return DiscoveryRefusal::new(
                     Path::new(dependency),
                     if completion == Some(false) {
-                        "dependency initialization certainly exits before its importer"
+                        "certain top-level exit contradicts the app-starts premise; browser root withheld"
                     } else {
                         "dependency initialization completion is unproved"
                     },
@@ -2380,6 +2433,48 @@ fn discovered_index_with_inputs(
         .resolved_imports
         .as_ref()
         .required(&directory, "missing Type Facts import-resolution inventory")?;
+    // Select only exact static JS/TS edges. Loadability, export surfaces,
+    // hazards and cycles still independently gate the final root admission.
+    // Dynamic imports and type-only references never enlarge this premise.
+    let mut pending = root_files
+        .iter()
+        .filter_map(|path| path.to_str().map(str::to_owned))
+        .collect::<BTreeSet<_>>();
+    let mut startup_modules = BTreeSet::new();
+    while let Some(path) = pending.pop_first() {
+        if !startup_modules.insert(path.clone()) {
+            continue;
+        }
+        let Some(file) = facts.files.iter().find(|file| file.path.as_str() == path) else {
+            continue;
+        };
+        for (span, text, runtime) in static_loads(facts, file) {
+            if !runtime {
+                // An unused/type-space/server-erased value binding does not
+                // establish startup evaluation, even if the same module is
+                // dynamically imported in a later turn.
+                continue;
+            }
+            let SpecifierAttestation::Attested(row) = resolutions.specifier(&path, span, text)
+            else {
+                continue;
+            };
+            let target = row.resolved_path.as_ref();
+            if matches!(
+                row.resolution,
+                ImportResolution::Relative | ImportResolution::NonRelative
+            ) && row.symlink_path.is_empty()
+                && row.included_path.is_empty()
+                && !text.contains(['?', '#', '%', '\\'])
+                && !crate::host_loadable::resource_request(text)
+                && local_edge(facts, &config, &paths, &path, span, text, target)
+                && facts.files.iter().any(|file| file.path.as_str() == target)
+                && fs::canonicalize(target).ok().as_deref() == Some(Path::new(target))
+            {
+                pending.insert(target.to_owned());
+            }
+        }
+    }
     let mut manifest = BrowserRootManifest {
         inputs,
         reason: match config.mode {
@@ -2471,6 +2566,7 @@ fn discovered_index_with_inputs(
                         file,
                         function.map(|function| function.span),
                         &constants,
+                        function.is_none() && startup_modules.contains(file.path.as_str()),
                     ),
                     ..HostScope::default()
                 },
@@ -2492,7 +2588,7 @@ fn discovered_index_with_inputs(
                     path: file.path.to_string(),
                     span: Some(default.span),
                     refused,
-                    execution: execution_regions(file, Some(default.span), &constants),
+                    execution: execution_regions(file, Some(default.span), &constants, false),
                     ..HostScope::default()
                 },
             );
@@ -2513,7 +2609,13 @@ fn discovered_index_with_inputs(
                 .host_execution
                 .iter()
                 .find(|fact| {
-                    fact.kind == HostExecutionSiteKind::ModuleCompletion && fact.scope.is_none()
+                    fact.kind
+                        == if startup_modules.contains(path) {
+                            HostExecutionSiteKind::ModuleStartupCompletion
+                        } else {
+                            HostExecutionSiteKind::ModuleCompletion
+                        }
+                        && fact.scope.is_none()
                 })
                 .and_then(|fact| {
                     let constants = execution_constants(
@@ -2524,12 +2626,15 @@ fn discovered_index_with_inputs(
                         dialect,
                         &mut manifest,
                     );
-                    fact.predicate.evaluate(&|identity| match identity {
-                        HostConstantIdentity::ViteSsr => Some(false),
-                        HostConstantIdentity::Import { declaration } => {
-                            constants.get(declaration).map(|(client, _)| *client)
-                        }
-                    })
+                    fact.predicate.evaluate_with_startup(
+                        &|identity| match identity {
+                            HostConstantIdentity::ViteSsr => Some(false),
+                            HostConstantIdentity::Import { declaration } => {
+                                constants.get(declaration).map(|(client, _)| *client)
+                            }
+                        },
+                        startup_modules.contains(path),
+                    )
                 }),
             refused: !Path::new(path).starts_with(&directory)
                 || [".d.ts", ".d.mts", ".d.cts"]
@@ -2544,6 +2649,9 @@ fn discovered_index_with_inputs(
                 || ["entry-server", "middleware"].contains(&filename)
                 || (config.mode == EntryMode::ClientStart && filename == "Document"),
         };
+        if startup_modules.contains(path) && module.completion == Some(false) {
+            module.refused = true;
+        }
         if file
             .ast
             .module_hazards
@@ -2594,39 +2702,7 @@ fn discovered_index_with_inputs(
             .filter(|(_, id)| scopes.get(*id).is_some_and(|scope| scope.path == path))
             .map(|(symbol, _)| symbol.clone())
             .collect::<BTreeSet<_>>();
-        for (span, text, runtime) in file
-            .ast
-            .imports
-            .iter()
-            .filter(|import| {
-                !import.type_only
-                    && (import.bindings.is_empty()
-                        || import.bindings.iter().any(|binding| !binding.type_only))
-            })
-            .map(|import| {
-                (
-                    import.span,
-                    import.module.as_str(),
-                    runtime_import(facts, file, import),
-                )
-            })
-            .chain(file.ast.exports.iter().filter_map(|export| {
-                export
-                    .module
-                    .as_deref()
-                    .filter(|_| {
-                        !export.type_only
-                            && (export.kind == ExportKind::All
-                                || export.namespace.is_some()
-                                || export.specifiers.is_empty()
-                                || export
-                                    .specifiers
-                                    .iter()
-                                    .any(|specifier| !specifier.type_only))
-                    })
-                    .map(|text| (export.span, text, true))
-            }))
-        {
+        for (span, text, runtime) in static_loads(facts, file) {
             // Even an unused value binding can survive client lowering.
             // Without exact erasure facts, every authored value import and
             // export-from must be loadable before this module can evaluate.
@@ -3069,6 +3145,12 @@ fn discovered_index_with_inputs(
         manifest
             .reason
             .push_str(&format!("; withheld static loads: {withheld_loads:?}"));
+    }
+    for module in modules
+        .iter()
+        .filter(|module| startup_modules.contains(&module.path) && module.completion == Some(false))
+    {
+        manifest.reason.push_str(&format!("; certain top-level exit contradicts the app-starts premise; browser root withheld: {}", module.path));
     }
     let mut index = ProjectHostIndex::build(
         manifest,

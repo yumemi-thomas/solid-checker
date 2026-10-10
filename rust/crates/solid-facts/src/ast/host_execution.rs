@@ -27,6 +27,7 @@ const WIDTH: usize = 256;
 struct ExtractionState {
     calls: CallState,
     statements: HashMap<Span, HostExecutionPredicate>,
+    startup: HashMap<Span, HostExecutionPredicate>,
     classes: HashMap<Span, HostExecutionPredicate>,
     prefixes: HashMap<Span, HostExecutionPredicate>,
     composites: HashMap<Span, Option<HostExecutionPredicate>>,
@@ -40,6 +41,7 @@ impl ExtractionState {
         Self {
             calls: CallState::new(),
             statements: HashMap::new(),
+            startup: HashMap::new(),
             classes: HashMap::new(),
             prefixes: HashMap::new(),
             composites: HashMap::new(),
@@ -63,7 +65,7 @@ impl HostExecutionPredicate {
     fn nodes(&self) -> usize {
         match self {
             Self::All(items) | Self::Any(items) => 1 + items.iter().map(Self::nodes).sum::<usize>(),
-            Self::CallCompletion(item) => 1 + item.nodes(),
+            Self::CallCompletion(item) | Self::ModuleEvaluationCompletion(item) => 1 + item.nodes(),
             _ => 1,
         }
     }
@@ -96,24 +98,49 @@ pub enum HostExecutionPredicate {
     /// Recognized ordinary invocation uses premise A; a certain synchronous
     /// exit is dead. Unsupported eager forms/bodies remain unproved here.
     CallCompletion(Box<Self>),
+    /// Normal completion of a statement during module evaluation. Only the
+    /// inference consumer may apply ADR 0270's admitted static-graph startup
+    /// premise here; branch selection and function bodies are separate facts.
+    ModuleEvaluationCompletion(Box<Self>),
 }
 
 impl HostExecutionPredicate {
     /// Three-valued evaluation: None is possible execution, never dead code.
     #[must_use]
     pub fn evaluate(&self, value: &impl Fn(&HostConstantIdentity) -> Option<bool>) -> Option<bool> {
+        self.evaluate_with_startup(value, false)
+    }
+
+    /// The caller must establish membership in an admitted browser root's
+    /// static graph. Certain exits contradict startup and remain false.
+    #[must_use]
+    pub fn evaluate_with_startup(
+        &self,
+        value: &impl Fn(&HostConstantIdentity) -> Option<bool>,
+        module_startup: bool,
+    ) -> Option<bool> {
         match self {
             Self::Live => Some(true),
             Self::Dead => Some(false),
             Self::Unknown => None,
-            Self::CallCompletion(predicate) => predicate.evaluate(value),
+            Self::CallCompletion(predicate) => {
+                predicate.evaluate_with_startup(value, module_startup)
+            }
+            Self::ModuleEvaluationCompletion(predicate) => {
+                let completion = predicate.evaluate_with_startup(value, module_startup);
+                if module_startup && completion.is_none() {
+                    Some(true)
+                } else {
+                    completion
+                }
+            }
             Self::Constant { identity, expected } => {
                 value(identity).map(|value| value == *expected)
             }
             Self::All(items) => {
                 let mut unknown = false;
                 for item in items {
-                    match item.evaluate(value) {
+                    match item.evaluate_with_startup(value, module_startup) {
                         Some(false) => return Some(false),
                         None => unknown = true,
                         _ => {}
@@ -124,7 +151,7 @@ impl HostExecutionPredicate {
             Self::Any(items) => {
                 let mut unknown = false;
                 for item in items {
-                    match item.evaluate(value) {
+                    match item.evaluate_with_startup(value, module_startup) {
                         Some(true) => return Some(true),
                         None => unknown = true,
                         _ => {}
@@ -148,6 +175,8 @@ pub enum HostExecutionSiteKind {
     Region,
     /// Whole-module normal completion, not eligibility of its live prefix.
     ModuleCompletion,
+    /// Module completion with structural exits retained across premised await.
+    ModuleStartupCompletion,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -773,6 +802,7 @@ fn preceding<'a>(
     suspensions: &[(oxc_span::Span, Option<oxc_span::Span>)],
     statements: &[Statement<'a>],
     child: oxc_span::Span,
+    module_evaluation: bool,
     state: &mut ExtractionState,
 ) -> HostExecutionPredicate {
     if let Some(result) = state.prefixes.get(&span(child)) {
@@ -788,7 +818,7 @@ fn preceding<'a>(
             .insert(span(statement.span()), prefix.clone());
         prefix = all(vec![
             prefix,
-            completion(semantic, suspensions, statement, 0, state),
+            statement_completion(semantic, suspensions, statement, module_evaluation, state),
         ]);
     }
     state
@@ -796,6 +826,81 @@ fn preceding<'a>(
         .get(&span(child))
         .cloned()
         .unwrap_or(HostExecutionPredicate::Unknown)
+}
+
+fn statement_completion<'a>(
+    semantic: &Semantic<'a>,
+    suspensions: &[(oxc_span::Span, Option<oxc_span::Span>)],
+    statement: &Statement<'a>,
+    module_evaluation: bool,
+    state: &mut ExtractionState,
+) -> HostExecutionPredicate {
+    let predicate = completion(semantic, suspensions, statement, 0, state);
+    if module_evaluation {
+        HostExecutionPredicate::ModuleEvaluationCompletion(Box::new(predicate))
+    } else {
+        predicate
+    }
+}
+
+fn startup_completion<'a>(
+    semantic: &Semantic<'a>,
+    suspensions: &[(oxc_span::Span, Option<oxc_span::Span>)],
+    statement: &Statement<'a>,
+    depth: usize,
+    state: &mut ExtractionState,
+) -> HostExecutionPredicate {
+    let extent = span(statement.span());
+    if let Some(predicate) = state.startup.get(&extent) {
+        return predicate.clone();
+    }
+    if depth >= EDGE_DEPTH || !state.step() {
+        return HostExecutionPredicate::Unknown;
+    }
+    // Await in a containing block must not hide a later certain throw: startup
+    // premises its completion too. Ordinary function completion is untouched.
+    let predicate = match statement {
+        Statement::ThrowStatement(_) | Statement::ReturnStatement(_) => {
+            HostExecutionPredicate::Dead
+        }
+        Statement::BlockStatement(block) if block.body.len() <= WIDTH => all(block
+            .body
+            .iter()
+            .map(|statement| startup_completion(semantic, suspensions, statement, depth + 1, state))
+            .collect()),
+        Statement::IfStatement(statement) => {
+            let yes = startup_completion(
+                semantic,
+                suspensions,
+                &statement.consequent,
+                depth + 1,
+                state,
+            );
+            let no = statement
+                .alternate
+                .as_ref()
+                .map_or(HostExecutionPredicate::Live, |statement| {
+                    startup_completion(semantic, suspensions, statement, depth + 1, state)
+                });
+            let evaluated = HostExecutionPredicate::ModuleEvaluationCompletion(Box::new(
+                expression_completion(semantic, &statement.test, &mut state.calls),
+            ));
+            if yes == no {
+                all(vec![evaluated, yes])
+            } else {
+                all(vec![
+                    evaluated,
+                    any(vec![
+                        all(vec![test(semantic, &statement.test, true), yes]),
+                        all(vec![test(semantic, &statement.test, false), no]),
+                    ]),
+                ])
+            }
+        }
+        _ => statement_completion(semantic, suspensions, statement, true, state),
+    };
+    state.startup.insert(extent, predicate.clone());
+    predicate
 }
 
 fn default_initializer(nodes: &AstNodes<'_>, id: NodeId) -> Option<HostDefaultInitializer> {
@@ -966,6 +1071,12 @@ fn execution_inner<'a>(
     }
     let mut child = id;
     let mut conditions = Vec::new();
+    let module_evaluation = !nodes.ancestor_kinds(id).take(EDGE_DEPTH).any(|kind| {
+        matches!(
+            kind,
+            AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
+        )
+    });
     for (depth, parent) in nodes.ancestor_ids(id).enumerate() {
         if depth >= EDGE_DEPTH || !state.step() || defaults.len() > WIDTH {
             return (None, HostExecutionPredicate::Unknown);
@@ -1000,6 +1111,7 @@ fn execution_inner<'a>(
                 suspensions,
                 &program.body,
                 child_span,
+                module_evaluation,
                 state,
             )),
             AstKind::FunctionBody(body) => conditions.push(preceding(
@@ -1007,6 +1119,7 @@ fn execution_inner<'a>(
                 suspensions,
                 &body.statements,
                 child_span,
+                module_evaluation,
                 state,
             )),
             AstKind::BlockStatement(block) => conditions.push(preceding(
@@ -1014,6 +1127,7 @@ fn execution_inner<'a>(
                 suspensions,
                 &block.body,
                 child_span,
+                module_evaluation,
                 state,
             )),
             AstKind::IfStatement(statement) => {
@@ -1385,7 +1499,7 @@ fn host_execution_with_state(
                 }
                 module_completion = all(vec![
                     module_completion,
-                    completion(semantic, &suspensions, statement, 0, state),
+                    statement_completion(semantic, &suspensions, statement, true, state),
                 ]);
             }
             facts.push(HostExecutionFact {
@@ -1393,6 +1507,17 @@ fn host_execution_with_state(
                 kind: HostExecutionSiteKind::ModuleCompletion,
                 scope: None,
                 predicate: module_completion,
+            });
+            let predicate = all(program
+                .body
+                .iter()
+                .map(|statement| startup_completion(semantic, &suspensions, statement, 0, state))
+                .collect());
+            facts.push(HostExecutionFact {
+                span: span(program.span),
+                kind: HostExecutionSiteKind::ModuleStartupCompletion,
+                scope: None,
+                predicate: HostExecutionPredicate::ModuleEvaluationCompletion(Box::new(predicate)),
             });
         }
         let kind = match node.kind() {
@@ -1504,6 +1629,79 @@ fn host_execution_with_state(
 mod tests {
     use super::*;
     use crate::ast::extract;
+
+    #[test]
+    fn startup_premise_is_confined_to_module_statement_completion() {
+        for (source, expected) in [
+            ("{await pending(); throw 0;}", Some(false)),
+            (
+                "if(!import.meta.env.SSR){await pending(); throw 0;}",
+                Some(false),
+            ),
+            (
+                "if(import.meta.env.SSR){await pending(); throw 0;}",
+                Some(true),
+            ),
+            ("await pending();", Some(true)),
+            ("throw await pending();", Some(false)),
+        ] {
+            let facts = extract("/project/main.ts", source).unwrap();
+            let fact = facts
+                .host_execution
+                .iter()
+                .find(|fact| fact.kind == HostExecutionSiteKind::ModuleStartupCompletion)
+                .unwrap();
+            assert_eq!(
+                fact.predicate.evaluate_with_startup(&|_| Some(false), true),
+                expected,
+                "{source}: {fact:?}"
+            );
+        }
+        for (source, expected) in [
+            ("unknown.member(); target();", Some(true)),
+            ("await unknown(); target();", Some(true)),
+            ("class X extends unknown {} target();", Some(true)),
+            ("throw 0; target();", Some(false)),
+            ("unknown.member(); throw 0; target();", Some(false)),
+            ("if(!import.meta.env.SSR) throw 0; target();", Some(false)),
+            ("if(import.meta.env.SSR) throw 0; target();", Some(true)),
+            ("if(unknown) target();", None),
+            ("if(import.meta.env.SSR) target();", Some(false)),
+            ("function run(){new Date(); target();} run();", None),
+            (
+                "async function run(){await unknown(); target();} run();",
+                None,
+            ),
+        ] {
+            let facts = extract("/project/main.ts", source).unwrap();
+            let offset = u32::try_from(source.find("target()").unwrap()).unwrap();
+            let fact = facts
+                .host_execution
+                .iter()
+                .find(|fact| fact.kind == HostExecutionSiteKind::Call && fact.span.start == offset)
+                .unwrap();
+            let constants = |identity: &HostConstantIdentity| match identity {
+                HostConstantIdentity::ViteSsr => Some(false),
+                _ => None,
+            };
+            assert_eq!(
+                fact.predicate
+                    .evaluate_with_startup(&constants, fact.scope.is_none()),
+                expected,
+                "{source}: {fact:?}"
+            );
+            if (source.starts_with("unknown.member") && !source.contains("throw"))
+                || source.starts_with("await")
+                || source.starts_with("class")
+            {
+                assert_eq!(
+                    fact.predicate.evaluate(&constants),
+                    None,
+                    "default interpretation must stay strict: {source}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn every_oxc_statement_variant_has_an_explicit_completion_classification() {

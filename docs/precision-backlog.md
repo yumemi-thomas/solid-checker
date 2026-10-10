@@ -1,5 +1,26 @@
 # Precision backlog
 
+ADR 0270 app-starts premise (schema 57, 2026-10-10): module-statement
+completion is explicitly marked in normalized facts. Inference consumes the
+premise only on an exact browser root static graph; unknown top-level
+initializers/heritage/await no longer block importer continuations. Certain
+top-level exits contradict startup and refuse the root with a decision note.
+Client-dead guards remain dead; unknown guards and function-body completion
+remain unproved. Explicit targets, certification and alias/link/cycle/opaque
+evaluation boundaries are unchanged. Unused/type-space/server-erased value
+bindings cannot enlarge startup membership. Direct `throw await …` retains its
+certain exit in the startup summary. Twenty-one native twins and a published
+Solid/router factory typing example pass; all seven added positive registration
+sites were reviewed. Coverage retains 239 projects / 1,583 findings. The
+49-project corpus retains 538 violations / 3,504 uncertifiable findings, zero
+added/removed violation sites; Helge's router gap stays uncertifiable at its
+more precise import span. Error Menu admits 65 scopes, Helge 18; their measured
+incremental medians (+1.2639 s / +.6989 s) exceed the earlier approximate budget.
+No performance gate was relaxed. Handoff is green: workspace Clippy, armed
+Rust 1,744 passed, scripts 355 passed, CLI 381 passed plus typechecking and full
+make verify (TOTAL 242.62 s, zero failed-step lines). The obsolete verification
+interrupted for direct throw-await repair is not counted as a green run.
+
 ADR 0270 round-6 bounded call-completion review (schema 56):
 
 Bounded exact synchronous call completion now distinguishes CertainExit from
