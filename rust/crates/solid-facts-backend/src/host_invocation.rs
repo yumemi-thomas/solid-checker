@@ -108,22 +108,31 @@ fn shell_state_word(word: &str) -> bool {
 fn names_vite(source: &str) -> bool {
     // Quotes, escapes and line continuations vanish before execution:
     // `vit"e"`, cmd's `v^ite` and `v\<newline>ite` all run `vite`. A bare
-    // newline still separates commands, so it becomes a space.
-    let lower: String = source
+    // newline still separates commands, so it becomes a space. A backslash
+    // is also a Windows path separator (`node_modules\vite\dist`), so both
+    // readings are checked.
+    let joined = source
         .replace("\\\r\n", "")
         .replace("\\\n", "")
         .replace("^\r\n", "")
-        .replace("^\n", "")
-        .chars()
-        .filter(|ch| !matches!(ch, '\'' | '"' | '\\' | '^'))
-        .map(|ch| if matches!(ch, '\n' | '\r') { ' ' } else { ch })
-        .collect::<String>()
-        .to_ascii_lowercase();
-    lower.match_indices("vite").any(|(index, _)| {
-        !lower
-            .as_bytes()
-            .get(index + 4)
-            .is_some_and(|ch| ch.is_ascii_alphanumeric())
+        .replace("^\n", "");
+    [None, Some('/')].into_iter().any(|backslash| {
+        let lower: String = joined
+            .chars()
+            .filter_map(|ch| match ch {
+                '\'' | '"' | '^' => None,
+                '\\' => backslash,
+                '\n' | '\r' => Some(' '),
+                _ => Some(ch),
+            })
+            .collect::<String>()
+            .to_ascii_lowercase();
+        lower.match_indices("vite").any(|(index, _)| {
+            !lower
+                .as_bytes()
+                .get(index + 4)
+                .is_some_and(|ch| ch.is_ascii_alphanumeric())
+        })
     })
 }
 
@@ -285,6 +294,7 @@ mod tests {
             "node_modules\\.bin\\vite.cmd build --config ../other.ts",
             "node node_modules\\vite\\bin\\vite.js build --config ../other.ts",
             "path.. && vite build",
+            "node node_modules\\vite\\dist\\node\\cli.js build --config ../other.ts",
             "path/alternate/bin && vite build",
             "v^\nite build --config ../other.ts",
             "c^d ..&vite build",
@@ -329,6 +339,7 @@ mod tests {
             "env -Svite build --config ../other.ts",
             "node_modules\\.bin\\vite.cmd build --config ../other.ts",
             "v^\nite build --config ../other.ts",
+            "node node_modules\\vite\\dist\\node\\cli.js build --config ../other.ts",
         ] {
             assert_eq!(
                 refusal(

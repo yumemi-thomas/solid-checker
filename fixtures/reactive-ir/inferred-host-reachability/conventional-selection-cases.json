@@ -127,5 +127,7 @@
   {"name":"enclosing-env-attached-vite","workspaceScripts":{"postbuild":"env -Svite build --config ../other.ts"},"browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory"},
   {"name":"windows-bin-path-vite","scripts":{"build":"node_modules\\.bin\\vite.cmd build --config ../other.ts"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
   {"name":"enclosing-windows-bin-path-vite","workspaceScripts":{"postbuild":"node_modules\\.bin\\vite.cmd build --config ../other.ts"},"browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory"},
-  {"name":"cmd-compact-path","scripts":{"build":"path.. && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"}
+  {"name":"cmd-compact-path","scripts":{"build":"path.. && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"windows-package-cli-path","scripts":{"build":"node node_modules\\vite\\dist\\node\\cli.js build --config ../other.ts"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"enclosing-windows-package-cli-path","workspaceScripts":{"postbuild":"node node_modules\\vite\\dist\\node\\cli.js build --config ../other.ts"},"browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory"}
 ]

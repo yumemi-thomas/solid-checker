@@ -152,7 +152,13 @@ and line continuations and treating a bare newline as a command break. Nothing
 is required before it, so `vite.js`, `vit"e"`, `v^ite`, attached option
 payloads (`env -Svite`, `cmd /cvite`) and Windows paths
 (`node_modules\.bin\vite.cmd`) count, and so does an unrelated word such as
-`invite`, conservatively; `vitest` and `@vitejs/...` do not. In the application manifest, including
+`invite`, conservatively; `vitest` and `@vitejs/...` do not. A backslash is
+read both as an escape and as a Windows path separator, so
+`node_modules\vite\dist\node\cli.js` counts too. Deliberately synthesized
+spellings (`v$''ite`, `$(printf v)ite`, `.bin/v[i]te`, `env -S 'vite\c…'`) are
+not detected; they are adversarial encodings of the command name rather than
+a config a real project selects, and are accepted under the premise (review
+15, P2). In the application manifest, including
 lifecycle hooks, such a script must be plain words joined by `&&`: every word
 uses only ASCII letters, digits and `._:/=@-`, so no other separator, newline,
 quote, escape, expansion, glob, brace, group, comment or variable can reach the
@@ -189,7 +195,7 @@ candidates and directory membership (including alternate-file additions) are
 cache/proof inputs. Browser-map checks also enroll every importer/enclosing
 manifest and its absence.
 
-The implementation pins 129 invocation/config/browser-map controls plus 22
+The implementation pins 131 invocation/config/browser-map controls plus 22
 resolver controls, with exact main/helper process sites. Enclosing plain-Vite
 twins refuse with a parent tsconfigPaths config, with no parent config, and
 after parent config mutation with unchanged manifests; retained daemon and
