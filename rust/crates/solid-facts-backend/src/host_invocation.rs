@@ -89,10 +89,11 @@ fn shell_syntax(source: &str) -> bool {
 /// `vitest` or `@vitejs`. Scripts that never name Vite are covered by the
 /// premise, whatever tool they run.
 fn names_vite(source: &str) -> bool {
-    // Quotes and escapes vanish before execution: `vit"e"` runs `vite`.
+    // Quotes, escapes and line continuations vanish before execution:
+    // `vit"e"` and `v\<newline>ite` both run `vite`.
     let lower: String = source
         .chars()
-        .filter(|ch| !matches!(ch, '\'' | '"' | '\\'))
+        .filter(|ch| !matches!(ch, '\'' | '"' | '\\' | '\n' | '\r'))
         .collect::<String>()
         .to_ascii_lowercase();
     lower.match_indices("vite").any(|(index, _)| {
@@ -134,12 +135,15 @@ pub(super) fn refusal(scripts: &serde_json::Value, role: ManifestRole) -> Option
             ));
         }
         let commands: Vec<_> = source.split(['&', '|', ';']).map(str::trim).collect();
+        // Any cd word, wherever it sits (`X=1 cd ..`, `command cd ..`),
+        // may move Vite to another root.
         let conventional = !shell_syntax(source)
-            && commands.iter().all(|command| {
-                let first = command.split_ascii_whitespace().next();
-                !matches!(first, Some("cd" | "pushd"))
-                    && (!names_vite(command) || admitted(command))
-            });
+            && !source
+                .split_ascii_whitespace()
+                .any(|word| matches!(word, "cd" | "pushd" | "popd"))
+            && commands
+                .iter()
+                .all(|command| !names_vite(command) || admitted(command));
         if !conventional {
             return Some(format!(
                 "scripts.{name}: script may select a non-conventional Vite config"
@@ -222,6 +226,10 @@ mod tests {
             "tsc && vite build --mode staging",
             "cd .. && vite build",
             "cd .. || cd app && vite build",
+            "X=1 cd .. && vite build",
+            "command cd ..; vite build",
+            "builtin pushd ..; vite build",
+            "v\\\nite build --config ../other.ts",
             "npx vite build",
             "pnpm --dir ../.. exec vite build",
             "pnpm -C.. exec vite dev",
@@ -250,6 +258,7 @@ mod tests {
             "vite build",
             "tsc && vite build",
             "pnpm --filter app exec vite",
+            "v\\\nite build --config ../other.ts",
         ] {
             assert_eq!(
                 refusal(

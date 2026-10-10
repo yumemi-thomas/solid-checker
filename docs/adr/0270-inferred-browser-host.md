@@ -147,11 +147,13 @@ local `.bin` wrappers are taken to build the app, if at all, with its
 conventional config, like the standard-runtime premise of ADR 0266.
 
 A script is inspected only when it names Vite: a case-insensitive `vite`
-word, after removing quotes and backslashes (so `vite.js` and `vit"e"` count,
+word, after removing quotes, backslashes and newlines (so `vite.js`,
+`vit"e"` and a `v\`-newline-`ite` continuation count,
 `vitest` and `@vitejs/...` do not). In the application manifest, including
 lifecycle hooks, such a script must contain no shell syntax beyond the
 separators `&`, `|` and `;` (no quotes, escapes, `$`, backticks, parentheses,
-redirection or newlines), no `cd`/`pushd` command, and every command naming
+redirection or newlines), no `cd`/`pushd`/`popd` word anywhere (so
+`X=1 cd ..` and `command cd ..` refuse too), and every command naming
 Vite must be exactly `vite`, `vite build`, `vite dev`, `vite serve` or
 `vite preview` with only these flags: `--port` (numeric), `--host` (optional
 literal), `--open`, `--strictPort`, `--base`/`--outDir` (literal),
@@ -181,7 +183,7 @@ candidates and directory membership (including alternate-file additions) are
 cache/proof inputs. Browser-map checks also enroll every importer/enclosing
 manifest and its absence.
 
-The implementation pins 104 invocation/config/browser-map controls plus 22
+The implementation pins 108 invocation/config/browser-map controls plus 22
 resolver controls, with exact main/helper process sites. Enclosing plain-Vite
 twins refuse with a parent tsconfigPaths config, with no parent config, and
 after parent config mutation with unchanged manifests; retained daemon and

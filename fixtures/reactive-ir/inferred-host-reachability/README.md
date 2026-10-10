@@ -35,7 +35,8 @@ Script inspection was then simplified (ADR 0270): scripts that do not name
 Vite are premised, so the vp, Playwright, unknown-tool and node-helper twins now
 admit in both roles, and the parent vp-build mutation twin was removed. App
 scripts naming Vite must split into exact conventional `vite` commands;
-enclosing scripts naming Vite refuse. There are 104 conventional-selection and
+enclosing scripts naming Vite refuse. Prefixed cd (`X=1 cd ..`, `command cd ..`) and
+escaped-newline Vite twins refuse. There are 108 conventional-selection and
 22 resolver controls.
 
 resolver-selection-cases.json supplies native host-proof twins in temporary

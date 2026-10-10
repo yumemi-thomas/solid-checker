@@ -102,5 +102,9 @@
   {"name":"enclosing-vp-bare","workspaceScripts":{"dev":"vp"},"browser":true},
   {"name":"enclosing-playwright","workspaceScripts":{"e2e":"playwright test"},"browser":true},
   {"name":"enclosing-unknown-tool","workspaceScripts":{"build":"unknown-tool build"},"browser":true},
-  {"name":"enclosing-audited-tools","workspaceScripts":{"typecheck":"tsc --noEmit","lint":"eslint ."},"browser":true}
+  {"name":"enclosing-audited-tools","workspaceScripts":{"typecheck":"tsc --noEmit","lint":"eslint ."},"browser":true},
+  {"name":"assignment-cd","scripts":{"build":"X=1 cd .. && vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"builtin-cd","scripts":{"build":"command cd ..; vite build"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"continued-vite","scripts":{"build":"v\\\nite build --config ../other.ts"},"browser":false,"note":"scripts.build: script may select a non-conventional Vite config"},
+  {"name":"enclosing-continued-vite","browser":false,"note":"scripts.postbuild: enclosing manifest launches Vite from a different directory","workspaceScripts":{"postbuild":"v\\\nite build --config ../other.ts"}}
 ]
