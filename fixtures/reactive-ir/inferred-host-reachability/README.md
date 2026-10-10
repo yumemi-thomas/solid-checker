@@ -31,6 +31,14 @@ unchanged-manifest parent-config mutation twins pin refusal at the enclosing
 manifest/script. The mutation process twin checks retained daemon and fresh
 one-shot results. Enclosing tsc/eslint/prettier scripts remain ignored.
 
+Review 8 admits the ignored class only by an audited exact first tool word
+(docs/adr/0270-inferred-host-script-tools.md), plus the existing plain-word and
+case-insensitive `vite` exclusion. App/enclosing vp-build, bare-vp, Playwright
+and unknown-tool twins refuse; tsc --noEmit / eslint . twins and the app's
+openapi-typescript control remain admitted. Parent vp-build config mutation
+with unchanged manifests stays refused in retained daemon and one-shot checks.
+There are 105 conventional-selection and 22 resolver controls.
+
 resolver-selection-cases.json supplies native host-proof twins in temporary
 projects analyzed with tsconfig.app.json, while the enabled resolver discovers
 tsconfig.json. Both native Vite and default vite-tsconfig-paths configuration

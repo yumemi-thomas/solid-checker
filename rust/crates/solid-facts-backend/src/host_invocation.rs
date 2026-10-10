@@ -86,39 +86,34 @@ fn shell_syntax(source: &str) -> bool {
 }
 
 fn ignored(source: &str) -> bool {
-    let lower = source.to_ascii_lowercase();
-    !lower.contains("vite")
+    let mut words = source.split_ascii_whitespace();
+    // This is a positive tool allowlist, not absence of known launchers.
+    // Audit notes: docs/adr/0270-inferred-host-script-tools.md. Tools with
+    // configured command hooks, app servers, or unknown dispatch stay closed.
+    matches!(
+        words.next(),
+        Some(
+            "tsc"
+                | "eslint"
+                | "prettier"
+                | "oxlint"
+                | "oxfmt"
+                | "biome"
+                | "stylelint"
+                | "rimraf"
+                | "rm"
+                | "mkdir"
+                | "cp"
+                | "echo"
+                | "true"
+                | "openapi-typescript"
+                | "depcheck"
+                | "syncpack"
+        )
+    ) && !source.to_ascii_lowercase().contains("vite")
         && !shell_syntax(source)
-        // Escapes/globs must not disguise a forbidden launcher word. No shell
-        // interpretation is used even to establish an unrelated command.
+        // Check every word, including the executable, before shell expansion.
         && source.split_ascii_whitespace().all(plain_word)
-        && !lower
-            .split(|ch: char| !ch.is_ascii_alphanumeric() && !matches!(ch, '_' | '-'))
-            .any(|word| {
-                matches!(
-                    word,
-                    "cd" | "sh"
-                        | "bash"
-                        | "zsh"
-                        | "node"
-                        | "npx"
-                        | "bunx"
-                        | "pnpm"
-                        | "npm"
-                        | "yarn"
-                        | "bun"
-                        | "deno"
-                        | "env"
-                        | "cross-env"
-                        | "exec"
-                        | "run"
-                        | "concurrently"
-                        | "npm-run-all"
-                        | "turbo"
-                        | "nx"
-                        | "lerna"
-                )
-            })
 }
 
 /// Check every app/enclosing manifest script, including lifecycle hooks.
@@ -284,6 +279,74 @@ mod tests {
                 .unwrap()
                 .contains("scripts.build")
             );
+        }
+    }
+
+    #[test]
+    fn ignored_tools_require_an_exact_audited_first_word() {
+        for source in [
+            "tsc --noEmit",
+            "eslint .",
+            "prettier --check .",
+            "oxlint src",
+            "oxfmt --check .",
+            "biome check .",
+            "stylelint src/app.css",
+            "rimraf dist",
+            "rm -rf dist",
+            "mkdir -p dist",
+            "cp src/app.css dist/app.css",
+            "echo ready",
+            "true",
+            "openapi-typescript http://localhost:3000/openapi.json --output ./src/api/schema.gen.ts",
+            "depcheck --json",
+            "syncpack list",
+            // Arguments are data for these tools, not executable dispatch.
+            "echo node",
+        ] {
+            assert!(ignored(source), "{source}");
+            for role in [ManifestRole::Application, ManifestRole::Enclosing] {
+                assert!(refusal(&serde_json::json!({"check":source}), role).is_none());
+            }
+        }
+        for source in [
+            "vp build",
+            "vp",
+            "vp build --config ../other.ts",
+            "vp -C .. build",
+            "vp build --mode production",
+            "playwright test",
+            "cypress run",
+            "vitest",
+            "storybook dev",
+            "astro dev",
+            "lint-staged",
+            "tsx build.ts",
+            "ts-node build.ts",
+            "husky",
+            "graphql-codegen",
+            "knip",
+            "changeset publish",
+            "unknown-tool build",
+            "./tsc --noEmit",
+            "TSC --noEmit",
+            "",
+            "  ",
+            "tsc --noEmit\n",
+            "eslint *.ts",
+            "echo `command`",
+            "echo safe\\ word",
+            "echo VITE",
+        ] {
+            assert!(!ignored(source), "{source}");
+            for role in [ManifestRole::Application, ManifestRole::Enclosing] {
+                assert!(
+                    refusal(&serde_json::json!({"check":source}), role)
+                        .unwrap()
+                        .contains("scripts.check"),
+                    "{source}"
+                );
+            }
         }
     }
 }

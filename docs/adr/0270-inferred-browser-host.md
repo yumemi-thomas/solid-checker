@@ -152,9 +152,12 @@ letters, digits and `._:/=@-`; values cannot start with `-`. No config, mode,
 root, loader or cwd option is admitted, even for the conventional directory.
 Shell metacharacters, quotes and newlines refuse before trimming.
 An unrelated script is ignored only when it contains no case-insensitive
-`vite` substring, only plain words, no shell metacharacter, and no word naming `cd`, a shell,
-Node, a package manager, env/cross-env, exec/run, concurrently/npm-run-all,
-turbo/nx/lerna (the exact list is in host_invocation.rs). Every other script
+`vite` substring, only plain words, no shell metacharacter/quote/escape/glob or
+newline, and its exact first word belongs to the positive audited tool
+allowlist in host_invocation.rs. The per-tool decisions and documented dispatch
+boundaries are in [script-tool audit NOTES](0270-inferred-host-script-tools.md).
+Unknown tools, Vite launchers such as `vp`, and configured command runners
+such as Playwright, lint-staged and graphql-codegen are never ignored. Every other script
 refuses with a decision note naming `package.json` and the script. The same
 classifier distinguishes manifest roles: in every enclosing (non-app) manifest,
 only the ignored class passes. Even an exact plain `vite build` refuses there:
@@ -179,7 +182,7 @@ manifest and its absence. Configurations selected externally without visible
 evidence remain conditional on this named premise; inference does not observe
 an arbitrary build command or attest a production build.
 
-The implementation pins 94 invocation/config/browser-map controls plus 22
+The implementation pins 105 invocation/config/browser-map controls plus 22
 resolver controls, including exact main/helper process sites and link-target
 mutation with unchanged pointer identity. Review-6 shell/npx payload and
 conditional-cwd twins remain refused after outside-config mutation.
@@ -203,6 +206,14 @@ still infer 65/18 scopes) and the same corpus/coverage totals, with zero changed
 violation sites or multiplicities. Its release decision measurements and final
 handoff checks are recorded in rust/target/research/HANDOFF-infer-host-RESULT-11.md.
 No generated snapshot or public contract was changed.
+
+Review 8 replaces the ignored-script deny-list with the audited first-word
+allowlist. App/enclosing `vp build`, bare `vp`, Playwright and unknown-tool
+twins refuse; `tsc --noEmit`, `eslint .` and the app's openapi-typescript control
+remain ignored. Parent `vp build` stays refused after config mutation with
+unchanged manifests. Final candidate decisions, corpus comparison and handoff
+checks are recorded in rust/target/research/HANDOFF-infer-host-RESULT-12.md;
+the Error Menu/Helge measurements above are historical review-6/7 results.
 
 ## Successful-build premise (owner decision, 2026-10-10)
 

@@ -92,5 +92,16 @@
   {"name":"enclosing-vite-parent-resolver","workspaceScripts":{"build":"vite build"},"parentConfig":"export default {root:'./app',plugins:[],resolve:{tsconfigPaths:true}};","browser":false,"note":"scripts.build: enclosing manifest launches Vite from a different directory"},
   {"name":"enclosing-vite-no-parent-config","workspaceScripts":{"build":"vite build"},"browser":false,"note":"scripts.build: enclosing manifest launches Vite from a different directory"},
   {"name":"enclosing-vite-parent-config-mutation","workspaceScripts":{"build":"vite build"},"parentConfig":"export default {root:'./app',plugins:[]};","mutatedParentConfig":"export default {root:'./app',plugins:[],resolve:{tsconfigPaths:true}};","browser":false,"note":"scripts.build: enclosing manifest launches Vite from a different directory"},
-  {"name":"enclosing-ignored-control","workspaceScripts":{"build":"tsc -b","lint":"eslint src","format":"prettier --check ."},"browser":true}
+  {"name":"enclosing-ignored-control","workspaceScripts":{"build":"tsc -b","lint":"eslint src","format":"prettier --check ."},"browser":true},
+  {"name":"app-vp-build","scripts":{"build":"vp build"},"browser":false,"note":"scripts.build: script is outside the exact conventional Vite allowlist"},
+  {"name":"app-vp-bare","scripts":{"dev":"vp"},"browser":false,"note":"scripts.dev: script is outside the exact conventional Vite allowlist"},
+  {"name":"app-playwright","scripts":{"e2e":"playwright test"},"browser":false,"note":"scripts.e2e: script is outside the exact conventional Vite allowlist"},
+  {"name":"app-unknown-tool","scripts":{"build":"unknown-tool build"},"browser":false,"note":"scripts.build: script is outside the exact conventional Vite allowlist"},
+  {"name":"app-audited-tools","scripts":{"typecheck":"tsc --noEmit","lint":"eslint .","generate:api":"openapi-typescript http://localhost:3000/openapi.json --output ./src/api/schema.gen.ts"},"browser":true},
+  {"name":"enclosing-vp-build","workspaceScripts":{"build":"vp build"},"parentConfig":"export default {root:'./app',plugins:[],resolve:{tsconfigPaths:true}};","browser":false,"note":"scripts.build: script is outside the exact conventional Vite allowlist"},
+  {"name":"enclosing-vp-bare","workspaceScripts":{"dev":"vp"},"browser":false,"note":"scripts.dev: script is outside the exact conventional Vite allowlist"},
+  {"name":"enclosing-playwright","workspaceScripts":{"e2e":"playwright test"},"browser":false,"note":"scripts.e2e: script is outside the exact conventional Vite allowlist"},
+  {"name":"enclosing-unknown-tool","workspaceScripts":{"build":"unknown-tool build"},"browser":false,"note":"scripts.build: script is outside the exact conventional Vite allowlist"},
+  {"name":"enclosing-audited-tools","workspaceScripts":{"typecheck":"tsc --noEmit","lint":"eslint ."},"browser":true},
+  {"name":"enclosing-vp-parent-config-mutation","workspaceScripts":{"build":"vp build"},"parentConfig":"export default {root:'./app',plugins:[]};","mutatedParentConfig":"export default {root:'./app',plugins:[],resolve:{tsconfigPaths:true}};","browser":false,"note":"scripts.build: script is outside the exact conventional Vite allowlist"}
 ]

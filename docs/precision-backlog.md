@@ -1,5 +1,34 @@
 # Precision backlog
 
+ADR 0270 ignored-script allowlist, review 8 (2026-10-10): absence of a Vite
+spelling or known launcher is no longer sufficient. Only an exact audited
+first tool word, with plain words, no shell syntax/quotes/escapes/globs or
+newlines, and no case-insensitive `vite` substring, is ignored. The per-tool
+audit and its documented-dispatch boundary are in
+docs/adr/0270-inferred-host-script-tools.md. Command runners (including vp,
+Playwright, lint-staged and graphql-codegen) and unknown tools refuse. App and
+enclosing manifest roles remain distinct; only app-local exact Vite commands
+are admitted. There are 105 conventional-selection and 22 resolver controls,
+including parent vp-build config mutation with unchanged manifests and
+retained-daemon/fresh-one-shot comparisons. No signature or diagnostic claim
+was added. Final checks are recorded in
+rust/target/research/HANDOFF-infer-host-RESULT-12.md.
+Error Menu still infers 65 scopes; Helge now refuses package.json scripts.e2e
+(playwright test). Compass now refuses earlier at scripts.test:visual (also
+playwright test); its initialization remains unproved. Queue Management, Jar
+Hell and Beacon refuse scripts.test=vitest; Lutra refuses enclosing
+scripts.build=pnpm --filter @lutra/console build. All 49 no-target corpus
+projects succeed with 538 violations / 3504 uncertifiable findings, exactly
+matching rc13-head-notarget.json at every project/site/kind/multiplicity.
+No changed violation needs adjudication; Helge's previous uncertifiable column
+move disappears when inference is withheld. Snapshot/public-contract updates
+are not required by this sweep.
+Coverage stays 239 projects / 1583 findings. Five focused unit tests and the
+armed process controls passed; published rc.13 web typings have zero TypeScript
+diagnostics. Handoff: Rust 1756 passed, zero failed/ignored; scripts 355; CLI
+381 plus adapter tsc; workspace Clippy before full make verify, green at TOTAL
+211.24 s with zero failed steps. No generated snapshot/public contract changed.
+
 ADR 0270 enclosing-manifest selection, review 7 (2026-10-10): the exact Vite
 allowlist applies only to the analyzed app's own manifest. Every enclosing
 manifest admits only the ignored script class; all Vite launches and other
