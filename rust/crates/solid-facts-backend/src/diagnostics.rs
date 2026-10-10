@@ -319,6 +319,7 @@ impl DiagnosticSession {
                         })
                         .all(browser_site)
             };
+            let projection = crate::inferred_host::HostStage::new("projection");
             let mut snapshot = ordinary.snapshot.clone();
             snapshot.findings = merge_host_findings(
                 &ordinary.snapshot.findings,
@@ -338,6 +339,7 @@ impl DiagnosticSession {
                 "uncertifiable"
             }
             .into();
+            drop(projection);
             crate::inferred_host::validate_inputs(hosts)?;
             timings.reactive_ir += selected_timings.reactive_ir;
             timings.solve_and_snapshot += selected_timings.solve_and_snapshot;

@@ -34,12 +34,7 @@ pub(super) fn installed(
     None
 }
 
-fn tree(
-    root: &Path,
-    directory: &Path,
-    rows: &mut BTreeMap<String, String>,
-    inputs: &mut Vec<PathBuf>,
-) -> Option<()> {
+fn tree(directory: &Path, files: &mut Vec<PathBuf>, inputs: &mut Vec<PathBuf>) -> Option<()> {
     inputs.push(directory.to_owned());
     for entry in fs::read_dir(directory).ok()? {
         let entry = entry.ok()?;
@@ -52,13 +47,10 @@ fn tree(
             return None;
         }
         if kind.is_dir() {
-            tree(root, &path, rows, inputs)?;
+            tree(&path, files, inputs)?;
         } else if kind.is_file() {
             inputs.push(path.clone());
-            rows.insert(
-                path.strip_prefix(root).ok()?.to_str()?.replace('\\', "/"),
-                format!("{:x}", Sha256::digest(fs::read(path).ok()?)),
-            );
+            files.push(path);
         } else {
             return None;
         }
@@ -66,19 +58,22 @@ fn tree(
     Some(())
 }
 
-fn package(root: &Path, inputs: &mut Vec<PathBuf>) -> Option<(serde_json::Value, String)> {
-    let manifest: serde_json::Value =
-        serde_json::from_slice(&fs::read(root.join("package.json")).ok()?).ok()?;
-    let mut rows = BTreeMap::new();
-    tree(root, root, &mut rows, inputs)?;
-    let rows = rows.into_iter().collect::<Vec<_>>();
-    let key = format!(
-        "{}@{}:{:x}",
-        manifest.get("name")?.as_str()?,
-        manifest.get("version")?.as_str()?,
-        Sha256::digest(serde_json::to_vec(&rows).ok()?)
-    );
-    Some((manifest, key))
+fn package_tree(
+    root: &Path,
+    inputs: &mut Vec<PathBuf>,
+    generation: Option<&BTreeMap<String, String>>,
+) -> Option<(serde_json::Value, Vec<PathBuf>)> {
+    let path = root.join("package.json");
+    let bytes = fs::read(&path).ok()?;
+    if let Some(expected) = generation.and_then(|inputs| inputs.get(path.to_str()?))
+        && expected != &format!("sha256:{:x}", Sha256::digest(&bytes))
+    {
+        return None;
+    }
+    let manifest: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let mut files = Vec::new();
+    tree(root, &mut files, inputs)?;
+    Some((manifest, files))
 }
 
 pub(super) fn audit(
@@ -86,6 +81,7 @@ pub(super) fn audit(
     specifier: &str,
     inputs: &mut Vec<PathBuf>,
     packages: &mut PackageAudits,
+    generation: Option<&BTreeMap<String, String>>,
 ) -> Result<(), String> {
     let name = match specifier {
         "filesystem-routing/vite" => "filesystem-routing",
@@ -132,6 +128,7 @@ pub(super) fn audit(
     let mut seen = BTreeSet::new();
     let mut rows = BTreeSet::new();
     let mut pending = vec![root.clone()];
+    let mut closure = BTreeMap::new();
     while let Some(root) = pending.pop() {
         if !seen.insert(root.clone()) {
             continue;
@@ -142,44 +139,139 @@ pub(super) fn audit(
                 root.display()
             ));
         }
-        if let std::collections::btree_map::Entry::Vacant(entry) = packages.entry(root.clone()) {
-            entry.insert(package(&root, inputs).ok_or_else(|| {
-                format!(
-                    "{}: unreadable or symlink-bearing plugin package tree",
-                    root.display()
-                )
-            })?);
-        }
-        let (manifest, key) = packages.get(&root).expect("inserted package").clone();
-        rows.insert(key.clone());
+        let manifest = packages
+            .get(&root)
+            .map(|(manifest, _)| manifest.clone())
+            .or_else(|| serde_json::from_slice(&fs::read(root.join("package.json")).ok()?).ok())
+            .ok_or_else(|| format!("{}: unreadable plugin dependency manifest", root.display()))?;
         let mut dependencies = BTreeSet::new();
         for field in ["dependencies", "optionalDependencies", "peerDependencies"] {
             if let Some(deps) = manifest.get(field).and_then(serde_json::Value::as_object) {
                 dependencies.extend(deps.keys().cloned());
             }
         }
-        for name in dependencies {
-            if let Some(target) = installed(&root, &name, inputs) {
-                if let std::collections::btree_map::Entry::Vacant(entry) =
-                    packages.entry(target.clone())
-                {
-                    entry.insert(package(&target, inputs).ok_or_else(|| {
-                        format!(
-                            "{}: unreadable or symlink-bearing plugin dependency tree",
-                            target.display()
-                        )
-                    })?);
+        let edges = dependencies
+            .into_iter()
+            .map(|name| {
+                let target = installed(&root, &name, inputs);
+                if let Some(target) = &target {
+                    pending.push(target.clone());
                 }
-                rows.insert(format!(
-                    "{key}:{name}={}",
-                    packages.get(&target).expect("inserted dependency").1
-                ));
-                pending.push(target);
-            } else {
-                // Absence is part of the exact audited installation, not
-                // positive evidence of a dependency's runtime behavior.
-                rows.insert(format!("{key}:{name}=absent"));
-            }
+                (name, target)
+            })
+            .collect::<Vec<_>>();
+        closure.insert(root, (manifest, edges));
+    }
+    let missing = closure
+        .keys()
+        .filter(|root| !packages.contains_key(*root))
+        .collect::<Vec<_>>();
+    let workers = std::thread::available_parallelism()
+        .map_or(1, usize::from)
+        .min(8);
+    let observations = std::thread::scope(|scope| {
+        let jobs = (0..workers.min(missing.len()))
+            .map(|worker| {
+                let missing = &missing;
+                scope.spawn(move || {
+                    (worker..missing.len())
+                        .step_by(workers)
+                        .map(|index| {
+                            let root = missing[index];
+                            let mut paths = Vec::new();
+                            let observed = package_tree(root, &mut paths, generation);
+                            (root.clone(), observed, paths)
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect::<Vec<_>>();
+        jobs.into_iter()
+            .flat_map(|job| job.join().expect("plugin fingerprint worker panicked"))
+            .collect::<Vec<_>>()
+    });
+    let mut trees = BTreeMap::new();
+    let mut files = Vec::new();
+    for (root, observed, paths) in observations {
+        inputs.extend(paths);
+        let (manifest, observed_files) = observed.ok_or_else(|| {
+            format!(
+                "{}: unreadable or symlink-bearing plugin package tree",
+                root.display()
+            )
+        })?;
+        files.extend(observed_files.into_iter().map(|path| (root.clone(), path)));
+        trees.insert(root, (manifest, BTreeMap::new()));
+    }
+    // One pool across all files prevents a large package from holding up an
+    // otherwise finished closure. The same sorted per-package rows define pins.
+    // Replay pins against the independently captured manifest generation. Its
+    // file digests are already byte observations, never metadata trust. Native
+    // inference validates that entire generation before returning and before/
+    // after analysis. Manifests above are still checked before choosing edges.
+    let missing = files
+        .iter()
+        .filter(|(_, path)| {
+            generation
+                .and_then(|inputs| path.to_str().and_then(|path| inputs.get(path)))
+                .is_none()
+        })
+        .map(|(_, path)| path.as_path())
+        .collect::<Vec<_>>();
+    let mut fresh = crate::inferred_host::identities(&missing).into_iter();
+    let identities = files
+        .iter()
+        .map(|(_, path)| {
+            generation
+                .and_then(|inputs| path.to_str().and_then(|path| inputs.get(path)))
+                .cloned()
+                .or_else(|| fresh.next().flatten())
+        })
+        .collect::<Vec<_>>();
+    for ((root, path), identity) in files.into_iter().zip(identities) {
+        let row = || {
+            Some((
+                path.strip_prefix(&root).ok()?.to_str()?.replace('\\', "/"),
+                identity.as_deref()?.strip_prefix("sha256:")?.to_owned(),
+            ))
+        };
+        let (path, digest) =
+            row().ok_or_else(|| format!("{}: cannot fingerprint plugin file", path.display()))?;
+        trees
+            .get_mut(&root)
+            .expect("observed tree")
+            .1
+            .insert(path, digest);
+    }
+    for (root, (manifest, rows)) in trees {
+        let key = || {
+            Some(format!(
+                "{}@{}:{:x}",
+                manifest.get("name")?.as_str()?,
+                manifest.get("version")?.as_str()?,
+                Sha256::digest(serde_json::to_vec(&rows.into_iter().collect::<Vec<_>>()).ok()?)
+            ))
+        };
+        let key = key().ok_or_else(|| format!("{}: invalid plugin identity", root.display()))?;
+        packages.insert(root, (manifest, key));
+    }
+    for (root, (observed_manifest, edges)) in closure {
+        let (manifest, key) = &packages[&root];
+        if manifest != &observed_manifest {
+            return Err(format!(
+                "{}: plugin manifest changed; retry analysis",
+                root.display()
+            ));
+        }
+        rows.insert(key.clone());
+        for (name, target) in edges {
+            // Absence remains an audited input, never runtime authority.
+            rows.insert(format!(
+                "{key}:{name}={}",
+                target
+                    .as_ref()
+                    .map_or("absent", |target| packages[target].1.as_str())
+            ));
         }
     }
     let digest = format!(

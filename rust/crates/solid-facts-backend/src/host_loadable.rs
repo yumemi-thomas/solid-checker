@@ -7,6 +7,50 @@ use solid_facts::resolution::{AttestedImport, ImportResolution};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+type PackageCandidates = (PathBuf, Vec<u8>, Vec<PathBuf>);
+
+/// Exact importer-directory observations, confined to one discovery pass.
+/// Replaying a lookup also replays every positive and negative input path.
+#[derive(Default)]
+pub(super) struct PackageLoads {
+    candidates:
+        std::collections::BTreeMap<(PathBuf, String), (Option<PackageCandidates>, Vec<PathBuf>)>,
+}
+
+impl PackageLoads {
+    pub(super) fn candidates(
+        &mut self,
+        importer: &Path,
+        text: &str,
+        inputs: &mut Vec<PathBuf>,
+    ) -> Option<PackageCandidates> {
+        let key = (importer.parent()?.to_owned(), text.to_owned());
+        let (selected, paths) = self.candidates.entry(key).or_insert_with(|| {
+            let mut paths = Vec::new();
+            let selected = candidates(importer, text, &mut paths);
+            (selected, paths)
+        });
+        inputs.extend(paths.iter().cloned());
+        selected.clone()
+    }
+
+    pub(super) fn loadable(
+        &mut self,
+        importer: &Path,
+        text: &str,
+        row: &AttestedImport,
+        dialect: &dyn solid_dialect::Dialect,
+        inputs: &mut Vec<PathBuf>,
+        excluded: &std::collections::BTreeSet<String>,
+    ) -> Option<PackageLoadability> {
+        if row.resolution != ImportResolution::NodeModules || !row.included_path.is_empty() {
+            return None;
+        }
+        let selected = self.candidates(importer, text, inputs)?;
+        loadable_selected(text, row, dialect, inputs, excluded, selected)
+    }
+}
+
 #[derive(Debug)]
 pub(super) enum PackageLoadability {
     AuditedDialect(Vec<PathBuf>),
@@ -276,6 +320,22 @@ fn browser_map(manifest: &serde_json::Value, target: &str) -> Option<String> {
     }
 }
 
+struct PackageManifest {
+    value: serde_json::Value,
+    ordered: Ordered,
+}
+
+impl PackageManifest {
+    fn parse(bytes: &[u8]) -> Option<Self> {
+        Some(Self {
+            value: serde_json::from_slice(bytes).ok()?,
+            // Preserve author order and the refusal of duplicate metadata.
+            ordered: serde_json::from_slice(bytes).ok()?,
+        })
+    }
+}
+
+#[cfg(test)]
 fn entry(
     root: &Path,
     bytes: &[u8],
@@ -284,9 +344,26 @@ fn entry(
     solid: bool,
     inputs: &mut Vec<PathBuf>,
 ) -> Option<PathBuf> {
-    let manifest: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-    // Deserializing the whole object this way also refuses duplicate metadata.
-    let Ordered(fields): Ordered = serde_json::from_slice(bytes).ok()?;
+    entry_for_manifest(
+        root,
+        &PackageManifest::parse(bytes)?,
+        key,
+        production,
+        solid,
+        inputs,
+    )
+}
+
+fn entry_for_manifest(
+    root: &Path,
+    parsed: &PackageManifest,
+    key: &str,
+    production: bool,
+    solid: bool,
+    inputs: &mut Vec<PathBuf>,
+) -> Option<PathBuf> {
+    let manifest = &parsed.value;
+    let Ordered(fields) = &parsed.ordered;
     if manifest.get("browser") == Some(&serde_json::Value::Bool(false)) {
         return None;
     }
@@ -297,7 +374,7 @@ fn entry(
         }
         // Root entries may be browser-remapped by Vite after exports selection.
         let target = if key == "." {
-            browser_map(&manifest, &target)?
+            browser_map(manifest, &target)?
         } else {
             target
         };
@@ -328,7 +405,7 @@ fn entry(
         }
         field.unwrap_or("index.js").to_owned()
     };
-    let target = browser_map(&manifest, &target)?;
+    let target = browser_map(manifest, &target)?;
     legacy_file(root, &target, inputs)
 }
 
@@ -848,19 +925,23 @@ pub(super) fn candidates(
     inputs.push(root.clone());
     inputs.push(manifest.clone());
     let bytes = fs::read(manifest).ok()?;
+    let manifest = PackageManifest::parse(&bytes)?;
     let mut entries = Vec::new();
     // No build mode is inferred. Both deployment/default serve choices must
     // resolve, even if their selected files differ. Resolver opt-in can then
     // join the actual choice without overriding a failed default proof.
     for production in [false, true] {
         for solid in [false, true] {
-            entries.push(entry(&root, &bytes, &key, production, solid, inputs)?);
+            entries.push(entry_for_manifest(
+                &root, &manifest, &key, production, solid, inputs,
+            )?);
         }
     }
     Some((root, bytes, entries))
 }
 
-pub(super) fn loadable(
+#[cfg(test)]
+fn loadable(
     importer: &Path,
     text: &str,
     row: &AttestedImport,
@@ -868,11 +949,21 @@ pub(super) fn loadable(
     inputs: &mut Vec<PathBuf>,
     excluded: &std::collections::BTreeSet<String>,
 ) -> Option<PackageLoadability> {
+    PackageLoads::default().loadable(importer, text, row, dialect, inputs, excluded)
+}
+
+fn loadable_selected(
+    text: &str,
+    row: &AttestedImport,
+    dialect: &dyn solid_dialect::Dialect,
+    inputs: &mut Vec<PathBuf>,
+    excluded: &std::collections::BTreeSet<String>,
+    (root, bytes, entries): PackageCandidates,
+) -> Option<PackageLoadability> {
     if row.resolution != ImportResolution::NodeModules || !row.included_path.is_empty() {
         return None;
     }
     let (name, _) = request(text)?;
-    let (root, bytes, entries) = candidates(importer, text, inputs)?;
     // Includes root exports, extensionless subpaths, legacy fields, browser
     // redirects and every condition projection, after canonical selection.
     if !entries.iter().all(|path| static_entry(path)) {
@@ -1092,6 +1183,48 @@ mod tests {
             resolver_package_name: Some(name.into()),
             resolver_package_version: Some(version.into()),
         }
+    }
+
+    #[test]
+    fn importer_directory_observations_replay_absence_and_refresh_next_pass() {
+        let app = std::env::temp_dir().join(format!("host-package-lookups-{}", std::process::id()));
+        fs::create_dir_all(app.join("src")).unwrap();
+        let package = app.join("node_modules/reactive-package");
+        fs::create_dir_all(&package).unwrap();
+        let manifest = r#"{"name":"reactive-package","version":"1.0.0","type":"module","exports":"./index.js"}"#;
+        fs::write(package.join("package.json"), manifest).unwrap();
+        fs::write(package.join("index.js"), "export const x = 1;").unwrap();
+        let app = fs::canonicalize(app).unwrap();
+        let mut cache = PackageLoads::default();
+        let mut first = Vec::new();
+        let selected = cache
+            .candidates(&app.join("src/a.ts"), "reactive-package", &mut first)
+            .unwrap();
+        let shadow = app.join("src/node_modules/reactive-package");
+        assert!(first.contains(&shadow.join("package.json")));
+        let mut second = Vec::new();
+        assert_eq!(
+            cache.candidates(&app.join("src/b.ts"), "reactive-package", &mut second),
+            Some(selected)
+        );
+        assert_eq!(first, second);
+        assert_eq!(cache.candidates.len(), 1);
+        fs::create_dir_all(&shadow).unwrap();
+        fs::write(shadow.join("package.json"), manifest).unwrap();
+        fs::write(shadow.join("index.js"), "export const x = 2;").unwrap();
+        let refreshed = PackageLoads::default()
+            .candidates(&app.join("src/a.ts"), "reactive-package", &mut Vec::new())
+            .unwrap();
+        assert_eq!(refreshed.0, fs::canonicalize(&shadow).unwrap());
+        for root in [&shadow, &app.join("node_modules/reactive-package")] {
+            fs::remove_file(root.join("index.js")).unwrap();
+            fs::remove_file(root.join("package.json")).unwrap();
+            fs::remove_dir(root).unwrap();
+        }
+        fs::remove_dir(app.join("src/node_modules")).unwrap();
+        fs::remove_dir(app.join("src")).unwrap();
+        fs::remove_dir(app.join("node_modules")).unwrap();
+        fs::remove_dir(app).unwrap();
     }
 
     #[test]

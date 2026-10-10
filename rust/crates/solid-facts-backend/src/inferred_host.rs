@@ -20,6 +20,29 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Opt-in timings include refused paths; dropping the clock closes the stage.
+pub(crate) struct HostStage(&'static str, Option<std::time::Instant>);
+
+impl HostStage {
+    pub(crate) fn new(stage: &'static str) -> Self {
+        Self(
+            stage,
+            std::env::var_os("SOLID_CHECKER_TIMINGS").map(|_| std::time::Instant::now()),
+        )
+    }
+}
+
+impl Drop for HostStage {
+    fn drop(&mut self) {
+        if let Some(started) = self.1 {
+            eprintln!(
+                "{}",
+                serde_json::json!({"hostStage": self.0, "elapsedNs": started.elapsed().as_nanos()})
+            );
+        }
+    }
+}
+
 const CONFIGS: &[&str] = &[
     "vite.config.ts",
     "vite.config.js",
@@ -210,6 +233,7 @@ fn inferred_host_graph_input_paths(
     // when no behavior contract exists. Observe the same candidates before a
     // daemon shortcut, including absent/shadowing installs and store symlinks.
     let mut resolved_requests = BTreeSet::new();
+    let mut package_loads = crate::host_loadable::PackageLoads::default();
     for source in sources {
         if !source
             .extension()
@@ -251,7 +275,7 @@ fn inferred_host_graph_input_paths(
                 if resolved_requests
                     .insert((importer.parent().map(Path::to_path_buf), text.to_owned()))
                     && let Some((_, _, entries)) =
-                        crate::host_loadable::candidates(importer, text, &mut paths)
+                        package_loads.candidates(importer, text, &mut paths)
                 {
                     let _ = crate::host_loadable::stylesheet_closure(
                         &entries,
@@ -301,8 +325,13 @@ fn static_fact_requests(ast: &solid_facts::ast::AstFacts) -> Vec<String> {
 }
 
 fn identity(path: &Path) -> Option<String> {
-    if fs::symlink_metadata(path)
-        .ok()
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => Some(metadata),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Some("absent".into()),
+        Err(_) => None,
+    };
+    if metadata
+        .as_ref()
         .is_some_and(|metadata| metadata.file_type().is_symlink())
     {
         return Some(format!(
@@ -311,7 +340,10 @@ fn identity(path: &Path) -> Option<String> {
             fs::canonicalize(path).ok()?.display()
         ));
     }
-    if path.is_dir() {
+    if metadata
+        .as_ref()
+        .map_or_else(|| path.is_dir(), fs::Metadata::is_dir)
+    {
         let mut entries = fs::read_dir(path)
             .ok()?
             .map(|entry| {
@@ -346,9 +378,22 @@ fn identity(path: &Path) -> Option<String> {
     }
 }
 
+/// One graph pass observes each input once. Its manifest is re-read at every
+/// transaction boundary, and the post-manifest graph has a fresh observation
+/// map, so this never substitutes an earlier generation's bytes for validation.
+fn graph_identity(manifest: &mut BrowserRootManifest, path: &Path) -> Option<String> {
+    let key = path.to_str()?;
+    if let Some(observed) = manifest.inputs.get(key) {
+        return Some(observed.clone());
+    }
+    let observed = identity(path)?;
+    manifest.inputs.insert(key.into(), observed.clone());
+    Some(observed)
+}
+
 // Every pass still reads current bytes and path identities. Bound parallel I/O
 // only; never reuse an earlier pass's hash or a metadata-only observation.
-fn identities(paths: &[&Path]) -> Vec<Option<String>> {
+pub(super) fn identities(paths: &[&Path]) -> Vec<Option<String>> {
     let workers = std::thread::available_parallelism()
         .map_or(1, usize::from)
         .min(8);
@@ -356,14 +401,26 @@ fn identities(paths: &[&Path]) -> Vec<Option<String>> {
         return paths.iter().map(|path| identity(path)).collect();
     }
     std::thread::scope(|scope| {
-        let jobs = paths
-            .chunks(paths.len().div_ceil(workers))
-            .map(|chunk| {
-                scope.spawn(move || chunk.iter().map(|path| identity(path)).collect::<Vec<_>>())
+        // Interleave paths so a large package's adjacent files cannot all land
+        // on one worker. Preserve the caller's order when joining observations.
+        let jobs = (0..workers)
+            .map(|worker| {
+                scope.spawn(move || {
+                    (worker..paths.len())
+                        .step_by(workers)
+                        .map(|index| (index, identity(paths[index])))
+                        .collect::<Vec<_>>()
+                })
             })
             .collect::<Vec<_>>();
-        jobs.into_iter()
+        let mut observations = jobs
+            .into_iter()
             .flat_map(|job| job.join().expect("input fingerprint worker panicked"))
+            .collect::<Vec<_>>();
+        observations.sort_by_key(|(index, _)| *index);
+        observations
+            .into_iter()
+            .map(|(_, identity)| identity)
             .collect()
     })
 }
@@ -423,6 +480,7 @@ fn input_manifest(
     config: &Config,
     inputs: Vec<PathBuf>,
 ) -> Result<BTreeMap<String, String>, DiscoveryRefusal> {
+    let _stage = HostStage::new("manifest-identity");
     let mut inventory = Vec::new();
     inventory_paths(directory, &mut inventory)
         .required(directory, "cannot inventory application inputs")?;
@@ -489,6 +547,7 @@ fn input_manifest(
 /// Called before/after solving. Stale inferred authority is refused, never
 /// attached to facts from another input generation.
 pub(crate) fn validate_inputs(index: &ProjectHostIndex) -> Result<(), BackendError> {
+    let _stage = HostStage::new("input-validation");
     let paths = index
         .manifest
         .inputs
@@ -694,6 +753,15 @@ fn configuration(
     inputs: &mut Vec<PathBuf>,
     fixture_authority: bool,
 ) -> Result<Config, DiscoveryRefusal> {
+    configuration_in_generation(directory, inputs, fixture_authority, None)
+}
+
+fn configuration_in_generation(
+    directory: &Path,
+    inputs: &mut Vec<PathBuf>,
+    fixture_authority: bool,
+    generation: Option<&BTreeMap<String, String>>,
+) -> Result<Config, DiscoveryRefusal> {
     side_inputs(directory, inputs)?;
     let configs = CONFIGS
         .iter()
@@ -716,11 +784,17 @@ fn configuration(
     for name in &config.plugins {
         if name == "@solidjs/vite-plugin" && config.mode == EntryMode::ClientStart {
             if !fixture_authority || audited_start_plugin(directory, inputs).is_none() {
-                crate::host_plugins::audit(directory, name, inputs, &mut audited_packages)
-                    .map_err(|reason| DiscoveryRefusal::new(path, reason))?;
+                crate::host_plugins::audit(
+                    directory,
+                    name,
+                    inputs,
+                    &mut audited_packages,
+                    generation,
+                )
+                .map_err(|reason| DiscoveryRefusal::new(path, reason))?;
             }
         } else {
-            crate::host_plugins::audit(directory, name, inputs, &mut audited_packages)
+            crate::host_plugins::audit(directory, name, inputs, &mut audited_packages, generation)
                 .map_err(|reason| DiscoveryRefusal::new(path, reason))?;
         }
     }
@@ -1296,6 +1370,8 @@ fn execution_constants(
     let Some(resolutions) = &facts.resolved_imports else {
         return values;
     };
+    let browser = std::cell::OnceCell::new();
+    let server = std::cell::OnceCell::new();
     for candidate_export in dialect.host_boolean_exports() {
         for import in file
             .ast
@@ -1335,10 +1411,11 @@ fn execution_constants(
                 parent.ancestors().find_map(|ancestor| {
                     let candidate = ancestor.join("node_modules").join(candidate_export.module);
                     let path = candidate.join("package.json");
-                    manifest.inputs.insert(
-                        path.to_string_lossy().into_owned(),
-                        identity(&path).unwrap_or_else(|| "unreadable".into()),
-                    );
+                    let observed =
+                        graph_identity(manifest, &path).unwrap_or_else(|| "unreadable".into());
+                    manifest
+                        .inputs
+                        .insert(path.to_string_lossy().into_owned(), observed);
                     path.exists().then_some(candidate)
                 })
             });
@@ -1348,7 +1425,7 @@ fn execution_constants(
             {
                 continue;
             }
-            let Some(package_identity) = identity(package_json) else {
+            let Some(package_identity) = graph_identity(manifest, package_json) else {
                 continue;
             };
             manifest.inputs.insert(
@@ -1370,23 +1447,38 @@ fn execution_constants(
             }
             for target in candidate_export.runtime_targets {
                 let path = package.join(target);
-                manifest.inputs.insert(
-                    path.to_string_lossy().into_owned(),
-                    identity(&path).unwrap_or_else(|| "unreadable".into()),
-                );
+                let observed =
+                    graph_identity(manifest, &path).unwrap_or_else(|| "unreadable".into());
+                manifest
+                    .inputs
+                    .insert(path.to_string_lossy().into_owned(), observed);
             }
-            let browser = crate::host_constants::host_constants_of_module(
-                Path::new(file.path.as_str()),
-                &file.source,
-                solid_dialect::HostTargetCondition::Browser,
-                Some(directory),
-            );
-            let server = crate::host_constants::host_constants_of_module(
-                Path::new(file.path.as_str()),
-                &file.source,
-                solid_dialect::HostTargetCondition::Node,
-                Some(directory),
-            );
+            // Keep every package/path identity above even when this import
+            // does not use the candidate. Runtime parsing cannot contribute a
+            // constant without a named value binding for this exact export.
+            if !import.bindings.iter().any(|binding| {
+                !binding.type_only
+                    && binding.kind == ImportKind::Named
+                    && binding.imported.as_deref() == Some(candidate_export.export)
+            }) {
+                continue;
+            }
+            let browser = browser.get_or_init(|| {
+                crate::host_constants::host_constants_of_module(
+                    Path::new(file.path.as_str()),
+                    &file.source,
+                    solid_dialect::HostTargetCondition::Browser,
+                    Some(directory),
+                )
+            });
+            let server = server.get_or_init(|| {
+                crate::host_constants::host_constants_of_module(
+                    Path::new(file.path.as_str()),
+                    &file.source,
+                    solid_dialect::HostTargetCondition::Node,
+                    Some(directory),
+                )
+            });
             let proved = |constants: &[crate::host_constants::ResolvedHostConstant], expected| {
                 constants.iter().any(|constant| {
                     constant.fold.specifier == candidate_export.module
@@ -1402,8 +1494,7 @@ fn execution_constants(
                         })
                 })
             };
-            if !proved(&browser, candidate_export.client)
-                || !proved(&server, candidate_export.server)
+            if !proved(browser, candidate_export.client) || !proved(server, candidate_export.server)
             {
                 continue;
             }
@@ -1832,7 +1923,12 @@ fn local_edge(
     congruent_alias(config, paths, text) && exact_local_target(config, importer, text, target)
 }
 
-fn body_symbol(facts: &ProjectFacts, file: &FileFacts, function: &FunctionFact) -> Option<String> {
+fn body_symbol(
+    facts: &ProjectFacts,
+    file: &FileFacts,
+    function: &FunctionFact,
+    written_symbols: &BTreeSet<String>,
+) -> Option<String> {
     if function.method_name.is_some()
         || function.generator
         || file
@@ -1869,12 +1965,7 @@ fn body_symbol(facts: &ProjectFacts, file: &FileFacts, function: &FunctionFact) 
     })?;
     let symbol = exact_symbol(facts, file.path.as_str(), name.span)?;
     // Exact writes invalidate declaration-to-runtime identity, even in other files.
-    if facts.files.iter().any(|file| {
-        file.ast.assignments.iter().any(|write| {
-            exact_symbol(facts, file.path.as_str(), write.target).as_deref()
-                == Some(symbol.as_str())
-        })
-    }) {
+    if written_symbols.contains(&symbol) {
         return None;
     }
     Some(symbol)
@@ -2252,6 +2343,7 @@ fn discovery_inputs(
     dialect: &dyn solid_dialect::Dialect,
     fixture_authority: bool,
 ) -> Result<DiscoveryInputs, DiscoveryRefusal> {
+    let _stage = HostStage::new("host-discovery-config");
     if !dialect.models_server_functions() {
         return Err(DiscoveryRefusal::new(
             directory,
@@ -2317,6 +2409,7 @@ fn attach_discovery_inputs(
     fixture_authority: bool,
     packages: Option<&AcceptedContractIndex>,
 ) -> Result<(), DiscoveryRefusal> {
+    let _stage = HostStage::new("host-discovery-replay");
     let directory = &prepared.directory;
     let inputs = input_manifest(
         directory,
@@ -2342,10 +2435,16 @@ fn attach_discovery_inputs(
         index.manifest.inputs.insert(path, identity);
     }
     let project = Path::new(&facts.project_id);
+    let config_replay = HostStage::new("host-discovery-config-replay");
     let mut current_inputs = Vec::new();
     application_inputs(directory, project, &mut current_inputs)?;
     current_inputs.push(directory.join(".solid-checker/shared-host-plugin.json"));
-    let current = configuration(directory, &mut current_inputs, fixture_authority)?;
+    let current = configuration_in_generation(
+        directory,
+        &mut current_inputs,
+        fixture_authority,
+        Some(&index.manifest.inputs),
+    )?;
     let paths = paths_targets(directory, project)?;
     current_inputs.sort();
     current_inputs.dedup();
@@ -2358,6 +2457,7 @@ fn attach_discovery_inputs(
             "configuration inputs changed; retry analysis",
         ));
     }
+    drop(config_replay);
     // Probe decisions such as an absent nested package or Vite extension
     // precedence must also be made *after* the full input generation was
     // captured. Rebuild scopes now; the preliminary graph only selected
@@ -2392,6 +2492,11 @@ fn discovered_index_with_inputs(
     // independently of whether the behavior index has a contract for them.
     packages: Option<&AcceptedContractIndex>,
 ) -> Result<ProjectHostIndex, DiscoveryRefusal> {
+    let _stage = HostStage::new(if packages.is_some() {
+        "host-discovery-admitted"
+    } else {
+        "host-discovery-provisional"
+    });
     let directory = prepared.directory.clone();
     let config = prepared.config.clone();
     let paths = prepared.paths.clone();
@@ -2496,6 +2601,21 @@ fn discovered_index_with_inputs(
     let mut blocked_imports = BTreeSet::new();
     let mut unproven_semantics = BTreeSet::new();
     let mut withheld_loads = BTreeMap::new();
+    let mut package_loads = crate::host_loadable::PackageLoads::default();
+    let scope_selection = HostStage::new("scope-host-view-selection");
+    let mut constants_by_file = BTreeMap::new();
+    // Writes are generation facts, independent of the function being checked.
+    // Resolve them once rather than joining every function with every write.
+    let written_symbols = facts
+        .files
+        .iter()
+        .flat_map(|file| {
+            file.ast
+                .assignments
+                .iter()
+                .filter_map(|write| exact_symbol(facts, file.path.as_str(), write.target))
+        })
+        .collect::<BTreeSet<_>>();
     for file in &facts.files {
         if file.ast.schema != AST_FACTS_SCHEMA {
             return Err(DiscoveryRefusal::new(
@@ -2526,7 +2646,7 @@ fn discovered_index_with_inputs(
             );
         }
         for function in &file.ast.functions {
-            if let Some(symbol) = body_symbol(facts, file, function)
+            if let Some(symbol) = body_symbol(facts, file, function, &written_symbols)
                 && functions
                     .insert(symbol, scope_id(file.path.as_str(), Some(function)))
                     .is_some()
@@ -2593,7 +2713,9 @@ fn discovered_index_with_inputs(
                 },
             );
         }
+        constants_by_file.insert(file.path.as_str(), constants);
     }
+    drop(scope_selection);
     for file in &facts.files {
         let path = file.path.as_str();
         let is_root = root_files.iter().any(|root| root.to_str() == Some(path));
@@ -2618,14 +2740,7 @@ fn discovered_index_with_inputs(
                         && fact.scope.is_none()
                 })
                 .and_then(|fact| {
-                    let constants = execution_constants(
-                        &directory,
-                        facts,
-                        file,
-                        &config,
-                        dialect,
-                        &mut manifest,
-                    );
+                    let constants = &constants_by_file[path];
                     fact.predicate.evaluate_with_startup(
                         &|identity| match identity {
                             HostConstantIdentity::ViteSsr => Some(false),
@@ -2731,11 +2846,9 @@ fn discovered_index_with_inputs(
                         .to_str()
                         .required(&input, "non-UTF-8 route manifest input")?
                         .to_owned();
-                    manifest.inputs.insert(
-                        key,
-                        identity(&input)
-                            .required(&input, "cannot fingerprint route manifest input")?,
-                    );
+                    let observed = graph_identity(&mut manifest, &input)
+                        .required(&input, "cannot fingerprint route manifest input")?;
+                    manifest.inputs.insert(key, observed);
                 }
                 if !loadable {
                     module.refused = true;
@@ -2757,10 +2870,9 @@ fn discovered_index_with_inputs(
                         .to_str()
                         .required(&input, "non-UTF-8 resource input")?
                         .to_owned();
-                    manifest.inputs.insert(
-                        key,
-                        identity(&input).required(&input, "cannot fingerprint resource input")?,
-                    );
+                    let observed = graph_identity(&mut manifest, &input)
+                        .required(&input, "cannot fingerprint resource input")?;
+                    manifest.inputs.insert(key, observed);
                 }
                 let admitted = resource.as_ref().is_some_and(|resource| {
                     facts.runtime_resolutions.as_ref().is_none_or(|runtime| {
@@ -2914,31 +3026,26 @@ fn discovered_index_with_inputs(
                     // The provisional graph schedules package analysis; its
                     // optimistic edges are not final linking authority. Even
                     // here a selected file must be handled by reviewed Vite.
-                    let unsupported_loader = crate::host_loadable::candidates(
-                        Path::new(path),
-                        text,
-                        &mut package_inputs,
-                    )
-                    .is_some_and(|(_, _, entries)| {
-                        !entries
-                            .iter()
-                            .all(|entry| crate::host_loadable::static_entry(entry))
-                            || !crate::host_loadable::stylesheet_closure(
-                                &entries,
-                                &config,
-                                &mut package_inputs,
-                            )
-                    });
+                    let unsupported_loader = package_loads
+                        .candidates(Path::new(path), text, &mut package_inputs)
+                        .is_some_and(|(_, _, entries)| {
+                            !entries
+                                .iter()
+                                .all(|entry| crate::host_loadable::static_entry(entry))
+                                || !crate::host_loadable::stylesheet_closure(
+                                    &entries,
+                                    &config,
+                                    &mut package_inputs,
+                                )
+                        });
                     for input in package_inputs {
                         let key = input
                             .to_str()
                             .required(&input, "non-UTF-8 provisional package input")?
                             .to_owned();
-                        manifest.inputs.insert(
-                            key,
-                            identity(&input)
-                                .required(&input, "cannot fingerprint provisional package input")?,
-                        );
+                        let observed = graph_identity(&mut manifest, &input)
+                            .required(&input, "cannot fingerprint provisional package input")?;
+                        manifest.inputs.insert(key, observed);
                     }
                     if unsupported_loader {
                         module.refused = true;
@@ -2950,21 +3057,22 @@ fn discovered_index_with_inputs(
                     }
                     continue;
                 }
-                let entries = crate::host_loadable::loadable(
-                    Path::new(path),
-                    text,
-                    row,
-                    dialect,
-                    &mut package_inputs,
-                    &config.optimize_exclude,
-                )
-                .filter(|entries| {
-                    crate::host_loadable::stylesheet_closure(
-                        entries.entries(),
-                        &config,
+                let entries = package_loads
+                    .loadable(
+                        Path::new(path),
+                        text,
+                        row,
+                        dialect,
                         &mut package_inputs,
+                        &config.optimize_exclude,
                     )
-                });
+                    .filter(|entries| {
+                        crate::host_loadable::stylesheet_closure(
+                            entries.entries(),
+                            &config,
+                            &mut package_inputs,
+                        )
+                    });
                 // The audited provider adds runtime-owner dedupe in dev. The
                 // declaration package must also be the root-selected install.
                 let provider = config.plugins.iter().any(|plugin| {
@@ -2978,25 +3086,24 @@ fn discovered_index_with_inputs(
                 });
                 let deduped = !provider
                     || !core
-                    || crate::host_loadable::loadable(
-                        &directory.join("index.ts"),
-                        text,
-                        row,
-                        dialect,
-                        &mut package_inputs,
-                        &config.optimize_exclude,
-                    )
-                    .is_some();
+                    || package_loads
+                        .loadable(
+                            &directory.join("index.ts"),
+                            text,
+                            row,
+                            dialect,
+                            &mut package_inputs,
+                            &config.optimize_exclude,
+                        )
+                        .is_some();
                 for input in package_inputs {
                     let key = input
                         .to_str()
                         .required(&input, "non-UTF-8 static package input")?
                         .to_owned();
-                    manifest.inputs.insert(
-                        key,
-                        identity(&input)
-                            .required(&input, "cannot fingerprint static package input")?,
-                    );
+                    let observed = graph_identity(&mut manifest, &input)
+                        .required(&input, "cannot fingerprint static package input")?;
+                    manifest.inputs.insert(key, observed);
                 }
                 let loadable = deduped && !config.package_dedupe && entries.is_some_and(|entries| {
                     facts.runtime_resolutions.as_ref().is_none_or(|runtime| {
@@ -3210,6 +3317,7 @@ pub fn inferred_project_accepted_contracts_with_note(
     requirements: AcceptedContractIndex,
 ) -> Result<(AcceptedContractIndex, Option<String>), BackendError> {
     let conditions = runtime.selected_conditions();
+    let admission = HostStage::new("contract-admission-baseline");
     let baseline = crate::project_accepted_contracts(
         directory,
         catalogs,
@@ -3220,6 +3328,7 @@ pub fn inferred_project_accepted_contracts_with_note(
         facts,
         requirements.clone(),
     )?;
+    drop(admission);
     if runtime.target.is_some() {
         return Ok((baseline, None));
     }
@@ -3259,15 +3368,16 @@ pub fn inferred_project_accepted_contracts_with_note(
         Ok(inputs) => inputs,
         Err(reason) => return Ok((baseline, refused(reason.message()))),
     };
-    match discovered_index_with_inputs(&inputs, facts, dialect, None) {
+    let mut index = match discovered_index_with_inputs(&inputs, facts, dialect, None) {
         Ok(index) if index.is_empty() => return Ok((baseline, refused(index.manifest.reason))),
-        Ok(_) => {}
+        Ok(index) => index,
         Err(reason) => return Ok((baseline, refused(reason.message()))),
-    }
+    };
     // Package checking only adds module refusals (provisional NodeModules
     // requests skip the final load proof). It cannot create a browser
     // scope in an already-empty graph. Report that proved refusal directly;
     // exact browser artifact admission is needed only for a surviving graph.
+    let admission = HostStage::new("contract-admission-browser");
     let browser = match crate::project_accepted_contracts(
         directory,
         catalogs,
@@ -3289,11 +3399,11 @@ pub fn inferred_project_accepted_contracts_with_note(
             ));
         }
     };
-    let mut index = match discovered_index_with_inputs(&inputs, facts, dialect, Some(&browser)) {
-        Ok(index) if !index.is_empty() => index,
-        Ok(index) => return Ok((baseline, refused(index.manifest.reason))),
-        Err(reason) => return Ok((baseline, refused(reason.message()))),
-    };
+    drop(admission);
+    // The provisional graph schedules manifest capture; it supplies no final
+    // authority. Build the admitted graph only after that capture, inside the
+    // replay below, and compare every observation with the complete generation.
+    // Both complete contract indexes remain independent (ADR 0140).
     if let Err(reason) = attach_discovery_inputs(
         &mut index,
         &inputs,
@@ -3309,6 +3419,7 @@ pub fn inferred_project_accepted_contracts_with_note(
     }
     // Invocation rows are read only after exact browser artifact admission.
     // No argument/child/prop edge is installed by native syntax discovery.
+    let selection = HostStage::new("callback-host-selection");
     index = index.with_callback_invocations(
         solid_reactive_ir::callback_host::browser_callback_invocations(facts, dialect, &browser),
     );
@@ -3337,6 +3448,7 @@ pub fn inferred_project_accepted_contracts_with_note(
         })
         .collect::<Vec<_>>();
     index.blocked_imports.extend(blocked);
+    drop(selection);
     validate_inputs(&index)?;
     let note = format!(
         "solid-checker: note: browser host inferred for {} scopes from roots {}",
@@ -3355,6 +3467,25 @@ pub fn inferred_project_accepted_contracts_with_note(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graph_observations_do_not_replace_boundary_validation() {
+        let root =
+            std::env::temp_dir().join(format!("host-graph-observation-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("input.ts");
+        fs::write(&path, "before").unwrap();
+        let mut manifest = BrowserRootManifest::default();
+        let before = graph_identity(&mut manifest, &path).unwrap();
+        fs::write(&path, "after!").unwrap();
+        assert_eq!(graph_identity(&mut manifest, &path), Some(before.clone()));
+        let index = ProjectHostIndex::build(manifest, &[], &[]);
+        assert!(validate_inputs(&index).is_err());
+        let mut replay = BrowserRootManifest::default();
+        assert_ne!(graph_identity(&mut replay, &path), Some(before));
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
 
     #[test]
     fn parallel_input_fingerprints_keep_order_absence_and_content_changes() {

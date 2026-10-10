@@ -595,3 +595,64 @@ performance certification. An obsolete verification was intentionally interrupte
 for the direct throw-await repair (go-rust-tests exit 130); it has no TOTAL and
 is not a green run. Final-source checks and exact-binary measurements were rerun.
 No generated snapshots, public contracts, JSON schemas or manifests changed.
+
+### Admission performance follow-up (2026-10-10)
+
+`SOLID_CHECKER_TIMINGS` now attributes configuration discovery and replay,
+provisional/admitted graphs, manifest/identity capture, both complete contract
+admissions, scope host selection, callback selection, input validation and
+finding projection. Graph/replay stages include their separately reported
+sub-stages; their durations must not be added together.
+
+Each graph pass observes an input once and resolves package candidates once
+per exact importer directory and request, replaying every positive and negative
+input path on reuse. Every attested import row is still checked independently.
+Host constants are resolved once per source; candidate imports that cannot
+bind the exact boolean export retain their input identities without parsing
+unused runtime constants. Exact assignment symbols are resolved once per graph
+instead of joining every function with every project assignment.
+
+Installed plugin closures use bounded parallel tree/file observation while
+retaining the same sorted digest rows, dependency edges and compiled pins.
+Configuration replay consumes file digests from the independently captured
+manifest generation; dependency manifests are rechecked before selecting
+edges. The complete generation is still freshly validated before inference
+returns and before/after analysis. The provisional graph only schedules
+manifest capture; the admitted graph is constructed once after that capture,
+and its observations must agree with the manifest. ADR 0140's complete
+host-free and browser contract indexes remain separate. No proof premise,
+cache-identity input or transaction validation was removed.
+
+Three alternating daemon-off release runs per app compare retained `6009dceb9`,
+the pre-optimization `b26b47ad9` image, and the optimized image; medians in seconds.
+
+| App | 6009dceb9 | b26b47ad9 | Optimized | Delta from 6009dceb9 |
+| --- | ---: | ---: | ---: | ---: |
+| queue-management-ui/ui | .2166 | .4489 | .3459 | +.1293 |
+| error-menu-web/web | .7004 | 1.9912 | 1.2618 | +.5614 |
+| jar-hell-web/web | .1973 | .4662 | .3210 | +.1236 |
+| beacon-web/apps/web | .6546 | 1.0018 | .7925 | +.1378 |
+| compass-ui/apps/ui | 1.3145 | 1.9339 | 1.5146 | +.2001 |
+| helge-dev | .0957 | .7936 | .3574 | +.2617 |
+| lutra-console/console | .1173 | .2602 | .1994 | +.0822 |
+
+Six apps meet the approximate +.3 s target; Error Menu still misses it. Its
+instrumented total falls from 1.9935 s to 1.2491 s: provisional graph .1874 to
+.0365 s, two admitted graph passes .4645 to one .0431 s, and configuration
+discovery .1225 to .0679 s. Full manifest capture remains .0915 s and the three
+fresh validations total .1602 s. macOS `sample` profiles of Error Menu and Helge
+confirm repeated discovery work was reduced; filesystem reads, directory
+observations and hashing remain material costs. No validation was dropped to
+meet the timing target.
+
+Sorted complete finding objects are identical before/after optimization on all
+seven apps and all 49 no-target corpus projects. Against the retained old HEAD
+corpus, counts remain 538 violations / 3,504 uncertifiable findings, with zero
+violation site changes and the same pre-existing Helge SC9005 column shift
+documented above. Coverage remains 239 projects / 1,583 findings unchanged.
+Workspace Clippy precedes the green full `make verify` (TOTAL 225.46 s, zero
+failed-step lines); cached IR reuse is 11.625 microseconds in its performance
+gate. This measures the shared diagnostic-session cache, not a full daemon RPC
+or no-target inference shortcut. No-target gate reuse remains disabled. No
+snapshots, public contracts, schemas or manifests changed; proof limitations
+above remain.
