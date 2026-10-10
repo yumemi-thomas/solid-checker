@@ -61,7 +61,7 @@ impl<'de> Deserialize<'de> for Ordered {
 
 // None means no applicable condition; Some(None) means an applicable but
 // unsupported/blocked target. Never fall through a selected null to default.
-fn conditional(target: &Target, production: bool, solid: bool) -> Option<Option<&str>> {
+fn conditional(target: &Target, production: bool, solid: bool, css: bool) -> Option<Option<&str>> {
     match target {
         Target::String(target) => Some(Some(target)),
         Target::Object(Ordered(rows)) => {
@@ -72,7 +72,12 @@ fn conditional(target: &Target, production: bool, solid: bool) -> Option<Option<
                 return Some(None);
             }
             for (key, value) in rows {
-                if (["module", "browser", "import", "default"].contains(&key.as_str())
+                if ((if css {
+                    &["style", "import", "default"][..]
+                } else {
+                    &["module", "browser", "import", "default"][..]
+                })
+                .contains(&key.as_str())
                     || (solid && key == "solid")
                     || key
                         == if production {
@@ -80,7 +85,7 @@ fn conditional(target: &Target, production: bool, solid: bool) -> Option<Option<
                         } else {
                             "development"
                         })
-                    && let Some(selected) = conditional(value, production, solid)
+                    && let Some(selected) = conditional(value, production, solid, css)
                 {
                     return Some(selected);
                 }
@@ -96,7 +101,13 @@ fn conditional(target: &Target, production: bool, solid: bool) -> Option<Option<
     }
 }
 
-fn exported(exports: &Target, key: &str, production: bool, solid: bool) -> Option<String> {
+fn exported(
+    exports: &Target,
+    key: &str,
+    production: bool,
+    solid: bool,
+    css: bool,
+) -> Option<String> {
     if let Target::Object(Ordered(rows)) = exports
         && rows.iter().any(|(key, _)| key.starts_with('.'))
     {
@@ -107,7 +118,7 @@ fn exported(exports: &Target, key: &str, production: bool, solid: bool) -> Optio
             .iter()
             .find(|(name, _)| name == key && !name.contains('*'))
         {
-            return conditional(target, production, solid)?.map(str::to_owned);
+            return conditional(target, production, solid, css)?.map(str::to_owned);
         }
         // Node/Vite specificity: longest pattern base, then longest whole key.
         // Match the specifier's exact subpath; never treat a wildcard as trust.
@@ -122,10 +133,11 @@ fn exported(exports: &Target, key: &str, production: bool, solid: bool) -> Optio
                 (!capture.is_empty()).then_some((pattern, target, capture))
             })
             .max_by_key(|(pattern, _, _)| (pattern.find('*').unwrap_or(0), pattern.len()))?;
-        return conditional(target, production, solid)?.map(|target| target.replace('*', capture));
+        return conditional(target, production, solid, css)?
+            .map(|target| target.replace('*', capture));
     }
     (key == ".")
-        .then(|| conditional(exports, production, solid))
+        .then(|| conditional(exports, production, solid, css))
         .flatten()
         .flatten()
         .map(str::to_owned)
@@ -279,7 +291,7 @@ fn entry(
         return None;
     }
     if let Some((_, exports)) = fields.iter().find(|(name, _)| name == "exports") {
-        let target = exported(exports, key, production, solid)?;
+        let target = exported(exports, key, production, solid, false)?;
         if !target.starts_with("./") {
             return None;
         }
@@ -320,17 +332,9 @@ fn entry(
     legacy_file(root, &target, inputs)
 }
 
-/// Vite 8.3.0's cssPostPlugin/assetPlugin generate inert export maps or
-/// strings. A resource grants linking only, never callback/component behavior.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum ResourceKind {
-    Stylesheet,
-    CssModule,
-    String,
-}
-
+/// ADR 0270 successful-build premise: acquisition grants static linking only,
+/// never generated export, callback, component or initialization behavior.
 pub(super) struct Resource {
-    pub kind: ResourceKind,
     pub entries: Vec<PathBuf>,
 }
 
@@ -363,6 +367,7 @@ pub(super) fn resource_request(text: &str) -> bool {
                 "styl",
                 "stylus",
                 "sss",
+                "json",
                 "apng",
                 "bmp",
                 "png",
@@ -403,12 +408,13 @@ pub(super) fn resource_request(text: &str) -> bool {
 }
 
 /// Classify the canonical selected file, never the authored package spelling.
-/// The general package premise covers executable entries only. All other Vite
-/// loaders require their own linking proof (compiled CSS has none today).
-pub(super) fn executable_entry(path: &Path) -> bool {
+/// A successful build discharges loader success, not target selection. Native
+/// addons/declarations and unknown loaders remain outside the Vite premise.
+pub(super) fn static_entry(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
         .is_some_and(|ext| ["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"].contains(&ext))
+        || path.to_str().is_some_and(resource_request)
 }
 
 /// Used before the daemon shortcut and again at admission. Exact package
@@ -484,10 +490,6 @@ pub(super) fn resource(
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("");
-    let stylesheet = [
-        "css", "pcss", "postcss", "less", "sass", "scss", "styl", "stylus", "sss",
-    ]
-    .contains(&requested);
     // A package must not redirect a .css/.svg request to executable JavaScript.
     if query.is_empty()
         && entries
@@ -496,84 +498,341 @@ pub(super) fn resource(
     {
         return None;
     }
-    let is_module = |path: &Path| {
-        path.to_str().is_some_and(|path| {
-            [
-                ".module.css",
-                ".module.pcss",
-                ".module.postcss",
-                ".module.less",
-                ".module.sass",
-                ".module.scss",
-                ".module.styl",
-                ".module.stylus",
-                ".module.sss",
-            ]
-            .iter()
-            .any(|suffix| path.ends_with(suffix))
-        })
-    };
-    if query == "url" {
-        // Vite explicitly rejects module CSS ?url; ordinary CSS ?url still
-        // compiles the stylesheet in builds, so it needs the CSS closure proof.
-        for path in &entries {
-            if is_module(path) {
-                return None;
-            }
-            let ext = path.extension().and_then(|ext| ext.to_str());
-            let css = ext.is_some_and(|ext| {
-                [
-                    "css", "pcss", "postcss", "less", "sass", "scss", "styl", "stylus", "sss",
-                ]
-                .contains(&ext)
-            });
-            if css
-                && (ext.is_none_or(|ext| !["css", "pcss", "postcss"].contains(&ext))
-                    || !passive_css(
-                        &fs::read_to_string(path).ok()?,
-                        config.tailwind && request.starts_with('.'),
-                    ))
-            {
-                return None;
-            }
-        }
+    // Raw acquisition executes no stylesheet loader. Successful compilation
+    // cannot discharge the independent refusal of executable plugin/config
+    // side inputs. Resource contents never add analyzed JavaScript edges.
+    if query != "raw" && !stylesheet_closure(&entries, config, inputs) {
+        return None;
     }
-    let kind = if !query.is_empty() {
-        ResourceKind::String
-    } else if stylesheet {
-        // Preprocessor availability/side inputs need independent proof;
-        // their files can still be imported explicitly as raw/url strings.
-        if !["css", "pcss", "postcss"].contains(&requested) {
-            return None;
-        }
-        for path in &entries {
-            let source = fs::read_to_string(path).ok()?;
-            if !passive_css(&source, config.tailwind && request.starts_with('.')) {
-                return None;
-            }
-        }
-        let modules = entries.iter().all(|path| is_module(path));
-        if !modules && entries.iter().any(|path| is_module(path)) {
-            return None;
-        }
-        if modules {
-            ResourceKind::CssModule
-        } else {
-            ResourceKind::Stylesheet
-        }
-    } else {
-        ResourceKind::String
-    };
-    Some(Resource { kind, entries })
+    Some(Resource { entries })
 }
 
-// Loader closure identity proves which code runs, not that arbitrary CSS
-// successfully transforms. Until a bounded transform-success fact exists,
-// compiled stylesheets (including CSS ?url) supply no linking authority.
-// Raw CSS remains an inert string and never calls this predicate. This also
-// withholds every directive/escape and every external stylesheet closure.
-fn passive_css(_source: &str, _tailwind: bool) -> bool {
-    false
+fn stylesheet(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            [
+                "css", "pcss", "postcss", "less", "sass", "scss", "styl", "stylus", "sss",
+            ]
+            .contains(&ext)
+        })
+}
+
+// Keep the existing executable CSS plugin/config veto, including escaped and
+// comment-separated spellings. This is not a transform-success predicate:
+// @import/@reference/@apply, composition and malformed CSS are loadable under
+// the successful-build premise, and never supply behavior authority.
+fn css_without_executable_inputs(source: &str) -> bool {
+    let normalized = normalized_css(source)
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace())
+        .collect::<String>();
+    !["@config", "@plugin"]
+        .iter()
+        .any(|directive| normalized.contains(directive))
+}
+
+fn normalized_css(source: &str) -> String {
+    let mut normalized = String::new();
+    let mut chars = source.chars().peekable();
+    let mut quote = None;
+    while let Some(c) = chars.next() {
+        // CSS loaders pass quoted resolver strings through differing parsers.
+        // Preserve their raw bytes; css_candidates refuses escape interpretation.
+        // Directive normalization outside strings must not choose a path.
+        if quote.is_some() && c == '\\' {
+            normalized.push(c);
+            if let Some(next) = chars.next() {
+                normalized.push(next);
+            }
+            continue;
+        }
+        if quote.is_none() && c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            while let Some(c) = chars.next() {
+                if c == '*' && chars.peek() == Some(&'/') {
+                    chars.next();
+                    break;
+                }
+            }
+            if !normalized.ends_with(' ') {
+                normalized.push(' ');
+            }
+        } else if c == '\\' {
+            // Escaped newlines continue a CSS token, including directives.
+            if chars
+                .peek()
+                .is_some_and(|c| ['\n', '\r', '\u{c}'].contains(c))
+            {
+                if chars.next() == Some('\r') && chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                continue;
+            }
+            let mut hex = String::new();
+            while hex.len() < 6 && chars.peek().is_some_and(|c| c.is_ascii_hexdigit()) {
+                hex.push(chars.next().unwrap());
+            }
+            if hex.is_empty() {
+                if let Some(c) = chars.next() {
+                    if ['\'', '"'].contains(&c) {
+                        normalized.push('\\');
+                    }
+                    normalized.push(c);
+                }
+            } else {
+                let decoded = u32::from_str_radix(&hex, 16)
+                    .ok()
+                    .and_then(char::from_u32)
+                    .unwrap_or('\u{fffd}');
+                if ['\'', '"'].contains(&decoded) {
+                    normalized.push('\\');
+                }
+                normalized.push(decoded);
+                if chars.peek().is_some_and(|c| c.is_whitespace()) {
+                    chars.next();
+                }
+            }
+        } else {
+            if quote.is_none() && c.is_ascii_whitespace() {
+                if !normalized.ends_with(' ') {
+                    normalized.push(' ');
+                }
+                continue;
+            }
+            if quote == Some(c) {
+                quote = None;
+            } else if quote.is_none() && ['\'', '"'].contains(&c) {
+                quote = Some(c);
+            }
+            normalized.push(c);
+        }
+    }
+    normalized
+}
+
+// Independent executable-side-input closure, not a compilation-success proof.
+// Imported/reference/composed CSS may introduce Tailwind @plugin/@config. The
+// bounded resolver uses CSS style conditions rather than JS entry conditions.
+pub(super) fn stylesheet_closure(
+    entries: &[PathBuf],
+    config: &crate::host_config::Config,
+    inputs: &mut Vec<PathBuf>,
+) -> bool {
+    let mut pending = entries
+        .iter()
+        .filter(|path| stylesheet(path))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut bytes = 0usize;
+    while let Some(path) = pending.pop() {
+        inputs.push(path.clone());
+        inputs.extend(path.ancestors().map(Path::to_owned));
+        let Ok(path) = fs::canonicalize(&path) else {
+            return false;
+        };
+        inputs.push(path.clone());
+        if !seen.insert(path.clone()) {
+            continue;
+        }
+        if seen.len() > 256 {
+            return false;
+        }
+        let Ok(metadata) = fs::metadata(&path) else {
+            return false;
+        };
+        if !metadata.is_file() || metadata.len() > 2_097_152 {
+            return false;
+        }
+        let Ok(source) = fs::read_to_string(&path) else {
+            return false;
+        };
+        bytes = bytes.saturating_add(source.len());
+        if bytes > 8_388_608 || !css_without_executable_inputs(&source) {
+            return false;
+        }
+        let normalized = normalized_css(&source);
+        let lower = normalized.to_ascii_lowercase();
+        // Unsupported preprocessor module/evaluation forms cannot authenticate
+        // their executable side-input closure. Ordinary declarations still link.
+        if lower.contains('@')
+            && ["@use", "@forward", "@require"]
+                .iter()
+                .any(|token| lower.contains(token))
+            || path.extension().is_some_and(|ext| ext == "less") && source.contains('`')
+        {
+            return false;
+        }
+        let mut requests = Vec::new();
+        for directive in ["@import", "@reference"] {
+            for (offset, _) in lower.match_indices(directive) {
+                let tail = normalized[offset + directive.len()..].trim_start();
+                let tail = tail
+                    .strip_prefix("url(")
+                    .map(str::trim_start)
+                    .unwrap_or(tail);
+                let Some(quote) = tail.chars().next().filter(|c| ['\'', '"'].contains(c)) else {
+                    return false;
+                };
+                let Some(end) = tail[1..].find(quote).map(|end| end + 1) else {
+                    return false;
+                };
+                requests.push((&tail[1..end], true));
+                // Reject escaped quote/path truncation or opaque qualifiers;
+                // reviewed layer/supports/media suffixes cannot load Node code.
+                let suffix = tail[end + 1..].trim_start();
+                if !suffix.starts_with([';', ')'])
+                    && ![
+                        "layer",
+                        "supports",
+                        "screen",
+                        "print",
+                        "all",
+                        "not ",
+                        "only ",
+                        "(",
+                        "source",
+                        "theme",
+                        "prefix",
+                        "important",
+                        "reference",
+                    ]
+                    .iter()
+                    .any(|prefix| suffix.starts_with(prefix))
+                {
+                    return false;
+                }
+            }
+        }
+        for statement in normalized.split(';') {
+            let lower = statement.to_ascii_lowercase();
+            if ["composes", "compose-with", "@value"]
+                .iter()
+                .any(|token| lower.contains(token))
+            {
+                let Some(offset) = lower.find(" from ") else {
+                    if lower.contains("from") || statement.contains(['\'', '"']) {
+                        return false;
+                    }
+                    continue;
+                };
+                let tail = statement[offset + 6..].trim();
+                let Some(quote) = tail.chars().next().filter(|c| ['\'', '"'].contains(c)) else {
+                    return false;
+                };
+                let Some(end) = tail[1..].find(quote).map(|end| end + 1) else {
+                    return false;
+                };
+                if !tail[end + 1..].trim().trim_matches('}').trim().is_empty() {
+                    return false;
+                }
+                requests.push((&tail[1..end], false));
+            }
+        }
+        if lower.contains(":import") {
+            return false;
+        }
+        for (text, allow_absent_literal) in requests {
+            // Remote CSS is browser data; it does not run build-time Node hooks.
+            if ["http://", "https://"]
+                .iter()
+                .any(|prefix| text.starts_with(prefix))
+            {
+                continue;
+            }
+            let Some(targets) = css_candidates(&path, text, config, inputs, allow_absent_literal)
+            else {
+                return false;
+            };
+            pending.extend(targets);
+        }
+    }
+    true
+}
+
+fn css_candidates(
+    importer: &Path,
+    text: &str,
+    config: &crate::host_config::Config,
+    inputs: &mut Vec<PathBuf>,
+    allow_absent_literal: bool,
+) -> Option<Vec<PathBuf>> {
+    if text.is_empty()
+        || text.contains(['?', '#', '%', '\\', ':'])
+        || text.starts_with('/')
+        || !config.default_extensions
+        || importer
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_none_or(|ext| !["css", "pcss", "postcss"].contains(&ext))
+        || config.package_dedupe
+        || config.aliases.keys().any(|find| {
+            text == find
+                || text
+                    .strip_prefix(find.as_str())
+                    .is_some_and(|tail| tail.starts_with('/'))
+        })
+    {
+        return None;
+    }
+    // Tailwind's audited CSS resolver is preferRelative, extensions [.css],
+    // style main-field/conditions, tryIndex:false. Both modes must agree on
+    // inspectable files; no JS resolver/Type Facts wildcard chooses CSS.
+    let local = importer.parent()?.join(text);
+    for path in [
+        local.clone(),
+        PathBuf::from(format!("{}.css", local.display())),
+    ] {
+        inputs.push(path.clone());
+        inputs.extend(path.ancestors().map(Path::to_owned));
+        if path.is_file() {
+            let physical = fs::canonicalize(path).ok()?;
+            inputs.push(physical.clone());
+            return stylesheet(&physical).then_some(vec![physical]);
+        }
+        if path.exists() {
+            return None;
+        }
+    }
+    if text.starts_with('.') || Path::new(text).is_absolute() {
+        // An absent exact literal is a failed transform, excluded by the named
+        // premise. Its absence stays an input; no substitute file is guessed.
+        return allow_absent_literal.then(Vec::new);
+    }
+    let (name, key) = request(text)?;
+    let root = crate::host_plugins::installed(importer.parent()?, name, inputs)?;
+    let manifest = root.join("package.json");
+    inputs.push(manifest.clone());
+    let bytes = fs::read(&manifest).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    // CSS browser-map substitutions are a separate resolver branch. A style
+    // field/exports key cannot stand in for that selected target.
+    if value.get("browser").is_some() {
+        return None;
+    }
+    let Ordered(fields): Ordered = serde_json::from_slice(&bytes).ok()?;
+    let mut targets = Vec::new();
+    for production in [false, true] {
+        let target = if let Some((_, exports)) = fields.iter().find(|(name, _)| name == "exports") {
+            exported(exports, &key, production, false, true)?
+        } else if key != "." {
+            key.clone()
+        } else {
+            let (_, Target::String(style)) = fields.iter().find(|(name, _)| name == "style")?
+            else {
+                return None;
+            };
+            style.clone()
+        };
+        let file = regular(&root, &target, inputs)?;
+        if !stylesheet(&file) {
+            return None;
+        }
+        targets.push(file);
+    }
+    Some(targets)
 }
 
 /// Record even failed candidate lookups before the daemon's shortcut. The same
@@ -616,7 +875,7 @@ pub(super) fn loadable(
     let (root, bytes, entries) = candidates(importer, text, inputs)?;
     // Includes root exports, extensionless subpaths, legacy fields, browser
     // redirects and every condition projection, after canonical selection.
-    if !entries.iter().all(|path| executable_entry(path)) {
+    if !entries.iter().all(|path| static_entry(path)) {
         return None;
     }
     let manifest: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
@@ -691,8 +950,131 @@ pub(super) fn loadable(
 mod tests {
     use super::*;
 
+    #[test]
+    fn stylesheet_executable_closure_uses_style_conditions_and_tracks_nested_inputs() {
+        let scratch = std::env::temp_dir().join(format!("host-css-closure-{}", std::process::id()));
+        let app = scratch.join("app");
+        let package = app.join("node_modules/css-provider");
+        fs::create_dir_all(&package).unwrap();
+        let app = fs::canonicalize(&app).unwrap();
+        let package = fs::canonicalize(&package).unwrap();
+        let config =
+            crate::host_config::parse(Path::new("vite.config.ts"), "export default {plugins:[]}")
+                .unwrap();
+        let main = app.join("main.css");
+        fs::write(&main, "@import 'css-provider';").unwrap();
+        fs::write(package.join("package.json"), r#"{"exports":{".":{"style":{"production":"./production.css","default":"./development.css"},"import":"./runtime.js"}}}"#).unwrap();
+        fs::write(package.join("runtime.js"), "throw 0").unwrap();
+        fs::write(
+            package.join("development.css"),
+            "@reference '../../outside.css';",
+        )
+        .unwrap();
+        fs::write(package.join("production.css"), ".x{}").unwrap();
+        let outside = app.join("outside.css");
+        fs::write(&outside, ".x{}").unwrap();
+        let mut inputs = Vec::new();
+        assert!(stylesheet_closure(
+            std::slice::from_ref(&main),
+            &config,
+            &mut inputs
+        ));
+        for path in [
+            &main,
+            &outside,
+            &package.join("package.json"),
+            &package.join("production.css"),
+            &package.join("development.css"),
+        ] {
+            assert!(
+                inputs
+                    .iter()
+                    .any(|input| fs::canonicalize(input).ok().as_ref() == Some(path)),
+                "{}",
+                path.display()
+            );
+        }
+        for directive in [
+            "@plugin './plugin.js';",
+            "@\\70lugin './plugin.js';",
+            "@plu\\\ngin './plugin.js';",
+            "@con/**/fig './config.js';",
+        ] {
+            fs::write(&outside, directive).unwrap();
+            assert!(
+                !stylesheet_closure(std::slice::from_ref(&main), &config, &mut Vec::new()),
+                "{directive}"
+            );
+        }
+        // A definitively absent literal is a transform failure under the
+        // successful-build premise; absence remains an input, not a guessed file.
+        fs::remove_file(&outside).unwrap();
+        let mut inputs = Vec::new();
+        assert!(stylesheet_closure(
+            std::slice::from_ref(&main),
+            &config,
+            &mut inputs
+        ));
+        assert!(inputs.contains(&package.join("../../outside.css")));
+        fs::write(&outside, "@plugin './plugin.js';").unwrap();
+        assert!(!stylesheet_closure(
+            std::slice::from_ref(&main),
+            &config,
+            &mut Vec::new()
+        ));
+        // Vite implicitly activates import even for a style resolver. Earlier
+        // author-order import must not be skipped in favor of clean style.
+        fs::write(
+            package.join("package.json"),
+            r#"{"exports":{".":{"import":"./evil.css","style":"./production.css"}}}"#,
+        )
+        .unwrap();
+        fs::write(package.join("evil.css"), "@plugin './plugin.js';").unwrap();
+        assert!(!stylesheet_closure(
+            std::slice::from_ref(&main),
+            &config,
+            &mut Vec::new()
+        ));
+        // Whitespace/comments in composition cannot hide an imported plugin.
+        fs::write(
+            &main,
+            ".x { composes : x from\t/*comment*/ './outside.css'; }",
+        )
+        .unwrap();
+        assert!(!stylesheet_closure(
+            std::slice::from_ref(&main),
+            &config,
+            &mut Vec::new()
+        ));
+        fs::write(&main, "@import 'css-provider';").unwrap();
+        assert_eq!(
+            normalized_css("@import './e\\76il.css';"),
+            "@import './e\\76il.css';"
+        );
+        fs::write(&main, "@import './e\\76il.css';").unwrap();
+        fs::write(app.join("evil.css"), ".x{}").unwrap();
+        assert!(!stylesheet_closure(
+            std::slice::from_ref(&main),
+            &config,
+            &mut Vec::new()
+        ));
+        fs::write(&main, "@import 'css-provider';").unwrap();
+        // Declaration/JS exports cannot answer for unknown CSS style resolution.
+        fs::write(
+            package.join("package.json"),
+            r#"{"exports":{".":{"import":"./runtime.js"}}}"#,
+        )
+        .unwrap();
+        assert!(!stylesheet_closure(
+            std::slice::from_ref(&main),
+            &config,
+            &mut Vec::new()
+        ));
+        fs::remove_dir_all(scratch).unwrap();
+    }
+
     fn exported(exports: &Target, key: &str, production: bool) -> Option<String> {
-        super::exported(exports, key, production, false)
+        super::exported(exports, key, production, false, false)
     }
 
     fn attested(root: &Path, name: &str, version: &str) -> AttestedImport {
@@ -721,6 +1103,13 @@ mod tests {
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         fs::create_dir_all(app.join("node_modules/styles/dist")).unwrap();
+        fs::create_dir_all(app.join("node_modules/tailwindcss")).unwrap();
+        fs::write(
+            app.join("node_modules/tailwindcss/package.json"),
+            r#"{"exports":{".":{"style":"./index.css","import":"./runtime.js"}}}"#,
+        )
+        .unwrap();
+        fs::write(app.join("node_modules/tailwindcss/index.css"), ".x{}").unwrap();
         let app = fs::canonicalize(app).unwrap();
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../../fixtures/reactive-ir/inferred-host-spa/resource-cases.json");
@@ -739,6 +1128,7 @@ mod tests {
             .unwrap();
             fs::write(app.join("node_modules/styles/dist/runtime.js"), "throw 0").unwrap();
             fs::write(app.join("local.css"), case["css"].as_str().unwrap()).unwrap();
+            fs::write(app.join("local.pcss"), case["css"].as_str().unwrap()).unwrap();
             fs::write(app.join("local.module.css"), case["css"].as_str().unwrap()).unwrap();
             fs::write(app.join("logo.svg"), "<svg/>").unwrap();
             fs::write(app.join("style.scss"), ".x{color:red}").unwrap();
@@ -770,9 +1160,6 @@ mod tests {
             if let Some(result) = result {
                 assert!(!result.entries.is_empty());
                 assert!(result.entries.iter().all(|path| inputs.contains(path)));
-                if let Some(kind) = case["kind"].as_str() {
-                    assert_eq!(format!("{:?}", result.kind), kind, "{}", case["name"]);
-                }
             }
         }
         let config =
@@ -793,10 +1180,12 @@ mod tests {
             inputs.contains(&app.join("./absent.svg")),
             "absence is a cache input"
         );
-        assert!(!passive_css("@\\69mport 'hidden.css';", false));
-        assert!(!passive_css("@con/**/fig 'hidden.ts';", false));
-        assert!(!passive_css("@import \"tailwindcss\"; .x{color:red}", true));
-        assert!(!passive_css("@import \"tailwindcss\";", false));
+        assert!(css_without_executable_inputs("@\\69mport 'hidden.css';"));
+        assert!(!css_without_executable_inputs("@con/**/fig 'hidden.ts';"));
+        assert!(!css_without_executable_inputs("@\\70lugin 'hidden.ts';"));
+        assert!(css_without_executable_inputs(
+            "@import \"tailwindcss\"; .x{color:red}"
+        ));
         fs::remove_dir_all(app).unwrap();
     }
 
@@ -804,7 +1193,6 @@ mod tests {
     fn resource_resolution_is_exact_per_occurrence_and_never_overrides_a_requested_unknown() {
         use solid_facts::runtime_resolution::{RuntimeOutcome, RuntimeResolutionIndex};
         let resource = Resource {
-            kind: ResourceKind::String,
             entries: vec![PathBuf::from("/app/logo.svg")],
         };
         let span = solid_facts::core::Span::new(7, 17);
@@ -1132,7 +1520,7 @@ mod tests {
             ] {
                 fs::write(root.join("package.json"), format!(r#"{{"name":"styles","version":"1.0.0","type":"module","exports":{exports}}}"#)).unwrap();
                 let mut inputs = Vec::new();
-                assert!(
+                assert_eq!(
                     loadable(
                         &scratch.join("main.ts"),
                         text,
@@ -1141,7 +1529,8 @@ mod tests {
                         &mut inputs,
                         &Default::default()
                     )
-                    .is_none(),
+                    .is_some(),
+                    ext != "unknown",
                     "{text}: {exports}"
                 );
                 assert!(

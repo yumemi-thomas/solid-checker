@@ -250,8 +250,14 @@ fn inferred_host_graph_input_paths(
             for importer in [&source, &directory.join("index.ts")] {
                 if resolved_requests
                     .insert((importer.parent().map(Path::to_path_buf), text.to_owned()))
+                    && let Some((_, _, entries)) =
+                        crate::host_loadable::candidates(importer, text, &mut paths)
                 {
-                    let _ = crate::host_loadable::candidates(importer, text, &mut paths);
+                    let _ = crate::host_loadable::stylesheet_closure(
+                        &entries,
+                        resource_config,
+                        &mut paths,
+                    );
                 }
             }
         }
@@ -398,7 +404,8 @@ fn inventory_paths(directory: &Path, paths: &mut Vec<PathBuf>) -> Option<()> {
                 .is_some_and(|extension| {
                     [
                         "ts", "tsx", "tsrx", "mts", "cts", "js", "jsx", "mjs", "cjs", "json",
-                        "html", "css",
+                        "html", "css", "pcss", "postcss", "less", "sass", "scss", "styl", "stylus",
+                        "sss",
                     ]
                     .contains(&extension)
                 })
@@ -758,18 +765,14 @@ fn configuration(
         let mut inventory = Vec::new();
         inventory_paths(directory, &mut inventory)
             .required(directory, "cannot inventory Tailwind side inputs")?;
-        // Record the entire observed inventory before refusing: daemon hits
-        // must revalidate the refusal witness too. No stylesheet closure is
-        // admitted without successful-transform facts, so @reference, @apply,
-        // escaped directives and outside-app dependencies cannot grant authority.
+        // Keep the complete inventory in cache identity. Successful builds
+        // discharge CSS compilation only; executable plugin/config side inputs
+        // still cannot enter the reviewed configuration through a stylesheet.
         inputs.extend(inventory.iter().cloned());
-        if let Some(path) = inventory
-            .iter()
-            .find(|path| path.extension().is_some_and(|ext| ext == "css"))
-        {
+        if !crate::host_loadable::stylesheet_closure(&inventory, &config, inputs) {
             return Err(DiscoveryRefusal::new(
-                path,
-                "Tailwind stylesheet successful transformation is unproved",
+                directory,
+                "executable stylesheet plugin/config side-input closure is unproved",
             ));
         }
     }
@@ -1428,30 +1431,6 @@ fn execution_constants(
         }
     }
     values
-}
-
-fn resource_surface(
-    ast: &solid_facts::ast::AstFacts,
-    extent: Span,
-    kind: crate::host_loadable::ResourceKind,
-) -> bool {
-    use crate::host_loadable::ResourceKind;
-    if let Some(import) = ast.imports.iter().find(|import| import.span == extent) {
-        return import
-            .bindings
-            .iter()
-            .filter(|binding| !binding.type_only)
-            .all(|binding| {
-                binding.kind == ImportKind::SideEffect
-                    || (kind != ResourceKind::Stylesheet
-                        && (matches!(binding.kind, ImportKind::Default | ImportKind::Namespace)
-                            || binding.imported.as_deref() == Some("default")))
-            });
-    }
-    // A re-exported resource is not admitted: this fact table carries no
-    // re-exported binding name, so the importer keeps its baseline host.
-    let _ = kind;
-    false
 }
 
 fn execution_regions(
@@ -2708,16 +2687,15 @@ fn discovered_index_with_inputs(
                     );
                 }
                 let admitted = resource.as_ref().is_some_and(|resource| {
-                    resource_surface(&file.ast, span, resource.kind)
-                        && facts.runtime_resolutions.as_ref().is_none_or(|runtime| {
-                            resource.matches_outcome(runtime.outcome(path, span, text))
-                        })
+                    facts.runtime_resolutions.as_ref().is_none_or(|runtime| {
+                        resource.matches_outcome(runtime.outcome(path, span, text))
+                    })
                 });
                 if !admitted {
                     module.refused = true;
                     unproven_semantics.insert(path.into());
                     blocked_imports.insert((path.into(), text.into()));
-                    withheld_loads.insert((path.to_owned(), text.to_owned()), "Vite resource file, generated export surface, transform, or requested resolution is unproved");
+                    withheld_loads.insert((path.to_owned(), text.to_owned()), "Vite resource target, executable side input, or requested resolution is unproved");
                 }
                 // No analyzed implementation or callable edge: generated CSS
                 // maps and asset strings are a linking premise only.
@@ -2859,7 +2837,7 @@ fn discovered_index_with_inputs(
                 if packages.is_none() {
                     // The provisional graph schedules package analysis; its
                     // optimistic edges are not final linking authority. Even
-                    // here a selected non-executable loader cannot be admitted.
+                    // here a selected file must be handled by reviewed Vite.
                     let unsupported_loader = crate::host_loadable::candidates(
                         Path::new(path),
                         text,
@@ -2868,7 +2846,12 @@ fn discovered_index_with_inputs(
                     .is_some_and(|(_, _, entries)| {
                         !entries
                             .iter()
-                            .all(|entry| crate::host_loadable::executable_entry(entry))
+                            .all(|entry| crate::host_loadable::static_entry(entry))
+                            || !crate::host_loadable::stylesheet_closure(
+                                &entries,
+                                &config,
+                                &mut package_inputs,
+                            )
                     });
                     for input in package_inputs {
                         let key = input
@@ -2898,7 +2881,14 @@ fn discovered_index_with_inputs(
                     dialect,
                     &mut package_inputs,
                     &config.optimize_exclude,
-                );
+                )
+                .filter(|entries| {
+                    crate::host_loadable::stylesheet_closure(
+                        entries.entries(),
+                        &config,
+                        &mut package_inputs,
+                    )
+                });
                 // The audited provider adds runtime-owner dedupe in dev. The
                 // declaration package must also be the root-selected install.
                 let provider = config.plugins.iter().any(|plugin| {
@@ -3310,54 +3300,6 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(changed, vec![31, 159]);
         fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn generated_resource_surfaces_do_not_supply_named_values_or_components() {
-        use crate::host_loadable::ResourceKind;
-        for (source, kind, expected) in [
-            ("import './style.css';", ResourceKind::Stylesheet, true),
-            (
-                "import style from './style.css';",
-                ResourceKind::Stylesheet,
-                false,
-            ),
-            (
-                "import classes from './style.module.css';",
-                ResourceKind::CssModule,
-                true,
-            ),
-            (
-                "import {missing} from './style.module.css';",
-                ResourceKind::CssModule,
-                false,
-            ),
-            ("import logo from './logo.svg';", ResourceKind::String, true),
-            (
-                "import {Component} from './logo.svg';",
-                ResourceKind::String,
-                false,
-            ),
-            (
-                "export {default as logo} from './logo.svg';",
-                ResourceKind::String,
-                false,
-            ),
-            (
-                "export {Component} from './logo.svg';",
-                ResourceKind::String,
-                false,
-            ),
-        ] {
-            let ast = solid_facts::ast::extract("main.ts", source).unwrap();
-            let extent = ast
-                .imports
-                .first()
-                .map(|import| import.span)
-                .or_else(|| ast.exports.first().map(|export| export.span))
-                .unwrap();
-            assert_eq!(resource_surface(&ast, extent, kind), expected, "{source}");
-        }
     }
 
     #[test]

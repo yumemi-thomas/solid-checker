@@ -342,8 +342,9 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
                     "{source}: {result:#?}"
                 );
             }
-            // The same bytes either require an unproved CSS transformation or
-            // are acquired as inert raw text. Review every live twin's exact site.
+            // Successful builds admit compiled and raw linking alike. These
+            // deliberately failing transform inputs cannot grant JS behavior;
+            // this test asserts only the importing module's exact live site.
             for css in [
                 "@reference './missing.css';",
                 "@reference '../../outside.css';",
@@ -360,7 +361,7 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
                     fs::write(project.join("src/main.ts"), &source).unwrap();
                     let result = analyze(None);
                     let call = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
-                    assert_eq!(
+                    assert!(
                         result["findings"].as_array().unwrap().iter().any(
                             |finding| finding["kind"] == "violation"
                                 && inferred(finding)
@@ -369,7 +370,6 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
                                     .is_some_and(|path| path.ends_with("src/main.ts"))
                                 && finding["primaryLocation"]["startByte"].as_u64() == Some(call)
                         ),
-                        raw,
                         "{source}: {result:#?}"
                     );
                 }
@@ -384,27 +384,27 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
                 (
                     r#"{".":{"types":"./index.d.ts","default":"./style.css"}}"#,
                     "styles",
-                    false,
+                    true,
                 ),
                 (
                     r#"{"./theme":{"types":"./index.d.ts","default":"./style.css"}}"#,
                     "styles/theme",
-                    false,
+                    true,
                 ),
                 (
                     r#"{".":{"types":"./index.d.ts","production":"./style.css","default":"./index.js"}}"#,
                     "styles",
-                    false,
+                    true,
                 ),
                 (
                     r#"{".":{"types":"./index.d.ts","solid":"./style.css","default":"./index.js"}}"#,
                     "styles",
-                    false,
+                    true,
                 ),
                 (
                     r#"{".":{"types":"./index.d.ts","default":"./style.scss"}}"#,
                     "styles",
-                    false,
+                    true,
                 ),
                 (
                     r#"{".":{"types":"./index.d.ts","default":"./index.js"}}"#,
@@ -450,6 +450,82 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
                     "{source}: {exports}: {result:#?}"
                 );
             }
+            let config_path = project.join("vite.config.ts");
+            let original_config = fs::read_to_string(&config_path).unwrap();
+            let tsconfig_path = project.join("tsconfig.json");
+            let original_tsconfig = fs::read_to_string(&tsconfig_path).unwrap();
+            let mut tsconfig: serde_json::Value = serde_json::from_str(&original_tsconfig).unwrap();
+            tsconfig["compilerOptions"]["paths"] = serde_json::json!({"~/*":["./src/*"]});
+            fs::write(&tsconfig_path, serde_json::to_vec(&tsconfig).unwrap()).unwrap();
+            let resource_cases: Vec<serde_json::Value> = serde_json::from_slice(
+                &fs::read(
+                    repository
+                        .join("fixtures/reactive-ir/inferred-host-spa/static-resource-cases.json"),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            for name in ["tailwindcss", "css-provider"] {
+                let root = project.join("node_modules").join(name);
+                fs::create_dir_all(&root).unwrap();
+                fs::write(root.join("package.json"), format!(r#"{{"name":"{name}","exports":{{".":{{"style":"./index.css","import":"./runtime.js"}}}}}}"#)).unwrap();
+                fs::write(root.join("index.css"), ".x{}").unwrap();
+            }
+            for case in resource_cases {
+                if let Some(dependencies) = case["dependencies"].as_object() {
+                    for (file, contents) in dependencies {
+                        fs::write(project.join("src").join(file), contents.as_str().unwrap())
+                            .unwrap();
+                    }
+                }
+                if let Some(file) = case["file"].as_str() {
+                    fs::write(
+                        project.join("src").join(file),
+                        case["contents"].as_str().unwrap(),
+                    )
+                    .unwrap();
+                }
+                fs::write(
+                    &config_path,
+                    case["config"].as_str().unwrap_or(&original_config),
+                )
+                .unwrap();
+                let source = format!(
+                    "{} import {{startClosed}} from 'reactive-package'; startClosed();",
+                    case["statement"].as_str().unwrap()
+                );
+                fs::write(project.join("src/main.ts"), &source).unwrap();
+                let result = analyze(None);
+                let call = u64::try_from(source.find("startClosed()").unwrap()).unwrap();
+                assert_eq!(
+                    result["findings"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|finding| finding["kind"] == "violation"
+                            && finding["rule"] == "missing-owner"
+                            && inferred(finding)
+                            && finding["primaryLocation"]["path"]
+                                .as_str()
+                                .is_some_and(|path| path.ends_with("src/main.ts"))
+                            && finding["primaryLocation"]["startByte"].as_u64() == Some(call)),
+                    case["live"] == true,
+                    "{}: {result:#?}",
+                    case["name"]
+                );
+                // Explicit Node always wins over successful-build inference.
+                if case["live"] == true {
+                    assert!(
+                        !analyze(Some("node"))["findings"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(inferred)
+                    );
+                }
+            }
+            fs::write(&config_path, original_config).unwrap();
+            fs::write(&tsconfig_path, original_tsconfig).unwrap();
             fs::write(project.join("src/main.ts"), "import {startClosed} from 'reactive-package'; class Stop {constructor(){throw 0}} new Stop(); startClosed();").unwrap();
             let constructor_refused = analyze(None);
             assert!(

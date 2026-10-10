@@ -31,9 +31,22 @@ class-cases.json, nullish-cases.json and resource-cases.json are small proof inp
 Rust tests, outside tsconfig's src include. They distinguish inert class
 allocation from eager static/decorator/key/heritage work, nullish left completion
 from unknown selection in statements/initializers/eager arguments, and raw/asset
-strings from compiled CSS requiring unproved successful transformation.
-Missing/external/escaped @reference, invalid @apply and malformed module CSS
-all refuse; byte-identical raw twins are inert and live. Every diagnostic twin
+strings from compiled CSS under ADR 0270's successful-build premise.
+Missing/external/escaped nested @reference, invalid @apply and malformed module
+CSS link under that premise; byte-identical raw twins also link. A missing import
+target and divergent CSS aliases still refuse. Executable CSS plugin/config
+inputs and executable PostCSS configuration still refuse independently.
+The executable-side-input closure follows canonical CSS imports/references and
+composition through style/import conditions, including installed/outside files.
+Opaque or ambiguous closures, missing composition targets (CSS/Sass/LESS
+resolution is not guessed), preprocessor import/module forms, ICSS imports and
+bounded-work overflow remain refused. Missing exact ordinary nested CSS literals
+are transform failures excluded by the successful-build premise; lookup absence
+remains tracked. A missing JavaScript static import target always refuses.
+static-resource-cases.json pins Tailwind/PostCSS/preprocessor/module CSS, JSON,
+assets, raw imports and re-exports, with exact-site native diagnostic twins and
+explicit Node controls. Resource contents grant no JavaScript behavior.
+Every diagnostic twin
 asserts the exact unowned registration site and violation kind under authorized
 browser inference. Normal nullish returns stay unknown; normal non-nullish calls
 remain live controls. Error remains unresolved in the syntax-only

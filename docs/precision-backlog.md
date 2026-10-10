@@ -29145,3 +29145,20 @@ daemon reuse and retain fresh one-shot checks. No premise, typing,
 contract, snapshot or performance ceiling is weakened. Measurements and final
 verification are recorded in HANDOFF-infer-host-RESULT-3.md; unsupported forms
 and compiled stylesheet transformation remain deliberate fail-closed cases.
+
+### Successful-build static linking premise (2026-10-10, ADR 0270)
+
+Owner decision: the analyzed app builds successfully. Static imports and
+export-from of exactly selected existing Vite-handled files now grant linking
+only, including Tailwind/PostCSS/preprocessor CSS, CSS modules, assets, raw/URL
+resources, JSON and JS/TS. This supersedes the compiled-CSS withholding in
+2882fd0e7/04a890520, including canonical package entries with root, subpath and
+conditional resource targets. Resource surfaces no longer withhold linking or
+grant behavior edges. Runtime JavaScript completion remains separately proved.
+Tailwind inventory, resource bytes, package candidates and absent targets remain
+cache inputs. Unknown/executable plugins and PostCSS/CSS plugin/config side
+inputs, missing/ambiguous targets, divergent aliases, server execution and the
+other existing refusals remain; explicit target/certification boundaries are
+unchanged. Focused resource cases and native exact-site twins cover both linking
+and refusal. Measurements and final handoff results are recorded in the round-4
+research handoff; no published signature or diagnostic claim is added.

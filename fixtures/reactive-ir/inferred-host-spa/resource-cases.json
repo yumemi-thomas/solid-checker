@@ -1,20 +1,18 @@
 [
   {
-    "name": "vite-config-does-not-prove-tailwind-transform",
+    "name": "vite-config-successful-build-tailwind",
     "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.css",
     "css": "@import \"tailwindcss\"; .x{color:red}",
-    "loadable": false,
-    "kind": "Stylesheet",
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "vitest-config-does-not-prove-tailwind-transform",
+    "name": "vitest-config-successful-build-tailwind",
     "config": "import {defineConfig} from 'vitest/config';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.css",
     "css": "@import \"tailwindcss\"; .x{color:red}",
-    "loadable": false,
-    "kind": "Stylesheet",
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -35,21 +33,21 @@
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "module-css-composes-needs-closure",
+    "name": "module-css-composes-unknown-target-refused",
     "request": "./local.module.css",
     "css": ".x{composes: hidden from './missing.css'}",
     "loadable": false,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "module-css-url-is-rejected-by-vite",
+    "name": "module-css-url-successful-build",
     "request": "./local.module.css?url",
     "css": ".x{}",
-    "loadable": false,
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "url-css-still-needs-closure",
+    "name": "url-css-still-successful-build",
     "request": "./local.css?url",
     "css": "@config './hidden.ts';",
     "loadable": false,
@@ -60,47 +58,41 @@
     "request": "./local.css?raw",
     "css": "@config './hidden.ts';",
     "loadable": true,
-    "kind": "String",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
     "name": "module-map-is-decided-by-the-resolved-file",
     "request": "styles/style.module.css",
     "css": ".x{}",
-    "loadable": false,
-    "kind": "Stylesheet",
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.module.css\":\"./dist/style.css\"}}"
   },
   {
     "name": "package-css",
     "request": "styles/style.css",
     "css": ".x{color:red}",
-    "loadable": false,
-    "kind": "Stylesheet",
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
     "name": "relative-css",
     "request": "./local.css",
     "css": ".x{color:red}",
-    "loadable": false,
-    "kind": "Stylesheet",
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
     "name": "css-module",
     "request": "./local.module.css",
     "css": ".x{color:red}",
-    "loadable": false,
-    "kind": "CssModule",
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
     "name": "escaped-css-classes",
     "request": "styles/style.css",
     "css": ".w-\\\\[1px\\\\]{width:1px}",
-    "loadable": false,
-    "kind": "Stylesheet",
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -108,7 +100,6 @@
     "request": "./logo.svg",
     "css": ".x{}",
     "loadable": true,
-    "kind": "String",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -116,7 +107,6 @@
     "request": "./logo.svg?url",
     "css": ".x{}",
     "loadable": true,
-    "kind": "String",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -124,7 +114,6 @@
     "request": "./payload.txt?raw",
     "css": ".x{}",
     "loadable": true,
-    "kind": "String",
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -152,7 +141,7 @@
     "name": "nested-css-import",
     "request": "./local.css",
     "css": "@import './hidden.css';",
-    "loadable": false,
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -185,18 +174,18 @@
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "unsupported-preprocessor",
+    "name": "successful-build-preprocessor",
     "request": "./style.scss",
     "css": ".x{}",
-    "loadable": false,
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "reference-missing-transform-refused",
+    "name": "reference-missing-successful-build",
     "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.module.css",
     "css": "@reference \"./missing.css\";",
-    "loadable": false,
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -205,15 +194,14 @@
     "request": "./local.module.css?raw",
     "css": "@reference \"./missing.css\";",
     "loadable": true,
-    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
-    "kind": "String"
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "reference-external-transform-refused",
+    "name": "reference-external-successful-build",
     "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.module.css",
     "css": "@reference \"../../outside.css\";",
-    "loadable": false,
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -222,15 +210,14 @@
     "request": "./local.module.css?raw",
     "css": "@reference \"../../outside.css\";",
     "loadable": true,
-    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
-    "kind": "String"
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "reference-escaped-transform-refused",
+    "name": "reference-escaped-successful-build",
     "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.module.css",
     "css": "@\\72 eference \"./missing.css\";",
-    "loadable": false,
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -239,15 +226,14 @@
     "request": "./local.module.css?raw",
     "css": "@\\72 eference \"./missing.css\";",
     "loadable": true,
-    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
-    "kind": "String"
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "apply-unknown-transform-refused",
+    "name": "apply-unknown-successful-build",
     "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.module.css",
     "css": "@apply definitely-not-a-real-utility;",
-    "loadable": false,
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -256,15 +242,14 @@
     "request": "./local.module.css?raw",
     "css": "@apply definitely-not-a-real-utility;",
     "loadable": true,
-    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
-    "kind": "String"
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "apply-escaped-transform-refused",
+    "name": "apply-escaped-successful-build",
     "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.module.css",
     "css": "@\\61 pply definitely-not-a-real-utility;",
-    "loadable": false,
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -273,15 +258,14 @@
     "request": "./local.module.css?raw",
     "css": "@\\61 pply definitely-not-a-real-utility;",
     "loadable": true,
-    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
-    "kind": "String"
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
-    "name": "module-malformed-transform-refused",
+    "name": "module-malformed-successful-build",
     "config": "import {defineConfig} from 'vite';import tailwind from '@tailwindcss/vite';export default defineConfig({plugins:[tailwind()]})",
     "request": "./local.module.css",
     "css": ".x{",
-    "loadable": false,
+    "loadable": true,
     "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   },
   {
@@ -290,7 +274,28 @@
     "request": "./local.module.css?raw",
     "css": ".x{",
     "loadable": true,
-    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}",
-    "kind": "String"
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "missing-local-css-refused",
+    "request": "./absent.css",
+    "css": ".x{}",
+    "loadable": false,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "alias-css-refused",
+    "config": "export default {plugins:[],resolve:{alias:{'~':'./other'}}}",
+    "request": "~/local.css",
+    "css": ".x{}",
+    "loadable": false,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
+  },
+  {
+    "name": "postcss-successful-build",
+    "request": "./local.pcss",
+    "css": "@import \"./missing.css\";",
+    "loadable": true,
+    "manifest": "{\"name\":\"styles\",\"version\":\"1.0.0\",\"exports\":{\"./style.css\":\"./dist/style.css\"}}"
   }
 ]

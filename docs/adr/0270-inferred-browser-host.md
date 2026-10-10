@@ -110,6 +110,44 @@ draft's mandatory build graph and second build flag are omitted per decision B;
 no build is run automatically. Unknown transformations and unreviewed provider
 bytes still refuse root/proof admission.
 
+## Successful-build premise (owner decision, 2026-10-10)
+
+**The analyzed app builds successfully.** Inference consumes this named premise
+only for static linking and module evaluation: a static import or `export … from`
+of an exactly selected, existing project-local or installed file handled by the
+reviewed Vite environment is LOADABLE. This includes compiled CSS (Tailwind,
+PostCSS and preprocessors), CSS modules, assets, `?url`/`?raw`, JSON and JS/TS.
+An import's transform/asset-loader failure would stop Vite's build, so the
+premise excludes it. The checker does not run or attest a build.
+
+The premise proves only that loading the dependency does not prevent importer
+evaluation. CSS/asset contents supply no JavaScript initialization, callable,
+component or callback edges, and no behavior, ownership, tracking or certification
+authority. Local JavaScript dependency completion still needs its separate
+execution proof; a successful build does not prove successful runtime execution.
+Generated resource export surfaces are not guessed or used for behavior.
+
+Successful building cannot identify which file Vite selects. Divergent Vite/Type
+Facts aliases, missing targets, ambiguous resolution and requested resolver
+unknown/disagreement remain refusals, even when a missing target contradicts the
+premise. Existing unknown/executable plugin, server-execution, environment-escape
+and generated-graph refusals remain. Executable PostCSS configuration and CSS
+`@plugin`/`@config` side inputs remain outside the reviewed provider closure.
+Resource bytes, candidate paths/absence, manifests and Tailwind inventory remain
+cache inputs. Explicit target wins, certification requires an explicit target,
+and inference remains monotone over today's default finding authority.
+
+The separate executable-side-input proof follows a bounded canonical stylesheet
+closure, including installed/outside imports and references and CSS-module
+composition. Its Vite CSS resolver uses `.css`, `style` main fields and
+style/import/default plus development/production conditions in author order.
+Unknown aliases/browser remaps, path-resolver overrides, opaque requests, ICSS,
+preprocessor module/import forms and missing composition targets remain refused;
+CSS/Sass/LESS composition fallback is not guessed. Exact missing ordinary nested
+CSS literals are transform failures excluded by successful building, with
+absence fingerprinted. Bounds are 256 files, 2 MiB/file and 8 MiB total, and
+overflow withholds inference. This closure grants no resource behavior edges.
+
 ## C. Roots, baseline and certification
 
 Round-5 static-link gate: every non-type static import and export-from (including
@@ -364,14 +402,14 @@ manifest candidates, canonical targets and lookup absence are fingerprinted
 before daemon reuse and again at admission. Requested resolver unknown/mismatch
 still refuses. No resource supplies a callable, component or initialization edge.
 
-Compiled stylesheets (including CSS module and CSS ?url) now withhold linking:
-audited loader identity does not prove successful transformation of arbitrary
-input. This refuses @reference, @apply and other unproved closures, including
-escaped spellings, without consuming an outside stylesheet. Tailwind discovery
-also records its inventory before refusing any stylesheet. Raw CSS remains inert
-text; every admitted raw/asset file, package dependency and absent lookup is
-recorded by the same resolver at discovery and before daemon reuse. Asset
-default/namespace surfaces are admitted; unknown named exports remain unproved.
+The successful-build premise supersedes the compiled-CSS withholding from
+2882fd0e7/04a890520. Loader success no longer requires a transform-success fact:
+`@reference`, `@apply`, composition and malformed transform inputs do not withhold
+linking. These bytes could not ship when they break the build. Executable
+stylesheet plugin/config inputs still refuse independently. Every resource file,
+package dependency and absent lookup is recorded by the same resolver at
+discovery and before daemon reuse; Tailwind retains its complete inventory.
+Imports and re-exports alike grant linking only, with no generated value edges.
 
 Nullish coalescing and nullish assignment always compose left completion. With no exact nullish facts,
 selection/right completion and tails remain unknown even for normal-return
@@ -413,8 +451,8 @@ and `vitest/config` were already closure-audited but incorrectly vetoed resource
 compatibility; including them removes that accidental refusal. Executable CSS
 directives, unknown resource plugins, nested stylesheet imports and mismatched
 resolutions still refuse. Independent review subsequently showed that this did
-not establish successful transformation: compiled stylesheet linking is now
-withheld as described above.
+not establish successful transformation. The subsequent compiled-stylesheet
+withholding is superseded by the explicit successful-build premise above.
 
 Read-only `import.meta.env?.DEV/SSR` scalar access no longer implies an env-object
 escape. Optional tests supply no host constant, and eager optional-chain
