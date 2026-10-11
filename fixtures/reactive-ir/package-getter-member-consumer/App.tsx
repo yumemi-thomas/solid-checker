@@ -296,3 +296,28 @@ export function UppercaseInlineHelper() {
   const path = ReadPath();
   return <div>{path}</div>;
 }
+export function AsyncCompute() {
+  const location = makeSize();
+  const path = createMemo(async () => {
+    await Promise.resolve();
+    return location.pathname;
+  });
+  return <div>{String(path())}</div>;
+}
+export function GeneratorCompute() {
+  const location = makeSize();
+  const iterator = createMemo(function* () {
+    yield location.pathname;
+  });
+  return <div>{String(untrack(iterator).next().value)}</div>;
+}
+export function NamedInlineSelfEscape() {
+  const location = makeSize();
+  let readPath: () => string = () => "";
+  const tracked = createMemo(function capturePath() {
+    readPath = capturePath;
+    return location.pathname;
+  });
+  const path = readPath();
+  return <div>{tracked()}{path}</div>;
+}

@@ -49,14 +49,18 @@ placements. A Get written directly in its innermost component/rendering body
 produces SC1001 at the existing strict-read-untracked boundary. Direct
 compiler-tracked JSX expressions/attributes remain clean. An inline arrow or
 function literal that is itself an exact Solid primitive's tracked compute
-argument remains clean; no intervening function is admitted. Direct inline
+argument remains clean; no intervening function is admitted. The literal must
+be anonymous and neither async nor a generator: a Get after `await`, or one an
+iterator runs later, is outside the call that admitted it, and a named
+function expression can reach its own name and run elsewhere. Direct inline
 event handlers and explicit untrack callback arguments retain their non-strict
 policy. Direct effect apply retains a violation only where the existing
 accessor/store execution model already makes apply a strict-read scope.
 
 Everything else receives `returned getter execution` SC9012: named functions
 (even memo-only callbacks), helpers, returned/stored/nested functions, inline
-wrappers such as flush, onSettled and unknown calls. A primitive callback must
+wrappers such as flush, async and generator literals, named function
+expressions, onSettled and unknown calls. A primitive callback must
 be supplied directly from a component/rendering body or module scope, rather
 than from another callback/helper. The consumer does not project invocations
 or compose execution witnesses. This deliberately gives up clean named-only,

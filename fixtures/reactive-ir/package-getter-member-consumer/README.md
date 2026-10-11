@@ -26,6 +26,8 @@ dispatch obligations. Transparent TypeScript receivers preserve exact Gets.
 The same-named local factory must remain plain; namespace imports use exact
 Type Facts targets. Existing store/accessor fixtures must not move.
 
+AsyncCompute (a Get after `await`), GeneratorCompute and NamedInlineSelfEscape
+must each retain one `returned getter execution` SC9012 and no violation.
 Returned/stored/escaped nested callbacks cannot inherit an enclosing memo,
 effect, untrack or onSettled execution role. They must retain `returned getter
 execution` SC9012 obligations. Named functions, even memo-only, onSettled and

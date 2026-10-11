@@ -29408,7 +29408,8 @@ The round-3 owner decision simplifies getter execution to direct body,
 compiler-tracked JSX and exact inline tracked compute/event/untrack placements.
 Direct effect apply keeps the existing accessor/store strict-read boundary.
 Named functions (including memo-only), helpers, returned/stored/nested
-callbacks, inline wrappers such as flush, onSettled and unknown calls retain
+callbacks, inline wrappers such as flush, async and generator literals, named
+function expressions, onSettled and unknown calls retain
 `returned getter execution` SC9012. No invocation projection or composed
 callback witness is claimed. This loses recall for safe named-only and wrapper
 uses, deliberately closing the reviewed false-clean paths. Shared accessor/store

@@ -219,15 +219,29 @@ impl LocalAccessContext<'_, '_> {
         if !crate::owners::written_directly_in(&file.ast, owner, span) {
             return None;
         }
-        if file.compiler.callback_roles.iter().any(|callback| {
-            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                && file.ast.peel_ts_sugar_span(callback.span) == owner.span
-        }) {
+        // An async or generator body has no proven extent: a Get after an
+        // `await`, or one an iterator runs later, is outside the call that
+        // admitted the literal.
+        if owner.r#async || owner.generator {
+            return None;
+        }
+        // A named function expression can reach its own name and be invoked
+        // elsewhere, so only an anonymous literal stands for one invocation.
+        let anonymous = owner.name.is_none();
+        if anonymous
+            && file.compiler.callback_roles.iter().any(|callback| {
+                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                    && file.ast.peel_ts_sugar_span(callback.span) == owner.span
+            })
+        {
             return Some(ExecutionRole::EventCallback);
         }
         for (call, index) in file.ast.arguments_containing(span) {
             let argument = &call.arguments[index];
-            if argument.spread || file.ast.peel_ts_sugar_span(argument.span) != owner.span {
+            if !anonymous
+                || argument.spread
+                || file.ast.peel_ts_sugar_span(argument.span) != owner.span
+            {
                 continue;
             }
             // A callback literal must be supplied directly from a body, rather
