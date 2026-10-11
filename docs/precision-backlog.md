@@ -29443,3 +29443,29 @@ new authorized fixture, scoped snapshot and focused checks are recorded in
 rust/target/research/getter-members/RESULT.md; the simplified execution and
 serialization boundary is recorded in RESULT-3.md there. No full verify or corpus sweep
 is claimed. Other ADR 0271 open domains and outside-premise boundaries remain.
+
+### Exact accessor transport through returned data members and context (2026-10-11)
+
+Project-owned factories with one unconditional return can now carry an exact
+signal/memo accessor or lexical-this arrow through a closed object literal data
+member. One exact default-less context with one JSX provider can carry that
+provider's closed object/closure through useContext and local wrappers. The
+interprocedural graph retains the accessor declaration and callable implementation;
+the consumer proves body, eager-initializer or synchronous effect-apply entry.
+Definition-site tracking and declared Accessor types do not establish that proof.
+Local wrappers returning a dialect-identified memo call also retain its origin.
+
+The accessor-provenance fixture covers cross-file generic factories, namespace
+imports and TypeScript wrappers, signal/memo members, context objects/closures,
+and the async synchronous-prefix versus after-await boundary. Tracked JSX/memo,
+event and plain-member controls acquire no violations. Mutable or escaped
+containers, aliases/destructuring, spread/computed/getter/method literals,
+alternative returns, defaulted contexts, multiple providers, compiled provider
+calls and unknown implementation targets remain outside this proof. The ordinary
+returned-getter boundary above is unchanged. Kui's @kui/kernel implementation
+lies outside its analyzed solution leaf and still needs package/source authority.
+
+Strict published rc.13 typing checks, scoped snapshots and focused native checks
+are recorded in rust/target/research/accessor-provenance/RESULT.md. Corpus recall,
+ownership/oracle/contract sweeps and full verification remain the lead's handoff
+work; no new package authority or complete corpus recall is claimed.

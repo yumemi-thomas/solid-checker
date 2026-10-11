@@ -1,0 +1,17 @@
+# Exact accessor provenance
+
+Cross-file generic factories return a signal slot, memo, or a data-property
+closure that reads it. A default-less context transports one exact provider
+object/closure through useContext and wrappers. Reads must be claimed at their
+actual body/eager-initializer/effect-apply invocation, retaining source evidence.
+Tracked memo/JSX calls and plain members stay clean. Mutable/replaced/escaped
+receivers, computed/spread members, multiple factory returns, defaulted contexts
+and two providers must not acquire a guessed violation.
+An async helper's after-await read must not borrow the effect apply role of its
+initial entry; that detached continuation remains uncertifiable.
+
+The reduced stub preserves the published rc.13 claim-bearing signal/memo,
+effect and context signatures (including effect cleanup-or-void returns).
+Renderer and unused options are scaffolding. The independent published-typing
+check replaces the stub with the retained real rc.13 packages, with strict
+noEmit and skipLibCheck for prerelease declaration internals.

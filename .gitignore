@@ -388,3 +388,5 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/inferred-host-override/node_modules/**
 !fixtures/reactive-ir/inferred-host-callback-invocation/node_modules/
 !fixtures/reactive-ir/inferred-host-callback-invocation/node_modules/**
+!fixtures/reactive-ir/accessor-provenance/node_modules/
+!fixtures/reactive-ir/accessor-provenance/node_modules/**

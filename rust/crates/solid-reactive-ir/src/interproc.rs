@@ -56,6 +56,9 @@ use crate::pipeline::{parallel_file_results, parallel_slice_results};
 #[path = "property_gets.rs"]
 mod property_gets;
 
+#[path = "accessor_provenance.rs"]
+mod accessor_provenance;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct SummaryRead {
     pub(super) contract_read_context: Option<crate::ContractReadContext>,
@@ -5679,6 +5682,8 @@ pub(super) struct InterproceduralResultReadContext<'a, 'b> {
     pub(super) entities: &'a EntitySymbols,
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(super) lookup: &'a SemanticLookup<'b>,
+    transported_calls: &'a HashMap<Location, accessor_provenance::Callable>,
+    provenance: &'a accessor_provenance::Resolver<'a, 'b>,
 }
 
 fn interprocedural_result_reads_for_file(
@@ -5706,6 +5711,8 @@ fn interprocedural_result_reads_for_file(
         entities,
         symbol_names,
         lookup,
+        transported_calls,
+        provenance,
     } = context;
     let mut result = Vec::new();
     let mut dispatch_obligations = Vec::new();
@@ -5718,6 +5725,7 @@ fn interprocedural_result_reads_for_file(
         }
         let obligations_before = dispatch_obligations.len();
         let callee = location(file.path.shared(), call.callee);
+        let transported = transported_calls.get(&callee);
         let label = call
             .static_callee(&file.source)
             .map(str::to_owned)
@@ -5778,17 +5786,44 @@ fn interprocedural_result_reads_for_file(
             continue;
         }
         let ambiguous_candidates = (candidate_symbols.len() > 1).then_some(&candidate_symbols);
-        let Some(symbol) = candidate_symbols
-            .first()
-            .map(SymbolId::as_str)
-            .or_else(|| lookup.callee_symbol(file, call.callee))
-        else {
+        let transported_symbol = match transported {
+            Some(accessor_provenance::Callable::Accessor(symbol)) => Some(symbol.to_string()),
+            Some(accessor_provenance::Callable::Function { path, span }) => Some(format!(
+                "project-callable:{path}:{}:{}",
+                span.start, span.end
+            )),
+            None => None,
+        };
+        let Some(symbol) = transported_symbol.as_deref().or_else(|| {
+            candidate_symbols
+                .first()
+                .map(SymbolId::as_str)
+                .or_else(|| lookup.callee_symbol(file, call.callee))
+        }) else {
             continue;
         };
         dependencies.insert(InterproceduralResultDependency::Symbol(SymbolId::from(
             symbol,
         )));
-        let (label, mut effective, target) = if let Some(candidates) = ambiguous_candidates {
+        let (label, mut effective, target) = if let Some(transported) = transported {
+            match transported {
+                accessor_provenance::Callable::Accessor(symbol) => (
+                    label,
+                    provenance
+                        .read(symbol, file, call.span)
+                        .into_iter()
+                        .collect(),
+                    None,
+                ),
+                accessor_provenance::Callable::Function { path, span } => {
+                    let Some(target) = context.result.indexes.get(&(path.clone(), *span)).copied()
+                    else {
+                        continue;
+                    };
+                    (label, summaries[target].to_vec(), Some(target))
+                }
+            }
+        } else if let Some(candidates) = ambiguous_candidates {
             let mut candidate_summaries = Vec::with_capacity(candidates.len());
             for candidate in candidates {
                 dependencies.insert(InterproceduralResultDependency::Symbol(candidate.clone()));
@@ -6370,13 +6405,22 @@ fn interprocedural_result_reads_for_file(
         // proof: ordinary async calls enter immediately, but resume detached.
         let direct_callee = (ambiguous_candidates.is_none()
             && !file.ast.any_jsx_containing(call.span))
-        .then(|| lookup.function_for_symbol(symbol))
+        .then(|| match transported {
+            Some(accessor_provenance::Callable::Function { path, span }) => {
+                let file = lookup.file_by_path(path)?;
+                Some((file, file.ast.functions.iter().find(|f| f.span == *span)?))
+            }
+            _ => lookup.function_for_symbol(symbol),
+        })
         .flatten()
         .filter(|(callee_file, callee)| {
             !call.construct
                 && !callee.generator
                 && (!callee.r#async || call.direct_callee)
-                && lookup.function_value_is_current(callee_file, callee)
+                && (matches!(
+                    transported,
+                    Some(accessor_provenance::Callable::Function { .. })
+                ) || lookup.function_value_is_current(callee_file, callee))
         });
         // ADR 0204: a default-parameter initializer of an ordinary callee runs
         // during this call exactly when the call omits that argument. An
@@ -6506,10 +6550,22 @@ fn interprocedural_result_reads_for_file(
         // pass the same test. Entry alone never proves the whole async body.
         let entered = std::cell::OnceCell::new();
         let read_is_direct = |read: &SummaryRead| -> bool {
+            if matches!(
+                transported,
+                Some(accessor_provenance::Callable::Accessor(_))
+            ) {
+                return read.origin == location(file.path.shared(), call.span);
+            }
             let Some((callee_file, callee)) = direct_callee else {
                 return false;
             };
             if read.owner.is_none() {
+                if matches!(
+                    transported,
+                    Some(accessor_provenance::Callable::Function { .. })
+                ) {
+                    return captured_body_read_runs_during_call(callee_file, callee, read);
+                }
                 return read.kind.as_deref() == Some("accessor")
                     && read.origin == location(file.path.shared(), call.span);
             }
@@ -6526,8 +6582,9 @@ fn interprocedural_result_reads_for_file(
                 else {
                     return false;
                 };
-                let entered: &Vec<(String, Span)> =
-                    entered.get_or_init(|| directly_entered_functions(callee_file, callee, lookup));
+                let entered: &Vec<(String, Span)> = entered.get_or_init(|| {
+                    directly_entered_functions(callee_file, callee, lookup, transported_calls)
+                });
                 if !entered
                     .iter()
                     .any(|(path, span)| path == owner.0.path.as_str() && *span == owner.1.span)
@@ -6562,20 +6619,21 @@ fn interprocedural_result_reads_for_file(
                     })
                 });
             (!through_async
-                || (source_has_runtime_witness(
+                || ((source_has_runtime_witness(
                     &read.symbol,
                     accessors,
                     entities,
                     symbol_names,
                     lookup,
-                ) && (source_kinds.get(&read.symbol) != Some(&ReactiveSourceKind::Store)
-                    || store_get_has_strict_witness(
-                        owner_file,
-                        origin,
-                        &read.symbol,
-                        entities,
-                        lookup.dialect,
-                    ))))
+                ) || provenance.has_source_origin(&read.symbol))
+                    && (source_kinds.get(&read.symbol) != Some(&ReactiveSourceKind::Store)
+                        || store_get_has_strict_witness(
+                            owner_file,
+                            origin,
+                            &read.symbol,
+                            entities,
+                            lookup.dialect,
+                        ))))
                 && body_site_runs_during_call(owner_file, owner, origin)
         };
         // One finding per symbol at this call (`seen` below). A symbol read
@@ -6859,8 +6917,13 @@ pub(super) fn body_site_runs_during_call(
 fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
     crate::indexes::returns_bare_identifier(file)
         || !file.ast.object_get_shapes.is_empty()
+        // Provider multiplicity and returned literal identities are project
+        // syntax inputs, even when their read summaries stay byte-identical.
+        || !file.ast.jsx_elements.is_empty()
+        || file.ast.returns.iter().any(|returned| returned.value == solid_facts::ast::ReturnValueKind::Function)
         || file.ast.functions.iter().any(|function| {
             function.r#async
+                || function.expression_return.is_some()
                 || function
                     .parameters
                     .iter()
@@ -6897,10 +6960,18 @@ fn directly_entered_functions(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
+    transported_calls: &HashMap<Location, accessor_provenance::Callable>,
 ) -> Vec<(String, Span)> {
     let mut entered = Vec::new();
     let mut path = vec![(file.path.to_string(), function.span)];
-    if enter_directly_called(file, function, lookup, &mut path, &mut entered) {
+    if enter_directly_called(
+        file,
+        function,
+        lookup,
+        transported_calls,
+        &mut path,
+        &mut entered,
+    ) {
         entered
     } else {
         Vec::new()
@@ -6912,6 +6983,7 @@ fn enter_directly_called(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
+    transported_calls: &HashMap<Location, accessor_provenance::Callable>,
     path: &mut Vec<(String, Span)>,
     entered: &mut Vec<(String, Span)>,
 ) -> bool {
@@ -6919,7 +6991,8 @@ fn enter_directly_called(
     for call in &file.ast.calls {
         // A plain call: a method call dispatches on its receiver, which a
         // subclass can override.
-        if !call.direct_callee
+        let transported = transported_calls.get(&location(file.path.shared(), call.callee));
+        if (!call.direct_callee && transported.is_none())
             || !body_site_runs_during_call(file, function, call.span)
             || file.ast.any_jsx_containing(call.span)
         {
@@ -6936,12 +7009,24 @@ fn enter_directly_called(
         else {
             continue;
         };
-        let Some((callee_file, callee)) = lookup.function_for_symbol(symbol) else {
+        let resolved = match transported {
+            Some(accessor_provenance::Callable::Function { path, span }) => {
+                lookup.file_by_path(path).and_then(|f| {
+                    f.ast
+                        .functions
+                        .iter()
+                        .find(|fun| fun.span == *span)
+                        .map(|fun| (f, fun))
+                })
+            }
+            _ => lookup.function_for_symbol(symbol),
+        };
+        let Some((callee_file, callee)) = resolved else {
             continue;
         };
         if call.construct
             || callee.generator
-            || !lookup.function_value_is_current(callee_file, callee)
+            || (transported.is_none() && !lookup.function_value_is_current(callee_file, callee))
         {
             continue;
         }
@@ -6955,7 +7040,14 @@ fn enter_directly_called(
         entered.push(key.clone());
         if path.len() < MAX_DEPTH {
             path.push(key);
-            if !enter_directly_called(callee_file, callee, lookup, path, entered) {
+            if !enter_directly_called(
+                callee_file,
+                callee,
+                lookup,
+                transported_calls,
+                path,
+                entered,
+            ) {
                 return false;
             }
             path.pop();
@@ -7295,6 +7387,50 @@ fn interprocedural_reads(
             nodes.extend(file_nodes);
         }
     }
+    let provenance = accessor_provenance::Resolver {
+        facts,
+        lookup,
+        accessors,
+        source_kinds,
+        names: symbol_names,
+    };
+    let transported_calls = provenance.calls();
+    // Type Facts' finite summary universe can omit an anonymous returned
+    // literal. Admit only implementations selected by the exact transport
+    // proof, never every lexically contained function.
+    for target in transported_calls.values() {
+        let accessor_provenance::Callable::Function { path, span } = target else {
+            continue;
+        };
+        if nodes
+            .iter()
+            .any(|node| node.path == *path && node.span == *span)
+        {
+            continue;
+        }
+        let Some(file) = lookup.file_by_path(path) else {
+            continue;
+        };
+        let Some(function) = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == *span)
+        else {
+            continue;
+        };
+        nodes.push(SummaryNode {
+            path: path.clone(),
+            span: *span,
+            body: function.body,
+            name: None,
+            symbol: None,
+            runtime_identity: String::new(),
+            parameters: Vec::new(),
+            exported: false,
+            r#async: function.r#async,
+        });
+    }
     let nodes_by_path = function_indices_by_path(&nodes);
     let indexes = nodes
         .iter()
@@ -7420,6 +7556,52 @@ fn interprocedural_reads(
                             compiler: file.compiler.clone(),
                         },
                     );
+                }
+            }
+        }
+    }
+    // These edges depend on other files' returned literals and the entire
+    // provider census. Recompute them after merging file-local cached graph
+    // contributions, so a provider/factory edit cannot retain a stale edge.
+    for file in &facts.files {
+        for call in &file.ast.calls {
+            let Some(owner) = containing_summary_function_indexed(
+                &nodes,
+                &nodes_by_path,
+                file.path.as_str(),
+                call.span,
+            ) else {
+                continue;
+            };
+            let selected_body = transported_calls.values().any(|target| matches!(target,
+                accessor_provenance::Callable::Function { path, span } if *path == nodes[owner].path && *span == nodes[owner].span
+            ));
+            let source = selected_body
+                .then(|| provenance.source_call(file, call.callee))
+                .flatten();
+            let source_target = source.map(accessor_provenance::Callable::Accessor);
+            let Some(target) = transported_calls
+                .get(&location(file.path.shared(), call.callee))
+                .or(source_target.as_ref())
+            else {
+                continue;
+            };
+            if runs_in_retained_value_literal(file, call.span, &nodes[owner])
+                || runs_outside_owner_call(file, call.span, nodes[owner].body, lookup)
+            {
+                continue;
+            }
+            match target {
+                accessor_provenance::Callable::Accessor(symbol) => {
+                    if let Some(mut read) = provenance.read(symbol, file, call.span) {
+                        read.owner = nodes[owner].symbol.clone();
+                        summaries[owner].push_unique(read);
+                    }
+                }
+                accessor_provenance::Callable::Function { path, span } => {
+                    if let Some(target) = indexes.get(&(path.clone(), *span)) {
+                        edges[owner].push(*target);
+                    }
                 }
             }
         }
@@ -7946,6 +8128,8 @@ fn interprocedural_reads(
         entities,
         symbol_names,
         lookup: context.lookup,
+        transported_calls: &transported_calls,
+        provenance: &provenance,
     };
     if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
         // Call-role proofs inspect callee syntax beyond its read summary:
