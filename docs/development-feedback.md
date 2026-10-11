@@ -88,8 +88,14 @@ check. The referenced `tsconfig` files are pinned as inputs and listed in
 `references`) is expanded recursively to its leaf projects; each is analysed in
 its own native session and the report carries `solution.referencedProjects`,
 per-leaf `projects[]` (a `report` or a `failure`) and aggregated `findings` /
-`gaps`. An unresolvable reference, `feedback manifest`, `--capture`, and
-`feedback run` on a solution refuse with the list of leaf projects.
+`gaps`. An unresolvable reference refuses. `feedback manifest` and `--capture`
+still require a leaf. `feedback run` expands a solution's leaves for static
+analysis, pins the whole reference graph, and executes one shared browser app.
+The report retains `solution.referencedProjects` and each leaf's `projects[].report`.
+Source instrumentation/guidance is withheld for a file with conflicting leaf
+models (`execution.coverage.conflictingLeafModels`); a changed source digest
+refuses. Typing errors in any leaf retain the existing typing exclusion for the
+shared capture.
 
 ## Capture format
 
@@ -148,18 +154,46 @@ node packages/cli/bin/solid-checker.mjs feedback run \
   --browser /absolute/path/chromium
 ```
 
-The application needs a client `index.html` entry at its Vite root.
+The application needs its own HTML and client module entry at its Vite root.
 The collector uses installed Vite, `@solidjs/vite-plugin`, Playwright and
 `@jridgewell/trace-mapping` from that directory. `--tooling /absolute/path/tools`
 can select a separate existing tooling installation. The command starts a
 local server and executes the application in Chromium. An existing Vite
 configuration owns its compiler plugins, aliases, public assets and root; its
 configuration files and imported dependencies are recorded as runtime inputs.
+`--root /absolute/path/app/runtime-root` and `--config /absolute/path/app/vite.config.ts`
+select runtime inputs independently of `--project`; neither changes the static
+source selection. `--root` also selects where automatic Vite config lookup
+starts when `--config` is omitted. Both must exist, have the appropriate directory/file kind,
+and remain inside the app tree after resolving symlinks. The nearest repository
+or package-workspace boundary defines that tree, otherwise the nearest package
+directory (or tsconfig directory) does. Boundary manifests, config dependencies
+and executed source files are pinned; canonical root/config selections appear
+in `execution.configuration.options`, with file pins in `execution.runtimeInputs`.
+A leaf such as `apps/web/tsconfig.json`
+can therefore use its workspace's config with `--root .../apps/web --config .../vite.config.ts`.
+Explicit runtime selections with `--compare-project` refuse: collect each app
+separately so a path for one app cannot select the other's runtime.
+
+A physical `index.html` is pinned as before. When it is absent, the collector
+starts the existing application config and admits the entry only if an exact
+config-plugin middleware serves successful HTML, and that HTML names a module
+resolved to an app-owned file or to output from that config's plugin loader.
+`execution.entry` records the served HTML digest, entry identities/digests and
+generator hook digests, alongside on-disk config/runtime pins. HTML over 1 MiB,
+Vite fallback pages, missing/unresolved entries, foreign entries and inline-only
+mount scripts refuse. No harness HTML or mount code is manufactured.
+When middleware bypasses Vite's HTML transforms, its config-loaded virtual
+client modules import the same collection bootstrap used by physical indexes
+(`execution.coverage.generatedBootstrap`). Server modules receive no bootstrap.
 Without one, the collector supplies the Solid plugin. Dependency optimization
 is disabled so the reviewed native reader passes through the capture hook.
 SSR needs a separate adapter. Requests to other origins are blocked unless the
 scenario supplies a response for that exact URL (below); config loading executes
 the application's existing config.
+The collector closes the browser context, Vite server and browser before
+returning JSON; the dedicated CLI drains stdout and then exits with the native
+status, including when a config plugin leaves a process-level timer alive.
 
 A scenario supplies explicit interactions and optional assertions. It never derives
 expected values from a proposed change:
@@ -176,23 +210,46 @@ expected values from a proposed change:
 }
 ```
 
-A scenario can also supply responses for other origins, so pages that fetch
-external data run offline and deterministically:
+A scenario can supply exact responses for other origins or same-origin APIs:
 
 ```json
 "responses": [
   { "url": "https://api.example.test/articles?user=a", "body": "articles.json",
-    "status": 200, "contentType": "application/json" }
+    "status": 200, "contentType": "application/json" },
+  { "url": "/api/user?mode=offline", "body": "user.json" },
+  { "url": "/api/items", "method": "POST", "requestBody": "{\"name\":\"example\"}",
+    "body": "created.json", "status": 201 }
 ]
 ```
 
-Each entry matches one exact, normalized `http(s)` URL for `GET`; `body` is a
+Each entry matches one exact, normalized `http(s)` URL or `/path?query` for
+`GET` by default. `POST` requires an explicit `requestBody` string, matched
+byte-for-byte (including an explicitly empty body). Wildcards, fragments,
+credentials, other methods and duplicate URL/method/body matches refuse.
+Same-origin matches are fulfilled before Vite's proxy; unmatched same-origin
+requests keep the application's existing server behavior. `body` is a
 file path relative to the scenario, pinned by digest and rechecked after the
 run. `status` defaults to 200 and `contentType` to `application/json`. A
 response is a scenario input, not observed network behaviour:
-`execution.suppliedResponses` lists each URL, its body pin and how often it was
+`execution.suppliedResponses` lists each URL, method, POST request-body string
+and digest where present, response status/content-type, body pin and how often it was
 served (`channel: "scenario-input"`). Every other cross-origin request stays
 blocked and is listed in `execution.blockedRequests`.
+
+Input steps use CSS selectors, as do the `document.querySelector` checkpoints:
+`fill` replaces an input's text (`text`), `type` appends text with keyboard
+events (`text`), `press` sends a key/chord (`key`, e.g. `Enter`), `select` chooses
+an option (`value`), and `check`/`uncheck` set a checkbox or radio's state.
+`submit` requires a form selector and calls the browser's `requestSubmit`,
+preserving validation and submit events. All steps and their arguments are
+pinned by the scenario-file digest; a failed action stops dependent steps.
+Playwright locator-engine spellings such as `text=...` are refused.
+
+Optional scenario `viewport: {"width":390,"height":844,"deviceScaleFactor":2,"isMobile":true}`
+is passed to `browser.newContext` and retained in `execution.viewport`, bound
+by the scenario digest. Width/height must be integers in 1–16384; optional
+deviceScaleFactor must be finite, positive and at most 8; isMobile is boolean.
+Omitting the field preserves the browser's default context settings.
 
 `wait-for-text` and `wait-for-selector` establish readiness; `assert-text`
 records the current value without waiting for the expected answer. A failing
@@ -202,6 +259,11 @@ Runtime exceptions are mapped to original source where possible; unmapped
 failures remain visible in `execution.unmapped` and `execution.pageErrors`.
 Browser console warnings and errors are retained in `execution.consoleDiagnostics`
 with their original browser locations; these are not inferred causal findings.
+`execution.serverDiagnostics` retains Vite warnings/errors and failed same-origin
+script/module response bodies: at most 64 rows per channel, 16 KiB per message/body,
+with byte lengths, truncation flags and dropped-row counters. These preserve
+transform evidence that silent Vite logging previously hid; a failure alone
+does not prove an instrumentation or compiler defect.
 If a readiness step times out, `execution.failure` identifies the step and
 selector. Earlier assertions, browser errors and read evidence remain in the
 result, and later interactions stop. Unmapped reads retain their runtime

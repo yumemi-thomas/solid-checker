@@ -6,6 +6,13 @@ if (process.argv[2] === "feedback") {
   try {
     const { developmentFeedback } = await import("../scripts/development-feedback.mjs");
     await developmentFeedback(process.argv.slice(3));
+    if (process.argv[3] === "run") {
+      // App config plugins can leave process-level timers after Vite closes.
+      // The collector has awaited context/server/browser cleanup; drain JSON
+      // before ending this dedicated CLI process with the native exit status.
+      await new Promise((resolve, reject) => process.stdout.write("", error => error ? reject(error) : resolve()));
+      process.exit(process.exitCode ?? 0);
+    }
   } catch (error) {
     console.error(`solid-checker: ${error instanceof Error ? error.message : error}`);
     process.exitCode = 2;

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "vitest";
 import { feedbackSnapshot, captureTemplate, admitFeedbackCapture, inspectDevelopmentFeedback,
-  DEFAULT_NATIVE_TIMEOUT_MS, NATIVE_TIMEOUT_ENV, describeNativeBinary, expandSolutionProject, nativeTimeoutMs,
+  DEFAULT_NATIVE_TIMEOUT_MS, NATIVE_TIMEOUT_ENV, describeNativeBinary, expandSolutionProject, feedbackBrowserSnapshots, nativeTimeoutMs,
   parseNativeStderr, validateFeedbackInputs, SolutionProjectError } from "../scripts/development-feedback.mjs";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -270,6 +270,26 @@ test("solution expansion recurses, de-duplicates, tolerates cycles and fails clo
   assert.deepEqual(expandSolutionProject(a), [a]);
   writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ files: [], references: [{ path: "./missing" }] }));
   assert.throws(() => expandSolutionProject(join(root, "tsconfig.json")), /Referenced project not found/);
+}));
+test("browser solution snapshots share leaf sources and pin intermediate reference configs", () => workspace(root => {
+  const a = leaf(root, "a"), b = leaf(root, "b");
+  const middle = join(root, "middle.json"), project = join(root, "tsconfig.json");
+  writeFileSync(middle, JSON.stringify({ files: [], references: [{ path: "./a" }, { path: "./b" }] }));
+  writeFileSync(project, JSON.stringify({ files: [], references: [{ path: "./middle.json" }, { path: "./a" }] }));
+  const { snapshot, leaves } = feedbackBrowserSnapshots(project);
+  assert.deepEqual(leaves.map(row => row.manifest.project), [a, b]);
+  assert.equal(snapshot.manifest.project, project); assert.deepEqual(snapshot.manifest.projectReferences, [a, b]);
+  assert(snapshot.sources.some(row => row.fileName === join(root, "a/src/index.ts")));
+  assert(snapshot.sources.some(row => row.fileName === join(root, "b/src/index.ts")));
+  validateFeedbackInputs(snapshot.manifest);
+  writeFileSync(middle, JSON.stringify({ files: [], references: [{ path: "./a" }] }));
+  assert.throws(() => validateFeedbackInputs(snapshot.manifest), /Feedback input changed/);
+}));
+test("browser snapshot preserves a source leaf and refuses unresolved solution references", () => workspace(root => {
+  const project = leaf(root, "a");
+  assert.equal(feedbackBrowserSnapshots(project).leaves, null);
+  writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ files: [], references: [{ path: "missing" }] }));
+  assert.throws(() => feedbackBrowserSnapshots(join(root, "tsconfig.json")), /Referenced project not found/);
 }));
 test("feedback on a solution-style tsconfig analyses each referenced project and aggregates", () => workspace(root => {
   const a = leaf(root, "a"), b = leaf(root, "b");

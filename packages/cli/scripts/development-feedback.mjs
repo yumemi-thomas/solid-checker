@@ -91,6 +91,39 @@ export function feedbackSnapshot(project) {
     typingMs: performance.now() - typingStarted };
 }
 
+// Browser runs expand a solution once, then share one application execution
+// across its leaves. Keep each leaf's typing/native session and pin the entire
+// reference graph, including intermediate solution configs.
+export function feedbackBrowserSnapshots(project) {
+  try { return { snapshot: feedbackSnapshot(project), leaves: null }; }
+  catch (error) {
+    if (!(error instanceof SolutionProjectError)) throw error;
+    const leaves = error.leaves.map(path => feedbackSnapshot(path));
+    assert(leaves.length, "Solution references resolve to no projects");
+    const inputs = new Map(), configs = new Set();
+    const visit = path => {
+      path = realpathSync(path);
+      if (configs.has(path)) return;
+      configs.add(path);
+      inputs.set(path, { kind: "readFile", path, arguments: [], result: hash(readFileSync(path, "utf8")) });
+      for (const reference of parseProject(path).projectReferences ?? []) visit(ts.resolveProjectReferencePath(reference));
+    };
+    visit(error.project);
+    for (const leaf of leaves) for (const input of leaf.manifest.inputs) inputs.set(JSON.stringify(input), input);
+    const sources = new Map();
+    for (const leaf of leaves) for (const source of leaf.sources) {
+      const previous = sources.get(source.fileName);
+      assert(!previous || previous.text === source.text, `Solution source differs between leaves: ${source.fileName}`);
+      sources.set(source.fileName, source);
+    }
+    const manifest = { project: error.project, typescript: ts.version, projectReferences: error.leaves, inputs: [...inputs.values()] };
+    return { leaves, snapshot: { manifest, inputId: hash(JSON.stringify(manifest)), sources: [...sources.values()],
+      typingErrors: leaves.reduce((sum, leaf) => sum + leaf.typingErrors, 0),
+      sourceFileCount: [...sources.values()].filter(source => !source.isDeclarationFile).length,
+      typingMs: leaves.reduce((sum, leaf) => sum + leaf.typingMs, 0) } };
+  }
+}
+
 export function validateFeedbackInputs(manifest) {
   for (const input of manifest.inputs) {
     const read = ts.sys[input.kind];
@@ -374,6 +407,7 @@ export const developmentFeedbackHelp = `Development feedback (experimental)
   solid-checker feedback manifest --project <tsconfig.json>
   solid-checker feedback run --project <tsconfig.json> --scenario <scenario.json>
     --browser <chromium-path> [--tooling <directory>] [--compare-project <tsconfig.json>]
+    [--root <directory>] [--config <file>]
 
 Returns native checker findings and separately labeled recorded observations.
 Read observations are information; they do not prove a stale result.
@@ -397,7 +431,7 @@ export async function developmentFeedback(args) {
   const options = new Map();
   for (let index = 0; index < args.length; index++) {
     const name = args[index];
-    assert((live ? ["--project", "--scenario", "--browser", "--tooling", "--compare-project", "--native-timeout", "--native-bin"]
+    assert((live ? ["--project", "--scenario", "--browser", "--tooling", "--compare-project", "--root", "--config", "--native-timeout", "--native-bin"]
       : ["--project", "--capture", "--native-timeout", "--native-bin"]).includes(name), `Unknown feedback option ${name}`);
     assert(args[index + 1] && !args[index + 1].startsWith("--"), `${name} requires a value`);
     assert(!options.has(name), `Duplicate feedback option ${name}`);
@@ -420,7 +454,8 @@ export async function developmentFeedback(args) {
       assert(options.has("--scenario") && options.has("--browser"), "Browser feedback requires --scenario and --browser");
       const { runBrowserFeedback } = await import("./feedback-browser.mjs");
       const result = await runBrowserFeedback({ project, scenarioPath: options.get("--scenario"),
-        browserPath: options.get("--browser"), toolingRoot: options.get("--tooling"), comparisonProject: options.get("--compare-project") });
+        browserPath: options.get("--browser"), toolingRoot: options.get("--tooling"), comparisonProject: options.get("--compare-project"),
+        root: options.get("--root"), config: options.get("--config") });
       process.stdout.write(JSON.stringify(result, null, 2) + "\n"); process.exitCode = result.nativeExitCode; return;
     }
     const result = manifest ? captureTemplate(feedbackSnapshot(project))
