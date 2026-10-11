@@ -12,12 +12,13 @@ const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")
 // nothing to check. It is refused with the leaf projects it names so a caller
 // can analyse each; the CLI expands it automatically.
 export class SolutionProjectError extends Error {
-  constructor(project, leaves) {
+  constructor(project, leaves, inputs) {
     super(`${project} is a solution-style tsconfig with no source files of its own; `
       + `analyse its referenced projects: ${leaves.join(", ") || "(none resolved)"}`);
     this.name = "SolutionProjectError";
     this.project = project;
     this.leaves = leaves;
+    this.inputs = inputs;
   }
 }
 
@@ -31,16 +32,16 @@ function parseProject(project, system = ts.sys) {
 // The leaf projects of `project`, depth first and de-duplicated. A project with
 // inputs of its own is its own leaf: its `references` are dependencies, not
 // work to expand. A reference that does not resolve fails closed.
-export function expandSolutionProject(project, seen = new Set()) {
+export function expandSolutionProject(project, seen = new Set(), system = ts.sys) {
   project = realpathSync(resolve(project));
   if (seen.has(project)) return [];
   seen.add(project);
-  const parsed = parseProject(project), references = parsed.projectReferences ?? [];
+  const parsed = parseProject(project, system), references = parsed.projectReferences ?? [];
   if (parsed.fileNames.length || !references.length) return [project];
   return references.flatMap(reference => {
     const path = ts.resolveProjectReferencePath(reference);
-    assert(ts.sys.fileExists(path), `Referenced project not found: ${path} (referenced from ${project})`);
-    return expandSolutionProject(path, seen);
+    assert(system.fileExists(path), `Referenced project not found: ${path} (referenced from ${project})`);
+    return expandSolutionProject(path, seen, system);
   });
 }
 
@@ -64,7 +65,10 @@ export function feedbackSnapshot(project) {
   const typingStarted = performance.now();
   const parsed = parseProject(project, system);
   const references = parsed.projectReferences ?? [];
-  if (!parsed.fileNames.length && references.length) throw new SolutionProjectError(project, expandSolutionProject(project));
+  if (!parsed.fileNames.length && references.length) {
+    const leaves = expandSolutionProject(project, new Set(), system);
+    throw new SolutionProjectError(project, leaves, [...inputs.values()]);
+  }
   // A project that keeps its own inputs and also lists `references` is checked
   // as the editor checks it: referenced projects contribute their *sources*
   // (no built `.d.ts` outputs are required, so no TS6305), and the native
@@ -100,15 +104,7 @@ export function feedbackBrowserSnapshots(project) {
     if (!(error instanceof SolutionProjectError)) throw error;
     const leaves = error.leaves.map(path => feedbackSnapshot(path));
     assert(leaves.length, "Solution references resolve to no projects");
-    const inputs = new Map(), configs = new Set();
-    const visit = path => {
-      path = realpathSync(path);
-      if (configs.has(path)) return;
-      configs.add(path);
-      inputs.set(path, { kind: "readFile", path, arguments: [], result: hash(readFileSync(path, "utf8")) });
-      for (const reference of parseProject(path).projectReferences ?? []) visit(ts.resolveProjectReferencePath(reference));
-    };
-    visit(error.project);
+    const inputs = new Map(error.inputs.map(input => [JSON.stringify(input), input]));
     for (const leaf of leaves) for (const input of leaf.manifest.inputs) inputs.set(JSON.stringify(input), input);
     const sources = new Map();
     for (const leaf of leaves) for (const source of leaf.sources) {
@@ -464,7 +460,12 @@ export async function developmentFeedback(args) {
     for (const warning of result.warnings ?? []) process.stderr.write(`solid-checker: warning: ${warning}\n`);
     if (!manifest) process.exitCode = result.nativeExitCode;
   } catch (error) {
-    if (!(error instanceof FeedbackNativeError)) throw error;
+    if (!(error instanceof FeedbackNativeError)) {
+      if (live) process.stdout.write(JSON.stringify({ schemaVersion: 1, documentKind: "solid-checker-development-feedback",
+        status: "runtime-failed", authority: false, certification: false, project: resolve(project),
+        failure: { kind: "collector-error", message: error.message } }, null, 2) + "\n");
+      throw error;
+    }
     // The partial result is the structured failure; the message is for humans.
     process.stdout.write(JSON.stringify(failureDocument(realpathSync(resolve(project)), error.failure), null, 2) + "\n");
     throw error;

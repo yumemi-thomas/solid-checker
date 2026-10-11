@@ -291,6 +291,34 @@ test("browser snapshot preserves a source leaf and refuses unresolved solution r
   writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ files: [], references: [{ path: "missing" }] }));
   assert.throws(() => feedbackBrowserSnapshots(join(root, "tsconfig.json")), /Referenced project not found/);
 }));
+for (const intermediate of [false, true]) test(`solution selection pins extends observations (intermediate=${intermediate})`, () => workspace(root => {
+  leaf(root, "a");
+  const base = join(root, "selection-base.json"), project = join(root, "tsconfig.json"), middle = join(root, "middle.json");
+  writeFileSync(join(root, "source.ts"), "export const value = 1;");
+  writeFileSync(base, JSON.stringify({ files: [] }));
+  const solution = { extends: "./selection-base.json", references: [{ path: "./a" }] };
+  writeFileSync(project, JSON.stringify(intermediate ? { files: [], references: [{ path: "./middle.json" }] } : solution));
+  if (intermediate) writeFileSync(middle, JSON.stringify(solution));
+  const { snapshot } = feedbackBrowserSnapshots(project);
+  assert(snapshot.manifest.inputs.some(input => input.kind === "readFile" && input.path === base));
+  validateFeedbackInputs(snapshot.manifest);
+  writeFileSync(base, JSON.stringify({ files: ["source.ts"] }));
+  assert.throws(() => validateFeedbackInputs(snapshot.manifest), /Feedback input changed/);
+  assert.deepEqual(expandSolutionProject(project), [intermediate ? middle : project]);
+}));
+test("solution selection pins empty include listings and negative extends resolutions", () => workspace(root => {
+  leaf(root, "a"); mkdirSync(join(root, "selection"));
+  const project = join(root, "tsconfig.json");
+  writeFileSync(project, JSON.stringify({ extends: "./absent-base", include: ["selection/*.ts"], references: [{ path: "./a" }] }));
+  const { snapshot } = feedbackBrowserSnapshots(project);
+  assert(snapshot.manifest.inputs.some(input => input.kind === "fileExists" && input.result === false && input.path.includes("absent-base")));
+  validateFeedbackInputs(snapshot.manifest);
+  writeFileSync(join(root, "selection/new.ts"), "export const value = 1;");
+  assert.throws(() => validateFeedbackInputs(snapshot.manifest), /Feedback input changed/);
+  const changed = feedbackBrowserSnapshots(project).snapshot;
+  writeFileSync(join(root, "absent-base.json"), "{}");
+  assert.throws(() => validateFeedbackInputs(changed.manifest), /Feedback input changed/);
+}));
 test("feedback on a solution-style tsconfig analyses each referenced project and aggregates", () => workspace(root => {
   const a = leaf(root, "a"), b = leaf(root, "b");
   writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ files: [], references: [{ path: "./a" }, { path: "./b" }] }));

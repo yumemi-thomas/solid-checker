@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { createRequire, isBuiltin } from "node:module";
+import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { captureTemplate, feedbackBrowserSnapshots, inspectDevelopmentFeedback, validateFeedbackInputs } from "./development-feedback.mjs";
@@ -11,8 +11,6 @@ import { selectAssertionFeedback } from "./feedback-assertion-selector.mjs";
 import { instrumentFeedbackSource } from "./feedback-source-hook.mjs";
 import { selectReadFeedback } from "./feedback-read-selector.mjs";
 import { classifyUnmappedFrames, createFrameAttributor, operationFrame, siteExpressionKind, summarizeCandidateScopes, summarizeUnmapped } from "./feedback-attribution.mjs";
-import { admitFeedbackEntry, observeFeedbackEntry } from "./feedback-entry.mjs";
-import ts from "typescript";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const runtimePath = fileURLToPath(new URL("./feedback-read-runtime.mjs", import.meta.url));
@@ -24,7 +22,7 @@ export function validateFeedbackScenario(scenario) {
   for (const step of scenario.steps) {
     assert(["click", "wait-for-selector", "wait-for-text", "assert-text", "fill", "type", "press", "select", "check", "uncheck", "submit"].includes(step.action), "Unsupported scenario action");
     assert(typeof step.selector === "string" && step.selector.trim(), "Step needs a selector");
-    assert(!step.selector.includes("=") || !/^(?:\w+)=/.test(step.selector), "Selectors must be CSS, not Playwright locator engines");
+    validateFeedbackSelector(step.selector);
     if (["fill", "type"].includes(step.action)) assert.equal(typeof step.text, "string", "Input action needs text");
     if (step.action === "press") assert(typeof step.key === "string" && step.key.trim(), "Press needs a key");
     if (step.action === "select") assert.equal(typeof step.value, "string", "Select needs an option value");
@@ -64,6 +62,12 @@ export function validateFeedbackScenario(scenario) {
 
 const responseKey = (url, method = "GET", body) => method === "GET" ? url : JSON.stringify([url, method, body]);
 
+function validateFeedbackSelector(selector) {
+  assert(!selector.includes(">>") && !/^\s*[\w-]+\s*=/.test(selector)
+    && !/:(?:text(?:-is|-matches)?|has-text|visible|nth-match|right-of|left-of|above|below|near)\b/.test(selector),
+  "Selectors must be native CSS, not Playwright locator engines or extensions");
+}
+
 export function feedbackContextOptions(scenario) {
   if (!scenario.viewport) return {};
   const { width, height, ...device } = scenario.viewport;
@@ -85,11 +89,19 @@ export function loadSuppliedResponses(scenario, scenarioPath) {
 
 // Exact same-origin matches are fulfilled before the browser can reach Vite's
 // proxy. Unmatched application traffic keeps the existing server behavior.
-export function routeFeedbackRequest(route, origin, responses, blockedRequests) {
+export function routeFeedbackRequest(route, origin, responses, blockedRequests, refusedResponses = []) {
   const request = route.request(), url = new URL(request.url()), sameOrigin = url.origin === origin;
   const target = sameOrigin ? url.pathname + url.search : url.href;
-  const supplied = responses.get(responseKey(target, request.method(), request.postData() ?? ""));
+  const method = request.method(), body = method === "POST" ? request.postDataBuffer() : null;
+  const supplied = method === "GET" ? responses.get(responseKey(target)) : method === "POST" && Buffer.isBuffer(body)
+    ? [...responses.values()].find(row => row.url === target && row.method === method && Buffer.from(row.requestBody, "utf8").equals(body)) : null;
   if (supplied) {
+    if (sameOrigin && !["fetch", "xhr"].includes(request.resourceType())) {
+      refusedResponses.push({ url: url.href, method, resourceType: request.resourceType(),
+        reason: "Same-origin scenario responses require fetch/xhr data requests" });
+      return route.abort();
+    }
+    if (method === "POST") supplied.matchedRequestBodySha256 = hash(body);
     supplied.served++;
     return route.fulfill({ status: supplied.status, contentType: supplied.contentType, body: supplied.body,
       headers: { "access-control-allow-origin": origin } });
@@ -143,49 +155,9 @@ export async function loadFeedbackConfiguration(tools, projectRoot, record, opti
     configuration: { kind: "application-vite-config", path: realpathSync(loaded.path), root } };
 }
 
-// Vite's config bundle externalizes package imports, so its dependencies list
-// alone does not pin a middleware generator's installed implementation. Pin
-// the exact resolved artifact, package metadata and root-export artifacts
-// (including import/require branches), plus their local helper modules.
-export function recordFeedbackGeneratorInputs(configFiles, record) {
-  const visited = new Set(), recorded = new Set();
-  const targets = value => typeof value === "string" ? [value] : value && typeof value === "object" ? Object.values(value).flatMap(targets) : [];
-  const visit = (path, configuration = false) => {
-    path = realpathSync(path);
-    const key = JSON.stringify([path, configuration]);
-    if (visited.has(key)) return;
-    visited.add(key);
-    if (!recorded.has(path)) { recorded.add(path); record(path); }
-    if (!/\.[cm]?[jt]sx?$/.test(path)) return;
-    const require = createRequire(path);
-    for (const { fileName: specifier } of ts.preProcessFile(readFileSync(path, "utf8"), true, true).importedFiles) {
-      if (isBuiltin(specifier) || (!configuration && !specifier.startsWith("."))) continue;
-      let resolved;
-      try { resolved = require.resolve(specifier); } catch { continue; } // Vite owns unresolved/conditional config imports.
-      visit(resolved);
-      if (specifier.startsWith(".") || isAbsolute(specifier)) continue;
-      let directory = dirname(resolved);
-      while (dirname(directory) !== directory) {
-        const metadata = join(directory, "package.json");
-        if (existsSync(metadata)) {
-          const pkg = JSON.parse(readFileSync(metadata, "utf8"));
-          record(metadata);
-          if (pkg.name === specifier) for (const target of targets(pkg.exports?.["."] ?? pkg.exports)) {
-            if (!target.startsWith("./") || target.includes("*")) continue;
-            const artifact = resolve(directory, target);
-            if (existsSync(artifact) && statSync(artifact).isFile()) visit(artifact);
-          }
-          if (typeof pkg.name === "string") break;
-        }
-        directory = dirname(directory);
-      }
-    }
-  };
-  for (const path of configFiles) visit(path, true);
-}
-
-export function createFeedbackDiagnostics() {
-  const vite = [], failedModules = [], pending = new Set();
+export function createFeedbackDiagnostics({ timeoutMs = 2000 } = {}) {
+  const vite = [], failedModules = [], pending = new Set(), bodies = new Map();
+  let captured = 0;
   let viteDropped = 0, failedModulesDropped = 0;
   const bounded = text => { const bytes = Buffer.from(String(text)); return { text: bytes.subarray(0, 16384).toString(), bytes: bytes.length, truncated: bytes.length > 16384 }; };
   const log = (severity, message) => {
@@ -193,6 +165,54 @@ export function createFeedbackDiagnostics() {
     vite.push({ severity, ...bounded(message) });
   };
   return {
+    // Observe the original server response as it is written. Playwright's
+    // response.body() buffers everything and cannot impose a read cap.
+    install(server) {
+      server.middlewares.use((request, response, next) => {
+        const key = request.url;
+        let capture;
+        const begin = () => {
+          if (capture || response.statusCode < 400 || captured >= 64) return;
+          captured++;
+          const buffer = Buffer.alloc(16384);
+          let retained = 0, bytes = 0, settled = false, timer;
+          let complete;
+          const promise = new Promise(resolve => { complete = resolve; });
+          const finish = (timedOut = false, incomplete = false) => {
+            if (settled) return;
+            settled = true; clearTimeout(timer); pending.delete(finish);
+            complete({ text: buffer.subarray(0, retained).toString(), bytes, truncated: bytes > retained,
+              timedOut, incomplete });
+          };
+          capture = { promise, append(chunk, encoding) {
+            if (settled || (typeof chunk !== "string" && !(chunk instanceof Uint8Array))) return;
+            const size = typeof chunk === "string" ? Buffer.byteLength(chunk, encoding) : chunk.byteLength;
+            bytes += size;
+            const remaining = buffer.length - retained;
+            if (!remaining) return;
+            // Write only the byte budget; never convert a huge string whole.
+            if (typeof chunk === "string") retained += buffer.write(chunk, retained, remaining, encoding ?? "utf8");
+            else retained += Buffer.from(chunk.buffer, chunk.byteOffset, Math.min(chunk.byteLength, remaining))
+              .copy(buffer, retained, 0, remaining);
+          }, finish };
+          const queue = bodies.get(key) ?? []; queue.push(promise); bodies.set(key, queue);
+          pending.add(finish); timer = setTimeout(() => finish(true, true), timeoutMs);
+        };
+        const writeHead = response.writeHead, write = response.write, end = response.end;
+        response.writeHead = function(...args) { const result = writeHead.apply(this, args); begin(); return result; };
+        response.write = function(chunk, encoding, ...args) {
+          begin(); capture?.append(chunk, typeof encoding === "string" ? encoding : undefined);
+          return write.call(this, chunk, encoding, ...args);
+        };
+        response.end = function(chunk, encoding, ...args) {
+          begin(); capture?.append(chunk, typeof encoding === "string" ? encoding : undefined);
+          return end.call(this, chunk, encoding, ...args);
+        };
+        response.once("finish", () => capture?.finish());
+        response.once("close", () => capture?.finish(false, !response.writableFinished));
+        next();
+      });
+    },
     logger: { hasWarned: false, info() {}, warn(message) { this.hasWarned = true; log("warning", message); },
       warnOnce(message) { this.warn(message); }, error(message) { log("error", message); }, clearScreen() {}, hasErrorLogged() { return false; } },
     response(response, origin) {
@@ -200,31 +220,53 @@ export function createFeedbackDiagnostics() {
       if (failedModules.length >= 64) { failedModulesDropped++; return; }
       const row = { url: response.url(), status: response.status(), contentType: response.headers()["content-type"] ?? null };
       failedModules.push(row);
-      const work = (async () => {
-        try { row.body = bounded((await response.body()).toString()); }
-        catch (error) { row.bodyUnavailable = bounded(error.message).text; }
-      })();
-      pending.add(work); work.finally(() => pending.delete(work));
+      const url = new URL(response.url()), queue = bodies.get(url.pathname + url.search);
+      const body = queue?.shift();
+      if (body) row.pendingBody = body.then(value => { row.body = value; delete row.pendingBody; });
+      else row.bodyUnavailable = "No bounded server response capture available";
     },
     async finish() {
-      await Promise.all([...pending]);
+      await Promise.all(failedModules.map(row => row.pendingBody));
       return { vite, viteDropped, failedModules, failedModulesDropped };
-    }
+    },
+    dispose() { for (const finish of pending) finish(false, true); }
   };
 }
 
 // Every resource is attempted even if an earlier close rejects. This also
 // covers createServer/listen failures and removes only this run's cache tree.
-export async function closeFeedbackResources({ context, server, cache, browser }) {
+export async function closeFeedbackResources({ context, server, cache, browser, timeoutMs = 2000 }) {
   const errors = [];
-  for (const resource of [context, server, browser]) {
-    try { await resource?.close(); } catch (error) { errors.push(error); }
+  for (const [name, resource] of [["context", context], ["server", server], ["browser", browser]]) {
+    if (!resource) continue;
+    let timer;
+    try {
+      await Promise.race([Promise.resolve().then(() => resource.close()), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${name} close timed out after ${timeoutMs} ms`)), timeoutMs);
+      })]);
+    } catch (error) { errors.push(error); } finally { clearTimeout(timer); }
   }
   if (cache) rmSync(cache, { recursive: true, force: true });
-  if (errors.length) throw new AggregateError(errors, "Feedback resource cleanup failed");
+  if (errors.length) throw new AggregateError(errors, `Feedback resource cleanup failed: ${errors.map(error => error.message).join("; ")}`);
 }
 
 const inside = (tree, path) => { const part = relative(tree, path); return part !== ".." && !part.startsWith(".." + sep) && !isAbsolute(part); };
+
+export function validateFeedbackRoot(root, appTree, reportedRoot) {
+  assert(typeof root === "string", "Vite did not expose its effective root");
+  const canonical = realpathSync(resolve(root));
+  assert(inside(appTree, canonical), `Effective Vite root is outside the app tree: ${canonical}`);
+  assert(statSync(canonical).isDirectory(), "Vite root must be a directory");
+  assert(reportedRoot === undefined || canonical === reportedRoot, "Vite config hooks changed the reported root");
+  return canonical;
+}
+
+export function feedbackPhysicalEntry(root, appTree) {
+  assert(existsSync(join(root, "index.html")), "Browser feedback needs an application index.html");
+  const path = realpathSync(join(root, "index.html"));
+  assert(inside(appTree, path) && statSync(path).isFile(), "Application index.html must be a file inside the app tree");
+  return { kind: "physical-index", path };
+}
 
 // A repository/workspace boundary admits configs above a package's source
 // leaf; without one, the nearest package directory establishes the app tree.
@@ -271,6 +313,8 @@ export async function executeFeedbackScenario(page, scenario) {
   const assertions = [], checkpoints = [];
   for (const [index, step] of scenario.steps.entries()) {
     try {
+      validateFeedbackSelector(step.selector);
+      await page.evaluate(selector => { document.querySelector(selector); }, step.selector);
       if (step.action === "click") await page.locator(step.selector).click();
       if (step.action === "fill") await page.locator(step.selector).fill(step.text);
       if (step.action === "type") await page.locator(step.selector).pressSequentially(step.text);
@@ -303,7 +347,7 @@ export async function executeFeedbackScenario(page, scenario) {
 
 // Vite transform boundary: only one byte-reviewed native artifact is edited.
 // Every other runtime module remains original code executed by the application.
-export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage, generatedModules = new Map() }) {
+export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage }) {
   const virtual = "\0solid-checker-feedback-entry", publicId = "virtual:solid-checker-feedback-entry";
   return {
     name: "solid-checker-feedback-reads", enforce: "pre",
@@ -324,15 +368,7 @@ export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage, generate
           diagnostics:reads.diagnostics}})));`;
     },
     transformIndexHtml() { return [{ tag: "script", attrs: { type: "module", src: "/@id/" + publicId }, injectTo: "head-prepend" }]; },
-    transform(code, id, options) {
-      // Middleware-generated shells may bypass transformIndexHtml. Subscribe
-      // through their actual config-loaded client modules instead; this adds
-      // only collection, never a replacement HTML entry or mount function.
-      if (generatedModules.has(id) && !isAbsolute(id) && !options?.ssr && this.environment?.config?.consumer !== "server") {
-        coverage.generatedBootstrap ??= [];
-        if (!coverage.generatedBootstrap.includes(id)) coverage.generatedBootstrap.push(id);
-        return { code: `import ${JSON.stringify(publicId)};\n${code}`, map: null };
-      }
+    transform(code, id) {
       const path = id.split("?")[0];
       if (!path.endsWith("/dist/dev-shared.js")) return null;
       // Resolve package identity from this exact module, including pnpm paths.
@@ -420,21 +456,18 @@ async function collectProject(project, scenario, tools, browser, responses = new
   const configuration = await loadFeedbackConfiguration(tools, projectRoot, record, runtimeOptions, serverDiagnostics.logger), root = realpathSync(configuration.root);
   configuration.configuration.root = root;
   configuration.configuration.options = { root: runtimeOptions.root ?? null, config: runtimeOptions.config ?? null };
-  const physicalEntry = existsSync(join(root, "index.html"));
-  assert(physicalEntry || configuration.configuration.kind === "application-vite-config", "Browser feedback needs an application HTML entry; no index.html or application config exists");
+  validateFeedbackRoot(root, runtimeOptions.appTree ?? root);
   record(runtimePath);
-  if (physicalEntry) record(join(root, "index.html"));
-  else recordFeedbackGeneratorInputs(configuration.dependencies, record);
-  const provenance = physicalEntry ? null : await observeFeedbackEntry(configuration.config.plugins);
-  const application = { ...configuration.config, plugins: provenance?.plugins ?? configuration.config.plugins };
+  const application = configuration.config;
   const cache = mkdtempSync(join(tmpdir(), "solid-feedback-vite-"));
   let server, context;
-  const pageErrors = [], blockedRequests = [], consoleDiagnostics = [];
+  const pageErrors = [], blockedRequests = [], refusedResponses = [], consoleDiagnostics = [];
   let consoleDiagnosticsDropped = 0;
   try {
     server = await tools.createServer(mergeFeedbackServerConfiguration(tools, application, { configFile: false, root, cacheDir: cache,
-    plugins: [...(provenance ? [provenance.observer] : []),
-      feedbackReadPlugin({ snapshot, runtimeInputs, coverage, generatedModules: provenance?.modules }), {
+    plugins: [{ name: "solid-checker-feedback-lifecycle", enforce: "pre",
+      configureServer(allocated) { server = allocated; serverDiagnostics.install(allocated); } },
+      feedbackReadPlugin({ snapshot, runtimeInputs, coverage }), {
       name: "solid-checker-development-source", enforce: "pre",
       transform(code, id) {
         const path = id.split("?")[0], model = models.get(path);
@@ -455,10 +488,13 @@ async function collectProject(project, scenario, tools, browser, responses = new
     optimizeDeps: { noDiscovery: true, include: [], exclude: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
     server: { host: "127.0.0.1", port: 0, fs: { allow: [root, dirname(runtimePath), dirname(dirname(runtimePath)), tools.root] } },
     customLogger: serverDiagnostics.logger, logLevel: "silent" }));
+    const effectiveRoot = validateFeedbackRoot(server.config.root, runtimeOptions.appTree ?? root, root);
+    const entry = feedbackPhysicalEntry(effectiveRoot, runtimeOptions.appTree ?? root);
+    record(entry.path);
     await server.listen();
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
     context = await browser.newContext(feedbackContextOptions(scenario)); context.setDefaultTimeout(12000);
-    await context.route("**/*", route => routeFeedbackRequest(route, origin, responses, blockedRequests));
+    await context.route("**/*", route => routeFeedbackRequest(route, origin, responses, blockedRequests, refusedResponses));
     const page = await context.newPage(), documentMessages = [];
     // A raw CDP binding: Playwright's exposed bindings drop calls from a
     // document that is already unloading, which is exactly the flush needed.
@@ -476,12 +512,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
       if (consoleDiagnostics.length >= 256) { consoleDiagnosticsDropped++; return; }
       consoleDiagnostics.push({ severity: message.type(), message: message.text(), location: message.location() });
     });
-    const entryResponse = await page.goto(new URL(server.config.base, origin).href, { waitUntil: "domcontentloaded" });
-    const entry = physicalEntry ? { kind: "physical-index", path: realpathSync(join(root, "index.html")) }
-      : await admitFeedbackEntry({ response: entryResponse, scripts: await page.evaluate(html =>
-        [...new DOMParser().parseFromString(html, "text/html").querySelectorAll('script[type="module"][src]')].map(script => script.getAttribute("src")),
-        (await entryResponse.body()).toString()),
-        origin, appTree: runtimeOptions.appTree ?? root, server, provenance, record });
+    await page.goto(new URL(server.config.base, origin).href, { waitUntil: "domcontentloaded" });
     const { assertions, checkpoints, failure } = await executeFeedbackScenario(page, scenario);
     const final = await page.evaluate(() => globalThis.__solidCheckerDocument ? { id: globalThis.__solidCheckerDocument,
       state: { events: globalThis.__solidCheckerReads?.events ?? [], stats: globalThis.__solidCheckerReads?.stats ?? null,
@@ -571,14 +602,17 @@ async function collectProject(project, scenario, tools, browser, responses = new
     if (raw.documents.lost) automatic.open?.push({ reason: "A loaded document unloaded without reporting its records", lost: raw.documents.lost });
     return { feedback, capture, assertions: snapshot.typingErrors ? [] : assertions,
       automatic,
-      coverage, stats: raw.stats, diagnostics, checkpoints, unmapped, blockedRequests,
+      coverage, stats: raw.stats, diagnostics, checkpoints, unmapped, blockedRequests, refusedResponses,
       suppliedResponses: [...responses.values()].map(row => ({ url: row.url, method: row.method,
-        ...(row.requestBody !== undefined ? { requestBody: row.requestBody, requestBodySha256: row.requestBodySha256 } : {}), status: row.status, contentType: row.contentType,
+        ...(row.requestBody !== undefined ? { requestBody: row.requestBody, requestBodySha256: row.requestBodySha256, matchedRequestBodySha256: row.matchedRequestBodySha256 ?? null } : {}), status: row.status, contentType: row.contentType,
         body: row.pin, served: row.served, channel: "scenario-input" })),
       pageErrors, consoleDiagnostics, consoleDiagnosticsDropped, serverDiagnostics: await serverDiagnostics.finish(), failure,
       entry, runtimeInputs: capture.runtimeInputs, ...(scenario.viewport ? { viewport: scenario.viewport } : {}),
       configuration: configuration.configuration, typingErrors: snapshot.typingErrors };
-  } finally { await closeFeedbackResources({ context, server, cache }); }
+  } catch (error) {
+    if (!server) error.message += "; no Vite server was exposed for cleanup; partial startup resources may remain until CLI exit";
+    throw error;
+  } finally { serverDiagnostics.dispose(); await closeFeedbackResources({ context, server, cache }); }
 }
 
 export function selectFeedbackModels(rows) {

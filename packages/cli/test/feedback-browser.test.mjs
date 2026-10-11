@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { createReadCollector } from "../scripts/feedback-read-runtime.mjs";
 import { selectAssertionFeedback } from "../scripts/feedback-assertion-selector.mjs";
-import { closeFeedbackResources, createFeedbackDiagnostics, executeFeedbackScenario, feedbackContextOptions, feedbackReadPlugin, loadFeedbackConfiguration, loadSuppliedResponses,
-  mergeFeedbackServerConfiguration, recordFeedbackGeneratorInputs, routeFeedbackRequest, selectFeedbackModels, validateFeedbackRuntimeOptions, validateFeedbackScenario } from "../scripts/feedback-browser.mjs";
+import { closeFeedbackResources, createFeedbackDiagnostics, executeFeedbackScenario, feedbackContextOptions, feedbackPhysicalEntry, loadFeedbackConfiguration, loadSuppliedResponses,
+  mergeFeedbackServerConfiguration, routeFeedbackRequest, selectFeedbackModels, validateFeedbackRoot, validateFeedbackRuntimeOptions, validateFeedbackScenario } from "../scripts/feedback-browser.mjs";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { instrumentFeedbackReads } from "../scripts/feedback-native-hook.mjs";
+import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 
 const row = (actual, expected = "2") => ({ id: "value", selector: "#value", actual, expected });
 test("capture transforms precede the application's pre compiler while preserving resolution settings", () => {
@@ -230,7 +232,7 @@ for (const step of [
 test("submit refuses a non-form and prevents following actions", async () => {
   const previous = globalThis.HTMLFormElement; globalThis.HTMLFormElement = class {};
   try {
-    const run = await executeFeedbackScenario({ locator: () => ({ evaluate: async fn => fn({}) }) }, { steps: [inputs.at(-1), inputs[0]] });
+    const run = await executeFeedbackScenario({ evaluate: async () => {}, locator: () => ({ evaluate: async fn => fn({}) }) }, { steps: [inputs.at(-1), inputs[0]] });
     assert.match(run.failure.message, /must identify a form/); assert.equal(run.failure.step, 0);
   } finally { globalThis.HTMLFormElement = previous; }
 });
@@ -258,7 +260,7 @@ test("same-origin responses precede proxy traffic and match the exact query, met
     const responses = loadSuppliedResponses(scenario, join(directory, "scenario.json")), blocked = [];
     const route = async (url, method = "GET", body = null) => {
       let result;
-      await routeFeedbackRequest({ request: () => ({ url: () => url, method: () => method, postData: () => body }),
+      await routeFeedbackRequest({ request: () => ({ url: () => url, method: () => method, postDataBuffer: () => body === null ? null : Buffer.from(body), resourceType: () => "fetch" }),
         fulfill: async options => { result = options; }, continue: async () => { result = "proxy"; }, abort: async () => { result = "blocked"; }
       }, "http://127.0.0.1:1234", responses, blocked);
       return result;
@@ -280,17 +282,6 @@ for (const response of [
 ]) test(`inexact same-origin response refuses: ${JSON.stringify(response)}`, () => {
   assert.throws(() => validateFeedbackScenario({ schemaVersion: 1, steps: click, responses: [{ body: "a.json", ...response }] }));
 });
-test("Vite diagnostics and failing module bodies are bounded and retained without inferring a cause", async () => {
-  const diagnostics = createFeedbackDiagnostics(), origin = "http://127.0.0.1:1234";
-  for (let i = 0; i < 65; i++) diagnostics.logger.error("transform failed " + "x".repeat(20000));
-  diagnostics.response({ url: () => origin + "/src/App.tsx", status: () => 500, headers: () => ({ "content-type": "text/plain" }),
-    request: () => ({ resourceType: () => "script" }), body: async () => Buffer.from("compiler error " + "x".repeat(20000)) }, origin);
-  diagnostics.response({ url: () => "https://foreign.test/a" }, origin);
-  const result = await diagnostics.finish();
-  assert.equal(result.vite.length, 64); assert.equal(result.viteDropped, 1); assert.equal(result.vite[0].truncated, true);
-  assert.equal(result.failedModules.length, 1); assert.equal(result.failedModules[0].status, 500);
-  assert.match(result.failedModules[0].body.text, /^compiler error/); assert.equal(result.failedModules[0].body.truncated, true);
-});
 test("cleanup closes every resource and removes this cache even when context close fails", async () => {
   const cache = mkdtempSync(join(tmpdir(), "solid-feedback-cleanup-")), calls = [];
   await assert.rejects(closeFeedbackResources({ cache,
@@ -307,28 +298,119 @@ test("shared leaf models are deduplicated, differing models remain open, and dif
   assert.equal(result.models.size, 0); assert.deepEqual([...result.conflictingLeafModels], [model.path]);
   assert.throws(() => selectFeedbackModels([model, differing, { ...model, sourceSha256: "changed" }]), /source changed/);
 });
-test("config-generated client modules collect diagnostics even when middleware bypasses HTML transforms", () => {
-  const coverage = {}, generatedModules = new Map([["virtual:app-entry", {}]]);
-  const plugin = feedbackReadPlugin({ coverage, generatedModules }), source = 'import App from "/src/App.tsx";';
-  const result = plugin.transform(source, "virtual:app-entry", {});
-  assert.equal(result.code, 'import "virtual:solid-checker-feedback-entry";\n' + source);
-  assert.deepEqual(coverage.generatedBootstrap, ["virtual:app-entry"]);
-  assert.equal(plugin.transform(source, "virtual:app-entry", { ssr: true }), null);
-  assert.equal(plugin.transform.call({ environment: { config: { consumer: "server" } } }, source, "virtual:app-entry", {}), null);
-  assert.equal(plugin.transform(source, "/src/App.tsx", {}), null);
+
+test("same-origin supplied scripts/documents/stylesheets are refused and recorded; fetch/xhr remain data inputs", async () => {
+  const origin = "http://127.0.0.1:1234", supplied = { url: "/src/entry.ts", method: "GET", body: Buffer.from("different code"), served: 0 };
+  const responses = new Map([[supplied.url, supplied]]), refused = [];
+  for (const resourceType of ["script", "document", "stylesheet", "fetch", "xhr"]) {
+    let outcome;
+    await routeFeedbackRequest({ request: () => ({ url: () => origin + supplied.url, method: () => "GET", resourceType: () => resourceType }),
+      fulfill: async () => { outcome = "supplied"; }, abort: async () => { outcome = "refused"; }, continue: () => assert.fail()
+    }, origin, responses, [], refused);
+    assert.equal(outcome, ["fetch", "xhr"].includes(resourceType) ? "supplied" : "refused");
+  }
+  assert.equal(supplied.served, 2);
+  assert.deepEqual(refused.map(row => row.resourceType), ["script", "document", "stylesheet"]);
+  assert(refused.every(row => row.reason.includes("fetch/xhr")));
 });
-test("generated-entry inputs pin externalized config packages and their import/require artifacts and local helpers", () => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-generator-pins-")));
+
+for (const [expected, actual, matches] of [["�", Buffer.from([0x80]), false], ["日本語", Buffer.from("日本語"), true],
+  ["", Buffer.alloc(0), true], ["", null, false], ["a", Buffer.from("b"), false]]) {
+  test(`POST matching uses complete UTF-8 bytes: ${JSON.stringify(expected)}/${actual?.toString("hex") ?? "unavailable"}`, async () => {
+    const supplied = { url: "/api", method: "POST", requestBody: expected, served: 0 }, responses = new Map([["post", supplied]]);
+    let fulfilled = false;
+    await routeFeedbackRequest({ request: () => ({ url: () => "http://app.test/api", method: () => "POST", postDataBuffer: () => actual, resourceType: () => "xhr" }),
+      fulfill: async () => { fulfilled = true; }, continue: async () => {}, abort: () => assert.fail()
+    }, "http://app.test", responses, []);
+    assert.equal(fulfilled, matches); assert.equal(supplied.served, matches ? 1 : 0);
+    assert.equal(supplied.matchedRequestBodySha256, matches ? "sha256:" + createHash("sha256").update(actual).digest("hex") : undefined);
+  });
+}
+
+test("effective roots refuse config-only escapes and hook changes; physical entries require in-tree files", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-effective-root-")));
   try {
-    const pkg = join(root, "node_modules/shell-plugin"); mkdirSync(pkg, { recursive: true });
-    const config = join(root, "vite.config.mjs"); writeFileSync(config, 'import shell from "shell-plugin"; export default {plugins:[shell()]};');
-    writeFileSync(join(pkg, "package.json"), JSON.stringify({ name: "shell-plugin", type: "module",
-      exports: { ".": { import: "./generator.mjs", require: "./generator.cjs" } } }));
-    writeFileSync(join(pkg, "generator.mjs"), 'import "./helper.mjs"; export default () => ({});');
-    writeFileSync(join(pkg, "generator.cjs"), 'module.exports = () => ({});');
-    writeFileSync(join(pkg, "helper.mjs"), 'export const html = "app";');
-    const pins = new Set(); recordFeedbackGeneratorInputs([config], path => pins.add(path));
-    for (const file of ["package.json", "generator.mjs", "generator.cjs", "helper.mjs"]) assert(pins.has(join(pkg, file)), file);
-    assert(pins.has(config));
+    mkdirSync(join(root, "changed"));
+    assert.equal(validateFeedbackRoot(root, root, root), root);
+    assert.throws(() => validateFeedbackRoot(tmpdir(), root), /outside the app tree/);
+    assert.throws(() => validateFeedbackRoot(join(root, "changed"), root, root), /changed the reported root/);
+    assert.throws(() => feedbackPhysicalEntry(root, root), /needs an application index.html/);
+    symlinkSync(fileURLToPath(import.meta.url), join(root, "index.html"));
+    assert.throws(() => feedbackPhysicalEntry(root, root), /inside the app tree/);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+for (const selector of [" text=search", "div >> text=search", "div:has-text('search')", "input:visible", "div:nth-match(1)"]) {
+  test(`Playwright selector syntax refuses before mutation: ${selector}`, async () => {
+    assert.throws(() => validateFeedbackScenario({ schemaVersion: 1, steps: [{ action: "fill", selector, text: "x" }] }), /native CSS/);
+    const result = await executeFeedbackScenario({ locator: () => assert.fail("must not mutate") },
+      { steps: [{ action: "fill", selector, text: "x" }] });
+    assert.match(result.failure.message, /native CSS/);
+  });
+}
+test("native CSS parsing precedes an action and refuses malformed selectors", async () => {
+  let parsed = false, filled = false;
+  const page = { evaluate: async (_fn, selector) => {
+    if (selector === "[") throw new Error("Invalid native CSS selector");
+    parsed = true;
+  }, locator: () => ({ fill: async () => { assert(parsed); filled = true; } }) };
+  const failed = await executeFeedbackScenario(page, { steps: [{ action: "fill", selector: "[", text: "x" }] });
+  assert.equal(filled, false); assert.match(failed.failure.message, /native CSS/);
+  const valid = await executeFeedbackScenario(page, { steps: [{ action: "fill", selector: "input[data-name = 'q']", text: "x" }] });
+  assert.equal(valid.failure, null); assert.equal(filled, true);
+});
+
+function diagnosticResponse(diagnostics, origin, path) {
+  let middleware;
+  diagnostics.install({ middlewares: { use(fn) { middleware = fn; } } });
+  const response = Object.assign(new EventEmitter(), { statusCode: 500, writableFinished: false,
+    writeHead() {}, write() { return true; }, end() { this.writableFinished = true; this.emit("finish"); } });
+  middleware({ url: path }, response, () => {});
+  response.writeHead(500);
+  diagnostics.response({ url: () => origin + path, status: () => 500, headers: () => ({ "content-type": "text/plain" }),
+    request: () => ({ resourceType: () => "script" }), body: () => assert.fail("unbounded body acquisition is forbidden") }, origin);
+  return response;
+}
+test("failed module diagnostics capture original streaming bytes with a read cap and logger row limits", async () => {
+  const diagnostics = createFeedbackDiagnostics(), origin = "http://127.0.0.1:1234";
+  for (let i = 0; i < 65; i++) diagnostics.logger.error("transform failed " + "x".repeat(20000));
+  const response = diagnosticResponse(diagnostics, origin, "/src/App.tsx");
+  response.write("compiler error " + "x".repeat(1000000)); response.end("tail");
+  const result = await diagnostics.finish(); diagnostics.dispose();
+  assert.equal(result.vite.length, 64); assert.equal(result.viteDropped, 1); assert.equal(result.vite[0].truncated, true);
+  const row = result.failedModules[0];
+  assert.equal(row.status, 500); assert.match(row.body.text, /^compiler error/);
+  assert.equal(Buffer.byteLength(row.body.text), 16384); assert.equal(row.body.bytes, 1000019);
+  assert.equal(row.body.truncated, true); assert.equal(row.body.timedOut, false);
+});
+test("a never-finishing 500 response times out without calling Playwright body or blocking teardown", async () => {
+  const diagnostics = createFeedbackDiagnostics({ timeoutMs: 15 });
+  diagnosticResponse(diagnostics, "http://app.test", "/never.ts").write("partial");
+  const result = await diagnostics.finish(); diagnostics.dispose();
+  assert.equal(result.failedModules[0].body.text, "partial");
+  assert.equal(result.failedModules[0].body.timedOut, true); assert.equal(result.failedModules[0].body.incomplete, true);
+});
+test("bounded outgoing capture preserves buffer chunks and callback-only end overloads", async () => {
+  const diagnostics = createFeedbackDiagnostics();
+  const response = diagnosticResponse(diagnostics, "http://app.test", "/buffers.ts");
+  assert.equal(response.write(Buffer.from("日本語")), true);
+  response.write(new Uint8Array(Buffer.from(" error")));
+  response.end(() => {});
+  const result = await diagnostics.finish(); diagnostics.dispose();
+  assert.equal(result.failedModules[0].body.text, "日本語 error");
+  assert.equal(result.failedModules[0].body.bytes, Buffer.byteLength("日本語 error"));
+});
+test("missing bounded response capture is explicit and never buffers a browser response", async () => {
+  const diagnostics = createFeedbackDiagnostics();
+  diagnostics.response({ url: () => "http://app.test/a.ts", status: () => 500, headers: () => ({}),
+    request: () => ({ resourceType: () => "script" }), body: () => assert.fail() }, "http://app.test");
+  assert.match((await diagnostics.finish()).failedModules[0].bodyUnavailable, /No bounded/);
+});
+test("hanging resource close is bounded and does not block later close attempts or cache deletion", async () => {
+  const cache = mkdtempSync(join(tmpdir(), "solid-feedback-hanging-close-")), calls = [];
+  await assert.rejects(closeFeedbackResources({ cache, timeoutMs: 15,
+    context: { close: () => new Promise(() => { calls.push("context"); }) },
+    server: { close: async () => calls.push("server") }, browser: { close: async () => calls.push("browser") }
+  }), /context close timed out/);
+  assert.deepEqual(calls, ["context", "server", "browser"]); assert.equal(existsSync(cache), false);
 });
