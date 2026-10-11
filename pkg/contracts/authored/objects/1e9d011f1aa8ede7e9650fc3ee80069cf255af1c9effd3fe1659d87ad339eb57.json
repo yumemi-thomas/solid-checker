@@ -20,7 +20,7 @@
             "createBeforeLeave": "open-callable",
             "createRouter": "open-callable",
             "defineRoute": "open-callable",
-            "defineRoutes": "open-callable",
+            "defineRoutes": "authored-defineRoutes",
             "hashHistory": "open-callable",
             "int": "open-callable",
             "liveQuery": "open-callable",
@@ -38,7 +38,7 @@
             "useParams": "authored-useParams",
             "usePreloadRoute": "open-callable",
             "useResolvedPath": "authored-useResolvedPath",
-            "useRouteMatches": "open-callable",
+            "useRouteMatches": "authored-useRouteMatches",
             "useSearchParams": "authored-useSearchParams",
             "useSubmissions": "open-callable"
           },
@@ -66,6 +66,46 @@
   "summaries": {
     "open-callable": {
       "call": {},
+      "shape": "callable"
+    },
+    "authored-defineRoutes": {
+      "call": {
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
       "shape": "callable"
     },
     "authored-useHref": {
@@ -101,6 +141,15 @@
     },
     "authored-useIsRouting": {
       "call": {
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
         "operations": [
           {
             "at": {
@@ -132,6 +181,10 @@
     },
     "authored-useLocation": {
       "call": {
+        "closed": [
+          "reads"
+        ],
+        "reads": [],
         "operations": [
           {
             "at": {
@@ -193,6 +246,10 @@
     },
     "authored-useParams": {
       "call": {
+        "closed": [
+          "reads"
+        ],
+        "reads": [],
         "operations": [
           {
             "at": {
@@ -243,6 +300,46 @@
             "tracking": "untracked",
             "trigger": {
               "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useRouteMatches": {
+      "call": {
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
             }
           }
         ],

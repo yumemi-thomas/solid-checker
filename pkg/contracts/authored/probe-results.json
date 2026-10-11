@@ -16420,6 +16420,100 @@
       "spec": "@solidjs+router@2.0.0-next.26",
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
+      "export": "defineFileRoute",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 23
+          }
+        },
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 9,
+            "column": 29
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "defineRoutes",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 8,
+            "column": 16
+          }
+        },
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 8,
+            "column": 26
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
       "export": "useHref",
       "solidRuntime": [
         {
@@ -16438,15 +16532,7 @@
       "artifacts": [
         "dist/index.js",
         "dist/index.jsx",
-        "dist/index.js",
-        "dist/index.js",
-        "dist/index.jsx",
-        "dist/index.jsx",
         "dist/fs.js",
-        "dist/fs.js",
-        "dist/fs.js",
-        "dist/server.js",
-        "dist/server.js",
         "dist/server.js"
       ],
       "rule": "strict-read-untracked",
@@ -16485,15 +16571,7 @@
       "artifacts": [
         "dist/index.js",
         "dist/index.jsx",
-        "dist/index.js",
-        "dist/index.js",
-        "dist/index.jsx",
-        "dist/index.jsx",
         "dist/fs.js",
-        "dist/fs.js",
-        "dist/fs.js",
-        "dist/server.js",
-        "dist/server.js",
         "dist/server.js"
       ],
       "rule": "strict-read-untracked",
@@ -16540,15 +16618,7 @@
       "artifacts": [
         "dist/index.js",
         "dist/index.jsx",
-        "dist/index.js",
-        "dist/index.js",
-        "dist/index.jsx",
-        "dist/index.jsx",
         "dist/fs.js",
-        "dist/fs.js",
-        "dist/fs.js",
-        "dist/server.js",
-        "dist/server.js",
         "dist/server.js"
       ],
       "rule": "strict-read-untracked",
@@ -16587,15 +16657,7 @@
       "artifacts": [
         "dist/index.js",
         "dist/index.jsx",
-        "dist/index.js",
-        "dist/index.js",
-        "dist/index.jsx",
-        "dist/index.jsx",
         "dist/fs.js",
-        "dist/fs.js",
-        "dist/fs.js",
-        "dist/server.js",
-        "dist/server.js",
         "dist/server.js"
       ],
       "rule": "strict-read-untracked",
@@ -16634,15 +16696,7 @@
       "artifacts": [
         "dist/index.js",
         "dist/index.jsx",
-        "dist/index.js",
-        "dist/index.js",
-        "dist/index.jsx",
-        "dist/index.jsx",
         "dist/fs.js",
-        "dist/fs.js",
-        "dist/fs.js",
-        "dist/server.js",
-        "dist/server.js",
         "dist/server.js"
       ],
       "rule": "strict-read-untracked",
@@ -16681,15 +16735,7 @@
       "artifacts": [
         "dist/index.js",
         "dist/index.jsx",
-        "dist/index.js",
-        "dist/index.js",
-        "dist/index.jsx",
-        "dist/index.jsx",
         "dist/fs.js",
-        "dist/fs.js",
-        "dist/fs.js",
-        "dist/server.js",
-        "dist/server.js",
         "dist/server.js"
       ],
       "rule": "strict-read-untracked",
@@ -16701,6 +16747,45 @@
             "file": "case",
             "line": 7,
             "column": 23
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "useRouteMatches",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 5,
+            "column": 17
           }
         }
       ],
@@ -16728,15 +16813,7 @@
       "artifacts": [
         "dist/index.js",
         "dist/index.jsx",
-        "dist/index.js",
-        "dist/index.js",
-        "dist/index.jsx",
-        "dist/index.jsx",
         "dist/fs.js",
-        "dist/fs.js",
-        "dist/fs.js",
-        "dist/server.js",
-        "dist/server.js",
         "dist/server.js"
       ],
       "rule": "strict-read-untracked",

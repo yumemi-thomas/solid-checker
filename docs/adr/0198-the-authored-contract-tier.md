@@ -161,6 +161,23 @@ document cannot state honestly.
   - Not admitted where the installed integrity is not a stated fact:
     `beacon-web` (binary `bun.lockb`, and a `package-lock.json` without
     integrities) and `error-menu-web` (two Solid versions in one lockfile).
+  - **next.26 closures (2026-10-11).** Under ADR 0226 citations,
+    `defineRoutes` and `defineFileRoute` (`/fs`, now an authored case) return
+    an argument by identity, and `useIsRouting` and `useRouteMatches` return
+    an existing accessor; all four close reads, returns, creates and
+    callbacks. `useLocation` and `useParams` close `reads` only. Three new
+    pairs pass in Chrome on rc.13, each misuse at its result-access line.
+    - Everything else stays open:
+      - stateful returned protocols (`createRouter`, the history
+        factories, `useNavigate`, `query`, `action`, `revalidate`);
+      - recursive manifests (`fileRoutes`);
+      - lazy proxies whose memos run under the router's owner, with
+        replaceable history `utils` (the location, params and search hooks).
+    - Measured on the rc.13 corpus, browser target, after its next.19–24
+      installs were relocked to next.26: violations 559 -> 559; the import
+      sites covered by router `SC9005` drop from 359 to 336. Uncertifiable
+      rows rise from 3,523 to 3,541, because exports that now leave different
+      claim sets open are reported in separate rows.
 - **`@tanstack/solid-query` options callbacks:** `useQuery` and
   `useInfiniteQuery`, on 6.0.0-rc.0 and rc.3.
   - Claim: argument 0 is invoked on every call, on the same stack, as the

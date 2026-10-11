@@ -3409,8 +3409,41 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/c5a988368a5fa6bb4f7b2ec75cf710d9a0e5800b8fcce2b10ffecfe1087677de.json",
-      "documentDigest": "sha256:c5a988368a5fa6bb4f7b2ec75cf710d9a0e5800b8fcce2b10ffecfe1087677de"
+      "document": "objects/cfdd9e8ef140cc9a1363181be0b83d2c6fa1a50524ea416bac94b28390a780d0.json",
+      "documentDigest": "sha256:cfdd9e8ef140cc9a1363181be0b83d2c6fa1a50524ea416bac94b28390a780d0"
+    },
+    {
+      "packageName": "@solidjs/router",
+      "specifier": "@solidjs/router/fs",
+      "packageVersion": "2.0.0-next.26",
+      "packageIntegrity": "sha512-Zjho0HI095mxSMu8tyfuqoq8vTeYML0mWJj1iQar298MrhtT2itGiEgF2C7ndE2mzKeXRQ/DLf1tr37Gax5bsg==",
+      "requestedEntrypoint": "./fs",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/fs.js",
+      "declarationTarget": "dist/fs.d.ts",
+      "snapshotRoot": "sha256:37e62621f9401300ada43d0eadb463a0c8617084d72c6d9e918094071e6d998f",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13",
+          "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+        }
+      ],
+      "document": "objects/20f13dc9158ce2a483365b9eb65bfa96277e9c7ea076e6e6a0263e5b0abc0bf3.json",
+      "documentDigest": "sha256:20f13dc9158ce2a483365b9eb65bfa96277e9c7ea076e6e6a0263e5b0abc0bf3"
     },
     {
       "packageName": "@solidjs/router",
@@ -3442,8 +3475,8 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/73734cfb2917693f89b737da2dc7c2fd4aa9ed5da1e65da0db04c024028dfe7a.json",
-      "documentDigest": "sha256:73734cfb2917693f89b737da2dc7c2fd4aa9ed5da1e65da0db04c024028dfe7a"
+      "document": "objects/1e9d011f1aa8ede7e9650fc3ee80069cf255af1c9effd3fe1659d87ad339eb57.json",
+      "documentDigest": "sha256:1e9d011f1aa8ede7e9650fc3ee80069cf255af1c9effd3fe1659d87ad339eb57"
     },
     {
       "packageName": "@tanstack/solid-query",

@@ -25,6 +25,8 @@
       "why": "Returns the router's location: getters over memos, and a memo-backed query proxy.",
       "rule": "strict-read-untracked",
       "call": {
+        "closed": ["reads"],
+        "reads": [],
         "operations": [
           {
             "at": {
@@ -50,12 +52,17 @@
         "returns": [
           "return"
         ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:29-34; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294 — The hook only retrieves a context and its plain location field; it performs no reactive read. Missing owner/context throws before returning. Returned location getters and query proxy reads are result accesses, not hook-call reads; returns stays open for the first-use createMemoObject path at router/dist/utils.js:124-147 and custom queryWrapper at router/dist/routing.js:490-528. No absence claim about those open result paths."
       }
     },
     "useParams": {
       "why": "Returns the route's params, a memo-backed proxy.",
       "rule": "strict-read-untracked",
       "call": {
+        "closed": ["reads"],
+        "reads": [],
         "operations": [
           {
             "at": {
@@ -81,6 +88,9 @@
         "returns": [
           "return"
         ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-37,163-165; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:29-34; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294 — All TempRoute, optional route-context and base-route branches select the existing params field without reading its properties. Context lookup is non-reactive; the optional lookup catches missing context/owner. Result proxy first-use memo creation at router/dist/utils.js:124-147, including paramsWrapper at router/dist/routing.js:724-728,947-954, stays in the open returns domain."
       }
     },
     "useSearchParams": {
@@ -126,6 +136,10 @@
       "why": "Returns a function reading the router's pending signals.",
       "rule": "strict-read-untracked",
       "call": {
+        "closed": ["reads", "returns", "creates", "callbacks"],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
         "operations": [
           {
             "at": {
@@ -152,6 +166,12 @@
         "returns": [
           "return"
         ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,95,700-711,738-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:29-34; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294 — No reactive read at the hook call: context lookup returns the existing isRouting function. Its later reads are represented by the reactive accessor return, not attributed to the hook call.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:95,700-711,738-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:1-2,17-19,1014-1019; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:1076-1088,1625-1701,2341-2357 — Every normal hook completion returns the same existing boolean reactive accessor, with no members or caller argument capture. Both short-circuit arms are reactive reads: routingPending() or isPending(source). Pending probing returns a boolean (or propagates NotReadyError), never a Promise or an action/control function. The first-use pending companion is internal Solid reactive-source plumbing, not a router-owned returned method; no promise return or lifecycle graph is asserted. Standard hydration-host premise applies to the existing memo.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,95,738-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:29-34; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294 — The hook allocates/registers no reactive source, child owner, computation or cleanup. Context presence is required by getContext, but is not a child-owner/cleanup registration requirement; throws stays open. Later pending companion creation belongs to the returned core reactive accessor, not an ambient hook-call owner registration.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,95,700-711,738-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:29-34; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294,1625-1701 — No caller argument is accepted, invoked, retained or dispatched by the hook. Returned accessor reads existing router computations; their route callbacks belong to createRouter, whose domains remain open. Neither DEV nor hydration adds a hook callback."
       }
     },
     "useMatch": {
@@ -216,6 +236,84 @@
         "returns": [
           "return"
         ]
+      }
+    },
+    "useRouteMatches": {
+      "why": "Returns an accessor reading the router's existing matches memo, copying the plain result array. The pair reads that accessor in a route component rendered through JSX. Fresh probes required.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": ["reads", "returns", "creates", "callbacks"],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "operations": [{
+          "id": "return",
+          "kind": "return",
+          "trigger": { "event": "call" },
+          "at": { "event": "call", "schedule": "same-stack" },
+          "tracking": "untracked",
+          "count": { "min": 1, "max": 1, "scope": "call" },
+          "output": { "kind": "reactive", "role": "accessor" }
+        }],
+        "returns": ["return"]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,142-146,738-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:29-34; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294 — The hook retrieves the context without reading matches. Only the returned accessor reads that existing memo, represented by its reactive return role. No hook-call read is asserted for later result access.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:142-146,674-699,738-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:1014-1019; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2341-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:6296-6449 — Exactly one reactive accessor with no own members or caller-argument captures. On each read it reads the existing matches memo (including ordinary reactive suspension for unresolved lazy routes), then returns a fresh shallow copy of its plain array under P2; no Promise or returned control graph. Route compilation, lazy resolution and preload dispatch are behavior of the already-created router memo, not additional hook callbacks. Standard hydration-host/runtime premises apply to the existing memo.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,142-146,738-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:29-34; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294 — The hook creates a JavaScript closure only, no reactive source, computation, child owner or cleanup registration. The later native array copy creates no Solid owner. Context absence remains an open throws behavior, not a registration requirement.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,142-146,738-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:29-34; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294 — No caller argument or callback is accepted, retained or invoked. Reading the already-existing router matches memo is a reactive accessor read, not a hook callback. No DEV, server or hydration branch in this hook."
+      }
+    },
+    "defineFileRoute": {
+      "why": "router/dist/fs.js:20-22 returns exactly argument 1 without traversing or invoking it. The pair exercises preservation of a caller-owned store through the return; closures assert no package-created reactive state or callback dispatch. Browser next.26 only; fresh probes required.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": ["reads", "returns", "creates", "callbacks"],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "operations": [{
+          "id": "return",
+          "kind": "return",
+          "trigger": { "event": "call" },
+          "at": { "event": "call", "schedule": "same-stack" },
+          "tracking": "untracked",
+          "count": { "min": 1, "max": 1, "scope": "call" },
+          "output": { "kind": "parameter", "index": 1 }
+        }],
+        "returns": ["return"]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/fs.js:20-22 — Complete body is return config. No traversal, read, helper, coercion or lazy path.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/fs.js:20-22 — Exactly argument 1, preserving its identity and existing reactive shape. No new wrapper, invocation result or Promise; contained caller callbacks are returned data, not package dispatch.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/fs.js:20-22 — No allocation, owner lookup, child computation or cleanup registration in the complete body.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/fs.js:20-22 — Neither argument is invoked or retained in a package closure; no helper, DEV, isServer or hydration branch. Module init completion is an accepted premise."
+      }
+    },
+    "defineRoutes": {
+      "why": "router/dist/routers/factory.jsx:23-25 returns exactly argument 0 without traversing or invoking it. The pair exercises preservation of a caller-owned store array through the return. Browser next.26 only; fresh probes required.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": ["reads", "returns", "creates", "callbacks"],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "operations": [{
+          "id": "return",
+          "kind": "return",
+          "trigger": { "event": "call" },
+          "at": { "event": "call", "schedule": "same-stack" },
+          "tracking": "untracked",
+          "count": { "min": 1, "max": 1, "scope": "call" },
+          "output": { "kind": "parameter", "index": 0 }
+        }],
+        "returns": ["return"]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routers/factory.jsx:23-25; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/index.js:2054-2056 — Complete body is return routes. No traversal, read, helper, coercion or lazy path.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routers/factory.jsx:23-25; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/index.js:2054-2056 — Exactly argument 0, preserving identity and existing reactive shape. No package wrapper or Promise; route component/preload functions remain caller data.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routers/factory.jsx:23-25; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/index.js:2054-2056 — No allocation, owner lookup, child computation or cleanup registration.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routers/factory.jsx:23-25; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/index.js:2054-2056 — No argument invocation or package retention; no helper, DEV, isServer or hydration branch. Module init completion is an accepted premise."
       }
     },
     "useResolvedPath": {
