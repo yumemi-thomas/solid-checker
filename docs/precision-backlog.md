@@ -29513,10 +29513,28 @@ origins. Refusing async members alone did not close after-await reads through
 ordinary async helpers. The explicit transport flag preserves the pre-existing
 non-transported summary policy; this slice claims no general synchronous-summary
 proof. Four transport-derived corpus SC8015 rows are deliberately withheld.
-Context transport now joins all exact useContext/wrapper-return receiver bindings
+Context transport now joins exact useContext/wrapper-return receiver bindings
 by context identity. A mutation, alias, export or opaque escape through any
 receiver (or the provider-value binding) withholds the entire context, preserving
 ordinary obligations. The per-analysis census is rebuilt before calls resolve.
+The receiver census does not close stability through arbitrary wrapper callback
+escapes. ADR 0273 adopts the owner-accepted transported member stability premise:
+Assumed by default, Vetoed(site) on a project-wide static member-name write or
+exact Object/Reflect mutation. Any receiver's matching name withholds transport;
+unknown/spread Object.assign sources veto all transported members. One index is
+built per analysis. Nested helper/alias, second-consumer and wrapper-callback
+mutation controls remain non-violations with obligations retained. Missing,
+unresolved, dependency, unsupported reflective, eval and HMR code are outside
+the premise, as are nonliteral computed writes on other receivers. The existing
+exact receiver census rejects computed writes on the transported binding itself.
+No further alias/callback dataflow or recall expansion is claimed. Existing
+fixture positives retain their expectations by giving mutation-only members
+distinct names; focused premise projects cover name over-veto and wildcard veto.
+The retained/cold controls exposed stale contract export fragments when a
+transport-map transition removes/adds an edge between otherwise retained files.
+Result reads were already recomputed; export invalidation now also follows the
+current transport census, since a removed edge cannot dirty its old callers
+through the current reverse graph. File-local graph reuse remains available.
 Transported callable result dependencies now bind the actual path/span summary,
 including parameter-invocation state. Result reuse also compares the admitted
 transport and unavailable-target census; the synthetic project-callable label

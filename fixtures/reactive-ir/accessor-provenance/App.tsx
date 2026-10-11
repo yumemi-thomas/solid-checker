@@ -75,9 +75,9 @@ export function EventOnly() {
   return <button onClick={() => { console.log(account.user(), store.selected()); }}>Read</button>;
 }
 export function Reassigned() {
-  const store: { rows: () => number } = collection(1);
-  store.rows = () => 0;
-  const value = store.rows();
+  const store: { dead: () => number } = modifiable(1);
+  store.dead = () => 0;
+  const value = store.dead();
   return <p>{value}</p>;
 }
 export function Escaped() {
@@ -169,33 +169,33 @@ export function ObjectConsumerTracked() {
   return <p>{decor.notes()}</p>;
 }
 
-function nestedCollection(): { inner: { rows: () => number } } {
-  const [rows] = createSignal(1);
-  return { inner: { rows } };
+function nestedCollection(): { inner: { dead: () => number } } {
+  const [dead] = createSignal(1);
+  return { inner: { dead } };
 }
-function replaceInner(inner: { rows: () => number }) { inner.rows = () => 0; }
+function replaceInner(inner: { dead: () => number }) { inner.dead = () => 0; }
 export function NestedHelperMutation() {
   const store = nestedCollection();
   replaceInner(store.inner);
-  const value = store.inner.rows();
+  const value = store.inner.dead();
   return <p>{value}</p>;
 }
 export function NestedAliasMutation() {
   const store = nestedCollection();
   const inner = store.inner;
-  inner.rows = () => 0;
-  const value = store.inner.rows();
+  inner.dead = () => 0;
+  const value = store.inner.dead();
   return <p>{value}</p>;
 }
 export function NestedOpaqueHelper() {
   const store = nestedCollection();
   unknown(store.inner);
-  const value = store.inner.rows();
+  const value = store.inner.dead();
   return <p>{value}</p>;
 }
 export function NestedUnmutated() {
   const store = nestedCollection();
-  const value = store.inner.rows();
+  const value = store.inner.dead();
   return <p>{value}</p>;
 }
 export function MixedInstances() {
@@ -216,9 +216,9 @@ export function MemberAlias() {
   return <p>{value}</p>;
 }
 export function LoopMemberWrite() {
-  const store = collection(1);
-  for (store.rows of [() => 0]) {}
-  const value = store.rows();
+  const store = modifiable(1);
+  for (store.dead of [() => 0]) {}
+  const value = store.dead();
   return <p>{value}</p>;
 }
 export function LoopMemberKeyWrite() {
@@ -327,4 +327,9 @@ export function SynchronousHelperPreference() {
 export function DirectAccessorPreference() {
   const [rows] = createSignal(1);
   return <p>{rows() > 0 && <span>ready</span>}</p>;
+}
+
+function modifiable(initial: number): { dead: () => number } {
+  const [dead] = createSignal(initial);
+  return { dead };
 }

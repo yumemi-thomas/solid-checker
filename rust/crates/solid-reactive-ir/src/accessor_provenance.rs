@@ -39,6 +39,183 @@ pub(super) struct Resolver<'a, 'facts> {
     providers: HashMap<Location, Vec<Option<(String, Span)>>>,
     source_origins: HashSet<SymbolId>,
     blocked_contexts: HashSet<Location>,
+    member_stability: MemberStability,
+}
+
+/// ADR 0273: absence of a visible veto is an assumption, not a closed census.
+#[derive(Default)]
+struct MemberStability {
+    written: HashMap<String, Location>,
+    all: Option<Location>,
+}
+
+enum Stability<'a> {
+    Assumed,
+    Vetoed(&'a Location),
+}
+
+impl MemberStability {
+    fn state(&self, name: &str) -> Stability<'_> {
+        match self.all.as_ref().or_else(|| self.written.get(name)) {
+            Some(site) => Stability::Vetoed(site),
+            None => Stability::Assumed,
+        }
+    }
+
+    fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
+        let mut index = Self::default();
+        for file in &facts.files {
+            index.syntax(file);
+            for call in &file.ast.calls {
+                let Some(method) = mutation_builtin(file, call, lookup) else {
+                    continue;
+                };
+                let site = location(file.path.shared(), call.span);
+                match method {
+                    "defineProperty" | "set" | "deleteProperty" => {
+                        if let Some(argument) = call.arguments.get(1)
+                            && !argument.spread
+                            && let ast::ArgumentLiteralFact::String(name) = &argument.literal_value
+                        {
+                            index.written.entry(name.to_string()).or_insert(site);
+                        }
+                    }
+                    "defineProperties" => {
+                        if let Some(argument) = call.arguments.get(1)
+                            && !argument.spread
+                            && let Some(shape) = file.ast.object_get_shapes.iter().find(|shape| {
+                                shape.span == file.ast.peel_ts_sugar_span(argument.span)
+                            })
+                        {
+                            for property in &shape.properties {
+                                index
+                                    .written
+                                    .entry(property.key.to_string())
+                                    .or_insert_with(|| site.clone());
+                            }
+                        }
+                    }
+                    "assign" => {
+                        for argument in call.arguments.iter().skip(1) {
+                            let shape = file.ast.object_get_shapes.iter().find(|shape| {
+                                shape.span == file.ast.peel_ts_sugar_span(argument.span)
+                                    && shape.closed
+                            });
+                            if argument.spread || shape.is_none() {
+                                index.all.get_or_insert_with(|| site.clone());
+                            } else if let Some(shape) = shape {
+                                for property in &shape.properties {
+                                    index
+                                        .written
+                                        .entry(property.key.to_string())
+                                        .or_insert_with(|| site.clone());
+                                }
+                            }
+                        }
+                    }
+                    _ => unreachable!("mutation builtin catalog"),
+                }
+            }
+        }
+        index
+    }
+
+    fn syntax(&mut self, file: &FileFacts) {
+        // Normalized leaves exclude receiver Gets, destructuring keys/defaults
+        // and reads inside computed keys. Updates and loop targets are included.
+        let targets = file
+            .ast
+            .write_targets
+            .iter()
+            .copied()
+            .chain(file.ast.deleted_targets.iter().copied())
+            .map(|span| file.ast.peel_ts_sugar_span(span))
+            .collect::<HashSet<_>>();
+        let literal_keys = file
+            .ast
+            .literal_computed_members
+            .iter()
+            .map(|key| (key.span, key.key.as_str()))
+            .collect::<HashMap<_, _>>();
+        for member in &file.ast.members {
+            if !targets.contains(&member.span) {
+                continue;
+            }
+            let name = if file.ast.computed_members.contains(&member.span) {
+                literal_keys.get(&member.span).copied()
+            } else {
+                file.source_text(member.property)
+            };
+            if let Some(name) = name {
+                self.written
+                    .entry(name.to_owned())
+                    .or_insert_with(|| location(file.path.shared(), member.span));
+            }
+        }
+    }
+}
+
+/// Signature and runtime receiver identities are independent, as in ADR 0272.
+/// A local ObjectConstructor-typed value or a homonymous helper is not Object.
+fn mutation_builtin<'a>(
+    file: &FileFacts,
+    call: &ast::CallFact,
+    lookup: &'a SemanticLookup<'_>,
+) -> Option<&'a str> {
+    let declaration = lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    let (global, property, library) = match declaration.qualified_name.as_ref() {
+        "ObjectConstructor.defineProperty" => ("Object", "defineProperty", "lib.es5.d.ts"),
+        "ObjectConstructor.defineProperties" => ("Object", "defineProperties", "lib.es5.d.ts"),
+        "ObjectConstructor.assign" => ("Object", "assign", "lib.es2015.core.d.ts"),
+        "Reflect.set" => ("Reflect", "set", "lib.es2015.reflect.d.ts"),
+        "Reflect.defineProperty" => ("Reflect", "defineProperty", "lib.es2015.reflect.d.ts"),
+        "Reflect.deleteProperty" => ("Reflect", "deleteProperty", "lib.es2015.reflect.d.ts"),
+        _ => return None,
+    };
+    let member = file.ast.members.iter().find(|member| {
+        member.span == file.ast.peel_ts_sugar_span(call.callee)
+            && !file.ast.computed_members.contains(&member.span)
+            && file.source_text(member.property) == Some(property)
+    })?;
+    let receiver = file.ast.peel_ts_sugar_span(member.object);
+    if file.ast.reference_declaration(receiver).is_some() {
+        return None;
+    }
+    let entity = lookup.entity_at(file.path.as_str(), receiver)?;
+    if entity.symbol_unresolved || entity.symbol.is_empty() {
+        return None;
+    }
+    let symbol = lookup.symbol_at(file.path.as_str(), receiver)?;
+    if !symbol.alias_target().is_empty()
+        || symbol.declarations().iter().any(|binding| {
+            lookup
+                .file_by_path(binding.location.path.as_ref())
+                .is_some()
+        })
+    {
+        return None;
+    }
+    let mut bindings = symbol.declarations().iter().filter(|binding| {
+        binding.name.as_ref() == global
+            && (global == "Reflect" || binding.kind.as_ref() == "variable")
+    });
+    let binding = bindings.next()?;
+    // Object's runtime variable is in es5 even when assign's signature is in es2015.core.
+    let expected = std::path::Path::new(declaration.source_file.as_ref())
+        .parent()?
+        .join(if global == "Object" {
+            "lib.es5.d.ts"
+        } else {
+            library
+        });
+    (bindings.next().is_none()
+        && std::path::Path::new(binding.location.path.as_ref()) == expected
+        && declaration.location.path == declaration.source_file
+        && std::path::Path::new(declaration.source_file.as_ref())
+            .file_name()?
+            .to_str()?
+            == library)
+        .then_some(property)
 }
 
 #[derive(Default)]
@@ -71,6 +248,7 @@ impl Resolver<'_, '_> {
             providers: HashMap::new(),
             source_origins: HashSet::new(),
             blocked_contexts: HashSet::new(),
+            member_stability: MemberStability::index(facts, lookup),
         };
         for file in &facts.files {
             for binding in &file.ast.bindings {
@@ -505,6 +683,9 @@ impl Resolver<'_, '_> {
             };
             let object_file = self.lookup.file_by_path(&path)?;
             let name = file.source_text(member.property)?;
+            if let Stability::Vetoed(_site) = self.member_stability.state(name) {
+                return None;
+            }
             let properties = closed_properties(object_file, object)?;
             let property = properties.into_iter().find(|p| {
                 object_file
@@ -860,6 +1041,49 @@ mod tests {
                 callback_roles: vec![],
                 jsx_operations: vec![],
             }),
+        }
+    }
+
+    #[test]
+    fn visible_member_writes_use_normalized_targets_and_cooked_keys() {
+        for source in [
+            "x.rows = f;",
+            "x.rows += 1;",
+            "x.rows ||= f;",
+            "++x.rows;",
+            "x.rows--;",
+            "[x.rows] = values;",
+            "({ key: x.rows } = value);",
+            "for (x.rows of values) {}",
+            "for (x.rows in values) {}",
+            "delete x.rows;",
+            "x['rows'] = f;",
+            "delete x['r\\u006fws'];",
+            "(x.rows as any) = f;",
+        ] {
+            let file = file(source);
+            let mut index = MemberStability::default();
+            index.syntax(&file);
+            assert!(
+                matches!(index.state("rows"), Stability::Vetoed(_)),
+                "{source}"
+            );
+            assert!(matches!(index.state("other"), Stability::Assumed));
+        }
+        for source in [
+            "x.rows.other = f;",
+            "x[x.rows] = f;",
+            "const rows = x.rows;",
+            "({ rows: x.other = x.rows } = value);",
+            "delete x[key];",
+        ] {
+            let file = file(source);
+            let mut index = MemberStability::default();
+            index.syntax(&file);
+            assert!(
+                matches!(index.state("rows"), Stability::Assumed),
+                "{source}"
+            );
         }
     }
 

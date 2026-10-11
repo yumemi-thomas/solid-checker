@@ -7484,6 +7484,9 @@ fn interprocedural_reads(
             .collect(),
     );
     let (transported_calls, unavailable_calls) = provenance.calls();
+    let transport_identity_matches = interprocedural_result_cache.as_ref().is_none_or(|cache| {
+        cache.transported_calls == transported_calls && cache.unavailable_calls == unavailable_calls
+    });
     let transported_bodies = transported_calls
         .values()
         .filter_map(|target| match target {
@@ -8222,8 +8225,6 @@ fn interprocedural_reads(
         provenance: &provenance,
     };
     if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
-        let transport_identity_matches = cache.transported_calls == transported_calls
-            && cache.unavailable_calls == unavailable_calls;
         cache.transported_calls.clone_from(&transported_calls);
         cache.unavailable_calls.clone_from(&unavailable_calls);
         // Call-role proofs inspect callee syntax beyond its read summary:
@@ -8595,12 +8596,22 @@ fn interprocedural_reads(
         semantics: ContractSemantics { source_kinds },
     };
     let exports = if let Some(cache) = interprocedural_result_cache {
+        // A removed transport edge is absent from the CURRENT reverse graph,
+        // so an edited falsifier cannot dirty its former callers through that
+        // graph. Likewise a new edge can connect otherwise retained files.
+        // Invalidate export fragments too when the transport census changes;
+        // ordinary graph contributions can still be reused.
+        let export_reused_paths = if transport_identity_matches {
+            &graph_node_reused_paths
+        } else {
+            &HashSet::new()
+        };
         contract_export_summaries_incremental(
             &mut cache.contract_exports,
             facts,
             &contract_graph,
             &reverse_edges,
-            &graph_node_reused_paths,
+            export_reused_paths,
             *changed_semantic_symbols,
             &contract_analysis,
         )

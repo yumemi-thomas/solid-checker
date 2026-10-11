@@ -3,5 +3,5 @@ import { CrossAccount } from "./ContextStability";
 
 export function replaceCrossAccount() {
   const replaced = useContext(CrossAccount);
-  replaced.state = () => 0;
+  replaced.stale = () => 0;
 }

@@ -78,7 +78,22 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
         consumer_read(&program),
         "the member must be admitted and carry a proven body read"
     );
-    for (version, source, reads) in [(1, without_read, false), (2, original, true)] {
+    let unrelated_write =
+        format!("{original}\nconst other = {{ ready: () => 0 }}; other.ready = () => 0;\n");
+    let unknown_assign =
+        format!("{original}\nconst other = {{ plain: 0 }}; Object.assign({{}}, other);\n");
+    let spread_assign =
+        format!("{original}\nconst other = {{ plain: 0 }}; Object.assign({{}}, {{ ...other }});\n");
+    for (version, source, reads) in [
+        (1, without_read, false),
+        (2, original.clone(), true),
+        (3, unrelated_write, false),
+        (4, original.clone(), true),
+        (5, unknown_assign, false),
+        (6, original.clone(), true),
+        (7, spread_assign, false),
+        (8, original, true),
+    ] {
         let facts = session
             .edit(
                 vec![SourceChange {
@@ -100,7 +115,7 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
         assert_eq!(
             consumer_read(&cold),
             reads,
-            "the helper edit must change the consumer read"
+            "the helper summary or unrelated member-name write must change transport"
         );
         assert_eq!(
             warm, cold,
@@ -130,8 +145,20 @@ fn context_receiver_census_edits_match_cold_in_both_directions() {
         .unwrap()
         .to_string_lossy()
         .into_owned();
+    let controls = directory.join("ContextStability.tsx");
+    let source = fs::read_to_string(&controls).unwrap();
+    fs::write(
+        &controls,
+        source
+            .replace("replaced.stale = () => 0;", "void replaced.stale();")
+            .replace(
+                "useContext(Unbound).stale = () => 0;",
+                "void useContext(Unbound).stale();",
+            ),
+    )
+    .unwrap();
     let original = fs::read_to_string(&mutation).unwrap();
-    let closed = original.replace("replaced.state = () => 0;", "void replaced.state();");
+    let closed = original.replace("replaced.stale = () => 0;", "void replaced.stale();");
     assert_ne!(closed, original);
     let vocabulary = dialect::default_dialect().vocabulary;
     let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();

@@ -61,7 +61,7 @@ Renderer and unused options are scaffolding. The independent published-typing
 check replaces the stub with the retained real rc.13 packages, with strict
 noEmit and skipLibCheck for prerelease declaration internals.
 
-ContextStability joins every exact context-derived receiver by context identity.
+ContextStability joins exact context-derived receiver bindings by context identity.
 Mutation through a second wrapper result, cross-file direct useContext mutation,
 opaque escape through a second receiver and an escaped provider binding all
 withhold transport for the entire context. Direct mutation through an unbound
@@ -72,3 +72,15 @@ pin an admitted named member arrow whose ordinary helper gains/loses a signal re
 in another file, without changing the helper declaration or caller/factory spans.
 Backend retained/cold tests exercise both directions of that summary edit and
 both directions of the cross-file context receiver census edit.
+
+ADR 0273 adds the explicit transported member stability premise. The receiver
+census alone does not close shared-object stability, especially through wrapper
+callbacks. One project-wide written-name index vetoes transported members on
+any receiver's static assignment/update/destructuring/loop/delete target or
+exact Object/Reflect mutation call. Unknown Object.assign sources veto all
+members. Missing/unresolved/dependency/unsupported reflective/eval/HMR channels
+are outside the premise; other receivers' nonliteral computed writes are too.
+Vetoes withhold transport and keep ordinary obligations. Mutation controls use
+distinct dead/stale names so this project retains its independent rows/state
+positive expectations. The transported-member-stability projects pin the new
+premise, three review examples, exact builtin identity and wildcard refusal.
