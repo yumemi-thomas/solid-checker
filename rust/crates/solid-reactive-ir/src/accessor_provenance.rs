@@ -71,6 +71,13 @@ impl MemberStability {
                     continue;
                 };
                 let site = location(file.path.shared(), call.span);
+                // A spread argument shifts every later position (a tuple can
+                // supply target, key and value at once), so no key position is
+                // known: it could write any member.
+                if call.arguments.iter().any(|argument| argument.spread) {
+                    index.all.get_or_insert(site);
+                    continue;
+                }
                 match method {
                     // A key the literal fact cannot name (a template, an
                     // identifier, a spread) could be any member, so it vetoes

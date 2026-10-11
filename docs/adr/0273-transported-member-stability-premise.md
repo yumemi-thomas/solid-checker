@@ -38,10 +38,11 @@ recorded after the same wrapper peeling, without closing the object shape.
 Object.assign with a spread argument in **any position**, including its first
 written slot (`Object.assign(...args)`),
 spread/open literal or nonliteral source vetoes **every** transported object
-member in the project. So does a single-key call (Object.defineProperty,
-Reflect.set, Reflect.defineProperty, Reflect.deleteProperty) whose key the
-argument-literal fact cannot name — a template literal, an identifier, a spread
-argument — and an Object.defineProperties call whose descriptor map is not a
+member in the project. So does any spread argument to any of these builtins —
+a tuple spread shifts every later position, so no key position is known — and
+a single-key call (Object.defineProperty, Reflect.set, Reflect.defineProperty,
+Reflect.deleteProperty) whose key the argument-literal fact cannot name (a
+template literal, an identifier), and an Object.defineProperties call whose descriptor map is not a
 literal or contains a spread: each could write any member, and over-vetoing only
 withholds. Local homonyms and local ObjectConstructor-typed values are not
 standard-library runtime receiver identities. Unsupported aliases, computed

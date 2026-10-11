@@ -11,6 +11,10 @@ function templateKey(target: { state: () => number }) {
   Object.defineProperty(target, `state`, { value: () => 0 });
 }
 function identifierKey(target: object, key: string) { Reflect.set(target, key, () => 0); }
+function tupleKey(target: object) {
+  const pair: [object, string] = [target, "state"];
+  Reflect.set(...pair, () => 0);
+}
 export function FactoryConsumer() {
   const store = make();
   const value = store.rows();
