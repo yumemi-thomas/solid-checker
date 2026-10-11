@@ -131,3 +131,36 @@ function libraryTypedLocal() {
   fake.assign({}, { stable: () => 0 });
   fake.defineProperty({}, "stable", {});
 }
+
+function wrappedMake(): {
+  wrappedAs: () => number; wrappedSatisfies: () => number;
+  wrappedDelete: () => number; wrappedDescriptors: () => number;
+  templateKey: () => number;
+} {
+  const [read] = createSignal(1);
+  return { wrappedAs: read, wrappedSatisfies: read, wrappedDelete: read,
+    wrappedDescriptors: read, templateKey: read };
+}
+function wrappedWrites(read: () => ReturnType<typeof wrappedMake>) {
+  const replaced = read();
+  replaced["wrappedAs" as const] = () => 0;
+  replaced[("wrappedSatisfies" satisfies string)] = () => 0;
+  delete (replaced as { wrappedDelete?: () => number })["wrappedDelete"!];
+  Object.defineProperties(replaced, {
+    ["wrappedDescriptors" as const]: { value: () => 0 }
+  });
+  replaced[`templateKey`] = () => 0;
+}
+export function WrappedLiteralVetoes() {
+  wrappedWrites(wrappedMake);
+  const store = wrappedMake();
+  const value = [store.wrappedAs(), store.wrappedSatisfies(), store.wrappedDelete(),
+    store.wrappedDescriptors(), store.templateKey()];
+  return <p>{value.join()}</p>;
+}
+// Deliberately escaped dotted names/callees are outside ADR 0273's premise.
+// These unused controls pin that boundary without affecting StableBody.
+function obfuscated(other: { stable: () => number }) {
+  other.st\u0061ble = () => 0;
+  Object.ass\u0069gn(other, { stable: () => 0 });
+}

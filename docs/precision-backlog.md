@@ -29521,7 +29521,18 @@ The receiver census does not close stability through arbitrary wrapper callback
 escapes. ADR 0273 adopts the owner-accepted transported member stability premise:
 Assumed by default, Vetoed(site) on a project-wide static member-name write or
 exact Object/Reflect mutation. Any receiver's matching name withholds transport;
-unknown/spread Object.assign sources veto all transported members. One index is
+unknown/spread Object.assign sources veto all transported members, including a
+spread in the first written argument slot. Literal computed write and descriptor
+keys survive transparent TypeScript wrappers and substitution-free templates;
+computed descriptor shapes remain open, so this adds known veto names without
+admitting object transport. Retained/cold add/remove tests cover both spread
+positions and wrapped keys, including callback-fed context mutation with a
+separate direct consumer. Deliberate Unicode escapes in dotted member/callee
+names remain outside ADR 0273's premise (raw IdentifierName source spelling);
+cooked string/template escapes are covered. No Type Facts producer, protocol or
+AST fact schema version change is needed: existing literal-key/property facts
+gain additional exact literals, with the same serialized fields and closure
+policy. One index is
 built per analysis. Nested helper/alias, second-consumer and wrapper-callback
 mutation controls remain non-violations with obligations retained. Missing,
 unresolved, dependency, unsupported reflective, eval and HMR code are outside

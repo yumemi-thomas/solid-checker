@@ -29,3 +29,9 @@ export function DirectBody() {
   const value = count();
   return <p>{value}</p>;
 }
+function firstSlotTuple(read: () => { state: () => number }) {
+  const args: [{ state: () => number }, { state: () => number }] =
+    [read(), { state: () => 0 }];
+  Object.assign(...args);
+}
+function laterSlotSpread(sources: object[]) { Object.assign({}, ...sources); }

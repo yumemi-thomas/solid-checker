@@ -96,12 +96,20 @@ impl MemberStability {
                         }
                     }
                     "assign" => {
-                        for argument in call.arguments.iter().skip(1) {
+                        for (position, argument) in call.arguments.iter().enumerate() {
+                            // A first-slot spread can supply both target and sources.
+                            if argument.spread {
+                                index.all.get_or_insert_with(|| site.clone());
+                                continue;
+                            }
+                            if position == 0 {
+                                continue;
+                            }
                             let shape = file.ast.object_get_shapes.iter().find(|shape| {
                                 shape.span == file.ast.peel_ts_sugar_span(argument.span)
                                     && shape.closed
                             });
-                            if argument.spread || shape.is_none() {
+                            if shape.is_none() {
                                 index.all.get_or_insert_with(|| site.clone());
                             } else if let Some(shape) = shape {
                                 for property in &shape.properties {
@@ -1059,6 +1067,11 @@ mod tests {
             "delete x.rows;",
             "x['rows'] = f;",
             "delete x['r\\u006fws'];",
+            "x['rows' as const] = f;",
+            "x['rows' satisfies string] = f;",
+            "delete x['rows'!];",
+            "x[(<string>'rows')] = f;",
+            "x[`r\\u006fws`] = f;",
             "(x.rows as any) = f;",
         ] {
             let file = file(source);
@@ -1076,6 +1089,8 @@ mod tests {
             "const rows = x.rows;",
             "({ rows: x.other = x.rows } = value);",
             "delete x[key];",
+            "x[key as string] = f;",
+            "x[`r${key}ws`] = f;",
         ] {
             let file = file(source);
             let mut index = MemberStability::default();

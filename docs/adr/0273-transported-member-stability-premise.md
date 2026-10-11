@@ -25,16 +25,30 @@ static member writes by **name on any receiver**. Normalized write targets
 cover assignment, compound/logical assignment, ++/--, destructuring leaves,
 for-in/for-of targets and delete. Static dotted/optional member targets and
 literal computed keys use their syntax facts, including cooked string keys.
+Transparent TypeScript wrappers (as, satisfies, non-null, type assertions and
+parentheses) do not erase literal computed keys. Substitution-free templates
+also supply their cooked literal key; templates with substitutions do not.
 Receiver Gets, destructuring keys/defaults and computed-key reads are not writes.
 
 Exact standard-library signature and runtime receiver declaration identities
 identify Object.defineProperty, Object.defineProperties, Reflect.set,
 Reflect.defineProperty, Reflect.deleteProperty and Object.assign. Their static
-literal keys veto the named members. Object.assign with a spread argument,
+literal keys veto the named members. Known computed descriptor-object keys are
+recorded after the same wrapper peeling, without closing the object shape.
+Object.assign with a spread argument in **any position**, including its first
+written slot (`Object.assign(...args)`),
 spread/open literal or nonliteral source vetoes **every** transported object
 member in the project. Local homonyms and local ObjectConstructor-typed values
 are not standard-library runtime receiver identities. Unsupported aliases,
 computed callees and nonliteral reflective keys remain outside the premise.
+
+Deliberately obfuscated Unicode escapes in dotted member names or mutation
+callee names (`x.st\u0061te`, `Object.ass\u0069gn`) are outside this premise.
+The dotted-member fact records source spans, and this veto compares their raw
+spellings; it does not currently carry the parser's cooked IdentifierName.
+This exclusion does not apply to cooked escapes inside literal computed strings
+or templates, which are normalized and vetoed. Applications must ensure
+stability in the excluded obfuscation channel too.
 
 A nonliteral computed write/delete on a transported object's own exact binding
 already refuses that receiver via the existing reference census. Computed
@@ -71,7 +85,11 @@ Contract export fragments also invalidate on a transport-map transition: a
 removed edge is absent from the current reverse graph and cannot dirty its
 former callers through that graph. File-local graph contributions remain reusable.
 The focused retained/cold regression exercises both directions, including a
-write on an unrelated receiver. No premise state is retained independently.
+write on an unrelated receiver, first-slot tuple and later-slot argument spreads,
+wrapped literal writes/deletes/descriptors and substitution-free template keys.
+Addition and removal both compare the full retained/cold Program. Callback-fed
+context mutation controls also cover the review's separate direct consumer.
+No premise state is retained independently.
 
 Direct accessor calls, callable context values and other independent reads are
 outside this object-member premise. Definition obligations are never suppressed

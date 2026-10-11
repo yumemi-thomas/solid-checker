@@ -244,7 +244,8 @@ pub struct AstFacts {
     pub array_literals: Vec<Span>,
     /// The subset of [`AstFacts::computed_members`] whose key is a literal
     /// naming exactly one property, sorted by member span: a string literal
-    /// (its cooked value, lone surrogates refused) or a numeric literal whose
+    /// or substitution-free template (its cooked value, lone surrogates
+    /// refused), under transparent TypeScript wrappers, or a numeric literal whose
     /// value is a non-negative integer no larger than `i32::MAX` (its
     /// canonical decimal spelling, which is the property key ToPropertyKey
     /// gives it). The same key the Type Facts producer's
@@ -3586,6 +3587,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 PropertyKey::StringLiteral(key) if !key.lone_surrogates => {
                     Some(key.value.as_str().into())
                 }
+                _ if property.computed => {
+                    property.key.as_expression().and_then(literal_property_key)
+                }
                 _ => None,
             };
             let Some(key) = key else {
@@ -4125,16 +4129,23 @@ fn export_declaration_surface_names(declaration: &Declaration<'_>) -> Vec<Export
     }]
 }
 
-/// The one property key a literal names: a string literal's cooked value (lone
-/// surrogates refused), or a numeric literal whose value is a non-negative
+/// The one property key a literal names after transparent TypeScript wrappers:
+/// a string or substitution-free template's cooked value (lone surrogates
+/// refused), or a numeric literal whose value is a non-negative
 /// integer no larger than `i32::MAX`, in the canonical decimal spelling
 /// ToPropertyKey gives it. Everything else names no key statically.
 fn literal_property_key(expression: &Expression<'_>) -> Option<CompactString> {
-    match expression {
+    match peel_ts_sugar(expression) {
         Expression::StringLiteral(literal) if !literal.lone_surrogates => {
             Some(literal.value.as_str().into())
         }
         Expression::NumericLiteral(literal) => canonical_index_key(literal.value),
+        Expression::TemplateLiteral(literal) if literal.expressions.is_empty() => literal
+            .quasis
+            .first()
+            .filter(|quasi| !quasi.lone_surrogates)
+            .and_then(|quasi| quasi.value.cooked.as_ref())
+            .map(|key| key.as_str().into()),
         _ => None,
     }
 }
@@ -4563,6 +4574,40 @@ export const short = async () => 2;
                     .closed,
                 "{source}"
             );
+        }
+    }
+
+    #[test]
+    fn literal_keys_peel_wrappers_without_closing_computed_object_shapes() {
+        for key in [
+            "'state' as const",
+            "'state' satisfies string",
+            "'state'!",
+            "(('state'))",
+            "<string>'state'",
+            "`st\\u0061te`",
+            "(`state` as const)!",
+        ] {
+            let source = format!("other[{key}] = read; const o = {{ [{key}]: read }};");
+            let facts = extract("keys.ts", &source).unwrap();
+            let [member] = facts.literal_computed_members.as_slice() else {
+                panic!("one literal member key: {key}");
+            };
+            assert_eq!(member.key, "state", "{key}");
+            assert_eq!(member.span, facts.members[0].span, "{key}");
+            let [shape] = facts.object_get_shapes.as_slice() else {
+                panic!("one object shape: {key}");
+            };
+            assert!(!shape.closed, "computed shapes must stay open: {key}");
+            assert_eq!(shape.properties.len(), 1, "{key}");
+            assert_eq!(shape.properties[0].key, "state", "{key}");
+        }
+        for key in ["key as string", "`st${key}te`", "'\\ud800'", "`\\ud800`"] {
+            let source = format!("other[{key}] = read; const o = {{ [{key}]: read }};");
+            let facts = extract("keys.ts", &source).unwrap();
+            assert!(facts.literal_computed_members.is_empty(), "{key}");
+            assert!(facts.object_get_shapes[0].properties.is_empty(), "{key}");
+            assert!(!facts.object_get_shapes[0].closed, "{key}");
         }
     }
 
@@ -5572,6 +5617,7 @@ S.createErrorBoundary;
                 ("h[0]", "0"),
                 ("h[\"run\"]", "run"),
                 ("h[0x6]", "6"),
+                ("h[`x`]", "x"),
                 ("h[2]", "2")
             ]
         );

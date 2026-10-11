@@ -84,6 +84,23 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
         format!("{original}\nconst other = {{ plain: 0 }}; Object.assign({{}}, other);\n");
     let spread_assign =
         format!("{original}\nconst other = {{ plain: 0 }}; Object.assign({{}}, {{ ...other }});\n");
+    let first_slot_assign = format!(
+        "{original}\nconst args: [object, object] = [{{}}, {{ ready: () => 0 }}]; Object.assign(...args);\n"
+    );
+    let later_slot_assign = format!(
+        "{original}\nconst sources: object[] = [{{ ready: () => 0 }}]; Object.assign({{}}, ...sources);\n"
+    );
+    let wrapped_write = format!(
+        "{original}\nconst other = {{ ready: () => 0 }}; other[\"ready\" as const] = () => 0;\n"
+    );
+    let wrapped_delete = format!(
+        "{original}\nconst other: {{ ready?: () => number }} = {{}}; delete other[\"ready\"!];\n"
+    );
+    let wrapped_descriptor = format!(
+        "{original}\nObject.defineProperties({{}}, {{ [\"ready\" satisfies string]: {{ value: () => 0 }} }});\n"
+    );
+    let template_write =
+        format!("{original}\nconst other = {{ ready: () => 0 }}; other[`ready`] = () => 0;\n");
     for (version, source, reads) in [
         (1, without_read, false),
         (2, original.clone(), true),
@@ -92,7 +109,19 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
         (5, unknown_assign, false),
         (6, original.clone(), true),
         (7, spread_assign, false),
-        (8, original, true),
+        (8, original.clone(), true),
+        (9, first_slot_assign, false),
+        (10, original.clone(), true),
+        (11, later_slot_assign, false),
+        (12, original.clone(), true),
+        (13, wrapped_write, false),
+        (14, original.clone(), true),
+        (15, wrapped_delete, false),
+        (16, original.clone(), true),
+        (17, wrapped_descriptor, false),
+        (18, original.clone(), true),
+        (19, template_write, false),
+        (20, original, true),
     ] {
         let facts = session
             .edit(
@@ -177,7 +206,32 @@ fn context_receiver_census_edits_match_cold_in_both_directions() {
         })
     };
     assert!(!consumer_read(&program));
-    for (version, source, reads) in [(1, closed, true), (2, original, false)] {
+    let callback_mutation = |body: &str| {
+        format!(
+            "{closed}\nconst useCross = () => useContext(CrossAccount);\n\
+             function replace(read: () => {{ stale: () => number }}) {{ {body} }}\n\
+             replace(useCross);\n"
+        )
+    };
+    let first_slot = callback_mutation(
+        "const args: [{ stale: () => number }, { stale: () => number }] = \
+         [read(), { stale: () => 0 }]; Object.assign(...args);",
+    );
+    let wrapped_write = callback_mutation("read()[\"stale\" as const] = () => 0;");
+    let wrapped_descriptor = callback_mutation(
+        "Object.defineProperties(read(), { [\"stale\" as const]: { value: () => 0 } });",
+    );
+    for (version, source, reads) in [
+        (1, closed.clone(), true),
+        (2, original, false),
+        (3, closed.clone(), true),
+        (4, first_slot, false),
+        (5, closed.clone(), true),
+        (6, wrapped_write, false),
+        (7, closed.clone(), true),
+        (8, wrapped_descriptor, false),
+        (9, closed, true),
+    ] {
         let facts = session
             .edit(
                 vec![SourceChange {
