@@ -22,35 +22,31 @@
   "identity": "identity.json",
   "exports": {
     "useLocation": {
-      "why": "Returns the router's location: getters over memos, and a memo-backed query proxy.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/donegeon-client/web/node_modules/@solidjs/router/dist/routing.js:436-474 — Location is a plain object with reactive pathname/search/hash/state getters, an inert key getter and a plain query property holding a memo-backed proxy. Existing vocabulary cannot express these Get semantics exactly; the whole-object store positive is removed and returns remains open (ADR 0271). Runtime pairs are regression controls, not a return proof.",
       "rule": "strict-read-untracked",
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "store"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      }
+      "call": {},
+      "probes": [
+        {
+          "label": "search",
+          "rule": "strict-read-untracked",
+          "why": "The search getter is reactive; the correct twin reads it in JSX."
+        },
+        {
+          "label": "key",
+          "rule": "strict-read-untracked",
+          "why": "The pathname misuse opens a strict-read window; the correct twin reads only the inert key in the component body."
+        },
+        {
+          "label": "query",
+          "rule": "strict-read-untracked",
+          "why": "The pathname misuse opens a strict-read window; retrieving query is inert, and query.q is read only in JSX."
+        },
+        {
+          "label": "keys",
+          "rule": "strict-read-untracked",
+          "why": "The pathname misuse opens a strict-read window; enumerating the plain location object with Object.keys is inert."
+        }
+      ]
     },
     "useParams": {
       "why": "Returns the route's params, a memo-backed proxy.",

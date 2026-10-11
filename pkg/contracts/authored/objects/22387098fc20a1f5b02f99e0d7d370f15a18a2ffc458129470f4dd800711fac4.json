@@ -171,33 +171,6 @@
             }
           },
           {
-            "id": "path-update",
-            "kind": "invoke",
-            "trigger": {
-              "event": "external-event",
-              "resource": "memo-owner"
-            },
-            "tracking": "tracked",
-            "count": {
-              "min": 0,
-              "max": "many",
-              "scope": "trigger"
-            },
-            "owner": {
-              "source": "created",
-              "resource": "memo-owner",
-              "children": "allowed",
-              "cleanup": "supported",
-              "productions": [
-                {
-                  "resource": "memo-owner",
-                  "children": "allowed",
-                  "cleanup": "supported"
-                }
-              ]
-            }
-          },
-          {
             "at": {
               "event": "call",
               "schedule": "same-stack"
@@ -225,8 +198,7 @@
         "closed": [
           "reads",
           "returns",
-          "creates",
-          "callbacks"
+          "creates"
         ],
         "reads": [],
         "creates": [],
@@ -242,13 +214,6 @@
         "callbacks": [
           {
             "operation": "path-initial",
-            "from": {
-              "arg": 0,
-              "path": []
-            }
-          },
-          {
-            "operation": "path-update",
             "from": {
               "arg": 0,
               "path": []
@@ -302,36 +267,10 @@
       "call": {
         "closed": [
           "reads",
-          "returns",
           "creates",
           "callbacks"
         ],
         "reads": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "min": 1,
-              "max": 1,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "store"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ],
         "creates": [],
         "callbacks": []
       },
@@ -547,33 +486,6 @@
             }
           },
           {
-            "id": "path-update",
-            "kind": "invoke",
-            "trigger": {
-              "event": "external-event",
-              "resource": "memo-owner"
-            },
-            "tracking": "tracked",
-            "count": {
-              "min": 0,
-              "max": "many",
-              "scope": "trigger"
-            },
-            "owner": {
-              "source": "created",
-              "resource": "memo-owner",
-              "children": "allowed",
-              "cleanup": "supported",
-              "productions": [
-                {
-                  "resource": "memo-owner",
-                  "children": "allowed",
-                  "cleanup": "supported"
-                }
-              ]
-            }
-          },
-          {
             "at": {
               "event": "call",
               "schedule": "same-stack"
@@ -629,8 +541,7 @@
         "closed": [
           "reads",
           "returns",
-          "creates",
-          "callbacks"
+          "creates"
         ],
         "reads": [
           "route-path-read"
@@ -648,13 +559,6 @@
         "callbacks": [
           {
             "operation": "path-initial",
-            "from": {
-              "arg": 0,
-              "path": []
-            }
-          },
-          {
-            "operation": "path-update",
             "from": {
               "arg": 0,
               "path": []

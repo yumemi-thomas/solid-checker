@@ -1,4 +1,4 @@
-// Correct: argument 0 only reads while the hook's memo tracks it.
+// Correct: initial argument 0 only reads while the hook's memo tracks it. Later recomputation is not exercised.
 import { createSignal } from "solid-js";
 import { createRouter, memoryHistory, useResolvedPath } from "@solidjs/router";
 

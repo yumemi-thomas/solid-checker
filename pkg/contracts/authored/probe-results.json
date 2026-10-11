@@ -16515,7 +16515,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useHref",
-      "integrationPremiseProbeDigest": "8978ae989cf277809b1ffbf4396e2c2509afb8ac197aeb767d539d8ecb5951e6",
+      "integrationPremiseProbeDigest": "626f31e78f93ed185f1606f40fce96a0dee7b29d00ec57749ae95d4b07270437",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16555,7 +16555,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useHref",
-      "integrationPremiseProbeDigest": "20792ed2c3bd236282e036474be6ecec00c51896a54226c704a3ec145aba7c9f",
+      "integrationPremiseProbeDigest": "f784e9b84f0753710f6791303fcbd1434ca3bc1dd61488531e0fde41535f6493",
       "label": "callback",
       "solidRuntime": [
         {
@@ -16604,7 +16604,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useHref",
-      "integrationPremiseProbeDigest": "4af36b71c766bd438b4f7bdfa784ee7fd192df5a9f7bb86cd6217e2cb7243c97",
+      "integrationPremiseProbeDigest": "d8f99460764b4acd70092f35502b61ed390d70460531ef37c2925f25e1c9ed6a",
       "label": "owner",
       "solidRuntime": [
         {
@@ -16701,7 +16701,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useLocation",
-      "integrationPremiseProbeDigest": "5612d3a2e546a24d78de4879d51e59306fd4b567d2a6e28c5210c5d994965313",
+      "integrationPremiseProbeDigest": "45040158a2323b5c5d1d317db7f08e04097d082fae7705362bc211e9158382ef",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16731,6 +16731,170 @@
             "file": "case",
             "line": 7,
             "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "useLocation",
+      "integrationPremiseProbeDigest": "f2900912949db4dac1fd71ff37d720f666e502b510347817aa0f36ac60a8fca6",
+      "label": "key",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "useLocation",
+      "integrationPremiseProbeDigest": "e0f6f09b846a14025b7b58b02f1cfdf84b7811615d9f52721c71aaabc088e42d",
+      "label": "keys",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "useLocation",
+      "integrationPremiseProbeDigest": "285d6de64452a73d30f7778d4e52dd09f887a8e4b38f8f87de698d9540c4d36d",
+      "label": "query",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "useLocation",
+      "integrationPremiseProbeDigest": "96389cb2be1d86aaf0e39a1a33d7640643578e4e4586de089fcd47060a0730d8",
+      "label": "search",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 27
           }
         }
       ],
@@ -16870,7 +17034,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useResolvedPath",
-      "integrationPremiseProbeDigest": "8740e07666261493ea8d7b4095982aec1a95af84c266e6b8e9a86810787c2d81",
+      "integrationPremiseProbeDigest": "7447c8868a98c382a731a71e0f976ddd25f157b84f69f6d4d1160c88f4b6a293",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16910,7 +17074,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useResolvedPath",
-      "integrationPremiseProbeDigest": "dc725a1eb8770b1b53dac8fcd2559e5f7a430736113b5f222cdedddaaf1d6d1b",
+      "integrationPremiseProbeDigest": "6c105e00f0baeddc3ff1cf0c20e08e2a66cf5b7024b147eaf30d376d15d14ef4",
       "label": "callback",
       "solidRuntime": [
         {
@@ -16959,7 +17123,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useResolvedPath",
-      "integrationPremiseProbeDigest": "529af62b043543bca1ee27726a0b32e309a4fa6b3119dbdb6c7a5d029b303ff3",
+      "integrationPremiseProbeDigest": "b0e6801676b31bee3453c64ad4579fcba721f63f47916e293af6d2482d4ea663",
       "label": "owner",
       "solidRuntime": [
         {

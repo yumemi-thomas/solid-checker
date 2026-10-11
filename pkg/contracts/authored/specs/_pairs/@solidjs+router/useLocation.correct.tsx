@@ -1,5 +1,5 @@
-// Correct: a property of the store `useLocation` returns is read where JSX
-// tracks it.
+// Correct: pathname is a reactive getter read in tracked JSX.
+// Runtime control only; the exact native return representation remains open.
 import { createRouter, memoryHistory, useLocation } from "@solidjs/router";
 
 function Reader() {

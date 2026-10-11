@@ -42,11 +42,31 @@ All citations below are published next.26 bytes installed at
   `runWithOwner(owner, ...)`, then read their accessors. `ownKeys`/`has` read
   the existing source. The later reader does not supply the memo's parent.
 
-The ordinary reactive store result describes these reads; it does not claim
-inert data, allocation freedom, successful lookup, or caller-owned lazy
-getters. Captured-owner source plumbing imposes no ambient consumer owner
-registration requirement. This justifies closing the location/params returns
-and creates census without adding a dynamic-key proxy recipe to shared IR.
+The params result is the proxy itself: every property Get, ownKeys and has
+trap reads reactive state. Its whole-object store role is exact. Both branches
+of useSearchParams (`dist/routing.js:166-209`) return such a proxy as tuple
+item 0; obtaining the tuple item is inert, while its proxy accesses are reactive.
+The setter and typed validator behavior stay open. Captured-owner params/query
+source plumbing imposes no ambient consumer owner registration requirement.
+
+Location is instead a plain object (`dist/routing.js:509-527`). Pathname,
+search, hash and state are reactive getters; key is an inert getter; query is
+a plain data property holding the proxy. Retrieving query or enumerating
+location does not read reactive state. The former whole-object store positive
+was incorrect and is removed, including from next.16/17/18. Their independently
+inspected location constructors are respectively `donegeon-client/web`'s
+`dist/routing.js:436-474`, `compass-ui/apps/ui`'s `:464-502`, and
+`solid-groove`'s `:471-509`, beneath each app's `node_modules/@solidjs/router`.
+
+Existing object outputs describe member values, not getter execution. A
+`reactive` member is an accessor function, not a reactive scalar Get.
+ADR 0255's lazy-getter-object has different observer-dependent semantics and
+never proves an untracked violation; ADR 0235/0249 describe calls, and
+property-get operations describe caller-argument Gets. None expresses this
+mixed result exactly. This round adds no vocabulary: location returns stays
+open and has no store positive. The real `location.search` seed defect at
+donegeon-client's WaitlistRoute.tsx:33 therefore loses its native proof until
+an exact getter representation exists; runtime regression pairs retain it.
 
 ## Exact visible veto
 
@@ -115,13 +135,20 @@ project-catalog precedence are unchanged.
 
 Under ADR 0226's cited-source policy and the named premise:
 
-- useLocation/useParams close reads, returns, creates and callbacks. Hook
+- useLocation closes reads, creates and callbacks; returns stays open with
+  no positive return shape. useParams closes all four domains. Hook
   construction reads no reactive property and invokes no caller callback.
-- useHref/useResolvedPath close those four domains, with explicit optional
-  parent memo registration, tracked initial/later argument invocation and
-  reactive accessor returns. useResolvedPath's internal route-path reads are
-  tracked. Hydration permits zero initial same-stack callback executions;
-  it does not claim a deferred ordinary memo. Context absence/throws is open.
+- useHref/useResolvedPath close reads, returns and creates, with explicit
+  optional parent memo registration, tracked initial argument invocation and
+  reactive accessor returns. Callbacks stays open: native projection
+  (`contracts.rs:1503-1536`) requires a same-stack call-triggered invocation
+  with min >= 1, excluding optional initial execution and external triggers.
+  Hydration permits zero initial executions, so increasing min is unsound.
+  The unexercised path-update rows are removed; callback pairs assert only
+  initial execution. Remaining reads/returns/creates closures stand on the
+  hook construction census and do not require those later invocation rows.
+  useResolvedPath's internal route-path reads are tracked. Context
+  absence/throws stays open. Native projection is unchanged in this round.
 - useMatch closes returns and creates (two optional-parent memos). Reads and
   callbacks stay open for dynamic match-filter dispatch and path coercion.
 - useSearchParams stays open: its typed-path branch executes arbitrary
@@ -162,13 +189,16 @@ provider mutation; the conservative value-reference rule still withholds it.
 Focused fixture `fixtures/package-contracts/standard-router-integration`
 pins selective weakening, receipt/cache identity, each veto and unresolved
 controls, with no reduced package stubs. Published-typing checks use strict
-noEmit and skipLibCheck=false. Fifteen Chrome pairs pass, including five new
-memo-owner/callback pairs; native consumer checks and handoff results are
-recorded in the implementation result. No corpus sweep or full verify is
-claimed by this implementation round.
+noEmit and skipLibCheck=false. Round 1 passed fifteen Chrome pairs, including
+five memo-owner/callback pairs. Round 2 adds search/key/query/enumeration
+location controls; current probe and native results are recorded in
+`rust/target/research/router-premise/RESULT-2.md`. Next.16/17/18 probes are
+lead-owned. No corpus sweep or full verify is claimed here.
 
 The native checker recognizes the three leaf-owner pairs as SC3001. The
-tracked-callback write pairs are runtime-proved, but the native consumer does
-not yet diagnose either write; their graph is authored authority, not a claim
-that write-detection recall is complete. useMatch retains explicit open-domain
-SC9005 results, and all pair programs' createRouter/history imports remain open.
+tracked-callback write pairs demonstrate initial runtime behavior, but native
+projection does not diagnose either write. The explicit open callbacks domain
+now retains SC9005 at each hook import, independently of open createRouter/history
+imports. useLocation retains its open returns obligation, and useMatch retains
+its explicit open-domain SC9005 results. Inert location controls must have no
+native violation; an open import obligation is not whole-program certification.

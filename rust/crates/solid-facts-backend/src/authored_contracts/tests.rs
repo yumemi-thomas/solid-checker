@@ -245,6 +245,55 @@ fn the_shipped_index_loads() {
 }
 
 #[test]
+fn router_mixed_location_returns_and_optional_callbacks_remain_open() {
+    use solid_reactive_ir::contract_semantics::{ClaimDomain, Event, Schedule, Trigger};
+
+    let entries = authored().expect("the compiled-in authored index loads");
+    let mut versions = BTreeSet::new();
+    for loaded in entries.iter().filter(|loaded| {
+        loaded.entry.package_name == "@solidjs/router" && loaded.entry.requested_entrypoint == "."
+    }) {
+        versions.insert(loaded.entry.package_version.as_str());
+        let location = loaded.contract.export("useLocation").unwrap();
+        let returns = location.operation_claim(ClaimDomain::Returns).unwrap();
+        assert!(!returns.is_closed());
+        assert!(returns.items().is_empty(), "no broad store positive");
+        if loaded.entry.package_version == "2.0.0-next.26" {
+            for name in ["useHref", "useResolvedPath"] {
+                let hook = loaded.contract.export(name).unwrap();
+                assert!(!hook.callbacks().is_closed(), "{name}");
+                assert_eq!(hook.callbacks().items().len(), 1, "initial only: {name}");
+                let callback = &hook.callbacks().items()[0];
+                let operation = hook.operation(&callback.operation.0).unwrap();
+                assert_eq!(
+                    operation.trigger,
+                    Some(Trigger::Event(Event::Call)),
+                    "{name}"
+                );
+                assert_eq!(operation.at, Some(Event::Call), "{name}");
+                assert_eq!(operation.schedule, Some(Schedule::SameStack), "{name}");
+                assert_eq!(operation.cardinality.min, Some(0), "{name}");
+                assert!(
+                    hook.operation_claim(ClaimDomain::Returns)
+                        .unwrap()
+                        .is_closed(),
+                    "{name}"
+                );
+            }
+        }
+    }
+    assert_eq!(
+        versions,
+        BTreeSet::from([
+            "2.0.0-next.16",
+            "2.0.0-next.17",
+            "2.0.0-next.18",
+            "2.0.0-next.26"
+        ])
+    );
+}
+
+#[test]
 fn integration_veto_opens_only_premised_exports_and_changes_semantic_identity() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let fixture = root.join("fixtures/package-contracts/standard-router-integration");

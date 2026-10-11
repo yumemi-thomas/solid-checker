@@ -29353,10 +29353,33 @@ selects an open weakening of only those exports, with a distinct accepted semant
 identity. Missing resolution stays outside the premise, never a defect or a
 third knowledge state. Public schema-1 documents and shared IR are unchanged.
 
-useLocation/useParams and useHref/useResolvedPath close all four SC9005-demanded
-domains under cited source. First-use location/params/query memos belong to the
-captured router owner; path hooks explicitly state optional caller-parent memos
-and tracked argument callbacks. useMatch closes only returns/creates; dynamic
+Review round 2 removes the incorrect useLocation whole-object store positive
+in next.16/17/18/26. The plain location object combines reactive getter reads
+(pathname/search/hash/state), an inert key getter and a plain query field holding
+a proxy. Existing object members describe values; reactive members describe
+accessor calls; lazy-getter-object has different observer-dependent semantics;
+property-get describes caller-argument reads. None represents this result
+exactly. Returns stays open with no positive shape. Inert key/query retrieval
+and Object.keys controls must not become native violations. The real
+donegeon-client WaitlistRoute.tsx:33 location.search seed proof is withheld
+until exact getter support exists; this is a recall cost, not a type error.
+
+useParams still closes all four SC9005-demanded domains under cited source:
+its result is the createMemoObject proxy itself (next.26 routing.js:724-728,
+947-954; utils.js:124-147), whose Get/ownKeys/has traps read reactive state.
+useSearchParams item 0 is likewise a proxy on both branches (routing.js:166-209);
+it has no inert location wrapper. Typed validation/setter domains remain open.
+First-use params/query memos belong to the captured router owner.
+
+useHref/useResolvedPath now close reads/returns/creates, leaving callbacks open
+explicitly. contracts.rs:1503-1536 projects only same-stack, call-triggered
+tracked owned invocations with min >= 1. Hydration's min 0 initial invocation
+and external-triggered reevaluation cannot project, so callbacks must not close
+until native projection covers those contexts. This round does not change that
+consumer or invent min 1. Removed path-update positives were never exercised;
+retained callback pairs assert initial execution only. The remaining closed
+domains describe construction/return/owner registration independently.
+useMatch closes only returns/creates; dynamic
 filters and coercion keep reads/callbacks open. useSearchParams' typed schema/query
 proxy and stateful navigation setter remain open. useLinkState's pending-target
 graph remains unclaimed. Already-closed useIsRouting/useRouteMatches now name the

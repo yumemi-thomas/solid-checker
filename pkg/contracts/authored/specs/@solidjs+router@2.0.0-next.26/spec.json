@@ -22,50 +22,45 @@
   "identity": "identity.json",
   "exports": {
     "useLocation": {
-      "why": "Returns the router's location: getters over memos, and a memo-backed query proxy.",
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:490-528 — Location is a plain object with reactive pathname/search/hash/state getters, an inert key getter and a plain query property holding a memo-backed proxy. Existing vocabulary cannot express these Get semantics exactly; the whole-object store positive is removed and returns remains open (ADR 0271). Runtime pairs are regression controls, not a return proof.",
       "rule": "strict-read-untracked",
       "call": {
         "closed": [
           "reads",
-          "returns",
           "creates",
           "callbacks"
         ],
         "reads": [],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "min": 1,
-              "max": 1,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "store"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ],
         "creates": [],
         "callbacks": []
       },
       "closures": {
-        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. The complete hook selects an existing context field. No reactive read at the call; property/ownKeys/has reads of the result are reactive store accesses, never hook-call reads.",
-        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Every normal completion returns the existing location/params reactive object. Location fields are memo getters; params/query are createMemoObject proxies for arbitrary keys, with ownKeys/has reading the existing source. First-use memos run with runWithOwner on the captured router/route owner. The store return states reactive access, not inert data or caller-owned lazy getters; it adds no caller-argument capture, control function or Promise.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. No hook-call allocation or owner registration. Every lazy proxy memo runs under the captured router/route owner, not the hook caller or later reading owner. This is encapsulated reactive-source plumbing of the returned store, with no ambient consumer owner requirement; throws/lifetime guarantees remain open.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. The complete hook selects an existing context field. No reactive read at the call; The plain location object is not a store: its getter reads and nested proxy accesses are later result uses, never hook-call reads.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. No hook-call allocation or owner registration. Every lazy proxy memo runs under the captured router/route owner, not the hook caller or later reading owner. This is encapsulated reactive-source plumbing of the nested query proxy, with no ambient consumer owner requirement; throws/lifetime guarantees remain open.",
         "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. The hook accepts no executed caller callback. useParams ignores its optional typed path. Standard factory histories supply no custom paramsWrapper/queryWrapper; existing router computations and route callbacks belong to createRouter, whose claims remain open."
-      }
+      },
+      "probes": [
+        {
+          "label": "search",
+          "rule": "strict-read-untracked",
+          "why": "The search getter is reactive; the correct twin reads it in JSX."
+        },
+        {
+          "label": "key",
+          "rule": "strict-read-untracked",
+          "why": "The pathname misuse opens a strict-read window; the correct twin reads only the inert key in the component body."
+        },
+        {
+          "label": "query",
+          "rule": "strict-read-untracked",
+          "why": "The pathname misuse opens a strict-read window; retrieving query is inert, and query.q is read only in JSX."
+        },
+        {
+          "label": "keys",
+          "rule": "strict-read-untracked",
+          "why": "The pathname misuse opens a strict-read window; enumerating the plain location object with Object.keys is inert."
+        }
+      ]
     },
     "useParams": {
       "why": "Returns the route's params, a memo-backed proxy.",
@@ -108,7 +103,7 @@
       },
       "closures": {
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-37,163-165,724-736,947-982; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. The complete hook selects an existing context field. No reactive read at the call; property/ownKeys/has reads of the result are reactive store accesses, never hook-call reads.",
-        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-37,163-165,724-736,947-982; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Every normal completion returns the existing location/params reactive object. Location fields are memo getters; params/query are createMemoObject proxies for arbitrary keys, with ownKeys/has reading the existing source. First-use memos run with runWithOwner on the captured router/route owner. The store return states reactive access, not inert data or caller-owned lazy getters; it adds no caller-argument capture, control function or Promise.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-37,163-165,724-736,947-982; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Every normal completion returns the existing params createMemoObject proxy. Every property Get, ownKeys and has trap reads the existing reactive source, so a whole-object store role is exact for params, unlike the plain location object. First-use memos run with runWithOwner on the captured router/route owner. The store return states reactive access, not inert data or caller-owned lazy getters; it adds no caller-argument capture, control function or Promise.",
         "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-37,163-165,724-736,947-982; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. No hook-call allocation or owner registration. Every lazy proxy memo runs under the captured router/route owner, not the hook caller or later reading owner. This is encapsulated reactive-source plumbing of the returned store, with no ambient consumer owner requirement; throws/lifetime guarantees remain open.",
         "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-37,163-165,724-736,947-982; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. The hook accepts no executed caller callback. useParams ignores its optional typed path. Standard factory histories supply no custom paramsWrapper/queryWrapper; existing router computations and route callbacks belong to createRouter, whose claims remain open."
       }
@@ -384,33 +379,6 @@
             }
           },
           {
-            "id": "path-update",
-            "kind": "invoke",
-            "trigger": {
-              "event": "external-event",
-              "resource": "memo-owner"
-            },
-            "tracking": "tracked",
-            "count": {
-              "min": 0,
-              "max": "many",
-              "scope": "trigger"
-            },
-            "owner": {
-              "source": "created",
-              "resource": "memo-owner",
-              "children": "allowed",
-              "cleanup": "supported",
-              "productions": [
-                {
-                  "resource": "memo-owner",
-                  "children": "allowed",
-                  "cleanup": "supported"
-                }
-              ]
-            }
-          },
-          {
             "at": {
               "event": "call",
               "schedule": "same-stack"
@@ -438,8 +406,7 @@
         "closed": [
           "reads",
           "returns",
-          "creates",
-          "callbacks"
+          "creates"
         ],
         "reads": [],
         "creates": [],
@@ -459,21 +426,13 @@
               "arg": 0,
               "path": []
             }
-          },
-          {
-            "operation": "path-update",
-            "from": {
-              "arg": 0,
-              "path": []
-            }
           }
         ]
       },
       "closures": {
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,42-48,576-577,748; dist/routers/history.js:63-95,97-138,139-180; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Context selection reads no reactive value. The standard histories renderPath is identity or hash prefix; the caller accessor reads occur in the tracked callback, never as ambient package reads.",
         "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,42-48,576-577,748; dist/routers/history.js:63-95,97-138,139-180; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Exactly one reactive memo accessor on normal completion, no members or captured argument escaping outside its computation. Published argument returns string or undefined; memo return is not a Promise or control function. Standard hydration returns the same reactive role.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,42-48,576-577,748; dist/routers/history.js:63-95,97-138,139-180; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Exactly one createMemo, registered under the ambient caller owner when present; it tolerates absent parent but rejects a present leaf owner. The optional-parent computation is memo; no extra cleanup registration. Standard hydration retains the same ownership constraint.",
-        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,42-48,576-577,748; dist/routers/history.js:63-95,97-138,139-180; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Argument 0 is the only caller callback; it runs tracked under the created memo. Ordinary core eagerly evaluates initially; hydration may defer it. path-initial permits 0..1 same-stack executions and path-update permits later reevaluations. No custom renderer/route resolver under the integration premise."
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,42-48,576-577,748; dist/routers/history.js:63-95,97-138,139-180; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Exactly one createMemo, registered under the ambient caller owner when present; it tolerates absent parent but rejects a present leaf owner. The optional-parent computation is memo; no extra cleanup registration. Standard hydration retains the same ownership constraint."
       },
       "probes": [
         {
@@ -484,7 +443,7 @@
         {
           "label": "callback",
           "rule": "reactive-write-in-owned-scope",
-          "why": "Argument 0 executes in the owned tracked memo; writes are forbidden there."
+          "why": "The pair exercises only initial argument-0 execution in the owned tracked memo. Native optional-invocation projection is absent, so callbacks stays open; no later update is asserted."
         }
       ]
     },
@@ -694,33 +653,6 @@
             }
           },
           {
-            "id": "path-update",
-            "kind": "invoke",
-            "trigger": {
-              "event": "external-event",
-              "resource": "memo-owner"
-            },
-            "tracking": "tracked",
-            "count": {
-              "min": 0,
-              "max": "many",
-              "scope": "trigger"
-            },
-            "owner": {
-              "source": "created",
-              "resource": "memo-owner",
-              "children": "allowed",
-              "cleanup": "supported",
-              "productions": [
-                {
-                  "resource": "memo-owner",
-                  "children": "allowed",
-                  "cleanup": "supported"
-                }
-              ]
-            }
-          },
-          {
             "at": {
               "event": "call",
               "schedule": "same-stack"
@@ -776,8 +708,7 @@
         "closed": [
           "reads",
           "returns",
-          "creates",
-          "callbacks"
+          "creates"
         ],
         "reads": [
           "route-path-read"
@@ -799,21 +730,13 @@
               "arg": 0,
               "path": []
             }
-          },
-          {
-            "operation": "path-update",
-            "from": {
-              "arg": 0,
-              "path": []
-            }
           }
         ]
       },
       "closures": {
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-41,729-736,947-982; dist/utils.js:13-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Context selection is non-reactive. route.resolvePath reads the existing base/path accessors only inside its tracked memo; base strings and path normalization are plain data under P2. route-path-read represents internal same-stack reads, later reads belong to the existing returned memo.",
         "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-41,729-736,947-982; dist/utils.js:13-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Exactly one reactive memo accessor on normal completion, no members or captured argument escaping outside its computation. Published argument returns string; memo return is not a Promise or control function. Standard hydration returns the same reactive role.",
-        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-41,729-736,947-982; dist/utils.js:13-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Exactly one createMemo, registered under the ambient caller owner when present; it tolerates absent parent but rejects a present leaf owner. The optional-parent computation is memo; no extra cleanup registration. Standard hydration retains the same ownership constraint.",
-        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-41,729-736,947-982; dist/utils.js:13-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Argument 0 is the only caller callback; it runs tracked under the created memo. Ordinary core eagerly evaluates initially; hydration may defer it. path-initial permits 0..1 same-stack executions and path-update permits later reevaluations. No custom renderer/route resolver under the integration premise."
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:27-41,729-736,947-982; dist/utils.js:13-27; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:174-240,738-799; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:2346-2357; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658,6296-6449 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. Exactly one createMemo, registered under the ambient caller owner when present; it tolerates absent parent but rejects a present leaf owner. The optional-parent computation is memo; no extra cleanup registration. Standard hydration retains the same ownership constraint."
       },
       "probes": [
         {
@@ -824,7 +747,7 @@
         {
           "label": "callback",
           "rule": "reactive-write-in-owned-scope",
-          "why": "Argument 0 executes in the owned tracked memo; writes are forbidden there."
+          "why": "The pair exercises only initial argument-0 execution in the owned tracked memo. Native optional-invocation projection is absent, so callbacks stays open; no later update is asserted."
         }
       ]
     }

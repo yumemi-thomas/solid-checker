@@ -1,4 +1,4 @@
-// Misuse: argument 0 writes while the hook's memo tracks it.
+// Misuse: initial argument 0 writes while the hook's memo tracks it. Later recomputation is not exercised.
 import { createSignal } from "solid-js";
 import { createRouter, memoryHistory, useResolvedPath } from "@solidjs/router";
 

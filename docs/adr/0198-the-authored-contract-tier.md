@@ -141,7 +141,7 @@ document cannot state honestly.
   - Measured on the rc.13 corpus, after its lockfiles were made to name the
     rc.13 runtime they hold: violations 256 -> 266 (+10, -0). These are
     exactly the 10 ADR 0186 sites.
-- **`@solidjs/router`:** `returns` claims for seven hooks.
+- **`@solidjs/router` initial state (historical):** `returns` claims for seven hooks.
   - Claims: `useLocation` and `useParams` return a store (getters and proxies
     over memos); `useSearchParams` returns a tuple whose first item is a store
     (the setter is not claimed); `useIsRouting`, `useMatch`, `useHref` and
@@ -161,7 +161,7 @@ document cannot state honestly.
   - Not admitted where the installed integrity is not a stated fact:
     `beacon-web` (binary `bun.lockb`, and a `package-lock.json` without
     integrities) and `error-menu-web` (two Solid versions in one lockfile).
-  - **next.26 closures (2026-10-11).** Under ADR 0226 citations,
+  - **next.26 round-1 state (2026-10-11, historical).** Under ADR 0226 citations,
     `defineRoutes` and `defineFileRoute` (`/fs`, now an authored case) return
     an argument by identity, and `useIsRouting` and `useRouteMatches` return
     an existing accessor; all four close reads, returns, creates and
@@ -178,6 +178,13 @@ document cannot state honestly.
       sites covered by router `SC9005` drop from 359 to 336. Uncertifiable
       rows rise from 3,523 to 3,541, because exports that now leave different
       claim sets open are reported in separate rows.
+  - **Current reviewed state:** [ADR 0271](0271-standard-router-integration-premise.md)
+    defines the standard integration premise and exact visible veto. The
+    incorrect location store positive is removed in next.16/17/18/26; returns
+    stays open because existing vocabulary cannot express its mixed getters
+    and inert fields. Next.26 path hooks keep callbacks open pending native
+    optional-invocation projection, with unprobed update rows removed.
+    The lead records post-fix corpus measurements separately.
 - **`@tanstack/solid-query` options callbacks:** `useQuery` and
   `useInfiniteQuery`, on 6.0.0-rc.0 and rc.3.
   - Claim: argument 0 is invoked on every call, on the same stack, as the

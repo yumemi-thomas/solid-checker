@@ -14,3 +14,10 @@ repository metadata, never public contract vocabulary. Authored-tier tests load
 these together, pin selective withholding and its receipt/cache identity, and
 scan each case with exact binder/Type Facts joins. This fixture is not an
 authenticated installed package and grants no production admission by itself.
+
+Its synthetic location store tests selective weakening only. Review round 2
+removes that shape from shipped router contracts: the real location combines
+reactive getters and inert members, and its exact returns domain stays open.
+Published runtime pairs and fresh native controls for that boundary are recorded
+in `rust/target/research/router-premise/RESULT-2.md`; the reduced document is not
+evidence for a whole-object store return in production.

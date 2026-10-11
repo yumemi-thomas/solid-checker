@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "dbbdf8c1a81b706590c7b5e84681c18ae279d6e100c1cd3256e5f474ca8b0c6a",
+            "closureSha256": "b5537e7a380fc7717ecfad22047a3ac22a80fa530bc5d8257c4f8a07b56bef62",
             "path": "./dist/index.jsx",
             "sha256": "e73fc341f9427ae738b2ba86d62045518ab6093bb7a57a3a4035d01c03ef920b"
           },
@@ -31,7 +31,7 @@
             "useHref": "authored-useHref",
             "useIsRouting": "authored-useIsRouting",
             "useLinkState": "open-callable",
-            "useLocation": "authored-useLocation",
+            "useLocation": "open-callable",
             "useMatch": "authored-useMatch",
             "useNavigate": "open-callable",
             "useParams": "authored-useParams",
@@ -51,13 +51,13 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "sha512-sYaq5h4ISdDVZKhA1R0X4NHFg4Kao7HpK3QRfbFcE25/x2PFl4VxlHLZIoBUfv3T3L9g4GVTD376pvArwgGlDA==",
+    "integrity": "sha512-LchYm3IZ3Y7vGPh/Jx6X8UjpBirQrz9ZoRQkgRpdz8A9C7eTiRXY326pJDcoYDXn7FzYtFpRCwsfBMxRDsFo6A==",
     "manifest": {
       "path": "./package.json",
-      "sha256": "2e1ba673f6b24d41b0e5c5a5000791a892c37ce1320f16c3add4f239e2f06643"
+      "sha256": "0293f397980cc8801a3754aad7edb4ccc6c77c1831546fc4623965807d7bcec3"
     },
     "name": "@solidjs/router",
-    "version": "2.0.0-next.16"
+    "version": "2.0.0-next.17"
   },
   "schemaVersion": 1,
   "semanticModelVersion": 1,
@@ -116,36 +116,6 @@
             "output": {
               "kind": "reactive",
               "role": "accessor"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "authored-useLocation": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "store"
             },
             "tracking": "untracked",
             "trigger": {

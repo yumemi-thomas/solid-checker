@@ -1,5 +1,5 @@
-// Misuse: a property of the store `useLocation` returns is read in the body of
-// a component rendered through JSX, outside any tracking scope.
+// Misuse: pathname is a reactive getter read outside tracking in a JSX-rendered component.
+// Runtime control only; the exact native return representation remains open.
 import { createRouter, memoryHistory, useLocation } from "@solidjs/router";
 
 function Reader() {
