@@ -29404,21 +29404,25 @@ sweep or full verify is claimed in this implementation round.
 
 ### Returned object getter members (2026-10-11, ADR 0272)
 
-Round-2 review fixes bind tracked/deferred getter execution to the Get's own
-innermost function (or direct tracked JSX). Returned, stored and escaped nested
-functions retain `returned getter execution` SC9012 rather than inheriting a
-memo/effect/untrack/onSettled role. This gate is local to getter members; shared
-accessor/store classification stays unchanged. Real next.26/rc.13 controls
-exercise body, event and escaped callback use as well as direct callback Gets.
+The round-3 owner decision simplifies getter execution to direct body,
+compiler-tracked JSX and exact inline tracked compute/event/untrack placements.
+Direct effect apply keeps the existing accessor/store strict-read boundary.
+Named functions (including memo-only), helpers, returned/stored/nested
+callbacks, inline wrappers such as flush, onSettled and unknown calls retain
+`returned getter execution` SC9012. No invocation projection or composed
+callback witness is claimed. This loses recall for safe named-only and wrapper
+uses, deliberately closing the reviewed false-clean paths. Shared accessor/store
+classification stays unchanged. Real next.26/rc.13 controls retain all thirteen
+round-2 cases; direct onSettled changes from clean to an execution obligation.
 
 The getter leaf now normatively asserts an own enumerable accessor, with an
 explicit installed-source citation requirement; next.26's object-literal
 getters at routing.js:509-527 establish that premise. Non-enumerable accessors
-cannot use this shape. JSON.stringify additionally assumes standard prototypes
-without inherited callable toJSON under the existing unpatched-built-ins
-premise. The existing member-write veto withholds traversal on toJSON/__proto__
-writes or prototype replacement/dynamic writes. Reflective, external and
-unresolved prototype patching remains outside the premise (ADR 0272).
+cannot use this shape. Spread/assign/values/entries require a recipe containing
+only getters and plain/store data members, plus the same direct placement.
+Serialization is not modeled: JSON.stringify always remains SC9012, including
+standard no-toJSON objects. The serialization proof and toJSON/prototype veto
+are removed, eliminating the own-toJSON guessed-read path (ADR 0272).
 
 The reviewed open-return fallback above is superseded for next.26 useLocation
 only. Ordinary object data members are reused, with a new authored-only getter
@@ -29435,5 +29439,6 @@ next.26 Kui TopicsRoute.tsx:425 should regain its proof (lead measures the
 corpus). All 26 next.26 Chrome pairs pass, twelve for location, with strict
 published typings and empty correct observations. The exact native results,
 new authorized fixture, scoped snapshot and focused checks are recorded in
-rust/target/research/getter-members/RESULT.md. No full verify or corpus sweep
+rust/target/research/getter-members/RESULT.md; the simplified execution and
+serialization boundary is recorded in RESULT-3.md there. No full verify or corpus sweep
 is claimed. Other ADR 0271 open domains and outside-premise boundaries remain.

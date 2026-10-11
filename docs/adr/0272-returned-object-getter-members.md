@@ -44,16 +44,24 @@ untracked Get. ADR 0264 does not change that limitation. None is reinterpreted.
 Exact immutable receivers, exact resolved package callees (including namespace
 imports), direct factory-member expressions and transparent TypeScript receiver
 wrappers preserve the shape. A reactive Get is a read at the member expression
-or destructuring site, in that site's execution context. Component-body and
-proven untracked strict-read scopes produce SC1001 strict-read-untracked violations;
-JSX and tracked computation reads remain clean. Inert getters do not read.
-Tracked/deferred execution must belong to the Get's innermost function, or to
-direct compiler-censused JSX with no intervening function. A callback returned,
-stored or passed from an enclosing computation does not inherit its execution.
-Without an exact invocation proof it receives a `returned getter execution`
-SC9012 obligation, including callbacks later invoked in a body or event handler.
-Explicit untrack() clearing and event scopes retain the existing runtime
-strict-read policy; non-tracking alone never proves a runtime diagnostic.
+or destructuring site. The owner-decided round-3 consumer proves only plain
+placements. A Get written directly in its innermost component/rendering body
+produces SC1001 at the existing strict-read-untracked boundary. Direct
+compiler-tracked JSX expressions/attributes remain clean. An inline arrow or
+function literal that is itself an exact Solid primitive's tracked compute
+argument remains clean; no intervening function is admitted. Direct inline
+event handlers and explicit untrack callback arguments retain their non-strict
+policy. Direct effect apply retains a violation only where the existing
+accessor/store execution model already makes apply a strict-read scope.
+
+Everything else receives `returned getter execution` SC9012: named functions
+(even memo-only callbacks), helpers, returned/stored/nested functions, inline
+wrappers such as flush, onSettled and unknown calls. A primitive callback must
+be supplied directly from a component/rendering body or module scope, rather
+than from another callback/helper. The consumer does not project invocations
+or compose execution witnesses. This deliberately gives up clean named-only,
+inline-wrapper and onSettled cases to avoid borrowing execution roles.
+Shared accessor/store classification is unchanged. Inert getters do not read.
 
 Retrieving a store data member is inert. Direct static Gets on its proxy and
 one exact immutable local binding/destructuring of that proxy retain store
@@ -72,19 +80,13 @@ The `in` syntax currently lacks a normalized operand fact here and remains
 uncertifiable; that is not a reactive read claim.
 
 Exact object destructuring runs the selected getters. Object spread, one-source
-Object.assign into a fresh empty literal, Object.values/entries and one-argument
-JSON.stringify run the own enumerable getters and produce a read at traversal.
-Serialization assumes **standard prototypes, with no inherited callable
-toJSON**, under the repository's unpatched-built-ins premise (ADRs 0167, 0190,
-0211 and 0262). The existing project-wide member-write veto withholds this
-traversal for visible writes to `toJSON` or `__proto__`, prototype replacement,
-or dynamic prototype writes. This is an obligation, never a guessed read.
-Reflective writes (Object.defineProperty/setPrototypeOf), unresolved alias/key
-flows, dependency or excluded-source patches and prior/external configuration
-remain outside that premise; absence of a visible veto does not prove their
-absence. No new prototype mutation or escape census is introduced.
-More elaborate
-copying/serialization signatures, reflective descriptors, rest/computed
+Object.assign into a fresh empty literal and Object.values/entries run the own
+enumerable getters only when every recipe member is a getter or plain/store
+data member, and the same direct placement policy holds. Other reactive data
+members withhold traversal. JSON.stringify always remains SC9012:
+**serialization is not modeled**. No serialization proof or toJSON/prototype
+premise/veto remains in this consumer.
+More elaborate copying signatures, reflective descriptors, rest/computed
 bindings, mutable receivers, replaced members, aliases, unknown-call escapes,
 export, unproven helper/callback execution and missing identities retain obligations. Escaping or mutated receivers
 cannot supply a proven subsequent getter violation. Copied nested reactive
@@ -121,13 +123,13 @@ strictly with skipLibCheck=false. All 26 next.26 Chrome pairs pass, including
 twelve useLocation pairs. Native pair and fixture results are recorded in
 `rust/target/research/getter-members/RESULT.md`; no corpus sweep is claimed.
 
-Round-2 native controls against published next.26/rc.13 typings pass all thirteen
-cases: eight returned/stored/nested callback Gets retain execution obligations;
-direct memo, untrack, event and onSettled Gets are clean; direct effect apply
-keeps its strict-read violation. The isolated visible prototype-toJSON write
-withholds serialization. Coverage preserves every original finding and adds
-only eight SC9012 obligations and one SC1001 effect-apply control to the getter
-fixture. Details are in `rust/target/research/getter-members/RESULT-2.md`.
+Round-3 controls retain the thirteen published next.26/rc.13 cases; direct
+onSettled intentionally changes from clean to SC9012. The inline flush wrapper,
+named memo-only/memo-plus-body/memo-plus-escape and own-toJSON controls remain
+uncertifiable with no getter violation. Direct body, memo and tracked JSX
+controls preserve their outcomes. JSON.stringify with or without toJSON is
+uncertifiable. Exact snapshot changes and focused verification are recorded
+in `rust/target/research/getter-members/RESULT-3.md`.
 
 Source prediction: next.26's Kui TopicsRoute.tsx:425 signal seed is a real
 untracked getter defect and should regain its violation. The real next.16

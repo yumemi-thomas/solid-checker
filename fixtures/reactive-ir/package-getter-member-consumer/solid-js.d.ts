@@ -45,4 +45,6 @@ declare module "solid-js" {
   export function untrack<T>(fn: () => T, strictReadLabel?: string | false): T;
   // Published rc.13 signature; returned values must be void or cleanup.
   export function onSettled(callback: () => void | (() => void)): void;
+  // Published rc.13 generic callback overload.
+  export function flush<T>(fn: () => T): T;
 }

@@ -203,3 +203,96 @@ export function DirectSettled() {
   onSettled(() => { void location.pathname; });
   return <div />;
 }
+
+import { flush } from "solid-js";
+import { makeWithToJSON } from "reactive-package";
+
+export function ReturnedInlineWrapper() {
+  const location = makeSize();
+  const memo = createMemo(() => () => flush(() => location.pathname));
+  const path = untrack(memo)();
+  return <div>{path}</div>;
+}
+export function NamedMemoOnly() {
+  const location = makeSize();
+  const readPath = () => location.pathname;
+  const tracked = createMemo(readPath);
+  return <div>{tracked()}</div>;
+}
+export function NamedMemoBody() {
+  const location = makeSize();
+  const readPath = () => location.pathname;
+  const tracked = createMemo(readPath);
+  const path = readPath();
+  return <div>{tracked()}{path}</div>;
+}
+export function NamedMemoEscape() {
+  const location = makeSize();
+  const readPath = () => location.pathname;
+  const tracked = createMemo(readPath);
+  unknownCall(readPath);
+  return <div>{tracked()}</div>;
+}
+export function DirectInlineWrapper() {
+  const location = makeSize();
+  const tracked = createMemo(() => flush(() => location.pathname));
+  return <div>{tracked()}</div>;
+}
+export function OwnToJSON() {
+  const location = makeWithToJSON();
+  const text = JSON.stringify(location);
+  return <div>{text}</div>;
+}
+export function Values() {
+  const location = makeSize();
+  const values = Object.values(location);
+  return <div>{values.length}</div>;
+}
+export function EntriesTracked() {
+  const location = makeSize();
+  const entries = createMemo(() => Object.entries(location));
+  return <div>{entries().length}</div>;
+}
+export function DestructureTracked() {
+  const location = makeSize();
+  const path = createMemo(() => {
+    const { pathname } = location;
+    return pathname;
+  });
+  return <div>{path()}</div>;
+}
+
+import { makeWithAccessor } from "reactive-package";
+
+export function UnsupportedSpread() {
+  const location = makeWithAccessor();
+  const copy = { ...location };
+  return <div>{copy.pathname}</div>;
+}
+export function UnsupportedAssign() {
+  const location = makeWithAccessor();
+  const copy = Object.assign({}, location);
+  return <div>{copy.pathname}</div>;
+}
+export function UnsupportedValues() {
+  const location = makeWithAccessor();
+  const values = Object.values(location);
+  return <div>{values.length}</div>;
+}
+export function UnsupportedEntries() {
+  const location = makeWithAccessor();
+  const entries = createMemo(() => Object.entries(location));
+  return <div>{entries().length}</div>;
+}
+export function UppercaseHelper() {
+  const location = makeSize();
+  function ReadPath() { return location.pathname; }
+  const path = ReadPath();
+  return <div>{path}</div>;
+}
+export function UppercaseInlineHelper() {
+  const location = makeSize();
+  function ReadPath() { return flush(() => location.pathname); }
+  const path = ReadPath();
+  return <div>{path}</div>;
+}
