@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "d240da0c3aee262f03a66d0e03be7d3f1c578e18c130c827185619130b5efbbc",
+            "closureSha256": "dbbdf8c1a81b706590c7b5e84681c18ae279d6e100c1cd3256e5f474ca8b0c6a",
             "path": "./dist/index.jsx",
             "sha256": "e73fc341f9427ae738b2ba86d62045518ab6093bb7a57a3a4035d01c03ef920b"
           },
@@ -23,7 +23,6 @@
             "defineRoutes": "open-callable",
             "hashHistory": "open-callable",
             "int": "open-callable",
-            "liveQuery": "open-callable",
             "memoryHistory": "open-callable",
             "query": "open-callable",
             "revalidate": "open-callable",
@@ -35,11 +34,11 @@
             "useLocation": "authored-useLocation",
             "useMatch": "authored-useMatch",
             "useNavigate": "open-callable",
-            "useParams": "authored-useParams",
+            "useParams": "open-callable",
             "usePreloadRoute": "open-callable",
             "useResolvedPath": "authored-useResolvedPath",
             "useRouteMatches": "open-callable",
-            "useSearchParams": "authored-useSearchParams",
+            "useSearchParams": "open-callable",
             "useSubmissions": "open-callable"
           },
           "resolution": {
@@ -52,13 +51,13 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "sha512-DQ58djANKYi4HZfE9J7vN9kAtAH/eKYkUj61cezfDrBae3A/cgthgdjQS9C8pNGtNeST6aA8GNhcFYKlUWn+zA==",
+    "integrity": "sha512-sYaq5h4ISdDVZKhA1R0X4NHFg4Kao7HpK3QRfbFcE25/x2PFl4VxlHLZIoBUfv3T3L9g4GVTD376pvArwgGlDA==",
     "manifest": {
       "path": "./package.json",
-      "sha256": "f51b8560517b5fcd01106c59e03aa341015d769f3bfd7e5fa2b0e9f25a1c1aee"
+      "sha256": "2e1ba673f6b24d41b0e5c5a5000791a892c37ce1320f16c3add4f239e2f06643"
     },
     "name": "@solidjs/router",
-    "version": "2.0.0-next.18"
+    "version": "2.0.0-next.16"
   },
   "schemaVersion": 1,
   "semanticModelVersion": 1,
@@ -165,36 +164,6 @@
       },
       "shape": "callable"
     },
-    "authored-useParams": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "store"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
     "authored-useResolvedPath": {
       "call": {
         "operations": [
@@ -213,44 +182,6 @@
             "output": {
               "kind": "reactive",
               "role": "accessor"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "authored-useSearchParams": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "tuple",
-              "items": [
-                {
-                  "kind": "store"
-                },
-                {
-                  "kind": "unknown"
-                }
-              ]
             },
             "tracking": "untracked",
             "trigger": {

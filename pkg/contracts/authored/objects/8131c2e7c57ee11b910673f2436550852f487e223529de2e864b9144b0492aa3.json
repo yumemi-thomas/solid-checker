@@ -4,9 +4,9 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "b5537e7a380fc7717ecfad22047a3ac22a80fa530bc5d8257c4f8a07b56bef62",
-            "path": "./dist/index.jsx",
-            "sha256": "e73fc341f9427ae738b2ba86d62045518ab6093bb7a57a3a4035d01c03ef920b"
+            "closureSha256": "72b6115b194a3af3d326e3ba9b6711b13e8edc037d8085a6d25c9bf4e449f66a",
+            "path": "./dist/index.js",
+            "sha256": "984bcaf66c43724098d88d29e26a55a64f6c34b565c407846c3f84e81c0b8029"
           },
           "declarations": {
             "path": "./dist/index.d.ts",
@@ -34,16 +34,16 @@
             "useLocation": "authored-useLocation",
             "useMatch": "authored-useMatch",
             "useNavigate": "open-callable",
-            "useParams": "authored-useParams",
+            "useParams": "open-callable",
             "usePreloadRoute": "open-callable",
             "useResolvedPath": "authored-useResolvedPath",
             "useRouteMatches": "open-callable",
-            "useSearchParams": "authored-useSearchParams",
+            "useSearchParams": "open-callable",
             "useSubmissions": "open-callable"
           },
           "resolution": {
-            "runtimeBranch": "/exports/./solid",
-            "typesBranch": "/exports/./solid"
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./default"
           }
         }
       ]
@@ -164,36 +164,6 @@
       },
       "shape": "callable"
     },
-    "authored-useParams": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "store"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
     "authored-useResolvedPath": {
       "call": {
         "operations": [
@@ -212,44 +182,6 @@
             "output": {
               "kind": "reactive",
               "role": "accessor"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "authored-useSearchParams": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "tuple",
-              "items": [
-                {
-                  "kind": "store"
-                },
-                {
-                  "kind": "unknown"
-                }
-              ]
             },
             "tracking": "untracked",
             "trigger": {

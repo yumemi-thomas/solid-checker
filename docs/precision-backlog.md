@@ -29369,7 +29369,11 @@ its result is the createMemoObject proxy itself (next.26 routing.js:724-728,
 947-954; utils.js:124-147), whose Get/ownKeys/has traps read reactive state.
 useSearchParams item 0 is likewise a proxy on both branches (routing.js:166-209);
 it has no inert location wrapper. Typed validation/setter domains remain open.
-First-use params/query memos belong to the captured router owner.
+First-use params and no-path query memos belong to the captured router owner;
+the typed-path search memo and proxy belong to the hook caller, so that branch
+stays open (ADR 0271).
+Next.16/17/18 keep no params or search positive: their history `utils` may
+substitute plain wrappers, and ADR 0271 conditions only next.26.
 
 useHref/useResolvedPath now close reads/returns/creates, leaving callbacks open
 explicitly. contracts.rs:1503-1536 projects only same-stack, call-triggered
@@ -29392,7 +29396,8 @@ project (both Skyjtx), four top-level projects with saved-history test harnesses
 These vetoes withhold claims, never report misuse. Test-excluded sources do not
 veto. Unresolved/dynamic/reflective integration, excluded dependency installers,
 mutable alias dispatch and unsupported computed targets remain outside the
-conditional premise. Fifteen Chrome pairs pass against real next.26/rc.13 bytes;
+conditional premise. Nineteen Chrome pairs pass against real next.26/rc.13 bytes (fifteen in the
+first premise pass);
 strict published-typing checks pass without reduced stubs. Focused fixture,
 selective-withholding and cache-identity checks accompany the change; no corpus
 sweep or full verify is claimed in this implementation round.

@@ -184,7 +184,18 @@ document cannot state honestly.
     stays open because existing vocabulary cannot express its mixed getters
     and inert fields. Next.26 path hooks keep callbacks open pending native
     optional-invocation projection, with unprobed update rows removed.
-    The lead records post-fix corpus measurements separately.
+    Next.16/17/18 also drop their `useParams` and `useSearchParams` store
+    positives: their history `utils` can substitute plain wrappers, and the
+    premise conditions next.26 only.
+    - Measured on the rc.13 corpus, browser target, against the relocked
+      baseline before any router work: violations 559 -> 556, with none
+      added. The three lost are real defects whose proof rested on the
+      removed location store claim: `donegeon-client` `WaitlistRoute.tsx:33`,
+      and `kui` `TopicsRoute.tsx:425` in two projects. They return when the
+      format can describe reactive getter members. Router `SC9005` import
+      sites drop from 359 to 315; uncertifiable rows rise from 3,523 to
+      3,530. With no runtime target, nothing moves but one row (3,504 ->
+      3,505).
 - **`@tanstack/solid-query` options callbacks:** `useQuery` and
   `useInfiniteQuery`, on 6.0.0-rc.0 and rc.3.
   - Claim: argument 0 is invoked on every call, on the same stack, as the

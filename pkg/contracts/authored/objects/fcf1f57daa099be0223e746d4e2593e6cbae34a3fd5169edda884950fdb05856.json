@@ -4,9 +4,9 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "994828fab071594ae59f60f3b1d33091731a0c054767eaab6034da852152abb4",
+            "closureSha256": "d8ccd210a124825def22f663d056b49d72e316ea7268f2f5965bbee54c1ea872",
             "path": "./dist/index.js",
-            "sha256": "f857f19b4cdf65adaa3f8cef2008943c2b61f1a9b9d989221a42778704ee8fd5"
+            "sha256": "049c51d5d4f366d753e7628165264d48c74dae2854d7e7033d4484c325fc1783"
           },
           "declarations": {
             "path": "./dist/index.d.ts",
@@ -23,6 +23,7 @@
             "defineRoutes": "open-callable",
             "hashHistory": "open-callable",
             "int": "open-callable",
+            "liveQuery": "open-callable",
             "memoryHistory": "open-callable",
             "query": "open-callable",
             "revalidate": "open-callable",
@@ -34,11 +35,11 @@
             "useLocation": "authored-useLocation",
             "useMatch": "authored-useMatch",
             "useNavigate": "open-callable",
-            "useParams": "authored-useParams",
+            "useParams": "open-callable",
             "usePreloadRoute": "open-callable",
             "useResolvedPath": "authored-useResolvedPath",
             "useRouteMatches": "open-callable",
-            "useSearchParams": "authored-useSearchParams",
+            "useSearchParams": "open-callable",
             "useSubmissions": "open-callable"
           },
           "resolution": {
@@ -51,13 +52,13 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "sha512-sYaq5h4ISdDVZKhA1R0X4NHFg4Kao7HpK3QRfbFcE25/x2PFl4VxlHLZIoBUfv3T3L9g4GVTD376pvArwgGlDA==",
+    "integrity": "sha512-DQ58djANKYi4HZfE9J7vN9kAtAH/eKYkUj61cezfDrBae3A/cgthgdjQS9C8pNGtNeST6aA8GNhcFYKlUWn+zA==",
     "manifest": {
       "path": "./package.json",
-      "sha256": "2e1ba673f6b24d41b0e5c5a5000791a892c37ce1320f16c3add4f239e2f06643"
+      "sha256": "f51b8560517b5fcd01106c59e03aa341015d769f3bfd7e5fa2b0e9f25a1c1aee"
     },
     "name": "@solidjs/router",
-    "version": "2.0.0-next.16"
+    "version": "2.0.0-next.18"
   },
   "schemaVersion": 1,
   "semanticModelVersion": 1,
@@ -164,36 +165,6 @@
       },
       "shape": "callable"
     },
-    "authored-useParams": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "store"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
     "authored-useResolvedPath": {
       "call": {
         "operations": [
@@ -212,44 +183,6 @@
             "output": {
               "kind": "reactive",
               "role": "accessor"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "authored-useSearchParams": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "tuple",
-              "items": [
-                {
-                  "kind": "store"
-                },
-                {
-                  "kind": "unknown"
-                }
-              ]
             },
             "tracking": "untracked",
             "trigger": {

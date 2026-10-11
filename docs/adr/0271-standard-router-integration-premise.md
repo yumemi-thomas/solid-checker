@@ -58,6 +58,12 @@ inspected location constructors are respectively `donegeon-client/web`'s
 `dist/routing.js:436-474`, `compass-ui/apps/ui`'s `:464-502`, and
 `solid-groove`'s `:471-509`, beneath each app's `node_modules/@solidjs/router`.
 
+The older versions' `useParams` and `useSearchParams` store positives are
+removed too. This premise conditions next.26 only, and in next.16/17/18 a
+history's `utils.paramsWrapper` or `utils.queryWrapper` replaces the proxy
+with any value its declarations allow (next.16 `dist/routing.js:473,600-604`;
+next.17 `:501,648-652`; next.18 `:508,655-659`). No corpus finding moved.
+
 Existing object outputs describe member values, not getter execution. A
 `reactive` member is an accessor function, not a reactive scalar Get.
 ADR 0255's lazy-getter-object has different observer-dependent semantics and
