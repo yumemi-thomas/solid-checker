@@ -29404,6 +29404,22 @@ sweep or full verify is claimed in this implementation round.
 
 ### Returned object getter members (2026-10-11, ADR 0272)
 
+Round-2 review fixes bind tracked/deferred getter execution to the Get's own
+innermost function (or direct tracked JSX). Returned, stored and escaped nested
+functions retain `returned getter execution` SC9012 rather than inheriting a
+memo/effect/untrack/onSettled role. This gate is local to getter members; shared
+accessor/store classification stays unchanged. Real next.26/rc.13 controls
+exercise body, event and escaped callback use as well as direct callback Gets.
+
+The getter leaf now normatively asserts an own enumerable accessor, with an
+explicit installed-source citation requirement; next.26's object-literal
+getters at routing.js:509-527 establish that premise. Non-enumerable accessors
+cannot use this shape. JSON.stringify additionally assumes standard prototypes
+without inherited callable toJSON under the existing unpatched-built-ins
+premise. The existing member-write veto withholds traversal on toJSON/__proto__
+writes or prototype replacement/dynamic writes. Reflective, external and
+unresolved prototype patching remains outside the premise (ADR 0272).
+
 The reviewed open-return fallback above is superseded for next.26 useLocation
 only. Ordinary object data members are reused, with a new authored-only getter
 leaf stating reactive versus inert Get and a plain result. Every Get of

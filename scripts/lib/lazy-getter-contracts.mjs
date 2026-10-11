@@ -40,7 +40,9 @@ function getterObjects(call) {
     && operation.output.properties?.some(property => property.value?.kind === "getter"));
 }
 
-// ADR 0272. Existing object members describe values; this leaf describes Get.
+// ADR 0272. Existing object members describe values; this leaf asserts an own,
+// enumerable accessor. The installed-byte citation must show its enumerable
+// definition (e.g. an object-literal getter), as well as the Get behavior.
 export function validateGetterMembers(where, claim) {
   const rows = getterObjects(claim.call);
   const leaves = value => !value || typeof value !== "object" || value.kind === "prototype-instance" ? []
@@ -52,7 +54,9 @@ export function validateGetterMembers(where, claim) {
   for (const operation of rows) {
     assert.equal(operation.kind, "return", `${where}: getter members require a return`);
     assert(operation.output.closed?.includes("properties"), `${where}: getter object requires exact members`);
-    assert(typeof citations[operation.id] === "string" && /\S+:\d+/.test(citations[operation.id]), `${where}: getter members require installed source citation`);
+    assert(typeof citations[operation.id] === "string" && /\S+:\d+/.test(citations[operation.id])
+      && /\bown\b/.test(citations[operation.id]) && /\benumerable\b/.test(citations[operation.id]),
+    `${where}: getter members require installed source citation establishing own enumerable accessor definitions and Get behavior`);
     const names = new Set();
     for (const property of operation.output.properties) {
       assert(typeof property.name === "string" && property.name.length && !names.has(property.name), `${where}: duplicate/empty getter object member`);

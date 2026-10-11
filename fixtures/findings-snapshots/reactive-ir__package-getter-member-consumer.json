@@ -272,6 +272,96 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-getter-member-consumer/App.tsx",
+      "start": 4251,
+      "end": 4268,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-getter-member-consumer/App.tsx",
+      "start": 4440,
+      "end": 4457,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-getter-member-consumer/App.tsx",
+      "start": 4646,
+      "end": 4663,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-getter-member-consumer/App.tsx",
+      "start": 4833,
+      "end": 4850,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-getter-member-consumer/App.tsx",
+      "start": 5004,
+      "end": 5021,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-getter-member-consumer/App.tsx",
+      "start": 5195,
+      "end": 5212,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-getter-member-consumer/App.tsx",
+      "start": 5339,
+      "end": 5356,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-getter-member-consumer/App.tsx",
+      "start": 5508,
+      "end": 5525,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-getter-member-consumer/App.tsx",
+      "start": 5675,
+      "end": 5690,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

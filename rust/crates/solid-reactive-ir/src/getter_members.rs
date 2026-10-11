@@ -69,6 +69,9 @@ impl LocalAccessContext<'_, '_> {
             || std::path::Path::new(bindings[0].location.path.as_ref()) != expected
             || self.lookup.member_name_may_be_reassigned(property)
             || self.lookup.member_name_may_be_reassigned(global)
+            || global == "JSON"
+                && (self.lookup.member_name_may_be_reassigned("toJSON")
+                    || self.lookup.member_name_may_be_reassigned("__proto__"))
         {
             return None;
         }
@@ -193,6 +196,85 @@ impl LocalAccessContext<'_, '_> {
         exact
     }
 
+    /// Lexical containment in a computation does not invoke a nested function.
+    /// Keep this stricter boundary local to returned getter members.
+    fn getter_execution_is_direct(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+        allowed: &[Span],
+    ) -> bool {
+        use crate::execution_role::direct_callback_contains;
+
+        let direct_region = |region: Span| {
+            region.contains(span)
+                && !file
+                    .ast
+                    .functions_within(region)
+                    .any(|function| function.span.contains(span))
+        };
+        if file
+            .compiler
+            .tracked_regions
+            .iter()
+            .any(|region| direct_region(region.span))
+            || file
+                .compiler
+                .callback_roles
+                .iter()
+                .any(|callback| direct_callback_contains(file, callback.span, span))
+            || allowed
+                .iter()
+                .any(|region| direct_callback_contains(file, *region, span))
+            || direct_control_flow_body_role(
+                file,
+                span,
+                self.entities,
+                self.symbol_names,
+                self.lookup.dialect,
+            )
+            .is_some()
+        {
+            return true;
+        }
+        let Some(owner) = containing_ast_function(&file.ast, span) else {
+            return false;
+        };
+        file.ast.calls.iter().any(|call| {
+            call.arguments.iter().enumerate().any(|(index, argument)| {
+                let own_callback = direct_callback_contains(file, argument.span, span)
+                    || self
+                        .lookup
+                        .function_called_at(file.path.as_str(), argument.span)
+                        .is_some_and(|(target_file, function)| {
+                            target_file.path == file.path && function.span == owner.span
+                        });
+                own_callback
+                    && (self
+                        .lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            crate::owners::callback_execution_at_call(
+                                file,
+                                call,
+                                primitive,
+                                index,
+                                self.lookup,
+                            )
+                            .is_some()
+                        })
+                        || self
+                            .lookup
+                            .callee_symbol(file, call.callee)
+                            .is_some_and(|symbol| {
+                                self.lookup
+                                    .contract_guaranteed_callback_parameters(symbol)
+                                    .is_some_and(|parameters| parameters.contains(&index))
+                            }))
+            })
+        })
+    }
+
     fn getter_read(
         &self,
         file: &solid_facts::FileFacts,
@@ -224,18 +306,32 @@ impl LocalAccessContext<'_, '_> {
         ) || execution == ExecutionRole::DeferredCallback
             && !host_callback_timing(file, span, execution, self.lookup)
             && !callee_callback_timing(file, span, execution, self.lookup);
-        if (inside_non_component_function(file, span, self.lookup)
-            || inside_unclassified_callback(file, span))
-            && named_callback_execution_role(file, span, self.lookup).is_none()
-            && direct_control_flow_body_role(
-                file,
-                span,
-                self.entities,
-                self.symbol_names,
-                self.lookup.dialect,
-            )
-            .is_none()
-            && !non_strict
+        let direct = self.getter_execution_is_direct(file, span, &allowed);
+        let unproven_function = containing_ast_function(&file.ast, span).is_some_and(|function| {
+            !self.lookup.function_may_be_component(file, function) && !direct
+        });
+        let inherited_callback = matches!(
+            execution,
+            ExecutionRole::TrackedJsx
+                | ExecutionRole::DeferredCallback
+                | ExecutionRole::EventCallback
+                | ExecutionRole::EffectApply
+                | ExecutionRole::UntrackedCallback
+        ) && !direct;
+        if unproven_function
+            || inherited_callback
+            || (inside_non_component_function(file, span, self.lookup)
+                || inside_unclassified_callback(file, span))
+                && named_callback_execution_role(file, span, self.lookup).is_none()
+                && direct_control_flow_body_role(
+                    file,
+                    span,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup.dialect,
+                )
+                .is_none()
+                && !non_strict
         {
             result.dispatch_obligations.push(crate::StaticDefect {
                 kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {

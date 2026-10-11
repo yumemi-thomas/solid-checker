@@ -35,6 +35,10 @@
 // (callbacks and returns) names each further pair in `probes`, as `{ label,
 // rule, why, scenario? }` exercised by `<export>.<label>.misuse.tsx` and
 // `<export>.<label>.correct.tsx`; the call ships only when every pair passed.
+// A returned object's `getter` leaf asserts an own enumerable accessor, not
+// just its Get behavior. `getterClosures[return-operation]` must cite the
+// installed enumerable definition (e.g. an object-literal getter) and state
+// "own enumerable"; a non-enumerable accessor cannot use this leaf (ADR 0272).
 //
 // Each artifact case of that version starts from the spec's `identity.json`
 // (ADR 0207; every spec has one since the certified tier retired, ADR 0228):

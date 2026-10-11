@@ -42,5 +42,7 @@ declare module "solid-js" {
 declare module "solid-js" {
   export function createMemo<T>(compute: (prev: T | undefined) => T, options?: { lazy?: boolean }): () => T;
   export function createEffect<T>(compute: (prev: T | undefined) => T, apply: (value: T, prev: T | undefined) => void | (() => void)): void;
-  export function untrack<T>(fn: () => T, strictReadLabel?: string): T;
+  export function untrack<T>(fn: () => T, strictReadLabel?: string | false): T;
+  // Published rc.13 signature; returned values must be void or cleanup.
+  export function onSettled(callback: () => void | (() => void)): void;
 }

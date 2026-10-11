@@ -9,7 +9,10 @@
 ## Vocabulary and scope
 
 An exact returned `object` may contain `{ "kind": "getter", "reactive": true }`
-or the same leaf with `false`. A reactive getter performs a reactive read on
+or the same leaf with `false`. Each leaf asserts an **own, enumerable accessor
+property**. Non-enumerable or inherited accessors cannot be described with it;
+no descriptor metadata is added, and existing data-member meanings stay unchanged.
+A reactive getter performs a reactive read on
 every Get and yields plain data. An inert getter yields plain data without a
 reactive read. A data member continues to use its existing value shape: its
 Get is inert, and the retrieved value has that shape (for example `store`).
@@ -21,7 +24,11 @@ getter members and plain/store/reactive data members. Unknown, nested, partial,
 input, tuple and callable-graph placements are refused. The new canonical tag
 is 28; older tags and digest families are unchanged. Certification refuses the
 leaf: no implementation census proves it. Authored claims need installed-byte
-citations in `getterClosures[return-operation]`, and fresh probe identities bind
+citations in `getterClosures[return-operation]` showing the own enumerable
+definition (for example an object-literal getter), as well as Get behavior.
+The citation must explicitly state "own enumerable"; validation requires these
+words and the source location, while source review establishes their truth.
+Fresh probe identities bind
 the entire claim, both programs, artifact cases and runtime pins.
 Projection also requires one unguarded, same-stack, exactly-once call-triggered
 completion in call scope. Optional, deferred or partial returns remain open.
@@ -40,6 +47,11 @@ wrappers preserve the shape. A reactive Get is a read at the member expression
 or destructuring site, in that site's execution context. Component-body and
 proven untracked strict-read scopes produce SC1001 strict-read-untracked violations;
 JSX and tracked computation reads remain clean. Inert getters do not read.
+Tracked/deferred execution must belong to the Get's innermost function, or to
+direct compiler-censused JSX with no intervening function. A callback returned,
+stored or passed from an enclosing computation does not inherit its execution.
+Without an exact invocation proof it receives a `returned getter execution`
+SC9012 obligation, including callbacks later invoked in a body or event handler.
 Explicit untrack() clearing and event scopes retain the existing runtime
 strict-read policy; non-tracking alone never proves a runtime diagnostic.
 
@@ -61,7 +73,17 @@ uncertifiable; that is not a reactive read claim.
 
 Exact object destructuring runs the selected getters. Object spread, one-source
 Object.assign into a fresh empty literal, Object.values/entries and one-argument
-JSON.stringify run getters and produce a read at traversal. More elaborate
+JSON.stringify run the own enumerable getters and produce a read at traversal.
+Serialization assumes **standard prototypes, with no inherited callable
+toJSON**, under the repository's unpatched-built-ins premise (ADRs 0167, 0190,
+0211 and 0262). The existing project-wide member-write veto withholds this
+traversal for visible writes to `toJSON` or `__proto__`, prototype replacement,
+or dynamic prototype writes. This is an obligation, never a guessed read.
+Reflective writes (Object.defineProperty/setPrototypeOf), unresolved alias/key
+flows, dependency or excluded-source patches and prior/external configuration
+remain outside that premise; absence of a visible veto does not prove their
+absence. No new prototype mutation or escape census is introduced.
+More elaborate
 copying/serialization signatures, reflective descriptors, rest/computed
 bindings, mutable receivers, replaced members, aliases, unknown-call escapes,
 export, unproven helper/callback execution and missing identities retain obligations. Escaping or mutated receivers
@@ -79,6 +101,8 @@ returns as this object. pathname/search/hash/state are reactive getter leaves,
 key is inert, query is a store data member. Source authority is the exact
 next.26 install's `dist/routing.js:35,79,490-528,724-751` and
 `dist/utils.js:124-147`; the latter proxy traps belong only to query.
+The location accessors are object-literal getters at `dist/routing.js:509-527`,
+which establishes their own enumerable definitions.
 The existing exact visible integration veto withholds the entire hook claim,
 including this return shape. Throws, lifetime and other router protocols remain
 open. No vocabulary or package-specific rule is added to the Solid dialect.
@@ -96,6 +120,14 @@ Get/traversal/inert/escape branches. Published next.26/rc.13 pairs typecheck
 strictly with skipLibCheck=false. All 26 next.26 Chrome pairs pass, including
 twelve useLocation pairs. Native pair and fixture results are recorded in
 `rust/target/research/getter-members/RESULT.md`; no corpus sweep is claimed.
+
+Round-2 native controls against published next.26/rc.13 typings pass all thirteen
+cases: eight returned/stored/nested callback Gets retain execution obligations;
+direct memo, untrack, event and onSettled Gets are clean; direct effect apply
+keeps its strict-read violation. The isolated visible prototype-toJSON write
+withholds serialization. Coverage preserves every original finding and adds
+only eight SC9012 obligations and one SC1001 effect-apply control to the getter
+fixture. Details are in `rust/target/research/getter-members/RESULT-2.md`.
 
 Source prediction: next.26's Kui TopicsRoute.tsx:425 signal seed is a real
 untracked getter defect and should regain its violation. The real next.16

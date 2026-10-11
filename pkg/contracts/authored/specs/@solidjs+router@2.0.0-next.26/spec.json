@@ -170,7 +170,7 @@
         }
       ],
       "getterClosures": {
-        "return": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; dist/utils.js:124-147 — Under ADR 0271, ADRs 0266/0268 and ADR 0226 P1/P2. Returns the existing plain object: pathname/search/hash/state Gets read memos and yield plain data, key is inert, query is a data property holding createMemoObject. Plain object ownKeys/has are inert; copying/destructuring/serialization run getters. Throws/lifetime stays open."
+        "return": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; dist/routing.js:509-527 defines own enumerable accessors as object-literal getters; dist/utils.js:124-147 — Under ADR 0271, ADRs 0266/0268 and ADR 0226 P1/P2. Returns the existing plain object: pathname/search/hash/state Gets read memos and yield plain data, key is inert, query is a data property holding createMemoObject. Plain object ownKeys/has are inert; copying/destructuring/serialization run getters under ADR 0272's standard-prototype premise. Throws/lifetime stays open."
       }
     },
     "useParams": {

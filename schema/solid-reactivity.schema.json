@@ -985,6 +985,7 @@
       }
     },
     "getterValue": {
+      "description": "Authored-only own, enumerable accessor property of a complete returned plain object. Every Get yields plain data and performs a reactive read exactly when reactive is true. Non-enumerable or inherited accessors cannot use this leaf; getterClosures must cite the enumerable definition (for example an object-literal getter).",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "reactive"],

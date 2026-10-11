@@ -9,13 +9,16 @@ const claim = () => ({
       { name: "key", value: { kind: "getter", reactive: false } },
       { name: "query", value: { kind: "store" } }
     ]
-  } }] }, getterClosures: { return: "dist/routing.js:490-528" }
+  } }] }, getterClosures: { return: "dist/routing.js:509-527 — object-literal getters define own enumerable accessors" }
 });
 
 test("getter members require exact enumeration, Get flag and their own citation", () => {
   validateGetterMembers("fixture", claim());
   for (const mutate of [
     c => delete c.getterClosures,
+    c => c.getterClosures.return = "dist/routing.js:509-527 — reactive Gets only",
+    c => c.getterClosures.return = "dist/routing.js:509-527 — own accessors only",
+    c => c.getterClosures.return = "dist/routing.js:509-527 — enumerable accessors only",
     c => delete c.call.operations[0].output.closed,
     c => delete c.call.operations[0].output.properties[0].value.reactive,
     c => c.call.operations[0].output.properties.push(c.call.operations[0].output.properties[0]),

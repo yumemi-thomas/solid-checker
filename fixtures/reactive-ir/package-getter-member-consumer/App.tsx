@@ -141,3 +141,65 @@ export function Shadowed() {
   const path = location.pathname;
   return <div>{path}</div>;
 }
+
+import { createEffect, onSettled } from "solid-js";
+
+export function ReturnedMemoBody() {
+  const location = makeSize();
+  const memo = createMemo(() => () => location.pathname);
+  const path = untrack(memo)();
+  return <div>{path}</div>;
+}
+export function ReturnedMemoEvent() {
+  const location = makeSize();
+  const memo = createMemo(() => () => location.pathname);
+  const read = untrack(memo);
+  return <div onClick={() => { read(); }} />;
+}
+export function ReturnedMemoEscape() {
+  const location = makeSize();
+  const memo = createMemo(() => () => location.pathname);
+  unknownCall(untrack(memo));
+  return <div />;
+}
+export function StoredMemoCallback() {
+  const location = makeSize();
+  const memo = createMemo(() => ({ read: () => location.pathname }));
+  unknownCall(untrack(memo));
+  return <div />;
+}
+export function NestedEffectCompute() {
+  const location = makeSize();
+  createEffect(() => () => location.pathname, read => { unknownCall(read); });
+  return <div />;
+}
+export function NestedEffectApply() {
+  const location = makeSize();
+  createEffect(() => 0, () => { unknownCall(() => location.pathname); });
+  return <div />;
+}
+export function NestedUntrack() {
+  const location = makeSize();
+  const read = untrack(() => () => location.pathname);
+  const path = read();
+  return <div>{path}</div>;
+}
+export function NestedSettled() {
+  const location = makeSize();
+  onSettled(() => () => { void location.pathname; });
+  return <div />;
+}
+export function DirectEffect() {
+  const location = makeSize();
+  createEffect(() => location.pathname, () => { unknownCall(location.search); });
+  return <div />;
+}
+export function DirectEvent() {
+  const location = makeSize();
+  return <div onClick={() => { unknownCall(location.pathname); }} />;
+}
+export function DirectSettled() {
+  const location = makeSize();
+  onSettled(() => { void location.pathname; });
+  return <div />;
+}
