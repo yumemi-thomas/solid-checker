@@ -454,3 +454,24 @@ test("a cleanup failure after a primary failure is attached to it rather than re
   assert.equal(primary.cleanupErrors.length, 1);
   await assert.rejects(closeFeedbackResourcesAfter(undefined, { browser: failing }));
 });
+
+test("a dropped server capture disables body association for every failed script", async () => {
+  const origin = "http://app.test", diagnostics = createFeedbackDiagnostics();
+  let middleware;
+  diagnostics.install({ middlewares: { use(fn) { middleware = fn; } } });
+  const serve = (url, text) => {
+    const response = Object.assign(new EventEmitter(), { statusCode: 500, writableFinished: false,
+      writeHead() {}, write() { return true; }, end() { this.writableFinished = true; this.emit("finish"); } });
+    middleware({ url }, response, () => {});
+    response.writeHead(500); response.end(text);
+  };
+  serve("/src/lazy.js", '{"error":"fetch"}');
+  for (let i = 0; i < 63; i++) serve(`/api/${i}`, "fetch failed");
+  serve("/src/lazy.js", "compiler error");
+  diagnostics.response({ url: () => origin + "/src/lazy.js", status: () => 500, headers: () => ({}),
+    request: () => ({ resourceType: () => "script" }), body: () => assert.fail("unbounded body acquisition is forbidden") }, origin);
+  const result = await diagnostics.finish(); diagnostics.dispose();
+  assert.equal(result.capturesDropped, 1);
+  assert.equal(result.failedModules[0].body, undefined);
+  assert.match(result.failedModules[0].bodyUnavailable, /dropped/);
+});

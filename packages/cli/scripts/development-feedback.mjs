@@ -49,8 +49,12 @@ export function expandSolutionProject(project, seen = new Set(), system = ts.sys
 
 // TypeScript is the published-typing oracle here. Semantic analysis remains in
 // the native checker and its Type Facts/compiler fact domains.
+// Cleanup failures that followed the primary failure, bounded, for the published document.
+const cleanupFailures = error => error.cleanupErrors?.length
+  ? { cleanupErrors: error.cleanupErrors.slice(0, 8).map(cleanup => String(cleanup?.message ?? cleanup).slice(0, 2000)) } : {};
+
 export function feedbackSnapshot(project) {
-  project = realpathSync(resolve(project));
+  const requested = resolve(project);
   const inputs = new Map();
   const record = input => inputs.set(JSON.stringify([input.kind, input.path, input.arguments]), input);
   const system = { ...ts.sys };
@@ -64,6 +68,9 @@ export function feedbackSnapshot(project) {
       return result;
     };
   }
+  // The caller's path is resolved through the recording system, so a
+  // retargeted project symlink is an observed input of the final replay.
+  project = (system.realpath ?? realpathSync)(requested);
   const typingStarted = performance.now();
   const parsed = parseProject(project, system);
   const references = parsed.projectReferences ?? [];
@@ -465,11 +472,11 @@ export async function developmentFeedback(args) {
     if (!(error instanceof FeedbackNativeError)) {
       if (live) process.stdout.write(JSON.stringify({ schemaVersion: 1, documentKind: "solid-checker-development-feedback",
         status: "runtime-failed", authority: false, certification: false, project: resolve(project),
-        failure: { kind: "collector-error", message: error.message } }, null, 2) + "\n");
+        failure: { kind: "collector-error", message: error.message, ...cleanupFailures(error) } }, null, 2) + "\n");
       throw error;
     }
     // The partial result is the structured failure; the message is for humans.
-    process.stdout.write(JSON.stringify(failureDocument(realpathSync(resolve(project)), error.failure), null, 2) + "\n");
+    process.stdout.write(JSON.stringify(failureDocument(realpathSync(resolve(project)), { ...error.failure, ...cleanupFailures(error) }), null, 2) + "\n");
     throw error;
   }
 }

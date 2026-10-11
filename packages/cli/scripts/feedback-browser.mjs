@@ -161,7 +161,7 @@ export async function loadFeedbackConfiguration(tools, projectRoot, record, opti
 
 export function createFeedbackDiagnostics({ timeoutMs = 2000 } = {}) {
   const vite = [], failedModules = [], pending = new Set(), bodies = new Map(), rowKeys = new Map();
-  let captured = 0;
+  let captured = 0, capturesDropped = 0;
   let viteDropped = 0, failedModulesDropped = 0;
   const bounded = text => { const bytes = Buffer.from(String(text)); return { text: bytes.subarray(0, 16384).toString(), bytes: bytes.length, truncated: bytes.length > 16384 }; };
   const log = (severity, message) => {
@@ -174,9 +174,13 @@ export function createFeedbackDiagnostics({ timeoutMs = 2000 } = {}) {
     install(server) {
       server.middlewares.use((request, response, next) => {
         const key = request.url;
-        let capture;
+        let capture, considered = false;
         const begin = () => {
-          if (capture || response.statusCode < 400 || captured >= 64) return;
+          if (capture || considered || response.statusCode < 400) return;
+          considered = true;
+          // A dropped capture removes the proof that a retained one is the only
+          // failed response for its URL, so overflow disables association.
+          if (captured >= 64) { capturesDropped++; return; }
           captured++;
           const buffer = Buffer.alloc(16384);
           let retained = 0, bytes = 0, settled = false, timer;
@@ -235,12 +239,13 @@ export function createFeedbackDiagnostics({ timeoutMs = 2000 } = {}) {
       for (const key of rowKeys.values()) responses.set(key, (responses.get(key) ?? 0) + 1);
       await Promise.all(failedModules.map(async row => {
         const key = rowKeys.get(row), captures = bodies.get(key) ?? [];
-        if (captures.length === 1 && responses.get(key) === 1 && captures[0].status === row.status) row.body = await captures[0].promise;
+        if (capturesDropped) row.bodyUnavailable = "Server response captures were dropped, so no body can be associated exactly";
+        else if (captures.length === 1 && responses.get(key) === 1 && captures[0].status === row.status) row.body = await captures[0].promise;
         else row.bodyUnavailable = captures.length
           ? "The server capture cannot be associated with this response exactly"
           : "No bounded server response capture available";
       }));
-      return { vite, viteDropped, failedModules, failedModulesDropped };
+      return { vite, viteDropped, failedModules, failedModulesDropped, capturesDropped };
     },
     dispose() { for (const finish of pending) finish(false, true); }
   };

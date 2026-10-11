@@ -317,6 +317,17 @@ test("solution selection pins the target of a retargeted reference symlink", () 
   assert.throws(() => validateFeedbackInputs(snapshot.manifest), /Feedback input changed/);
   assert.deepEqual(expandSolutionProject(project), [b]);
 }));
+test("solution selection pins the target of a retargeted root project symlink", () => workspace(root => {
+  leaf(root, "a"); leaf(root, "b");
+  const first = join(root, "first.json"), second = join(root, "second.json"), selected = join(root, "selected.json");
+  writeFileSync(first, JSON.stringify({ files: [], references: [{ path: "./a" }] }));
+  writeFileSync(second, JSON.stringify({ files: [], references: [{ path: "./b" }] }));
+  symlinkSync(first, selected);
+  const { snapshot } = feedbackBrowserSnapshots(selected);
+  validateFeedbackInputs(snapshot.manifest);
+  unlinkSync(selected); symlinkSync(second, selected);
+  assert.throws(() => validateFeedbackInputs(snapshot.manifest), /Feedback input changed/);
+}));
 test("solution selection pins empty include listings and negative extends resolutions", () => workspace(root => {
   leaf(root, "a"); mkdirSync(join(root, "selection"));
   const project = join(root, "tsconfig.json");

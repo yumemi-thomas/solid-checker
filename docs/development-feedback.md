@@ -197,8 +197,9 @@ can close it. A creation failure before Vite exposes a server refuses with an
 explicit note that partial resources may remain until CLI exit. Runtime failures
 publish a `status: "runtime-failed"` document; native failures retain their
 structured `native-failed` document. A cleanup failure after another failure is
-attached to that primary failure instead of replacing it; it is the reported
-failure only when collection itself succeeded. The dedicated CLI drains stdout and stderr
+attached to that primary failure instead of replacing it, and is published in
+its `failure.cleanupErrors`; it is the reported failure only when collection
+itself succeeded. The dedicated CLI drains stdout and stderr
 in its finalizer and exits with status 2 on failure or the native status on
 success, including when application config leaves a process-level timer alive.
 
@@ -281,7 +282,10 @@ with byte lengths, truncation flags and dropped-row counters. Bodies are capture
 from the original outgoing Vite response as chunks are written, copying only
 the first 16 KiB; acquisition stops after two seconds. Body rows record
 `timedOut` and `incomplete`; `bytes` counts bytes observed before capture stops,
-and a missing bounded capture is explicit as `bodyUnavailable`. No second
+and a missing bounded capture is explicit as `bodyUnavailable`. A capture carries
+no request identity, so a body is attached only when one failed capture and one
+failed script response share its URL and status, and no capture was dropped
+(`capturesDropped`); otherwise the row says why it is unavailable. No second
 request or unbounded Playwright body read is made. These preserve
 transform evidence that silent Vite logging previously hid; a failure alone
 does not prove an instrumentation or compiler defect.
