@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "d240da0c3aee262f03a66d0e03be7d3f1c578e18c130c827185619130b5efbbc",
+            "closureSha256": "b5537e7a380fc7717ecfad22047a3ac22a80fa530bc5d8257c4f8a07b56bef62",
             "path": "./dist/index.jsx",
             "sha256": "e73fc341f9427ae738b2ba86d62045518ab6093bb7a57a3a4035d01c03ef920b"
           },
@@ -23,7 +23,6 @@
             "defineRoutes": "open-callable",
             "hashHistory": "open-callable",
             "int": "open-callable",
-            "liveQuery": "open-callable",
             "memoryHistory": "open-callable",
             "query": "open-callable",
             "revalidate": "open-callable",
@@ -32,7 +31,7 @@
             "useHref": "authored-useHref",
             "useIsRouting": "authored-useIsRouting",
             "useLinkState": "open-callable",
-            "useLocation": "open-callable",
+            "useLocation": "authored-useLocation",
             "useMatch": "authored-useMatch",
             "useNavigate": "open-callable",
             "useParams": "authored-useParams",
@@ -52,13 +51,13 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "sha512-DQ58djANKYi4HZfE9J7vN9kAtAH/eKYkUj61cezfDrBae3A/cgthgdjQS9C8pNGtNeST6aA8GNhcFYKlUWn+zA==",
+    "integrity": "sha512-LchYm3IZ3Y7vGPh/Jx6X8UjpBirQrz9ZoRQkgRpdz8A9C7eTiRXY326pJDcoYDXn7FzYtFpRCwsfBMxRDsFo6A==",
     "manifest": {
       "path": "./package.json",
-      "sha256": "f51b8560517b5fcd01106c59e03aa341015d769f3bfd7e5fa2b0e9f25a1c1aee"
+      "sha256": "0293f397980cc8801a3754aad7edb4ccc6c77c1831546fc4623965807d7bcec3"
     },
     "name": "@solidjs/router",
-    "version": "2.0.0-next.18"
+    "version": "2.0.0-next.17"
   },
   "schemaVersion": 1,
   "semanticModelVersion": 1,
@@ -128,6 +127,10 @@
           "return"
         ]
       },
+      "shape": "callable"
+    },
+    "authored-useLocation": {
+      "call": {},
       "shape": "callable"
     },
     "authored-useMatch": {

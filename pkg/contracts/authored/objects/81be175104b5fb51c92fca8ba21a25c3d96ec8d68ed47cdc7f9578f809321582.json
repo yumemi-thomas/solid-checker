@@ -32,7 +32,7 @@
             "useHref": "authored-useHref",
             "useIsRouting": "authored-useIsRouting",
             "useLinkState": "open-callable",
-            "useLocation": "open-callable",
+            "useLocation": "authored-useLocation",
             "useMatch": "authored-useMatch",
             "useNavigate": "open-callable",
             "useParams": "authored-useParams",
@@ -128,6 +128,10 @@
           "return"
         ]
       },
+      "shape": "callable"
+    },
+    "authored-useLocation": {
+      "call": {},
       "shape": "callable"
     },
     "authored-useMatch": {

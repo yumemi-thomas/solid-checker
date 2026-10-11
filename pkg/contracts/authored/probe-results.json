@@ -15754,6 +15754,158 @@
       "spec": "@solidjs+router@2.0.0-next.16",
       "package": "@solidjs/router",
       "version": "2.0.0-next.16",
+      "export": "useLocation",
+      "label": "key",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.16",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.16",
+      "export": "useLocation",
+      "label": "keys",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.16",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.16",
+      "export": "useLocation",
+      "label": "query",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.16",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.16",
+      "export": "useLocation",
+      "label": "search",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 27
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.16",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.16",
       "export": "useMatch",
       "solidRuntime": [
         {
@@ -16013,6 +16165,158 @@
       "spec": "@solidjs+router@2.0.0-next.17",
       "package": "@solidjs/router",
       "version": "2.0.0-next.17",
+      "export": "useLocation",
+      "label": "key",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.17",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.17",
+      "export": "useLocation",
+      "label": "keys",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.17",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.17",
+      "export": "useLocation",
+      "label": "query",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.17",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.17",
+      "export": "useLocation",
+      "label": "search",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 27
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.17",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.17",
       "export": "useMatch",
       "solidRuntime": [
         {
@@ -16263,6 +16567,158 @@
             "file": "case",
             "line": 7,
             "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.18",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.18",
+      "export": "useLocation",
+      "label": "key",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.18",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.18",
+      "export": "useLocation",
+      "label": "keys",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.18",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.18",
+      "export": "useLocation",
+      "label": "query",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 25
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.18",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.18",
+      "export": "useLocation",
+      "label": "search",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx"
+      ],
+      "rule": "strict-read-untracked",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "STRICT_READ_UNTRACKED",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 27
           }
         }
       ],
