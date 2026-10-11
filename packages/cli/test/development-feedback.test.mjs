@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -305,6 +305,17 @@ for (const intermediate of [false, true]) test(`solution selection pins extends 
   writeFileSync(base, JSON.stringify({ files: ["source.ts"] }));
   assert.throws(() => validateFeedbackInputs(snapshot.manifest), /Feedback input changed/);
   assert.deepEqual(expandSolutionProject(project), [intermediate ? middle : project]);
+}));
+test("solution selection pins the target of a retargeted reference symlink", () => workspace(root => {
+  const a = leaf(root, "a"), b = leaf(root, "b"), project = join(root, "tsconfig.json"), selected = join(root, "selected");
+  symlinkSync(join(root, "a"), selected);
+  writeFileSync(project, JSON.stringify({ files: [], references: [{ path: "./selected" }] }));
+  const { snapshot } = feedbackBrowserSnapshots(project);
+  assert.deepEqual(expandSolutionProject(project), [a]);
+  validateFeedbackInputs(snapshot.manifest);
+  unlinkSync(selected); symlinkSync(join(root, "b"), selected);
+  assert.throws(() => validateFeedbackInputs(snapshot.manifest), /Feedback input changed/);
+  assert.deepEqual(expandSolutionProject(project), [b]);
 }));
 test("solution selection pins empty include listings and negative extends resolutions", () => workspace(root => {
   leaf(root, "a"); mkdirSync(join(root, "selection"));

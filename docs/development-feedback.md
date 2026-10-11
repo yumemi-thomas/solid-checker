@@ -196,7 +196,9 @@ is registered in the collector's first configure hook so later startup failures
 can close it. A creation failure before Vite exposes a server refuses with an
 explicit note that partial resources may remain until CLI exit. Runtime failures
 publish a `status: "runtime-failed"` document; native failures retain their
-structured `native-failed` document. The dedicated CLI drains stdout and stderr
+structured `native-failed` document. A cleanup failure after another failure is
+attached to that primary failure instead of replacing it; it is the reported
+failure only when collection itself succeeded. The dedicated CLI drains stdout and stderr
 in its finalizer and exits with status 2 on failure or the native status on
 success, including when application config leaves a process-level timer alive.
 
@@ -254,7 +256,8 @@ an option (`value`), and `check`/`uncheck` set a checkbox or radio's state.
 preserving validation and submit events. All steps and their arguments are
 pinned by the scenario-file digest; a failed action stops dependent steps.
 Playwright locator-engine spellings, chained selectors and CSS extensions
-such as `:has-text` are refused. Before each action, the page validates the
+such as `:has-text` are refused; text inside quoted attribute values and
+escaped identifiers is CSS, not engine syntax. Before each action, the page validates the
 selector with native `document.querySelector`; invalid CSS stops that step
 before mutation and appears in `execution.failure`.
 

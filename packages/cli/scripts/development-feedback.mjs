@@ -33,7 +33,9 @@ function parseProject(project, system = ts.sys) {
 // inputs of its own is its own leaf: its `references` are dependencies, not
 // work to expand. A reference that does not resolve fails closed.
 export function expandSolutionProject(project, seen = new Set(), system = ts.sys) {
-  project = realpathSync(resolve(project));
+  // Through the recording system, so a retargeted reference symlink is an
+  // observed input rather than a resolution made outside the manifest.
+  project = (system.realpath ?? realpathSync)(resolve(project));
   if (seen.has(project)) return [];
   seen.add(project);
   const parsed = parseProject(project, system), references = parsed.projectReferences ?? [];

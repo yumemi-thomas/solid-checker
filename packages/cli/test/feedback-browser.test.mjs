@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { createReadCollector } from "../scripts/feedback-read-runtime.mjs";
 import { selectAssertionFeedback } from "../scripts/feedback-assertion-selector.mjs";
-import { closeFeedbackResources, createFeedbackDiagnostics, executeFeedbackScenario, feedbackContextOptions, feedbackPhysicalEntry, loadFeedbackConfiguration, loadSuppliedResponses,
+import { closeFeedbackResources, closeFeedbackResourcesAfter, createFeedbackDiagnostics, executeFeedbackScenario, feedbackContextOptions, feedbackPhysicalEntry, loadFeedbackConfiguration, loadSuppliedResponses,
   mergeFeedbackServerConfiguration, routeFeedbackRequest, selectFeedbackModels, validateFeedbackRoot, validateFeedbackRuntimeOptions, validateFeedbackScenario } from "../scripts/feedback-browser.mjs";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -348,6 +348,10 @@ for (const selector of [" text=search", "div >> text=search", "div:has-text('sea
     assert.match(result.failure.message, /native CSS/);
   });
 }
+test("selector syntax inside CSS strings and escapes is not taken for a Playwright engine", () => {
+  for (const selector of ['button[class~="hover:text-white"]', '[data-label="a >> b"]', ".hover\\:text-white", "[title='x:visible']"])
+    validateFeedbackScenario({ schemaVersion: 1, steps: [{ action: "click", selector }] });
+});
 test("native CSS parsing precedes an action and refuses malformed selectors", async () => {
   let parsed = false, filled = false;
   const page = { evaluate: async (_fn, selector) => {
@@ -383,6 +387,34 @@ test("failed module diagnostics capture original streaming bytes with a read cap
   assert.equal(Buffer.byteLength(row.body.text), 16384); assert.equal(row.body.bytes, 1000019);
   assert.equal(row.body.truncated, true); assert.equal(row.body.timedOut, false);
 });
+test("a failed body is attached only when its server capture is exactly associated", async () => {
+  const origin = "http://app.test";
+  // A failed fetch then a failed script at the same URL: the capture cannot be bound to the script.
+  const ambiguous = createFeedbackDiagnostics();
+  let middleware;
+  ambiguous.install({ middlewares: { use(fn) { middleware = fn; } } });
+  const serve = (status, text) => {
+    const response = Object.assign(new EventEmitter(), { statusCode: status, writableFinished: false,
+      writeHead() {}, write() { return true }, end() { this.writableFinished = true; this.emit("finish"); } });
+    middleware({ url: "/src/lazy.js" }, response, () => {});
+    response.writeHead(status); response.end(text);
+  };
+  serve(404, '{"error":"fetch"}'); serve(500, "compiler error");
+  ambiguous.response({ url: () => origin + "/src/lazy.js", status: () => 500, headers: () => ({}),
+    request: () => ({ resourceType: () => "script" }), body: () => assert.fail("unbounded body acquisition is forbidden") }, origin);
+  const first = await ambiguous.finish(); ambiguous.dispose();
+  assert.equal(first.failedModules[0].body, undefined);
+  assert.match(first.failedModules[0].bodyUnavailable, /cannot be associated/);
+  // One capture whose status differs from the script response: unavailable too.
+  const mismatched = createFeedbackDiagnostics();
+  mismatched.install({ middlewares: { use(fn) { middleware = fn; } } });
+  serve(404, "not this one");
+  mismatched.response({ url: () => origin + "/src/lazy.js", status: () => 500, headers: () => ({}),
+    request: () => ({ resourceType: () => "script" }), body: () => assert.fail("unbounded body acquisition is forbidden") }, origin);
+  const rows = await mismatched.finish(); mismatched.dispose();
+  assert.equal(rows.failedModules[0].body, undefined);
+  assert.match(rows.failedModules[0].bodyUnavailable, /cannot be associated/);
+});
 test("a never-finishing 500 response times out without calling Playwright body or blocking teardown", async () => {
   const diagnostics = createFeedbackDiagnostics({ timeoutMs: 15 });
   diagnosticResponse(diagnostics, "http://app.test", "/never.ts").write("partial");
@@ -413,4 +445,12 @@ test("hanging resource close is bounded and does not block later close attempts 
     server: { close: async () => calls.push("server") }, browser: { close: async () => calls.push("browser") }
   }), /context close timed out/);
   assert.deepEqual(calls, ["context", "server", "browser"]); assert.equal(existsSync(cache), false);
+});
+
+test("a cleanup failure after a primary failure is attached to it rather than replacing it", async () => {
+  const failing = { close: async () => { throw new Error("close failed"); } };
+  const primary = new Error("native failed");
+  await closeFeedbackResourcesAfter(primary, { browser: failing });
+  assert.equal(primary.cleanupErrors.length, 1);
+  await assert.rejects(closeFeedbackResourcesAfter(undefined, { browser: failing }));
 });

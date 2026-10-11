@@ -63,8 +63,12 @@ export function validateFeedbackScenario(scenario) {
 const responseKey = (url, method = "GET", body) => method === "GET" ? url : JSON.stringify([url, method, body]);
 
 function validateFeedbackSelector(selector) {
-  assert(!selector.includes(">>") && !/^\s*[\w-]+\s*=/.test(selector)
-    && !/:(?:text(?:-is|-matches)?|has-text|visible|nth-match|right-of|left-of|above|below|near)\b/.test(selector),
+  // Quoted attribute values and escaped identifiers are CSS literals, so engine
+  // spellings are looked for only outside them; the page's native parse runs
+  // before every action as well.
+  const syntax = selector.replace(/\\[\s\S]/g, "_").replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
+  assert(!syntax.includes(">>") && !/^\s*[\w-]+\s*=/.test(syntax)
+    && !/:(?:text(?:-is|-matches)?|has-text|visible|nth-match|right-of|left-of|above|below|near)\b/.test(syntax),
   "Selectors must be native CSS, not Playwright locator engines or extensions");
 }
 
@@ -156,7 +160,7 @@ export async function loadFeedbackConfiguration(tools, projectRoot, record, opti
 }
 
 export function createFeedbackDiagnostics({ timeoutMs = 2000 } = {}) {
-  const vite = [], failedModules = [], pending = new Set(), bodies = new Map();
+  const vite = [], failedModules = [], pending = new Set(), bodies = new Map(), rowKeys = new Map();
   let captured = 0;
   let viteDropped = 0, failedModulesDropped = 0;
   const bounded = text => { const bytes = Buffer.from(String(text)); return { text: bytes.subarray(0, 16384).toString(), bytes: bytes.length, truncated: bytes.length > 16384 }; };
@@ -195,7 +199,7 @@ export function createFeedbackDiagnostics({ timeoutMs = 2000 } = {}) {
             else retained += Buffer.from(chunk.buffer, chunk.byteOffset, Math.min(chunk.byteLength, remaining))
               .copy(buffer, retained, 0, remaining);
           }, finish };
-          const queue = bodies.get(key) ?? []; queue.push(promise); bodies.set(key, queue);
+          const queue = bodies.get(key) ?? []; queue.push({ promise, status: response.statusCode }); bodies.set(key, queue);
           pending.add(finish); timer = setTimeout(() => finish(true, true), timeoutMs);
         };
         const writeHead = response.writeHead, write = response.write, end = response.end;
@@ -220,13 +224,22 @@ export function createFeedbackDiagnostics({ timeoutMs = 2000 } = {}) {
       if (failedModules.length >= 64) { failedModulesDropped++; return; }
       const row = { url: response.url(), status: response.status(), contentType: response.headers()["content-type"] ?? null };
       failedModules.push(row);
-      const url = new URL(response.url()), queue = bodies.get(url.pathname + url.search);
-      const body = queue?.shift();
-      if (body) row.pendingBody = body.then(value => { row.body = value; delete row.pendingBody; });
-      else row.bodyUnavailable = "No bounded server response capture available";
+      const url = new URL(response.url());
+      rowKeys.set(row, url.pathname + url.search);
     },
     async finish() {
-      await Promise.all(failedModules.map(row => row.pendingBody));
+      // A server capture carries no request identity, so a body is attached only
+      // when the association is exact: one failed capture and one failed script
+      // response for that URL, with the same status. Otherwise it is unavailable.
+      const responses = new Map();
+      for (const key of rowKeys.values()) responses.set(key, (responses.get(key) ?? 0) + 1);
+      await Promise.all(failedModules.map(async row => {
+        const key = rowKeys.get(row), captures = bodies.get(key) ?? [];
+        if (captures.length === 1 && responses.get(key) === 1 && captures[0].status === row.status) row.body = await captures[0].promise;
+        else row.bodyUnavailable = captures.length
+          ? "The server capture cannot be associated with this response exactly"
+          : "No bounded server response capture available";
+      }));
       return { vite, viteDropped, failedModules, failedModulesDropped };
     },
     dispose() { for (const finish of pending) finish(false, true); }
@@ -235,6 +248,16 @@ export function createFeedbackDiagnostics({ timeoutMs = 2000 } = {}) {
 
 // Every resource is attempted even if an earlier close rejects. This also
 // covers createServer/listen failures and removes only this run's cache tree.
+// A cleanup failure after a primary failure is attached to it, so the primary
+// explanation (a structured native failure, a startup refusal) is what the run
+// reports; cleanup is the reported failure only when collection succeeded.
+export async function closeFeedbackResourcesAfter(primary, resources) {
+  try { await closeFeedbackResources(resources); } catch (cleanup) {
+    if (!primary) throw cleanup;
+    primary.cleanupErrors = [...(primary.cleanupErrors ?? []), cleanup];
+  }
+}
+
 export async function closeFeedbackResources({ context, server, cache, browser, timeoutMs = 2000 }) {
   const errors = [];
   for (const [name, resource] of [["context", context], ["server", server], ["browser", browser]]) {
@@ -463,6 +486,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
   let server, context;
   const pageErrors = [], blockedRequests = [], refusedResponses = [], consoleDiagnostics = [];
   let consoleDiagnosticsDropped = 0;
+  let primary;
   try {
     server = await tools.createServer(mergeFeedbackServerConfiguration(tools, application, { configFile: false, root, cacheDir: cache,
     plugins: [{ name: "solid-checker-feedback-lifecycle", enforce: "pre",
@@ -611,8 +635,9 @@ async function collectProject(project, scenario, tools, browser, responses = new
       configuration: configuration.configuration, typingErrors: snapshot.typingErrors };
   } catch (error) {
     if (!server) error.message += "; no Vite server was exposed for cleanup; partial startup resources may remain until CLI exit";
+    primary = error;
     throw error;
-  } finally { serverDiagnostics.dispose(); await closeFeedbackResources({ context, server, cache }); }
+  } finally { serverDiagnostics.dispose(); await closeFeedbackResourcesAfter(primary, { context, server, cache }); }
 }
 
 export function selectFeedbackModels(rows) {
@@ -640,6 +665,7 @@ export async function runBrowserFeedback({ project, scenarioPath, browserPath, t
   tools.root = realpathSync(resolve(toolingRoot ?? dirname(resolve(project))));
   const browserPin = { path: realpathSync(resolve(browserPath)), sha256: hash(readFileSync(browserPath)) };
   const browser = await tools.chromium.launch({ executablePath: browserPin.path, headless: true, timeout: 15000 });
+  let primary;
   try {
     const fresh = () => new Map([...responses].map(([url, row]) => [url, { ...row, served: 0 }]));
     const original = await collectProject(project, scenario, tools, browser, fresh(), runtimeOptions);
@@ -660,5 +686,5 @@ export async function runBrowserFeedback({ project, scenarioPath, browserPath, t
         assertions: comparison.assertions, stats: comparison.stats, nativeExitCode: comparison.feedback.nativeExitCode,
         typingErrors: comparison.typingErrors, pageErrors: comparison.pageErrors } : null,
       scenario: scenarioPin, browser: { ...browserPin, version: browser.version() } };
-  } finally { await closeFeedbackResources({ browser }); }
+  } catch (error) { primary = error; throw error; } finally { await closeFeedbackResourcesAfter(primary, { browser }); }
 }
