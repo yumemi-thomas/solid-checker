@@ -5563,6 +5563,11 @@ pub(super) fn contract_export_summaries_incremental(
         .filter_map(|(index, node)| {
             (!graph_node_reused_paths.contains(node.path.as_str())
                 || !cache.nodes.contains_key(&node_keys[index])
+                // Returned member classification reads an implementation's
+                // current summary without invoking it from the factory. Such
+                // a dependency is absent from ordinary call reverse edges.
+                || cache.structured_returns.get(&node_keys[index])
+                    != analysis.structured_returns[index].as_ref()
                 || changed_semantic_symbols.is_some_and(|changed| {
                     analysis.summaries[index]
                         .iter()
@@ -5591,6 +5596,13 @@ pub(super) fn contract_export_summaries_incremental(
     let mut changed_nodes = HashSet::<ContractNodeKey>::new();
     for (index, contract) in dirty_indices.into_iter().zip(rebuilt_nodes) {
         let key = node_keys[index].clone();
+        if let Some(returned) = &analysis.structured_returns[index] {
+            cache
+                .structured_returns
+                .insert(key.clone(), returned.clone());
+        } else {
+            cache.structured_returns.remove(&key);
+        }
         if cache.nodes.get(&key) != Some(&contract) {
             changed_nodes.insert(key.clone());
             cache.nodes.insert(key, contract);
@@ -5604,6 +5616,7 @@ pub(super) fn contract_export_summaries_incremental(
         .collect::<Vec<_>>();
     for key in removed_nodes {
         cache.nodes.remove(&key);
+        cache.structured_returns.remove(&key);
         changed_nodes.insert(key);
     }
     let current_paths = facts

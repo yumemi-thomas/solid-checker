@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal } from "solid-js";
 import * as factories from "./factory";
 import { collection, computed, memo, several, spread } from "./factory";
-import { AccountContext, useAccount, useAmbiguous, useDb, useDefaulted } from "./context";
+import { AccountContext, useAccount, useAmbiguous, useDb, useDefaulted, useEscaped, useAliased } from "./context";
 import { useContext } from "solid-js";
 
 export function Body() {
@@ -294,13 +294,13 @@ export function ReturnedObjectAlias() {
   return <p>{value}</p>;
 }
 export function ContextEscaped() {
-  const account = useAccount();
+  const account = useEscaped();
   unknown(account);
   const value = account.state();
   return <p>{value}</p>;
 }
 export function ContextMemberAlias() {
-  const account = useAccount();
+  const account = useAliased();
   const state = account.state;
   const value = state();
   return <p>{value}</p>;
@@ -309,4 +309,22 @@ export const exportedStore = collection(1);
 export function ExportedReceiver() {
   const value = exportedStore.rows();
   return <p>{value}</p>;
+}
+
+export function AsyncHelperPreference() {
+  const store = collection(1);
+  async function ready() {
+    await Promise.resolve();
+    return store.rows();
+  }
+  return <p>{(ready() instanceof Promise) && <span>ready</span>}</p>;
+}
+export function SynchronousHelperPreference() {
+  const [rows] = createSignal(1);
+  function ready() { return rows() > 0; }
+  return <p>{ready() && <span>ready</span>}</p>;
+}
+export function DirectAccessorPreference() {
+  const [rows] = createSignal(1);
+  return <p>{rows() > 0 && <span>ready</span>}</p>;
 }

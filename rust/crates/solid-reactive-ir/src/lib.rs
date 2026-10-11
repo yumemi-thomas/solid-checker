@@ -399,6 +399,11 @@ pub struct ReactiveRead {
     /// attributions were 73 false, 16 benign and 0 user-visible defects.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summary_attributed: bool,
+    /// Reactive origin supplied by project-owned accessor transport. This
+    /// proves source identity for strict reads, not a synchronous condition
+    /// dependency; ordinary summary hops must preserve the distinction.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub transported: bool,
 }
 
 impl ReactiveRead {
@@ -2524,6 +2529,7 @@ fn push_unique_summary_read(reads: &mut Vec<SummaryRead>, read: SummaryRead) {
             && existing.origin == read.origin
             && existing.declaration == read.declaration
             && existing.contract_read_context == read.contract_read_context
+            && existing.transported == read.transported
     }) {
         reads.push(read);
     }
@@ -2551,6 +2557,7 @@ fn propagate_summary_deltas(
     summaries: &mut [SummaryReads],
     reverse_edges: &[Vec<usize>],
     propagated_lengths: &mut [usize],
+    transported_edges: &std::collections::HashSet<(usize, usize)>,
 ) {
     let mut queued = summaries
         .iter()
@@ -2568,9 +2575,12 @@ fn propagate_summary_deltas(
         let propagated = summaries[target].ordered[start..].to_vec();
         propagated_lengths[target] = summaries[target].len();
         for owner in reverse_edges[target].iter().copied() {
+            let transported = transported_edges.contains(&(owner, target));
             let mut changed = false;
             for read in &propagated {
-                changed |= summaries[owner].push_unique(read.clone());
+                let mut read = read.clone();
+                read.transported |= transported;
+                changed |= summaries[owner].push_unique(read);
             }
             if changed && !queued[owner] {
                 queued[owner] = true;
@@ -3234,6 +3244,7 @@ mod tests {
 
     fn summary_read(symbol: &str, display: &str, start: u64) -> SummaryRead {
         SummaryRead {
+            transported: false,
             contract_read_context: None,
             symbol: symbol.into(),
             display: display.into(),
@@ -4134,6 +4145,29 @@ mod tests {
     }
 
     #[test]
+    fn transported_summary_edges_keep_provenance_through_ordinary_hops() {
+        let mut summaries = vec![SummaryReads::default(); 4];
+        summaries[3].push(summary_read("count", "count", 1));
+        let reverse_edges = vec![vec![], vec![0], vec![1], vec![2]];
+        propagate_summary_deltas(
+            &mut summaries,
+            &reverse_edges,
+            &mut [0; 4],
+            &HashSet::from([(2, 3)]),
+        );
+        assert!(
+            !summaries[3][0].transported,
+            "the ordinary leaf remains eligible"
+        );
+        for summary in &summaries[..3] {
+            assert!(
+                summary[0].transported,
+                "ordinary hops must retain the transport boundary"
+            );
+        }
+    }
+
+    #[test]
     fn missing_result_dependency_invalidates_when_a_function_appears() {
         let dependency = InterproceduralResultDependency::Symbol("helper".into());
         let mut node = summary_node(
@@ -4193,5 +4227,9 @@ mod tests {
         };
         assert!(direct_view.dependency_matches(&direct_state, &dependency));
         assert!(!captured_view.dependency_matches(&direct_state, &dependency));
+        let inline =
+            InterproceduralResultDependency::InlineFunction("fixture.tsx".into(), nodes[0].span);
+        assert!(direct_view.dependency_matches(&direct_state, &inline));
+        assert!(!captured_view.dependency_matches(&direct_state, &inline));
     }
 }

@@ -57,10 +57,11 @@ use crate::pipeline::{parallel_file_results, parallel_slice_results};
 mod property_gets;
 
 #[path = "accessor_provenance.rs"]
-mod accessor_provenance;
+pub(crate) mod accessor_provenance;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct SummaryRead {
+    pub(super) transported: bool,
     pub(super) contract_read_context: Option<crate::ContractReadContext>,
     pub(super) symbol: SymbolId,
     pub(super) display: SymbolId,
@@ -117,6 +118,7 @@ impl SummaryReads {
             && self.ordered.iter().any(|previous| {
                 Self::key(previous) == Self::key(&read)
                     && previous.contract_read_context == read.contract_read_context
+                    && previous.transported == read.transported
             })
         {
             return false;
@@ -164,6 +166,7 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
         Option<&'r str>,
         &'r Location,
         &'r Option<crate::ContractReadContext>,
+        bool,
     );
     fn effect(reads: &SummaryReads) -> Vec<Effect<'_>> {
         reads
@@ -175,6 +178,7 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
                     read.kind.as_deref(),
                     &read.declaration,
                     &read.contract_read_context,
+                    read.transported,
                 )
             })
             .collect()
@@ -513,6 +517,7 @@ fn discover_typed_accessors(
         contributions.push(TypedAccessorContribution {
             owner: nodes[owner].span,
             read: SummaryRead {
+                transported: false,
                 contract_read_context: None,
                 symbol: SymbolId::from(format!(
                     "typed:{}\0{}\0{}",
@@ -1693,6 +1698,7 @@ fn discover_interprocedural_graph(
                 contribution.direct_reads.push((
                     owner_span,
                     SummaryRead {
+                        transported: false,
                         contract_read_context: read_context.clone(),
                         symbol: SymbolId::from(symbol),
                         display: SymbolId::from(display.as_str()),
@@ -5617,12 +5623,17 @@ impl InterproceduralResultView<'_> {
                     InterproceduralResultDependencyState::Missing
                 }
             }
-            InterproceduralResultDependency::InlineFunction(path, span) => self
-                .indexes
-                .get(&(path.clone(), *span))
-                .map_or(InterproceduralResultDependencyState::Missing, |index| {
-                    InterproceduralResultDependencyState::Inline(self.summaries[*index].to_vec())
-                }),
+            InterproceduralResultDependency::InlineFunction(path, span) => {
+                self.indexes.get(&(path.clone(), *span)).map_or(
+                    InterproceduralResultDependencyState::Missing,
+                    |index| InterproceduralResultDependencyState::Function {
+                        name: self.nodes[*index].name.clone(),
+                        summary: self.summaries[*index].to_vec(),
+                        invoked_parameters: self.invoked_parameters[*index].clone(),
+                        invoked_parameter_members: self.invoked_parameter_members[*index].clone(),
+                    },
+                )
+            }
         }
     }
 
@@ -5660,8 +5671,15 @@ impl InterproceduralResultView<'_> {
                 if let Some(index) = self.indexes.get(&(path.clone(), *span)) {
                     matches!(
                         retained,
-                        InterproceduralResultDependencyState::Inline(previous)
-                            if previous.as_slice() == &self.summaries[*index][..]
+                        InterproceduralResultDependencyState::Function {
+                            name,
+                            summary,
+                            invoked_parameters: previous_parameters,
+                            invoked_parameter_members: previous_members,
+                        } if name == &self.nodes[*index].name
+                            && summary.as_slice() == &self.summaries[*index][..]
+                            && previous_parameters == &self.invoked_parameters[*index]
+                            && previous_members == &self.invoked_parameter_members[*index]
                     )
                 } else {
                     matches!(retained, InterproceduralResultDependencyState::Missing)
@@ -5840,9 +5858,12 @@ fn interprocedural_result_reads_for_file(
         }) else {
             continue;
         };
-        dependencies.insert(InterproceduralResultDependency::Symbol(SymbolId::from(
-            symbol,
-        )));
+        dependencies.insert(match transported {
+            Some(accessor_provenance::Callable::Function { path, span }) => {
+                InterproceduralResultDependency::InlineFunction(path.clone(), *span)
+            }
+            _ => InterproceduralResultDependency::Symbol(SymbolId::from(symbol)),
+        });
         let (label, mut effective, target) = if let Some(transported) = transported {
             match transported {
                 accessor_provenance::Callable::Accessor(symbol) => (
@@ -5956,6 +5977,7 @@ fn interprocedural_result_reads_for_file(
                     push_unique_summary_read(
                         &mut effective,
                         SummaryRead {
+                            transported: false,
                             contract_read_context: None,
                             symbol: argument_symbol.clone(),
                             display: display.clone(),
@@ -6009,6 +6031,7 @@ fn interprocedural_result_reads_for_file(
                         push_unique_summary_read(
                             &mut effective,
                             SummaryRead {
+                                transported: false,
                                 contract_read_context: None,
                                 symbol: argument_symbol.clone(),
                                 display: SymbolId::from(
@@ -6328,6 +6351,7 @@ fn interprocedural_result_reads_for_file(
                         }
                         let (display, declaration) = accessors.get(symbol.as_str())?;
                         Some(SummaryRead {
+                            transported: false,
                             contract_read_context: None,
                             symbol: symbol.clone(),
                             display: display.clone(),
@@ -6402,6 +6426,9 @@ fn interprocedural_result_reads_for_file(
                         result.push(ReactiveRead {
                             package_internal: false,
                             summary_attributed: !capture_read_proven,
+                            transported: read.transported
+                                || transported.is_some()
+                                || provenance.has_source_origin(&read.symbol),
                             kind: "accessor".into(),
                             accessor: read.display.to_string().into(),
                             location: location(file.path.shared(), call.span),
@@ -6532,6 +6559,7 @@ fn interprocedural_result_reads_for_file(
                     push_unique_summary_read(
                         &mut activated_defaults,
                         SummaryRead {
+                            transported: false,
                             contract_read_context: None,
                             symbol: accessor.clone(),
                             display: display.clone(),
@@ -6580,6 +6608,7 @@ fn interprocedural_result_reads_for_file(
                     push_unique_summary_read(
                         &mut activated_defaults,
                         SummaryRead {
+                            transported: false,
                             contract_read_context: None,
                             symbol: store.clone(),
                             display: SymbolId::from(
@@ -6697,7 +6726,7 @@ fn interprocedural_result_reads_for_file(
             .map(|read| (read_is_direct(&read), read))
             .chain(activated_defaults.into_iter().map(|read| (true, read)))
             .collect::<Vec<_>>();
-        effective.sort_by_key(|(direct, _)| !*direct);
+        effective.sort_by_key(|(direct, read)| (!*direct, read.transported));
         for (direct, read) in effective {
             let (execution, read_unproven) = read
                 .contract_read_context
@@ -6748,6 +6777,9 @@ fn interprocedural_result_reads_for_file(
                         || callee_callback_timing(file, call.span, execution, lookup),
                     package_internal,
                     summary_attributed: !direct,
+                    transported: read.transported
+                        || transported.is_some()
+                        || provenance.has_source_origin(&read.symbol),
                 });
             }
         }
@@ -7255,6 +7287,7 @@ fn direct_reference_contributions(
             .and_then(|index| index.direct_call_by_callee(reference_span))
         {
             let read = SummaryRead {
+                transported: false,
                 contract_read_context: None,
                 symbol: source.symbol.clone(),
                 display: source.display.clone(),
@@ -7286,6 +7319,7 @@ fn direct_reference_contributions(
                     .map(|member| DirectReferenceContribution {
                         owner,
                         read: SummaryRead {
+                            transported: false,
                             contract_read_context: None,
                             symbol: source.symbol.clone(),
                             display: SymbolId::from(format!(
@@ -7589,6 +7623,7 @@ fn interprocedural_reads(
     // These edges depend on other files' returned literals and the entire
     // provider census. Recompute them after merging file-local cached graph
     // contributions, so a provider/factory edit cannot retain a stale edge.
+    let mut transported_edges = HashSet::new();
     for file in &facts.files {
         for call in &file.ast.calls {
             let Some(owner) = containing_summary_function_indexed(
@@ -7624,10 +7659,22 @@ fn interprocedural_reads(
                     }
                 }
                 accessor_provenance::Callable::Function { path, span } => {
-                    if let Some(target) = indexes.get(&(path.clone(), *span)) {
+                    if let Some(target) = indexes.get(&(path.clone(), *span))
+                        && !edges[owner].contains(target)
+                    {
+                        transported_edges.insert((owner, *target));
                         edges[owner].push(*target);
                     }
                 }
+            }
+        }
+    }
+    // Extra memo-wrapper source origins also enter through ordinary discovery.
+    // Tag those rows before any normal summary hop can copy them.
+    if provenance.has_extra_source_origins() {
+        for summary in &mut summaries {
+            for read in &mut summary.ordered {
+                read.transported |= provenance.has_source_origin(&read.symbol);
             }
         }
     }
@@ -7913,6 +7960,7 @@ fn interprocedural_reads(
                             && let Some((display, declaration)) = accessors.get(symbol)
                         {
                             returned[index].push_unique(SummaryRead {
+                                transported: false,
                                 contract_read_context: None,
                                 symbol: symbol.clone(),
                                 display: display.clone(),
@@ -7962,6 +8010,7 @@ fn interprocedural_reads(
                             let contracted = contract_returns.get(symbol).cloned();
                             if let Some((returned_contract, declaration)) = contracted {
                                 returned[index].push_unique(SummaryRead {
+                                    transported: false,
                                     contract_read_context: None,
                                     symbol: symbol.clone(),
                                     display: SymbolId::from(returned_contract.label),
@@ -8010,7 +8059,12 @@ fn interprocedural_reads(
         }
     }
     let mut propagated_lengths = vec![0; summaries.len()];
-    propagate_summary_deltas(&mut summaries, &reverse_edges, &mut propagated_lengths);
+    propagate_summary_deltas(
+        &mut summaries,
+        &reverse_edges,
+        &mut propagated_lengths,
+        &transported_edges,
+    );
 
     // Composite structural dispatch is intentionally a second phase. The
     // first propagation computes each exact implementation's own summary;
@@ -8053,7 +8107,12 @@ fn interprocedural_reads(
         }
     }
     if dispatch_edges_added {
-        propagate_summary_deltas(&mut summaries, &reverse_edges, &mut propagated_lengths);
+        propagate_summary_deltas(
+            &mut summaries,
+            &reverse_edges,
+            &mut propagated_lengths,
+            &transported_edges,
+        );
     }
 
     let contract_generation_obligations = contract_generation_obligations
@@ -8123,7 +8182,12 @@ fn interprocedural_reads(
             }
         }
         if factory_reads_added {
-            propagate_summary_deltas(&mut summaries, &reverse_edges, &mut propagated_lengths);
+            propagate_summary_deltas(
+                &mut summaries,
+                &reverse_edges,
+                &mut propagated_lengths,
+                &transported_edges,
+            );
         }
     }
 
@@ -8158,6 +8222,10 @@ fn interprocedural_reads(
         provenance: &provenance,
     };
     if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
+        let transport_identity_matches = cache.transported_calls == transported_calls
+            && cache.unavailable_calls == unavailable_calls;
+        cache.transported_calls.clone_from(&transported_calls);
+        cache.unavailable_calls.clone_from(&unavailable_calls);
         // Call-role proofs inspect callee syntax beyond its read summary:
         // moving an await/default/edge can preserve that summary byte for
         // byte. Until syntax dependencies are retained per hop, a changed,
@@ -8240,6 +8308,7 @@ fn interprocedural_reads(
                 .collect::<HashSet<_>>();
             for file in &facts.files {
                 if all_result_sources_retained
+                    && transport_identity_matches
                     && retained_source_paths.contains(file.path.as_str())
                     && let Some(cached) = cache.files.get(file.path.as_str())
                     && (Arc::ptr_eq(&cached.compiler, &file.compiler)
@@ -8602,6 +8671,7 @@ mod tests {
 
     fn read(symbol: &str, display: &str, origin: u64) -> SummaryRead {
         SummaryRead {
+            transported: false,
             contract_read_context: None,
             symbol: SymbolId::from(symbol),
             display: SymbolId::from(display),
@@ -8677,6 +8747,17 @@ mod tests {
     /// so a read only one candidate performs must fail it. Same-length
     /// containment does not catch that: `[count, count]` and `[count, other]`
     /// are the same length and every member of the first is in the second.
+    #[test]
+    fn dispatch_equivalence_preserves_transport_provenance() {
+        let ordinary = read("sym-a", "count", 10);
+        let mut transported = ordinary.clone();
+        transported.transported = true;
+        assert!(!equivalent_summary_reads(
+            &reads(&[ordinary]),
+            &reads(&[transported])
+        ));
+    }
+
     #[test]
     fn dispatch_equivalence_rejects_a_read_only_one_candidate_performs() {
         let repeated = reads(&[read("sym-a", "count", 10), read("sym-a", "count", 11)]);

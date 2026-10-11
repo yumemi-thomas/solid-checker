@@ -79,7 +79,8 @@ impl ReactiveReadIndex {
                         && !read.host_callback_timing
                         && !read.callee_callback_timing
                         && !read.callback_invocation_unproven
-                        && !read.missing_jsx_census,
+                        && !read.missing_jsx_census
+                        && !read.transported,
                 });
         }
         for reads in by_path.values_mut() {
@@ -90,8 +91,9 @@ impl ReactiveReadIndex {
 
     /// Whether evaluating exactly `expression` performs a proven reactive
     /// read outside a nested function. A read summarized onto an enclosing
-    /// call remains eligible: that is the interprocedural proof that invoking
-    /// the helper executes the dependency. A read whose invocation timing is
+    /// call remains eligible under the pre-existing summary policy. A read
+    /// supplied by accessor transport is withheld even through ordinary helper
+    /// hops: its source identity does not prove synchronous execution. A read whose invocation timing is
     /// unproven (host, callee or callback timing, missing JSX census) does not
     /// qualify: source identity alone never proves a dependency of the
     /// governing expression.

@@ -577,6 +577,7 @@ impl LocalAccessContext<'_, '_> {
                 callback_invocation_unproven: false,
                 package_internal: false,
                 summary_attributed: false,
+                transported: false,
             }));
             if crate::owners::counts_as_strict_read_root(file, site, execution, self.lookup) {
                 result.strict_read_obligations += 1;

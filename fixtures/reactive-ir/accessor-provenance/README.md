@@ -45,8 +45,12 @@ when its body contains calls/member reads; an inert literal needs no such proof.
 MixedInstances and MixedSameInstance share makeDecor's definition obligation.
 
 AsyncMemberPreference and RetainedMemberPreference must gain no SC8015 from a
-deferred or unproven-timing read. SynchronousMemberPreference and DirectMemoPreference
-pin direct synchronous dependencies. The nested/loop factories explicitly return
+deferred or unproven-timing read. Round 5 also withholds SynchronousMemberPreference
+and DirectMemoPreference: every transported origin is excluded from preference
+dependencies, even through an ordinary summary hop. AsyncHelperPreference pins
+an after-await read of a transported member through an ordinary async helper.
+SynchronousHelperPreference and DirectAccessorPreference retain the pre-existing
+non-transported synchronous preference positives. The nested/loop factories explicitly return
 unbranded callable types, so legacy SourceAccessor type discovery cannot disguise
 a refused transport. This matches the review examples' published-type-legal
 shape; it does not loosen the primitive declarations.
@@ -56,3 +60,15 @@ effect and context signatures (including effect cleanup-or-void returns).
 Renderer and unused options are scaffolding. The independent published-typing
 check replaces the stub with the retained real rc.13 packages, with strict
 noEmit and skipLibCheck for prerelease declaration internals.
+
+ContextStability joins every exact context-derived receiver by context identity.
+Mutation through a second wrapper result, cross-file direct useContext mutation,
+opaque escape through a second receiver and an escaped provider binding all
+withhold transport for the entire context. Direct mutation through an unbound
+useContext result also closes the whole context. The old single-receiver escape/alias
+controls use independent contexts so they do not invalidate AccountBody's positive.
+Definition-site obligations remain. Cache.tsx/cache-factory.ts/cache-helper.ts
+pin an admitted named member arrow whose ordinary helper gains/loses a signal read
+in another file, without changing the helper declaration or caller/factory spans.
+Backend retained/cold tests exercise both directions of that summary edit and
+both directions of the cross-file context receiver census edit.

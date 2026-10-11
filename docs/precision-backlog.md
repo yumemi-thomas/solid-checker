@@ -29507,8 +29507,25 @@ Preference rules no longer accept a read whose invocation timing is unproven
 (host, callee or callback timing, missing JSX census) as a condition
 dependency. A synchronous summary-attributed read stays eligible, as before
 this series: refusing those removed 34 existing prefer-show findings from the
-rc.13 corpus. Async members are refused for transport, so a read after `await`
-cannot reach a condition through it. Per-analysis indexes replace repeated project-wide receiver/provider,
+rc.13 corpus. Round 5 excludes every accessor-transported read from preference
+dependencies, including ordinary helper-summary hops and local memo-wrapper
+origins. Refusing async members alone did not close after-await reads through
+ordinary async helpers. The explicit transport flag preserves the pre-existing
+non-transported summary policy; this slice claims no general synchronous-summary
+proof. Four transport-derived corpus SC8015 rows are deliberately withheld.
+Context transport now joins all exact useContext/wrapper-return receiver bindings
+by context identity. A mutation, alias, export or opaque escape through any
+receiver (or the provider-value binding) withholds the entire context, preserving
+ordinary obligations. The per-analysis census is rebuilt before calls resolve.
+Transported callable result dependencies now bind the actual path/span summary,
+including parameter-invocation state. Result reuse also compares the admitted
+transport and unavailable-target census; the synthetic project-callable label
+is not a cache dependency. Retained/cold tests cover both read removal/addition
+in an admitted member's cross-file helper and closure/refusal of a second context
+receiver. The admitted-member test also exposed stale factory return classification:
+cached export summaries now compare the current structured return, whose member
+implementation is not an invocation edge from the factory. Unbound context-result
+mutation/escape is censused alongside bound receivers. Per-analysis indexes replace repeated project-wide receiver/provider,
 source-origin and declaration scans; selected function bodies are indexed too.
 The release make target refreshes the session benchmark used by performance
 certification. The review controls and caller-only retained/cold IR comparison

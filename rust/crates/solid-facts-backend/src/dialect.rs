@@ -1078,6 +1078,7 @@ mod tests {
             reads: vec![ReactiveRead {
                 package_internal: false,
                 summary_attributed: false,
+                transported: false,
                 kind: "signal".into(),
                 accessor: "sampleAccessor".into(),
                 location: location(1),

@@ -288,7 +288,6 @@ pub(crate) enum InterproceduralResultDependencyState {
         invoked_parameter_members: Vec<crate::interproc::ParameterMemberInvocation>,
     },
     Returned(Vec<SummaryRead>),
-    Inline(Vec<SummaryRead>),
 }
 
 pub(crate) struct CachedInterproceduralResultFile {
@@ -311,6 +310,9 @@ pub(crate) struct CachedReactiveSource {
 
 #[derive(Default)]
 pub(crate) struct CachedInterproceduralResults {
+    pub(crate) transported_calls:
+        HashMap<Location, crate::interproc::accessor_provenance::Callable>,
+    pub(crate) unavailable_calls: HashSet<Location>,
     pub(crate) dependency_states:
         HashMap<InterproceduralResultDependency, InterproceduralResultDependencyState>,
     pub(crate) dependency_users: HashMap<InterproceduralResultDependency, usize>,
@@ -345,6 +347,7 @@ pub(crate) struct ContractExportFragment {
 #[derive(Default)]
 pub(crate) struct CachedContractExports {
     pub(crate) nodes: HashMap<ContractNodeKey, ContractExport>,
+    pub(crate) structured_returns: HashMap<ContractNodeKey, crate::ContractReturn>,
     pub(crate) files: HashMap<String, ContractExportFragment>,
     pub(crate) aggregate: Option<Arc<BTreeMap<String, ContractExport>>>,
 }

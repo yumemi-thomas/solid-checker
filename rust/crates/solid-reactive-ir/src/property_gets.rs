@@ -233,6 +233,7 @@ pub(super) fn reads(
                 callback_invocation_unproven: !guaranteed,
                 package_internal: false,
                 summary_attributed: !guaranteed,
+                transported: false,
             });
         }
         // Member reads can themselves enter getters or a reactive proxy.

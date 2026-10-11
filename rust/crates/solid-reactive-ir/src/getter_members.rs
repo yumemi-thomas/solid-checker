@@ -343,6 +343,7 @@ impl LocalAccessContext<'_, '_> {
         result.reads.push(Arc::new(ReactiveRead {
             package_internal: false,
             summary_attributed: false,
+            transported: false,
             kind: if store {
                 "store-path"
             } else {

@@ -42,3 +42,17 @@ export function DefaultProvider(props: { children?: JSX.Element }) {
   return <Defaulted value={{ state, user: () => state(), plain: () => 0 }}>{props.children}</Defaulted>;
 }
 export const useDefaulted = () => useContext(Defaulted);
+
+const Escaped = createContext<Account>();
+export function EscapedProvider(props: { children?: JSX.Element }) {
+  const [state] = createSignal(1);
+  return <Escaped value={{ state, user: () => state(), plain: () => 0 }}>{props.children}</Escaped>;
+}
+export const useEscaped = () => useContext(Escaped);
+
+const Aliased = createContext<Account>();
+export function AliasedProvider(props: { children?: JSX.Element }) {
+  const [state] = createSignal(1);
+  return <Aliased value={{ state, user: () => state(), plain: () => 0 }}>{props.children}</Aliased>;
+}
+export const useAliased = () => useContext(Aliased);

@@ -1417,6 +1417,7 @@ mod tests {
         let read = crate::ReactiveRead {
             package_internal: true,
             summary_attributed: false,
+            transported: false,
             kind: "accessor".into(),
             accessor: "package.read".into(),
             location: location(20),

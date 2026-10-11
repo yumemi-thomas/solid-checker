@@ -5,6 +5,9 @@
 #[path = "support/process.rs"]
 mod process_support;
 
+#[path = "accessor_provenance_process.rs"]
+mod accessor_provenance_process;
+
 #[path = "cli_process.rs"]
 mod cli_process;
 #[path = "cross_file_callbacks_process.rs"]

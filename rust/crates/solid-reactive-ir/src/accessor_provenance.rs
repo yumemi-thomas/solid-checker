@@ -11,8 +11,8 @@ use typefacts::Location;
 use super::{SummaryRead, source_has_runtime_witness};
 use crate::{SymbolId, indexes::SemanticLookup, location, owners::containing_ast_function};
 
-#[derive(Clone, Debug)]
-pub(super) enum Callable {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum Callable {
     Accessor(SymbolId),
     Function { path: String, span: Span },
 }
@@ -38,6 +38,7 @@ pub(super) struct Resolver<'a, 'facts> {
     uses: HashMap<Location, ClosedUses>,
     providers: HashMap<Location, Vec<Option<(String, Span)>>>,
     source_origins: HashSet<SymbolId>,
+    blocked_contexts: HashSet<Location>,
 }
 
 #[derive(Default)]
@@ -45,6 +46,7 @@ struct ClosedUses {
     object_escaped: bool,
     callable_escaped: bool,
     context_escaped: bool,
+    context_value_escaped: bool,
 }
 
 impl Resolver<'_, '_> {
@@ -68,6 +70,7 @@ impl Resolver<'_, '_> {
             uses: HashMap::new(),
             providers: HashMap::new(),
             source_origins: HashSet::new(),
+            blocked_contexts: HashSet::new(),
         };
         for file in &facts.files {
             for binding in &file.ast.bindings {
@@ -195,14 +198,19 @@ impl Resolver<'_, '_> {
                         || provider_values.contains(&id.span));
                 uses.context_escaped |= written
                     || !(context_reads.contains(&id.span) || context_tags.contains(&id.span));
+                uses.context_value_escaped |= written
+                    || !(receivers.contains(&id.span)
+                        || callees.contains(&id.span)
+                        || provider_values.contains(&id.span));
             }
             for export in file.ast.exports.iter() {
                 for binding in file.ast.exported_bindings(export) {
-                    resolver
+                    let uses = resolver
                         .uses
                         .entry(location(file.path.shared(), binding.pattern))
-                        .or_default()
-                        .object_escaped = true;
+                        .or_default();
+                    uses.object_escaped = true;
+                    uses.context_value_escaped = true;
                 }
             }
         }
@@ -228,6 +236,102 @@ impl Resolver<'_, '_> {
                 }
             }
         }
+        // Join every exact context-derived receiver, including wrapper-return
+        // bindings and aliases, before resolving any transported call. One
+        // escaped/mutated receiver can replace the shared provider's members.
+        let mut blocked_contexts = HashSet::new();
+        let object_contexts = resolver
+            .providers
+            .iter()
+            .filter_map(|(context, providers)| {
+                let [Some((path, span))] = providers.as_slice() else {
+                    return None;
+                };
+                let file = resolver.lookup.file_by_path(path)?;
+                matches!(
+                    resolver.value(file, *span, 24, &mut false),
+                    Some(Value::Object { .. })
+                )
+                .then(|| context.clone())
+            })
+            .collect::<HashSet<_>>();
+        for file in facts
+            .files
+            .iter()
+            .filter(|_| !resolver.providers.is_empty())
+        {
+            for binding in &file.ast.bindings {
+                let Some(context) = binding
+                    .initializer
+                    .and_then(|span| resolver.context_origin(file, span, 24))
+                else {
+                    continue;
+                };
+                let key = location(file.path.shared(), binding.pattern);
+                if !binding.immutable
+                    || binding.shape != ast::BindingShape::Identifier
+                    || binding.names.len() != 1
+                    || resolver.uses.get(&key).is_some_and(|uses| {
+                        uses.context_value_escaped
+                            || (object_contexts.contains(&context) && uses.object_escaped)
+                    })
+                    || binding
+                        .names
+                        .iter()
+                        .any(|name| crate::indexes::binding_written(file, name.span))
+                {
+                    blocked_contexts.insert(context);
+                }
+            }
+            let bound_values = file
+                .ast
+                .bindings
+                .iter()
+                .filter_map(|b| b.initializer)
+                .map(|s| file.ast.peel_ts_sugar_span(s))
+                .collect::<HashSet<_>>();
+            let wrapper_returns = file
+                .ast
+                .functions
+                .iter()
+                .filter(|f| {
+                    !f.r#async && !f.generator && resolver.lookup.function_value_is_current(file, f)
+                })
+                .filter_map(|f| single_return(file, f))
+                .map(|s| file.ast.peel_ts_sugar_span(s))
+                .collect::<HashSet<_>>();
+            let callees = file
+                .ast
+                .calls
+                .iter()
+                .map(|c| file.ast.peel_ts_sugar_span(c.callee))
+                .collect::<HashSet<_>>();
+            let receivers = file
+                .ast
+                .members
+                .iter()
+                .filter(|m| {
+                    !file.ast.computed_members.contains(&m.span) && callees.contains(&m.span)
+                })
+                .map(|m| file.ast.peel_ts_sugar_span(m.object))
+                .collect::<HashSet<_>>();
+            // An unbound result can mutate/escape the same shared object too.
+            // Exact wrapper returns and initializer handoffs are checked at
+            // their eventual bindings; direct invocations remain closed.
+            for call in &file.ast.calls {
+                if bound_values.contains(&call.span)
+                    || wrapper_returns.contains(&call.span)
+                    || callees.contains(&call.span)
+                    || receivers.contains(&call.span)
+                {
+                    continue;
+                }
+                if let Some(context) = resolver.context_origin(file, call.span, 24) {
+                    blocked_contexts.insert(context);
+                }
+            }
+        }
+        resolver.blocked_contexts = blocked_contexts;
         resolver
     }
 
@@ -256,6 +360,9 @@ impl Resolver<'_, '_> {
 
     pub fn has_source_origin(&self, symbol: &SymbolId) -> bool {
         self.source_origins.contains(symbol)
+    }
+    pub fn has_extra_source_origins(&self) -> bool {
+        !self.source_origins.is_empty()
     }
     pub fn source_call(&self, file: &FileFacts, callee: Span) -> Option<SymbolId> {
         match self.value(file, callee, 24, &mut false)? {
@@ -319,6 +426,7 @@ impl Resolver<'_, '_> {
             .or_else(|| self.declarations.get(symbol))
             .cloned()?;
         Some(SummaryRead {
+            transported: true,
             contract_read_context: None,
             symbol: symbol.clone(),
             display,
@@ -555,7 +663,9 @@ impl Resolver<'_, '_> {
             return None;
         }
         let key = location(context_file.path.shared(), binding.pattern);
-        if self.uses.get(&key).is_some_and(|uses| uses.context_escaped) {
+        if self.blocked_contexts.contains(&key)
+            || self.uses.get(&key).is_some_and(|uses| uses.context_escaped)
+        {
             return None;
         }
         let providers = self.providers.get(&key)?;
@@ -563,7 +673,62 @@ impl Resolver<'_, '_> {
             return None;
         }
         let (path, value) = providers[0].as_ref()?;
-        Some((self.lookup.file_by_path(path)?, *value))
+        let provider_file = self.lookup.file_by_path(path)?;
+        if let Some((bound_file, binding, _)) = self.lookup.binding_at_reference(
+            provider_file.path.as_str(),
+            provider_file.ast.peel_ts_sugar_span(*value),
+        ) {
+            let key = location(bound_file.path.shared(), binding.pattern);
+            if self
+                .uses
+                .get(&key)
+                .is_some_and(|uses| uses.context_value_escaped)
+            {
+                return None;
+            }
+        }
+        Some((provider_file, *value))
+    }
+
+    /// Derivation only: this deliberately ignores receiver closure/provider
+    /// acceptance so a bad receiver cannot disappear from the shared census.
+    fn context_origin(&self, file: &FileFacts, span: Span, depth: usize) -> Option<Location> {
+        if depth == 0 {
+            return None;
+        }
+        let span = file.ast.peel_ts_sugar_span(span);
+        if let Some(call) = file.ast.call_at(span) {
+            if call.construct {
+                return None;
+            }
+            if self.role(file, call) == Some(ContextRole::Read) {
+                return (call.arguments.len() == 1 && !call.arguments[0].spread)
+                    .then(|| {
+                        self.binding_key(file, file.ast.peel_ts_sugar_span(call.arguments[0].span))
+                    })
+                    .flatten();
+            }
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            let target = self
+                .lookup
+                .function_called_at(file.path.as_str(), callee)
+                .or_else(|| self.lookup.namespace_member_function(file, callee));
+            let (target_file, function) = target?;
+            if function.r#async
+                || function.generator
+                || !self.lookup.function_value_is_current(target_file, function)
+            {
+                return None;
+            }
+            return self.context_origin(
+                target_file,
+                single_return(target_file, function)?,
+                depth - 1,
+            );
+        }
+        let (bound_file, binding, _) =
+            self.lookup.binding_at_reference(file.path.as_str(), span)?;
+        self.context_origin(bound_file, binding.initializer?, depth - 1)
     }
 
     fn created_accessor(&self, file: &FileFacts, span: Span, depth: usize) -> bool {

@@ -614,6 +614,7 @@ mod tests {
         ReactiveRead {
             package_internal: false,
             summary_attributed: false,
+            transported: false,
             kind: "accessor".into(),
             accessor: "count".into(),
             location: location(20),
