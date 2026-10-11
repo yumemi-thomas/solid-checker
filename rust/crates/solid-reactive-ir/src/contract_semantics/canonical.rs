@@ -1428,6 +1428,10 @@ impl CanonicalWriter {
                 self.sequence(keys, |writer, key| writer.text(key));
                 self.option(from.as_ref(), |writer, index| writer.u16(*index));
             }
+            ValueShape::Getter { reactive } => {
+                self.u8(28);
+                self.u8(u8::from(*reactive));
+            }
             // ADR 0235. Appended; no document before it carries the tag.
             ValueShape::EffectfulCallable(call) => {
                 self.u8(24);

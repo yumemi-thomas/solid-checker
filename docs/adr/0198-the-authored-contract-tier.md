@@ -181,8 +181,10 @@ document cannot state honestly.
   - **Current reviewed state:** [ADR 0271](0271-standard-router-integration-premise.md)
     defines the standard integration premise and exact visible veto. The
     incorrect location store positive is removed in next.16/17/18/26; returns
-    stays open because existing vocabulary cannot express its mixed getters
-    and inert fields. Next.26 path hooks keep callbacks open pending native
+    stayed open until ADR 0272 added exact getter members. Next.26 now closes
+    returns under ADR 0271 using that shape; older versions remain open because
+    their context field can be substituted. Next.26 path hooks keep callbacks
+    open pending native
     optional-invocation projection, with unprobed update rows removed.
     Next.16/17/18 also drop their `useParams` and `useSearchParams` store
     positives, because their history `utils` can substitute plain wrappers,
@@ -192,8 +194,9 @@ document cannot state honestly.
       baseline before any router work: violations 559 -> 556, with none
       added. The three lost are real defects whose proof rested on the
       removed location store claim: `donegeon-client` `WaitlistRoute.tsx:33`,
-      and `kui` `TopicsRoute.tsx:425` in two projects. They return when the
-      format can describe reactive getter members. Router `SC9005` import
+      and `kui` `TopicsRoute.tsx:425` in two projects. ADR 0272 predicts the
+      next.26 Kui proofs return, while next.16 Donegeon stays open. Router
+      `SC9005` import
       sites drop from 359 to 315; uncertifiable rows rise from 3,523 to
       3,530. With no runtime target, nothing moves but one row (3,504 ->
       3,505).

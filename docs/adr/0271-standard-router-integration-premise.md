@@ -146,8 +146,9 @@ project-catalog precedence are unchanged.
 
 Under ADR 0226's cited-source policy and the named premise:
 
-- useLocation closes reads, creates and callbacks; returns stays open with
-  no positive return shape. useParams closes all four domains. Hook
+- useLocation closes all four domains under ADR 0272's exact returned getter
+  object, superseding the reviewed open-return fallback. useParams also closes
+  all four domains. Hook
   construction reads no reactive property and invokes no caller callback.
 - useHref/useResolvedPath close reads, returns and creates, with explicit
   optional parent memo registration, tracked initial argument invocation and

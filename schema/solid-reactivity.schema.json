@@ -718,6 +718,7 @@
         { "$ref": "#/$defs/returnedCallableValue" },
         { "$ref": "#/$defs/prototypeInstanceValue" },
         { "$ref": "#/$defs/lazyGetterObjectValue" },
+        { "$ref": "#/$defs/getterValue" },
         { "$ref": "#/$defs/actionValue" },
         { "$ref": "#/$defs/componentValue" },
         { "$ref": "#/$defs/cleanupValue" },
@@ -981,6 +982,15 @@
             }
           }
         }
+      }
+    },
+    "getterValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reactive"],
+      "properties": {
+        "kind": { "const": "getter" },
+        "reactive": { "type": "boolean" }
       }
     },
     "lazyGetterObjectValue": {

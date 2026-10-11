@@ -29401,3 +29401,23 @@ first premise pass);
 strict published-typing checks pass without reduced stubs. Focused fixture,
 selective-withholding and cache-identity checks accompany the change; no corpus
 sweep or full verify is claimed in this implementation round.
+
+### Returned object getter members (2026-10-11, ADR 0272)
+
+The reviewed open-return fallback above is superseded for next.26 useLocation
+only. Ordinary object data members are reused, with a new authored-only getter
+leaf stating reactive versus inert Get and a plain result. Every Get of
+pathname/search/hash/state reads; key and query retrieval do not. The query
+proxy retains store Gets, independent of the location object's inert ownKeys/has.
+Exact destructuring and getter traversals have native read evidence. Computed,
+mutated, escaped and unsupported reflective uses remain explicit uncertifiable
+dispatch obligations; copied proxies and `in` syntax are not silently certified.
+
+Next.16/17/18 still return the replaceable RouterContext field verbatim and
+remain fully open. The next.16 WaitlistRoute.tsx:33 defect stays withheld;
+next.26 Kui TopicsRoute.tsx:425 should regain its proof (lead measures the
+corpus). All 26 next.26 Chrome pairs pass, twelve for location, with strict
+published typings and empty correct observations. The exact native results,
+new authorized fixture, scoped snapshot and focused checks are recorded in
+rust/target/research/getter-members/RESULT.md. No full verify or corpus sweep
+is claimed. Other ADR 0271 open domains and outside-premise boundaries remain.

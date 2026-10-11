@@ -1,5 +1,5 @@
 // Correct: pathname is a reactive getter read in tracked JSX.
-// Runtime control only; the exact native return representation remains open.
+// ADR 0272 describes next.26; older context-substitutable versions stay open.
 import { createRouter, memoryHistory, useLocation } from "@solidjs/router";
 
 function Reader() {

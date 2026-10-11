@@ -94,6 +94,8 @@ pub(super) fn props_root_is_current(
     !member_written && !escapes
 }
 
+#[path = "getter_members.rs"]
+mod getter_members;
 #[path = "prototype_instance.rs"]
 mod prototype_instance;
 
@@ -1633,6 +1635,7 @@ impl LocalAccessContext<'_, '_> {
         let mut result = LocalAccessResult::default();
         self.prototype_instance_accesses(file, &mut result);
         self.lazy_getter_obligations(file, &mut result);
+        self.getter_member_accesses(file, &mut result);
         self.opaque_member_obligations(file, &mut result);
         self.returned_callable_obligations(file, &mut result);
         self.callback_result_obligations(file, &mut result);

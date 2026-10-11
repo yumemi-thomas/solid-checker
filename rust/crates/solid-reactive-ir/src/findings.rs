@@ -424,6 +424,7 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
 fn reactive_value_label(kind: &str) -> &'static str {
     match kind {
         "store-path" => "reactive store path",
+        "reactive-getter" => "reactive getter",
         "component-props" => "component prop",
         _ => "reactive accessor",
     }

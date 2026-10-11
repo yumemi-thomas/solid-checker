@@ -22,22 +22,95 @@
   "identity": "identity.json",
   "exports": {
     "useLocation": {
-      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:490-528 — Location is a plain object with reactive pathname/search/hash/state getters, an inert key getter and a plain query property holding a memo-backed proxy. Existing vocabulary cannot express these Get semantics exactly; the whole-object store positive is removed and returns remains open (ADR 0271). Runtime pairs are regression controls, not a return proof.",
+      "why": "ADR 0272: under ADR 0271, returned plain object with reactive getters and query data proxy.",
       "rule": "strict-read-untracked",
       "call": {
         "closed": [
           "reads",
+          "returns",
           "creates",
           "callbacks"
         ],
         "reads": [],
         "creates": [],
-        "callbacks": []
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "pathname",
+                  "value": {
+                    "kind": "getter",
+                    "reactive": true
+                  }
+                },
+                {
+                  "name": "search",
+                  "value": {
+                    "kind": "getter",
+                    "reactive": true
+                  }
+                },
+                {
+                  "name": "hash",
+                  "value": {
+                    "kind": "getter",
+                    "reactive": true
+                  }
+                },
+                {
+                  "name": "state",
+                  "value": {
+                    "kind": "getter",
+                    "reactive": true
+                  }
+                },
+                {
+                  "name": "key",
+                  "value": {
+                    "kind": "getter",
+                    "reactive": false
+                  }
+                },
+                {
+                  "name": "query",
+                  "value": {
+                    "kind": "store"
+                  }
+                }
+              ]
+            }
+          }
+        ]
       },
       "closures": {
         "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. The complete hook selects an existing context field. No reactive read at the call; The plain location object is not a store: its getter reads and nested proxy accesses are later result uses, never hook-call reads.",
         "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. No hook-call allocation or owner registration. Every lazy proxy memo runs under the captured router/route owner, not the hook caller or later reading owner. This is encapsulated reactive-source plumbing of the nested query proxy, with no ambient consumer owner requirement; throws/lifetime guarantees remain open.",
-        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. The hook accepts no executed caller callback. useParams ignores its optional typed path. Standard factory histories supply no custom paramsWrapper/queryWrapper; existing router computations and route callbacks belong to createRouter, whose claims remain open."
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/utils.js:124-147; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/solid-js/dist/solid.dev.js:17-19; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev.js:283-294; /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5658 — Under ADR 0271 standard router integration, ADRs 0266/0268 standard runtime/hydration host and ADR 0226 P1/P2. The hook accepts no executed caller callback. useParams ignores its optional typed path. Standard factory histories supply no custom paramsWrapper/queryWrapper; existing router computations and route callbacks belong to createRouter, whose claims remain open.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; dist/utils.js:124-147 — Under ADR 0271, ADRs 0266/0268 and ADR 0226 P1/P2. Returns the existing plain object: pathname/search/hash/state Gets read memos and yield plain data, key is inert, query is a data property holding createMemoObject. Plain object ownKeys/has are inert; copying/destructuring/serialization run getters. Throws/lifetime stays open."
       },
       "probes": [
         {
@@ -59,8 +132,46 @@
           "label": "keys",
           "rule": "strict-read-untracked",
           "why": "The pathname misuse opens a strict-read window; enumerating the plain location object with Object.keys is inert."
+        },
+        {
+          "label": "hash",
+          "rule": "strict-read-untracked",
+          "why": "Exercises hash Get in body versus JSX."
+        },
+        {
+          "label": "state",
+          "rule": "strict-read-untracked",
+          "why": "Exercises state Get in body versus JSX."
+        },
+        {
+          "label": "query-read",
+          "rule": "strict-read-untracked",
+          "why": "Exercises query-read Get in body versus JSX."
+        },
+        {
+          "label": "destructure",
+          "rule": "strict-read-untracked",
+          "why": "Exercises destructure Get in body versus JSX."
+        },
+        {
+          "label": "spread",
+          "rule": "strict-read-untracked",
+          "why": "Exercises spread Get in body versus JSX."
+        },
+        {
+          "label": "assign",
+          "rule": "strict-read-untracked",
+          "why": "Exercises assign Get in body versus JSX."
+        },
+        {
+          "label": "stringify",
+          "rule": "strict-read-untracked",
+          "why": "Exercises stringify Get in body versus JSX."
         }
-      ]
+      ],
+      "getterClosures": {
+        "return": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/helge-dev/node_modules/@solidjs/router/dist/routing.js:35,79,490-528,724-751; dist/utils.js:124-147 — Under ADR 0271, ADRs 0266/0268 and ADR 0226 P1/P2. Returns the existing plain object: pathname/search/hash/state Gets read memos and yield plain data, key is inert, query is a data property holding createMemoObject. Plain object ownKeys/has are inert; copying/destructuring/serialization run getters. Throws/lifetime stays open."
+      }
     },
     "useParams": {
       "why": "Returns the route's params, a memo-backed proxy.",

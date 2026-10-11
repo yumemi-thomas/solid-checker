@@ -3458,8 +3458,8 @@
           ]
         }
       ],
-      "document": "objects/22387098fc20a1f5b02f99e0d7d370f15a18a2ffc458129470f4dd800711fac4.json",
-      "documentDigest": "sha256:22387098fc20a1f5b02f99e0d7d370f15a18a2ffc458129470f4dd800711fac4"
+      "document": "objects/85b9d9301bc810b8a8404d783fa4e9b66c50eaf19234978729645dd424b4f615.json",
+      "documentDigest": "sha256:85b9d9301bc810b8a8404d783fa4e9b66c50eaf19234978729645dd424b4f615"
     },
     {
       "packageName": "@solidjs/router",
@@ -3574,8 +3574,8 @@
           ]
         }
       ],
-      "document": "objects/d542d3086c12fa8e3303c5c32a55cf3732bd722062dea168469cfaa07f329865.json",
-      "documentDigest": "sha256:d542d3086c12fa8e3303c5c32a55cf3732bd722062dea168469cfaa07f329865"
+      "document": "objects/dfca1af3d2921569a14cd46c0001082b66eb7c9005ba41b60ed7c57ff847e237.json",
+      "documentDigest": "sha256:dfca1af3d2921569a14cd46c0001082b66eb7c9005ba41b60ed7c57ff847e237"
     },
     {
       "packageName": "@tanstack/solid-query",

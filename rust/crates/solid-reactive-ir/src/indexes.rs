@@ -1552,6 +1552,18 @@ impl<'a> SemanticLookup<'a> {
         self.symbol_names
     }
 
+    pub(super) fn symbol_at(
+        &self,
+        path: &str,
+        span: Span,
+    ) -> Option<solid_facts::TypeScriptSymbol<'a>> {
+        let entity = self.entity_at(path, span)?;
+        if entity.symbol_unresolved || entity.symbol.is_empty() {
+            return None;
+        }
+        self.symbols_by_id().get(entity.symbol.as_ref()).copied()
+    }
+
     pub(super) fn files(&self) -> &'a [FileFacts] {
         &self.facts.files
     }
@@ -2284,7 +2296,7 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    fn standard_library_declaration(
+    pub(super) fn standard_library_declaration(
         &self,
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,

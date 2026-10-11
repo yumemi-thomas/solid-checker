@@ -228,6 +228,7 @@ function hostFreeClaim(where, claim) {
     returnedClosures: hostFree.returnedClosures ?? claim.returnedClosures,
     resultClosures: hostFree.resultClosures ?? (hostFree.call ? undefined : claim.resultClosures),
     lazyGetterClosures: hostFree.lazyGetterClosures ?? (hostFree.call ? undefined : claim.lazyGetterClosures),
+    getterClosures: hostFree.getterClosures ?? (hostFree.call ? undefined : claim.getterClosures),
     prototypeClosures: hostFree.prototypeClosures ?? (hostFree.call ? undefined : claim.prototypeClosures),
     captureClosures: hostFree.captureClosures ?? (hostFree.call ? undefined : claim.captureClosures) };
   validateMemberClosures(`${where} (host-free)`, derived);

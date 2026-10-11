@@ -160,3 +160,11 @@ test("a diagnosed site is a package export's own call or an access to a value", 
   assert.equal(siteExpressionKind(text, "/a.tsx", at("T.createPolled") + 2), "package-call");
   assert.equal(siteExpressionKind(text, "/a.tsx", at("local()")), "value-access");
 });
+
+test("object destructuring is a value Get without reclassifying initializer calls", async () => {
+  const { siteExpressionKind } = await import("../scripts/feedback-attribution.mjs");
+  const text = 'import { useLocation } from "@solidjs/router"; const { pathname } = useLocation();';
+  assert.equal(siteExpressionKind(text, "/a.tsx", text.indexOf("{ pathname")), "value-access");
+  assert.equal(siteExpressionKind(text, "/a.tsx", text.indexOf("pathname")), "value-access");
+  assert.equal(siteExpressionKind(text, "/a.tsx", text.lastIndexOf("useLocation")), "package-call");
+});

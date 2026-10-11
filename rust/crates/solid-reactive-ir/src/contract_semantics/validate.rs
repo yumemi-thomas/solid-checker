@@ -54,6 +54,9 @@ pub(super) fn normalize(mut proposal: ContractProposal) -> Result<NormalizedCont
             validate_export_identity(&case.id, &case.entrypoint, name, &export.identity)?;
             normalize_call(&mut export.call, &format!("case {} export {name}", case.id))?;
             let resources = resource_map(&export.call.resources);
+            if contains_getters(&export.shape) {
+                return contradiction("export shape", "getters require a returned object member");
+            }
             if contains_prototype_instances(&export.shape) {
                 return contradiction(
                     "export shape",
@@ -604,6 +607,23 @@ fn normalize_operation(
     }
     validate_cardinality(&operation.cardinality, &op_path)?;
     normalize_owner(&mut operation.owner, resources, &op_path)?;
+    if operation.inputs.iter().any(contains_getters) {
+        return contradiction(&op_path, "getters cannot be operation inputs");
+    }
+    if let Some(output) = operation.output.as_ref()
+        && contains_getters(output)
+    {
+        let exact = matches!(output, ValueShape::Object(KnowledgeSet::Complete(properties))
+            if properties.iter().all(|property| matches!(property.value,
+                ValueShape::Getter { .. } | ValueShape::Plain | ValueShape::Store { .. }
+                | ValueShape::Reactive { .. })));
+        if nested || operation.kind != OperationKind::Return || !exact {
+            return contradiction(
+                &op_path,
+                "getters require direct members of an exact returned plain object",
+            );
+        }
+    }
     if operation.inputs.iter().any(contains_prototype_instances) {
         return contradiction(&op_path, "prototype instances cannot be operation inputs");
     }
@@ -1401,6 +1421,37 @@ fn contains_lazy_getters(value: &ValueShape) -> bool {
     }
 }
 
+fn contains_getters(value: &ValueShape) -> bool {
+    match value {
+        ValueShape::Getter { .. } => true,
+        ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+            items.items().iter().any(contains_getters)
+        }
+        ValueShape::Object(properties) => properties
+            .items()
+            .iter()
+            .any(|property| contains_getters(&property.value)),
+        ValueShape::Array { element, .. }
+        | ValueShape::Promise(element)
+        | ValueShape::AsyncIterable(element) => contains_getters(element),
+        ValueShape::ReturnedCallable { call, members } => {
+            members.iter().any(|member| contains_getters(&member.value))
+                || call.as_ref().is_some_and(|call| {
+                    call.operations.iter().any(|operation| {
+                        operation.inputs.iter().any(contains_getters)
+                            || operation.output.as_ref().is_some_and(contains_getters)
+                    })
+                })
+        }
+        ValueShape::EffectfulCallable(call) => call.operations.iter().any(|operation| {
+            operation.inputs.iter().any(contains_getters)
+                || operation.output.as_ref().is_some_and(contains_getters)
+        }),
+        ValueShape::DescribedCallable(call) => call.returns.iter().any(contains_getters),
+        _ => false,
+    }
+}
+
 fn direct_lazy_getter_output(value: &ValueShape) -> bool {
     match value {
         ValueShape::LazyGetterObject { .. } => true,
@@ -1553,6 +1604,7 @@ fn normalize_value(
                 return contradiction(path, "duplicate lazy getter key");
             }
         }
+        ValueShape::Getter { .. } => {}
         ValueShape::ReadValue => {
             return contradiction(
                 path,
@@ -2616,6 +2668,7 @@ fn visit_closed_value(
         | ValueShape::ReturnedCallable { .. }
         | ValueShape::PrototypeInstance { .. }
         | ValueShape::LazyGetterObject { .. }
+        | ValueShape::Getter { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
@@ -3031,6 +3084,7 @@ fn open_value_closure(
         | ValueShape::ReturnedCallable { .. }
         | ValueShape::PrototypeInstance { .. }
         | ValueShape::LazyGetterObject { .. }
+        | ValueShape::Getter { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
@@ -3066,6 +3120,7 @@ fn visit_value(value: &ValueShape, root: ValueRoot, path: ValuePath, claims: &mu
         | ValueShape::ReturnedCallable { .. }
         | ValueShape::PrototypeInstance { .. }
         | ValueShape::LazyGetterObject { .. }
+        | ValueShape::Getter { .. }
         | ValueShape::ReadValue
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}

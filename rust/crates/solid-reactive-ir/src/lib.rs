@@ -1065,7 +1065,7 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 validate_contract_return(property)?;
             }
         }
-        "object" => {
+        "object" | crate::contracts::GETTER_OBJECT => {
             if !returned.label.is_empty()
                 || returned.parameter.is_some()
                 || returned.properties.is_empty()
@@ -1117,7 +1117,7 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
             }
         }
         // ADR 0234: an opaque member of a returned tuple or object.
-        crate::contracts::OPAQUE_MEMBER => {
+        crate::contracts::OPAQUE_MEMBER | "reactive-getter" | "plain" => {
             if !returned.label.is_empty()
                 || returned.parameter.is_some()
                 || !returned.elements.is_empty()

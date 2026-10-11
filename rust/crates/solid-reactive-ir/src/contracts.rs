@@ -828,7 +828,9 @@ fn project_return(
                 .is_none()
         })
         .count();
-    if returns.iter().any(|returned| returned.prototype.is_some())
+    if returns
+        .iter()
+        .any(|returned| returned.prototype.is_some() || returned.kind == GETTER_OBJECT)
         && knowledge.items().iter().any(|id| {
             export.operation(&id.0).is_none_or(|operation| {
                 operation.kind != OperationKind::Return
@@ -837,6 +839,16 @@ fn project_return(
                     || operation.cardinality.min != Some(1)
                     || operation.cardinality.max
                         != Some(crate::contract_semantics::UpperBound::Finite(1))
+                    || returns
+                        .iter()
+                        .any(|returned| returned.kind == GETTER_OBJECT)
+                        && (operation.trigger
+                            != Some(crate::contract_semantics::Trigger::Event(
+                                crate::contract_semantics::Event::Call,
+                            ))
+                            || operation.at != Some(crate::contract_semantics::Event::Call)
+                            || operation.cardinality.scope
+                                != Some(crate::contract_semantics::CardinalityScope::Call))
             })
         })
     {
@@ -846,7 +858,7 @@ fn project_return(
     let lazy_recipe = |returned: &ContractReturn| {
         matches!(
             returned.kind.as_str(),
-            LAZY_GETTER_OBJECT | PROTOTYPE_INSTANCE
+            LAZY_GETTER_OBJECT | PROTOTYPE_INSTANCE | GETTER_OBJECT
         ) || returned
             .elements
             .iter()
@@ -1255,9 +1267,43 @@ fn capture_context_supported(export: &crate::contract_semantics::ExportSemantics
 pub(crate) const OPAQUE_MEMBER: &str = "opaque-callable";
 pub(crate) const PROTOTYPE_INSTANCE: &str = "prototype-instance";
 pub(crate) const LAZY_GETTER_OBJECT: &str = "lazy-getter-object";
+pub(crate) const GETTER_OBJECT: &str = "getter-object";
 
 fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
     match shape {
+        ValueShape::Getter { reactive } => Some(ContractReturn {
+            kind: if *reactive {
+                "reactive-getter"
+            } else {
+                "plain"
+            }
+            .into(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Object(KnowledgeSet::Complete(properties))
+            if properties
+                .iter()
+                .any(|property| matches!(property.value, ValueShape::Getter { .. })) =>
+        {
+            Some(ContractReturn {
+                kind: GETTER_OBJECT.into(),
+                properties: properties
+                    .iter()
+                    .map(|property| {
+                        (
+                            property.name.clone(),
+                            project_return_shape(&property.value).unwrap_or_else(|| {
+                                ContractReturn {
+                                    kind: "plain".into(),
+                                    ..ContractReturn::default()
+                                }
+                            }),
+                        )
+                    })
+                    .collect(),
+                ..ContractReturn::default()
+            })
+        }
         // ADR 0235: valid only as a member, projected there.
         ValueShape::EffectfulCallable(_) => None,
         ValueShape::ReturnedCallable { members, .. } => Some(ContractReturn {
@@ -1996,6 +2042,42 @@ mod owner_requirement_projection_tests {
             disposals: KnowledgeSet::Unknown,
             computations: KnowledgeSet::Unknown,
         }
+    }
+
+    #[test]
+    fn getter_return_projection_requires_one_exact_call_completion() {
+        let mut returned = operation("return", OperationKind::Return, &[]);
+        returned.cardinality.min = Some(1);
+        returned.cardinality.max = Some(UpperBound::Finite(1));
+        returned.output = Some(ValueShape::Object(KnowledgeSet::Complete(vec![
+            crate::contract_semantics::ObjectProperty {
+                name: "path".into(),
+                value: ValueShape::Getter { reactive: true },
+            },
+        ])));
+        let project = |returned: Operation, closed: bool| {
+            let mut call = claims();
+            call.returns = if closed {
+                KnowledgeSet::Complete(vec![returned.id.clone()])
+            } else {
+                KnowledgeSet::Partial(vec![returned.id.clone()])
+            };
+            project_return(&export(call, vec![returned], vec![]), &mut BTreeSet::new())
+        };
+        let ContractClaim::Known(Some(exact)) = project(returned.clone(), true) else {
+            panic!("exact getter return");
+        };
+        assert_eq!(exact.kind, super::GETTER_OBJECT);
+        assert_eq!(exact.properties["path"].kind, "reactive-getter");
+        assert_eq!(project(returned.clone(), false), ContractClaim::Open);
+        let mut optional = returned.clone();
+        optional.cardinality.min = Some(0);
+        assert_eq!(project(optional, true), ContractClaim::Open);
+        let mut deferred = returned.clone();
+        deferred.schedule = Some(Schedule::External);
+        assert_eq!(project(deferred, true), ContractClaim::Open);
+        returned.cardinality.scope = None;
+        assert_eq!(project(returned, true), ContractClaim::Open);
     }
 
     #[test]

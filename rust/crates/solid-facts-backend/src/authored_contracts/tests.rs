@@ -245,8 +245,10 @@ fn the_shipped_index_loads() {
 }
 
 #[test]
-fn router_mixed_location_returns_and_optional_callbacks_remain_open() {
-    use solid_reactive_ir::contract_semantics::{ClaimDomain, Event, Schedule, Trigger};
+fn router_getter_returns_are_premised_and_optional_callbacks_remain_open() {
+    use solid_reactive_ir::contract_semantics::{
+        ClaimDomain, Event, Schedule, Trigger, ValueShape,
+    };
 
     let entries = authored().expect("the compiled-in authored index loads");
     let mut versions = BTreeSet::new();
@@ -256,9 +258,67 @@ fn router_mixed_location_returns_and_optional_callbacks_remain_open() {
         versions.insert(loaded.entry.package_version.as_str());
         let location = loaded.contract.export("useLocation").unwrap();
         let returns = location.operation_claim(ClaimDomain::Returns).unwrap();
-        assert!(!returns.is_closed());
-        assert!(returns.items().is_empty(), "no broad store positive");
         if loaded.entry.package_version == "2.0.0-next.26" {
+            let withheld = loaded
+                .withheld
+                .as_ref()
+                .expect("premised location has an open weakening");
+            let withheld_returns = withheld
+                .export("useLocation")
+                .unwrap()
+                .operation_claim(ClaimDomain::Returns)
+                .unwrap();
+            assert!(!withheld_returns.is_closed());
+            assert!(
+                withheld_returns.items().is_empty(),
+                "veto withholds every getter and data member positive"
+            );
+            assert_ne!(
+                loaded.contract.semantic_identity(),
+                withheld.semantic_identity()
+            );
+            assert!(returns.is_closed());
+            assert_eq!(returns.items().len(), 1);
+            let output = location
+                .operation(&returns.items()[0].0)
+                .unwrap()
+                .output
+                .as_ref()
+                .unwrap();
+            let ValueShape::Object(properties) = output else {
+                panic!("plain location object");
+            };
+            assert!(properties.is_closed());
+            assert_eq!(properties.items().len(), 6);
+            for name in ["pathname", "search", "hash", "state"] {
+                assert_eq!(
+                    properties
+                        .items()
+                        .iter()
+                        .find(|member| member.name == name)
+                        .unwrap()
+                        .value,
+                    ValueShape::Getter { reactive: true }
+                );
+            }
+            assert_eq!(
+                properties
+                    .items()
+                    .iter()
+                    .find(|member| member.name == "key")
+                    .unwrap()
+                    .value,
+                ValueShape::Getter { reactive: false }
+            );
+            assert!(matches!(
+                properties
+                    .items()
+                    .iter()
+                    .find(|member| member.name == "query")
+                    .unwrap()
+                    .value,
+                ValueShape::Store { .. }
+            ));
             for name in ["useHref", "useResolvedPath"] {
                 let hook = loaded.contract.export(name).unwrap();
                 assert!(!hook.callbacks().is_closed(), "{name}");
@@ -280,6 +340,12 @@ fn router_mixed_location_returns_and_optional_callbacks_remain_open() {
                     "{name}"
                 );
             }
+        } else {
+            assert!(!returns.is_closed());
+            assert!(
+                returns.items().is_empty(),
+                "older context substitution stays open"
+            );
         }
     }
     assert_eq!(

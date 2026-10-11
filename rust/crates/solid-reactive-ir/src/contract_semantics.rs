@@ -2547,6 +2547,11 @@ pub enum ValueShape {
         keys: Vec<String>,
         from: Option<u16>,
     },
+    /// ADR 0272: a direct member of a returned plain object. Each Get
+    /// yields plain data and, when reactive, reads a reactive source.
+    Getter {
+        reactive: bool,
+    },
 }
 
 /// Constructor input protocol. Opaque population admits only the zero-argument

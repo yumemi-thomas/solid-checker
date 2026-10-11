@@ -183,6 +183,9 @@ export function siteExpressionKind(text, path, offset) {
   }
   const fromPackage = name => { const specifier = imported.get(name); return specifier !== undefined && !/^[./]/.test(specifier); };
   for (let current = node; current && current !== source; current = current.parent) {
+    // An object binding performs Gets, just like member expressions. A call
+    // in its initializer/default is encountered first and keeps its own kind.
+    if (ts.isObjectBindingPattern(current)) return "value-access";
     if (ts.isCallExpression(current)) {
       let callee = current.expression;
       while (ts.isParenthesizedExpression(callee) || ts.isNonNullExpression(callee) || ts.isAsExpression(callee)) callee = callee.expression;

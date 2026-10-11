@@ -1261,6 +1261,7 @@ fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, Cont
             }
             value
         }
+        ValueShape::Getter { reactive } => json!({"kind": "getter", "reactive": reactive}),
         ValueShape::Action { transition } => {
             let mut node = json!({"kind": "action"});
             if let Some(transition) = transition {
@@ -2568,6 +2569,9 @@ enum WireValueNode {
         keys: Vec<String>,
         #[serde(default)]
         from: Option<u16>,
+    },
+    Getter {
+        reactive: bool,
     },
     /// ADR 0235: a returned member's own call graph, in the export's id
     /// namespace. Additive to `schemaVersion: 1`.
@@ -4060,6 +4064,9 @@ fn expand_value_node(
             keys: keys.clone(),
             from: *from,
         }),
+        WireValueNode::Getter { reactive } => Ok(ValueShape::Getter {
+            reactive: *reactive,
+        }),
         WireValueNode::EffectfulCallable { call } => Ok(ValueShape::EffectfulCallable(Box::new(
             expand_call(Some(call), ids)?,
         ))),
@@ -4897,6 +4904,58 @@ mod tests {
             panic!("lazy recipe certified without a census");
         };
         assert!(refusal.to_string().contains("authored-only"));
+    }
+
+    #[test]
+    fn getter_members_round_trip_bind_get_semantics_and_refuse_invalid_placement() {
+        let mut document = json!({
+            "format": "solid-reactivity-contract", "schemaVersion": 1, "semanticModelVersion": 1,
+            "package": {"name": "consumer", "version": "1.0.0", "integrity": "sha512:test",
+                "manifest": {"path": "package.json", "sha256": "a".repeat(64)}},
+            "summaries": {"fn": {"shape": "callable", "call": {
+                "closed": ["returns"], "returns": ["return"], "operations": [{
+                    "id": "return", "kind": "return", "trigger": {"event": "call"},
+                    "at": {"event": "call", "schedule": "same-stack"}, "tracking": "untracked",
+                    "count": {"min": 1, "max": 1, "scope": "call"},
+                    "output": {"kind": "object", "closed": ["properties"], "properties": [
+                        {"name": "path", "value": {"kind": "getter", "reactive": true}},
+                        {"name": "key", "value": {"kind": "getter", "reactive": false}},
+                        {"name": "query", "value": {"kind": "store"}}
+                    ]}
+                }]
+            }}},
+            "entrypoints": {".": {
+                "artifact": {"path": "dist/index.js", "sha256": "b".repeat(64), "closureSha256": "c".repeat(64)},
+                "declarations": {"path": "dist/index.d.ts", "sha256": "d".repeat(64)}, "exports": {"make": "fn"}
+            }}, "sidecars": {}
+        });
+        let kept = normalized(&serde_json::to_vec(&document).unwrap());
+        let encoded = encode(&kept, &SidecarDigests::default(), true).unwrap();
+        assert_eq!(normalized(&encoded), kept);
+        assert!(
+            solid_reactive_ir::contract_semantics::certification::proof_policy_2()
+                .inspect_candidates(&kept)
+                .is_err()
+        );
+        document["summaries"]["fn"]["call"]["operations"][0]["output"]["properties"][0]["value"]
+            ["reactive"] = json!(false);
+        let inert = normalized(&serde_json::to_vec(&document).unwrap());
+        assert_ne!(kept.semantic_digest(), inert.semantic_digest());
+        let output = document["summaries"]["fn"]["call"]["operations"][0]["output"].clone();
+        for invalid in [
+            json!({"kind": "getter", "reactive": true}),
+            json!({"kind": "getter"}),
+            json!({"kind": "getter", "reactive": true, "value": {"kind": "plain"}}),
+            json!({"kind": "tuple", "closed": ["items"], "items": [output.clone()]}),
+            json!({"kind": "object", "properties": output["properties"].clone()}),
+        ] {
+            document["summaries"]["fn"]["call"]["operations"][0]["output"] = invalid;
+            assert!(
+                decode(&serde_json::to_vec(&document).unwrap())
+                    .and_then(|decoded| decoded.normalize())
+                    .is_err()
+            );
+        }
     }
 
     /// ADR 0235: an `effectful-callable` member round-trips with its own

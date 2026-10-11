@@ -326,6 +326,14 @@ impl ProofPolicy2 {
                             .into(),
                     });
                 }
+                if export.call.operations.iter().any(|operation| matches!(operation.output.as_ref(),
+                    Some(ValueShape::Object(properties)) if properties.items().iter().any(|property| matches!(property.value, ValueShape::Getter { .. }))))
+                {
+                    return Err(ModelError::Contradiction {
+                        path: format!("{}.{export_name}", artifact.id),
+                        reason: "returned getter member behavior is authored-only and not certifiable".into(),
+                    });
+                }
                 // Per-key lazy cache behavior has no certification census.
                 if value_has_lazy_getters(&export.shape)
                     || export.call.operations.iter().any(|operation| {
@@ -814,6 +822,7 @@ fn inventory_value_shape(
         | ValueShape::ReturnedCallable { .. }
         | ValueShape::PrototypeInstance { .. }
         | ValueShape::LazyGetterObject { .. }
+        | ValueShape::Getter { .. }
         | ValueShape::ReadValue
         | ValueShape::Callable
         | ValueShape::Reactive { .. }
@@ -870,6 +879,7 @@ const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability 
         | ValueShape::Undefined
         | ValueShape::PrototypeInstance { .. }
         | ValueShape::LazyGetterObject { .. }
+        | ValueShape::Getter { .. }
         | ValueShape::ReadValue
         | ValueShape::Action { .. }
         | ValueShape::Cleanup { .. }
