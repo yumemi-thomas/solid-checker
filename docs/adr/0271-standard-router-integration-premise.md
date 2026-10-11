@@ -63,6 +63,11 @@ removed too. This premise conditions next.26 only, and in next.16/17/18 a
 history's `utils.paramsWrapper` or `utils.queryWrapper` replaces the proxy
 with any value its declarations allow (next.16 `dist/routing.js:473,600-604`;
 next.17 `:501,648-652`; next.18 `:508,655-659`). No corpus finding moved.
+Their `useIsRouting` positive is removed as well: it returns the context's
+`isRouting` field verbatim (next.16 `dist/routing.js:77`; next.17 `:80`;
+next.18 `:81`), and an app may provide its own `RouterContext` value whose
+field is any `() => boolean`. The path hooks keep their accessor positives,
+because each builds the memo it returns.
 
 Existing object outputs describe member values, not getter execution. A
 `reactive` member is an accessor function, not a reactive scalar Get.

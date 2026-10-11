@@ -4,9 +4,9 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "72b6115b194a3af3d326e3ba9b6711b13e8edc037d8085a6d25c9bf4e449f66a",
+            "closureSha256": "d8ccd210a124825def22f663d056b49d72e316ea7268f2f5965bbee54c1ea872",
             "path": "./dist/index.js",
-            "sha256": "984bcaf66c43724098d88d29e26a55a64f6c34b565c407846c3f84e81c0b8029"
+            "sha256": "049c51d5d4f366d753e7628165264d48c74dae2854d7e7033d4484c325fc1783"
           },
           "declarations": {
             "path": "./dist/index.d.ts",
@@ -23,13 +23,14 @@
             "defineRoutes": "open-callable",
             "hashHistory": "open-callable",
             "int": "open-callable",
+            "liveQuery": "open-callable",
             "memoryHistory": "open-callable",
             "query": "open-callable",
             "revalidate": "open-callable",
             "useAction": "open-callable",
             "useBeforeLeave": "open-callable",
             "useHref": "authored-useHref",
-            "useIsRouting": "authored-useIsRouting",
+            "useIsRouting": "open-callable",
             "useLinkState": "open-callable",
             "useLocation": "authored-useLocation",
             "useMatch": "authored-useMatch",
@@ -51,13 +52,13 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "sha512-LchYm3IZ3Y7vGPh/Jx6X8UjpBirQrz9ZoRQkgRpdz8A9C7eTiRXY326pJDcoYDXn7FzYtFpRCwsfBMxRDsFo6A==",
+    "integrity": "sha512-DQ58djANKYi4HZfE9J7vN9kAtAH/eKYkUj61cezfDrBae3A/cgthgdjQS9C8pNGtNeST6aA8GNhcFYKlUWn+zA==",
     "manifest": {
       "path": "./package.json",
-      "sha256": "0293f397980cc8801a3754aad7edb4ccc6c77c1831546fc4623965807d7bcec3"
+      "sha256": "f51b8560517b5fcd01106c59e03aa341015d769f3bfd7e5fa2b0e9f25a1c1aee"
     },
     "name": "@solidjs/router",
-    "version": "2.0.0-next.17"
+    "version": "2.0.0-next.18"
   },
   "schemaVersion": 1,
   "semanticModelVersion": 1,
@@ -68,37 +69,6 @@
       "shape": "callable"
     },
     "authored-useHref": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "reactive",
-              "role": "accessor"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "authored-useIsRouting": {
       "call": {
         "operations": [
           {

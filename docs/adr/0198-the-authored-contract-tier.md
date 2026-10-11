@@ -185,8 +185,9 @@ document cannot state honestly.
     and inert fields. Next.26 path hooks keep callbacks open pending native
     optional-invocation projection, with unprobed update rows removed.
     Next.16/17/18 also drop their `useParams` and `useSearchParams` store
-    positives: their history `utils` can substitute plain wrappers, and the
-    premise conditions next.26 only.
+    positives, because their history `utils` can substitute plain wrappers,
+    and their `useIsRouting` positive, because an app-provided `RouterContext`
+    can replace the field it returns; the premise conditions next.26 only.
     - Measured on the rc.13 corpus, browser target, against the relocked
       baseline before any router work: violations 559 -> 556, with none
       added. The three lost are real defects whose proof rested on the

@@ -4,9 +4,9 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "994828fab071594ae59f60f3b1d33091731a0c054767eaab6034da852152abb4",
-            "path": "./dist/index.js",
-            "sha256": "f857f19b4cdf65adaa3f8cef2008943c2b61f1a9b9d989221a42778704ee8fd5"
+            "closureSha256": "d240da0c3aee262f03a66d0e03be7d3f1c578e18c130c827185619130b5efbbc",
+            "path": "./dist/index.jsx",
+            "sha256": "e73fc341f9427ae738b2ba86d62045518ab6093bb7a57a3a4035d01c03ef920b"
           },
           "declarations": {
             "path": "./dist/index.d.ts",
@@ -23,13 +23,14 @@
             "defineRoutes": "open-callable",
             "hashHistory": "open-callable",
             "int": "open-callable",
+            "liveQuery": "open-callable",
             "memoryHistory": "open-callable",
             "query": "open-callable",
             "revalidate": "open-callable",
             "useAction": "open-callable",
             "useBeforeLeave": "open-callable",
             "useHref": "authored-useHref",
-            "useIsRouting": "authored-useIsRouting",
+            "useIsRouting": "open-callable",
             "useLinkState": "open-callable",
             "useLocation": "authored-useLocation",
             "useMatch": "authored-useMatch",
@@ -42,8 +43,8 @@
             "useSubmissions": "open-callable"
           },
           "resolution": {
-            "runtimeBranch": "/exports/./default",
-            "typesBranch": "/exports/./default"
+            "runtimeBranch": "/exports/./solid",
+            "typesBranch": "/exports/./solid"
           }
         }
       ]
@@ -51,13 +52,13 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "sha512-sYaq5h4ISdDVZKhA1R0X4NHFg4Kao7HpK3QRfbFcE25/x2PFl4VxlHLZIoBUfv3T3L9g4GVTD376pvArwgGlDA==",
+    "integrity": "sha512-DQ58djANKYi4HZfE9J7vN9kAtAH/eKYkUj61cezfDrBae3A/cgthgdjQS9C8pNGtNeST6aA8GNhcFYKlUWn+zA==",
     "manifest": {
       "path": "./package.json",
-      "sha256": "2e1ba673f6b24d41b0e5c5a5000791a892c37ce1320f16c3add4f239e2f06643"
+      "sha256": "f51b8560517b5fcd01106c59e03aa341015d769f3bfd7e5fa2b0e9f25a1c1aee"
     },
     "name": "@solidjs/router",
-    "version": "2.0.0-next.16"
+    "version": "2.0.0-next.18"
   },
   "schemaVersion": 1,
   "semanticModelVersion": 1,
@@ -68,37 +69,6 @@
       "shape": "callable"
     },
     "authored-useHref": {
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "reactive",
-              "role": "accessor"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "authored-useIsRouting": {
       "call": {
         "operations": [
           {

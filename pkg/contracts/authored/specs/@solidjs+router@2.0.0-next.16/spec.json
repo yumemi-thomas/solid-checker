@@ -48,38 +48,6 @@
         }
       ]
     },
-    "useIsRouting": {
-      "why": "Returns a function reading the router's pending signals.",
-      "rule": "strict-read-untracked",
-      "call": {
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "return",
-            "kind": "return",
-            "output": {
-              "kind": "reactive",
-              "role": "accessor"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ],
-        "returns": [
-          "return"
-        ]
-      }
-    },
     "useMatch": {
       "why": "Returns a memo of the match.",
       "rule": "strict-read-untracked",
