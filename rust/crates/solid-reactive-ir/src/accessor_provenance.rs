@@ -72,26 +72,60 @@ impl MemberStability {
                 };
                 let site = location(file.path.shared(), call.span);
                 match method {
+                    // A key the literal fact cannot name (a template, an
+                    // identifier, a spread) could be any member, so it vetoes
+                    // every transported member: over-vetoing only withholds.
                     "defineProperty" | "set" | "deleteProperty" => {
-                        if let Some(argument) = call.arguments.get(1)
-                            && !argument.spread
-                            && let ast::ArgumentLiteralFact::String(name) = &argument.literal_value
-                        {
-                            index.written.entry(name.to_string()).or_insert(site);
+                        let name = call
+                            .arguments
+                            .get(1)
+                            .filter(|argument| !argument.spread)
+                            .and_then(|argument| match &argument.literal_value {
+                                ast::ArgumentLiteralFact::String(name) => Some(name.to_string()),
+                                ast::ArgumentLiteralFact::Integer(index) => Some(index.to_string()),
+                                _ => None,
+                            });
+                        match name {
+                            Some(name) => {
+                                index.written.entry(name).or_insert(site);
+                            }
+                            None => {
+                                index.all.get_or_insert(site);
+                            }
                         }
                     }
                     "defineProperties" => {
-                        if let Some(argument) = call.arguments.get(1)
-                            && !argument.spread
-                            && let Some(shape) = file.ast.object_get_shapes.iter().find(|shape| {
-                                shape.span == file.ast.peel_ts_sugar_span(argument.span)
+                        // A literal descriptor map names its literal keys; a
+                        // spread in it, or a map that is not a literal, could
+                        // name any member. A non-literal computed key stays
+                        // outside the premise (ADR 0273).
+                        let shape = call
+                            .arguments
+                            .get(1)
+                            .filter(|argument| !argument.spread)
+                            .and_then(|argument| {
+                                file.ast.object_get_shapes.iter().find(|shape| {
+                                    shape.span == file.ast.peel_ts_sugar_span(argument.span)
+                                })
                             })
-                        {
-                            for property in &shape.properties {
-                                index
-                                    .written
-                                    .entry(property.key.to_string())
-                                    .or_insert_with(|| site.clone());
+                            .filter(|shape| {
+                                !file
+                                    .ast
+                                    .spreads
+                                    .iter()
+                                    .any(|spread| shape.span.contains(spread.span))
+                            });
+                        match shape {
+                            Some(shape) => {
+                                for property in &shape.properties {
+                                    index
+                                        .written
+                                        .entry(property.key.to_string())
+                                        .or_insert_with(|| site.clone());
+                                }
+                            }
+                            None => {
+                                index.all.get_or_insert(site);
                             }
                         }
                     }

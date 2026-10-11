@@ -903,10 +903,16 @@ mod tests {
             [Reach::Export("createErrorBoundary")]
         );
         // A literal computed key names exactly one export; `S[0]` names none.
+        // A transparent TypeScript wrapper does not change the literal key.
         assert_eq!(
             one(r#"import * as S from "solid-js";
                    const a = S["sharedConfig"];
                    const b = S[0];"#),
+            [Reach::Export("sharedConfig")]
+        );
+        assert_eq!(
+            one(r#"import * as S from "solid-js";
+                   const a = S["sharedConfig" as const];"#),
             [Reach::Export("sharedConfig")]
         );
         // Escaping into a call, a destructuring, a re-export, or a type.
@@ -916,7 +922,6 @@ mod tests {
             "export { S };",
             "type T = typeof S;",
             "declare const key: string; const k = S[key];",
-            "const k = S[\"untrack\" as const];",
         ] {
             assert_eq!(
                 one(&format!("import * as S from \"solid-js\";\n{escape}")),
