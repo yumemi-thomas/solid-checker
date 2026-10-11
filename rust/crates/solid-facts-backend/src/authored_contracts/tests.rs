@@ -54,6 +54,7 @@ fn entry(bundle: &serde_json::Value, document: &[u8]) -> AuthoredEntry {
         solid_runtime: runtime("2.0.0-rc.13", "sha512-rc13"),
         document: "objects/router.json".to_owned(),
         document_digest: crate::contract_interface::sha256_digest(document),
+        premises: Vec::new(),
     }
 }
 
@@ -241,4 +242,60 @@ fn a_patched_install_is_admitted_only_by_an_entry_probed_on_it() {
 #[test]
 fn the_shipped_index_loads() {
     authored().expect("the compiled-in authored index loads");
+}
+
+#[test]
+fn integration_veto_opens_only_premised_exports_and_changes_semantic_identity() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/package-contracts/standard-router-integration");
+    let bytes = std::fs::read(fixture.join("solid-reactivity.json")).unwrap();
+    let identity: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(
+            root.join("pkg/contracts/authored/specs/@solidjs+router@2.0.0-next.26/identity.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut bundle = identity["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| {
+            case["requestedEntrypoint"] == "."
+                && case["exportConditions"] == serde_json::json!(["browser", "import"])
+        })
+        .unwrap()
+        .clone();
+    bundle["packageName"] = "@solidjs/router".into();
+    bundle["packageVersion"] = "2.0.0-next.26".into();
+    let mut entry = entry(&bundle, &bytes);
+    entry.premises = vec![
+        serde_json::from_slice(&std::fs::read(fixture.join("premise.json")).unwrap()).unwrap(),
+    ];
+    let loaded = load_authored(&entry, &bytes).unwrap();
+    let open = loaded.withheld.as_ref().unwrap();
+    for name in ["useLocation", "useParams"] {
+        assert_ne!(loaded.contract.export(name), open.export(name), "{name}");
+    }
+    assert_eq!(
+        loaded.contract.export("defineRoutes"),
+        open.export("defineRoutes")
+    );
+    assert_ne!(
+        loaded.contract.receipt().closed_claims_root,
+        open.receipt().closed_claims_root
+    );
+    assert_ne!(
+        loaded.contract.semantic_identity(),
+        open.semantic_identity()
+    );
+    for invalid in [
+        serde_json::json!({"name":"","exports":["useLocation"],"valueReferences":[],"configCalls":[]}),
+        serde_json::json!({"name":"p","exports":["absent"],"valueReferences":[],"configCalls":[]}),
+        serde_json::json!({"name":"p","exports":["useLocation","useLocation"],"valueReferences":[{"path":"dist/routing.d.ts","start":1101,"end":1117}],"configCalls":[]}),
+        serde_json::json!({"name":"p","exports":["useLocation"],"valueReferences":[{"path":"dist\\routing.d.ts","start":1101,"end":1117}],"configCalls":[]}),
+    ] {
+        entry.premises = vec![serde_json::from_value(invalid).unwrap()];
+        assert!(load_authored(&entry, &bytes).is_err());
+    }
 }

@@ -29335,3 +29335,41 @@ other existing refusals remain; explicit target/certification boundaries are
 unchanged. Focused resource cases and native exact-site twins cover both linking
 and refusal. Measurements and final handoff results are recorded in the round-4
 research handoff; no published signature or diagnostic claim is added.
+
+### Standard router integration (2026-10-11, ADR 0271)
+
+Fresh native next.26 validation detects the three new leaf-owner misuse pairs
+(`useHref`, `useResolvedPath`, `useMatch`) as SC3001 and no violations in their
+correct twins. The two new `useHref`/`useResolvedPath` callback-write pairs are
+runtime-proved (`REACTIVE_WRITE_IN_OWNED_SCOPE`) but remain a native recall gap:
+the current checker emits neither write violation from the authored tracked
+invocation graph. This slice does not claim that recall is implemented.
+
+The next.26 authored spec conditions router hook claims on the package's own
+createRouter/standard history factories and no application-supplied RouterContext.
+Exact declaration identities in authored-index metadata drive a backend-only,
+project-wide positive visible veto. Assumed selects the reviewed claims; Vetoed
+selects an open weakening of only those exports, with a distinct accepted semantic
+identity. Missing resolution stays outside the premise, never a defect or a
+third knowledge state. Public schema-1 documents and shared IR are unchanged.
+
+useLocation/useParams and useHref/useResolvedPath close all four SC9005-demanded
+domains under cited source. First-use location/params/query memos belong to the
+captured router owner; path hooks explicitly state optional caller-parent memos
+and tracked argument callbacks. useMatch closes only returns/creates; dynamic
+filters and coercion keep reads/callbacks open. useSearchParams' typed schema/query
+proxy and stateful navigation setter remain open. useLinkState's pending-target
+graph remains unclaimed. Already-closed useIsRouting/useRouteMatches now name the
+same integration condition. Other router/component/navigation/action lifecycles
+retain their earlier open status.
+
+The source census predicts one RouterContext project and one nonliteral-config
+project (both Skyjtx), four top-level projects with saved-history test harnesses
+(app-game, Jar Hell, Kui, Solid Groove), and no spread/computed production config.
+These vetoes withhold claims, never report misuse. Test-excluded sources do not
+veto. Unresolved/dynamic/reflective integration, excluded dependency installers,
+mutable alias dispatch and unsupported computed targets remain outside the
+conditional premise. Fifteen Chrome pairs pass against real next.26/rc.13 bytes;
+strict published-typing checks pass without reduced stubs. Focused fixture,
+selective-withholding and cache-identity checks accompany the change; no corpus
+sweep or full verify is claimed in this implementation round.

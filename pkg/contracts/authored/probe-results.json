@@ -16515,6 +16515,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useHref",
+      "integrationPremiseProbeDigest": "8978ae989cf277809b1ffbf4396e2c2509afb8ac197aeb767d539d8ecb5951e6",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16553,7 +16554,106 @@
       "spec": "@solidjs+router@2.0.0-next.26",
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
+      "export": "useHref",
+      "integrationPremiseProbeDigest": "20792ed2c3bd236282e036474be6ecec00c51896a54226c704a3ec145aba7c9f",
+      "label": "callback",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 34
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "case",
+            "line": 8,
+            "column": 10
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "useHref",
+      "integrationPremiseProbeDigest": "4af36b71c766bd438b4f7bdfa784ee7fd192df5a9f7bb86cd6217e2cb7243c97",
+      "label": "owner",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "primitive-in-forbidden-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 21
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/probe-router-next26/.solid-checker-authored-probes/_solidjs_router_2.0.0-next.26_useHref_owner/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
       "export": "useIsRouting",
+      "integrationPremiseProbeDigest": "7242290e45fceaa2a648e65bf40581979e0ff7689f6d2c15b229455203c743f3",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16601,6 +16701,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useLocation",
+      "integrationPremiseProbeDigest": "5612d3a2e546a24d78de4879d51e59306fd4b567d2a6e28c5210c5d994965313",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16640,6 +16741,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useMatch",
+      "integrationPremiseProbeDigest": "805505582b1d93c4e76e783a465ce94ffdfd04f92452b0d5bbe099643ad9a623",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16678,7 +16780,57 @@
       "spec": "@solidjs+router@2.0.0-next.26",
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
+      "export": "useMatch",
+      "integrationPremiseProbeDigest": "98d792dffae3ae99dc50cc3801ebcc4ac7a5349862869545eee62fe9ab95e625",
+      "label": "owner",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "primitive-in-forbidden-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 21
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/probe-router-next26/.solid-checker-authored-probes/_solidjs_router_2.0.0-next.26_useMatch_owner/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
       "export": "useParams",
+      "integrationPremiseProbeDigest": "0f1fb1469bfaf72b2474679a7aa466515ac5d6f2e021bdfae6c9d00ab9d4ffea",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16718,6 +16870,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useResolvedPath",
+      "integrationPremiseProbeDigest": "8740e07666261493ea8d7b4095982aec1a95af84c266e6b8e9a86810787c2d81",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16756,7 +16909,106 @@
       "spec": "@solidjs+router@2.0.0-next.26",
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
+      "export": "useResolvedPath",
+      "integrationPremiseProbeDigest": "dc725a1eb8770b1b53dac8fcd2559e5f7a430736113b5f222cdedddaaf1d6d1b",
+      "label": "callback",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "reactive-write-in-owned-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 7,
+            "column": 42
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "case",
+            "line": 8,
+            "column": 10
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "useResolvedPath",
+      "integrationPremiseProbeDigest": "529af62b043543bca1ee27726a0b32e309a4fa6b3119dbdb6c7a5d029b303ff3",
+      "label": "owner",
+      "solidRuntime": [
+        {
+          "name": "solid-js",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/signals",
+          "version": "2.0.0-rc.13"
+        },
+        {
+          "name": "@solidjs/web",
+          "version": "2.0.0-rc.13"
+        }
+      ],
+      "artifacts": [
+        "dist/index.js",
+        "dist/index.jsx",
+        "dist/fs.js",
+        "dist/server.js"
+      ],
+      "rule": "primitive-in-forbidden-scope",
+      "verdict": "passed",
+      "misuse": [
+        {
+          "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+          "site": {
+            "file": "case",
+            "line": 6,
+            "column": 21
+          }
+        },
+        {
+          "code": "REACTIVITY_HALTED",
+          "site": {
+            "file": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/probe-router-next26/.solid-checker-authored-probes/_solidjs_router_2.0.0-next.26_useResolvedPath_owner/main.tsx",
+            "line": 8,
+            "column": 32
+          }
+        }
+      ],
+      "correct": []
+    },
+    {
+      "spec": "@solidjs+router@2.0.0-next.26",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
       "export": "useRouteMatches",
+      "integrationPremiseProbeDigest": "f4d89444e38951f5bf3bc024d5eec711b52fd09e9fdca69896d3b05906b451e4",
       "solidRuntime": [
         {
           "name": "solid-js",
@@ -16796,6 +17048,7 @@
       "package": "@solidjs/router",
       "version": "2.0.0-next.26",
       "export": "useSearchParams",
+      "integrationPremiseProbeDigest": "9203b5566a5e82b6a4e678d1e35e9118dbec9866a29d085d9264c149124a2333",
       "solidRuntime": [
         {
           "name": "solid-js",

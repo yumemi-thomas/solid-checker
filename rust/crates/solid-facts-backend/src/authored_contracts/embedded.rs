@@ -79,12 +79,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/1e9d011f1aa8ede7e9650fc3ee80069cf255af1c9effd3fe1659d87ad339eb57.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/authored/objects/1e9d011f1aa8ede7e9650fc3ee80069cf255af1c9effd3fe1659d87ad339eb57.json"
-        ),
-    ),
-    (
         "objects/20f13dc9158ce2a483365b9eb65bfa96277e9c7ea076e6e6a0263e5b0abc0bf3.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/20f13dc9158ce2a483365b9eb65bfa96277e9c7ea076e6e6a0263e5b0abc0bf3.json"
@@ -244,6 +238,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/5d82040b7b241c8dda58cb30d8177d94a3bb1b901002ed7cb694cfeeb72a69ec.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/5d82040b7b241c8dda58cb30d8177d94a3bb1b901002ed7cb694cfeeb72a69ec.json"
+        ),
+    ),
+    (
+        "objects/5df17d7755b1f94c414c829401bbde05935f342206cde872fbdca1efe6cfa20f.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/5df17d7755b1f94c414c829401bbde05935f342206cde872fbdca1efe6cfa20f.json"
         ),
     ),
     (
@@ -535,12 +535,6 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         ),
     ),
     (
-        "objects/cfdd9e8ef140cc9a1363181be0b83d2c6fa1a50524ea416bac94b28390a780d0.json",
-        include_bytes!(
-            "../../../../../pkg/contracts/authored/objects/cfdd9e8ef140cc9a1363181be0b83d2c6fa1a50524ea416bac94b28390a780d0.json"
-        ),
-    ),
-    (
         "objects/d24e15896b31318c1fcaea36d1f5f002e433dda914ff29b92806237bac3da9ba.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/d24e15896b31318c1fcaea36d1f5f002e433dda914ff29b92806237bac3da9ba.json"
@@ -556,6 +550,12 @@ pub(super) const OBJECTS: &[(&str, &[u8])] = &[
         "objects/d6368ee88aa1fd6dc26b7b3648077389fe4dc1ae5360b59c8fa529cefedbe067.json",
         include_bytes!(
             "../../../../../pkg/contracts/authored/objects/d6368ee88aa1fd6dc26b7b3648077389fe4dc1ae5360b59c8fa529cefedbe067.json"
+        ),
+    ),
+    (
+        "objects/d7e73f81a91a3978c9ca8cda7b5924785d8602ca70a6859b541c8b3c03d5c852.json",
+        include_bytes!(
+            "../../../../../pkg/contracts/authored/objects/d7e73f81a91a3978c9ca8cda7b5924785d8602ca70a6859b541c8b3c03d5c852.json"
         ),
     ),
     (

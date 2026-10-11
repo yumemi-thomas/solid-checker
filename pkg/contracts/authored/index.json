@@ -3409,8 +3409,57 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/cfdd9e8ef140cc9a1363181be0b83d2c6fa1a50524ea416bac94b28390a780d0.json",
-      "documentDigest": "sha256:cfdd9e8ef140cc9a1363181be0b83d2c6fa1a50524ea416bac94b28390a780d0"
+      "premises": [
+        {
+          "name": "standard-router-integration",
+          "exports": [
+            "useLocation",
+            "useParams",
+            "useSearchParams",
+            "useHref",
+            "useResolvedPath",
+            "useMatch",
+            "useIsRouting",
+            "useRouteMatches"
+          ],
+          "valueReferences": [
+            {
+              "path": "dist/routing.d.ts",
+              "start": 1101,
+              "end": 1117
+            }
+          ],
+          "configCalls": [
+            {
+              "declaration": {
+                "path": "dist/routers/factory.d.ts",
+                "start": 6426,
+                "end": 6438
+              },
+              "property": "history",
+              "factories": [
+                {
+                  "path": "dist/routers/history.d.ts",
+                  "start": 758,
+                  "end": 772
+                },
+                {
+                  "path": "dist/routers/history.d.ts",
+                  "start": 872,
+                  "end": 883
+                },
+                {
+                  "path": "dist/routers/history.d.ts",
+                  "start": 1156,
+                  "end": 1169
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "document": "objects/d7e73f81a91a3978c9ca8cda7b5924785d8602ca70a6859b541c8b3c03d5c852.json",
+      "documentDigest": "sha256:d7e73f81a91a3978c9ca8cda7b5924785d8602ca70a6859b541c8b3c03d5c852"
     },
     {
       "packageName": "@solidjs/router",
@@ -3442,6 +3491,7 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
+      "premises": [],
       "document": "objects/20f13dc9158ce2a483365b9eb65bfa96277e9c7ea076e6e6a0263e5b0abc0bf3.json",
       "documentDigest": "sha256:20f13dc9158ce2a483365b9eb65bfa96277e9c7ea076e6e6a0263e5b0abc0bf3"
     },
@@ -3475,8 +3525,57 @@
           "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
         }
       ],
-      "document": "objects/1e9d011f1aa8ede7e9650fc3ee80069cf255af1c9effd3fe1659d87ad339eb57.json",
-      "documentDigest": "sha256:1e9d011f1aa8ede7e9650fc3ee80069cf255af1c9effd3fe1659d87ad339eb57"
+      "premises": [
+        {
+          "name": "standard-router-integration",
+          "exports": [
+            "useLocation",
+            "useParams",
+            "useSearchParams",
+            "useHref",
+            "useResolvedPath",
+            "useMatch",
+            "useIsRouting",
+            "useRouteMatches"
+          ],
+          "valueReferences": [
+            {
+              "path": "dist/routing.d.ts",
+              "start": 1101,
+              "end": 1117
+            }
+          ],
+          "configCalls": [
+            {
+              "declaration": {
+                "path": "dist/routers/factory.d.ts",
+                "start": 6426,
+                "end": 6438
+              },
+              "property": "history",
+              "factories": [
+                {
+                  "path": "dist/routers/history.d.ts",
+                  "start": 758,
+                  "end": 772
+                },
+                {
+                  "path": "dist/routers/history.d.ts",
+                  "start": 872,
+                  "end": 883
+                },
+                {
+                  "path": "dist/routers/history.d.ts",
+                  "start": 1156,
+                  "end": 1169
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "document": "objects/5df17d7755b1f94c414c829401bbde05935f342206cde872fbdca1efe6cfa20f.json",
+      "documentDigest": "sha256:5df17d7755b1f94c414c829401bbde05935f342206cde872fbdca1efe6cfa20f"
     },
     {
       "packageName": "@tanstack/solid-query",

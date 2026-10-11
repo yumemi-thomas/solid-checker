@@ -58,6 +58,7 @@ import { callbackResultProbeDigest, validateCallbackResults } from "./lib/callba
 import { prototypeInstanceProbeDigest, validatePrototypeInstances } from "./lib/prototype-instance-contracts.mjs";
 import { lazyGetterProbeDigest, validateLazyGetters } from "./lib/lazy-getter-contracts.mjs";
 import { captureProbeDigest, validateCaptures } from "./lib/capture-contracts.mjs";
+import { integrationPremiseProbeDigest, validateIntegrationPremises } from "./lib/integration-premises.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TIER = join(ROOT, "pkg/contracts/authored");
@@ -249,6 +250,7 @@ const specs = readdirSync(join(TIER, "specs")).filter(name => !name.startsWith("
     validateCreatedOwners(`${spec.package}@${spec.version}#${name}`, claim.call);
     hostFreeClaim(`${spec.package}@${spec.version}#${name}`, claim);
   }
+  validateIntegrationPremises(spec);
   // ADR 0208: a spec about one patched install is named for its patch.
   const base = `${spec.package.replace("/", "+")}@${spec.version}`;
   assert.equal(name, spec.patchedInstall ? `${base}+${spec.patchedInstall.label}` : base, `${name}: directory names another version`);
@@ -423,6 +425,11 @@ function probe(browser) {
       return [entry.id, lazyGetterProbeDigest(spec, entry.export, pair,
         entry.misuse, entry.correct, certifiedCases(spec))];
     }));
+    const integrationDigests = new Map(cases.map(entry => {
+      const pair = pairsOf(entry.export, spec.exports[entry.export]).find(pair => pair.label === entry.label);
+      return [entry.id, integrationPremiseProbeDigest(spec, entry.export, pair,
+        entry.misuse, entry.correct, certifiedCases(spec))];
+    }));
     const scratch = mkdtempSync(join(tmpdir(), "solid-checker-authored-"));
     // Bind the bytes handed to the ledger before execution. Re-reading a
     // changed pair after a run must never stamp old observations as new input.
@@ -449,6 +456,7 @@ function probe(browser) {
       const captureDigest = captureDigests.get(row.id);
       const prototypeDigest = prototypeDigests.get(row.id);
       results.push({ spec: spec.name, package: spec.package, version: spec.version, export: row.export,
+        ...(integrationDigests.get(row.id) ? { integrationPremiseProbeDigest: integrationDigests.get(row.id) } : {}),
         ...(label ? { label } : {}),
         ...(probeDigest ? { propertyGetProbeDigest: probeDigest } : {}),
         ...(ownDataKeysDigest ? { ownDataKeysProbeDigest: ownDataKeysDigest } : {}),
@@ -533,6 +541,9 @@ function passed(spec, name) {
     const captureDigest = captureProbeDigest(spec, name, pair,
       readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
       readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
+    const integrationDigest = integrationPremiseProbeDigest(spec, name, pair,
+      readFileSync(join(spec.pairs, `${pair.file}.misuse.tsx`), "utf8"),
+      readFileSync(join(spec.pairs, `${pair.file}.correct.tsx`), "utf8"), certifiedCases(spec));
     return results.some(row => row.spec === spec.name && row.export === name
       && (row.label ?? undefined) === pair.label && row.verdict === "passed"
       && JSON.stringify(row.solidRuntime) === runtime
@@ -543,6 +554,7 @@ function passed(spec, name) {
       && (!callbackResultDigest || row.callbackResultProbeDigest === callbackResultDigest)
       && (!lazyGetterDigest || row.lazyGetterProbeDigest === lazyGetterDigest)
       && (!captureDigest || row.captureProbeDigest === captureDigest)
+      && (!integrationDigest || row.integrationPremiseProbeDigest === integrationDigest)
       && (!prototypeDigest || row.prototypeInstanceProbeDigest === prototypeDigest));
   });
 }
@@ -682,6 +694,9 @@ function build() {
         snapshotRoot,
         ...(spec.patchedInstall ? { patchedInstall: true } : {}),
         solidRuntime: spec.solidRuntime,
+        ...((spec.premises ?? []).length ? { premises: spec.premises.map(premise => ({
+          ...premise, exports: premise.exports.filter(name => shipped.includes(name))
+        })).filter(premise => premise.exports.length) } : {}),
         document: member,
         documentDigest: `sha256:${sha256(bytes)}`
       });

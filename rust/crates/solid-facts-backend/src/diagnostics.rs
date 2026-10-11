@@ -2397,7 +2397,7 @@ pub fn project_accepted_contracts(
     if bundled {
         // ADR 0198: the authored tier, below the project's own catalogs.
         contracts = contracts.with_fallback(
-            crate::authored_contracts::compiled_in_authored_contracts()
+            crate::authored_contracts::compiled_in_authored_contracts_for_project(facts)
                 .map_err(|error| BackendError::Contract(error.to_string()))?,
         );
     }

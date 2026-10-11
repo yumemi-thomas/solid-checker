@@ -1,0 +1,41 @@
+{
+  "name": "standard-router-integration",
+  "exports": [
+    "useLocation",
+    "useParams"
+  ],
+  "valueReferences": [
+    {
+      "path": "dist/routing.d.ts",
+      "start": 1101,
+      "end": 1117
+    }
+  ],
+  "configCalls": [
+    {
+      "declaration": {
+        "path": "dist/routers/factory.d.ts",
+        "start": 6426,
+        "end": 6438
+      },
+      "property": "history",
+      "factories": [
+        {
+          "path": "dist/routers/history.d.ts",
+          "start": 758,
+          "end": 772
+        },
+        {
+          "path": "dist/routers/history.d.ts",
+          "start": 872,
+          "end": 883
+        },
+        {
+          "path": "dist/routers/history.d.ts",
+          "start": 1156,
+          "end": 1169
+        }
+      ]
+    }
+  ]
+}

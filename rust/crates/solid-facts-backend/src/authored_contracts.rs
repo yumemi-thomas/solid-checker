@@ -30,6 +30,7 @@ use crate::contract_interface::{
 };
 
 mod embedded;
+mod premises;
 
 /// The verifier build an authored receipt names. An authored contract is not
 /// verified by a build; the string only keeps the identity stable.
@@ -68,6 +69,10 @@ pub(crate) struct AuthoredEntry {
     /// The document's member path among the embedded objects.
     pub(crate) document: String,
     pub(crate) document_digest: String,
+    /// Repository-owned conditional integration knowledge, not public wire
+    /// vocabulary. The project scan selects an open weakening on a veto.
+    #[serde(default)]
+    premises: Vec<premises::IntegrationPremise>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -85,6 +90,7 @@ pub(crate) struct LoadedAuthored {
     pub(crate) environment: Vec<DependencyEnvironmentEntry>,
     pub(crate) identity: String,
     pub(crate) contract: AcceptedContract,
+    withheld: Option<AcceptedContract>,
 }
 
 /// The index entry identity an authored contract is keyed and admitted by.
@@ -179,6 +185,119 @@ pub(crate) fn load_authored(
             DependencyEnvironmentEntry::package(&runtime.name, &runtime.version, &runtime.integrity)
         })
         .collect::<Vec<_>>();
+    let withheld = if entry.premises.is_empty() {
+        None
+    } else {
+        if entry.premises.len() != 1 {
+            return Err(ContractFailure::DocumentDecode {
+                message: "one integration premise per authored entry".into(),
+            });
+        }
+        let mut document: serde_json::Value =
+            serde_json::from_slice(document).map_err(|error| ContractFailure::DocumentDecode {
+                message: error.to_string(),
+            })?;
+        let original_summaries = document["summaries"].clone();
+        let mut open_summaries = Vec::new();
+        for premise in &entry.premises {
+            if premise.name.is_empty()
+                || premise.exports.is_empty()
+                || premise.exports.iter().collect::<BTreeSet<_>>().len() != premise.exports.len()
+                || (premise.value_references.is_empty() && premise.config_calls.is_empty())
+                || premise
+                    .value_references
+                    .iter()
+                    .chain(
+                        premise.config_calls.iter().flat_map(|call| {
+                            std::iter::once(&call.declaration).chain(&call.factories)
+                        }),
+                    )
+                    .any(|id| {
+                        id.path.is_empty()
+                            || id.path.starts_with('/')
+                            || id.path.contains('\\')
+                            || id.path.split('/').any(|part| part == "..")
+                            || id.start >= id.end
+                            || id.end > 9_007_199_254_740_991
+                    })
+                || premise
+                    .config_calls
+                    .iter()
+                    .any(|call| call.property.is_empty() || call.factories.is_empty())
+            {
+                return Err(ContractFailure::DocumentDecode {
+                    message: "invalid authored integration premise metadata".into(),
+                });
+            }
+            for name in &premise.exports {
+                let mut found = false;
+                for entrypoint in document["entrypoints"]
+                    .as_object_mut()
+                    .unwrap()
+                    .values_mut()
+                {
+                    for case in entrypoint["cases"].as_array_mut().unwrap() {
+                        let Some(reference) = case["exports"].get_mut(name) else {
+                            continue;
+                        };
+                        let summary = reference
+                            .as_str()
+                            .or_else(|| reference["summary"].as_str())
+                            .unwrap()
+                            .to_owned();
+                        // Each export gets its own open summary; a shared id
+                        // may also describe exports independent of the premise.
+                        let open = format!("premise-open-{name}");
+                        if reference.is_string() {
+                            *reference = open.clone().into();
+                        } else {
+                            reference["summary"] = open.clone().into();
+                        }
+                        found = true;
+                        open_summaries.push((
+                            open,
+                            serde_json::json!({
+                                "shape": original_summaries[&summary]["shape"], "call": {}
+                            }),
+                        ));
+                    }
+                }
+                if !found {
+                    return Err(ContractFailure::DocumentDecode {
+                        message: format!(
+                            "authored premise {} names absent export {name}",
+                            premise.name
+                        ),
+                    });
+                }
+            }
+        }
+        let used = document["entrypoints"]
+            .as_object()
+            .unwrap()
+            .values()
+            .flat_map(|entrypoint| entrypoint["cases"].as_array().unwrap())
+            .flat_map(|case| case["exports"].as_object().unwrap().values())
+            .map(|reference| {
+                reference
+                    .as_str()
+                    .or_else(|| reference["summary"].as_str())
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect::<BTreeSet<_>>();
+        let summaries = document["summaries"].as_object_mut().unwrap();
+        summaries.extend(open_summaries);
+        summaries.retain(|id, _| used.contains(id));
+        let bytes =
+            serde_json::to_vec(&document).map_err(|error| ContractFailure::DocumentDecode {
+                message: error.to_string(),
+            })?;
+        let mut weakened_entry = entry.clone();
+        weakened_entry.premises.clear();
+        weakened_entry.document_digest = crate::contract_interface::sha256_digest(&bytes);
+        Some(load_authored(&weakened_entry, &bytes)?.contract)
+    };
     Ok(LoadedAuthored {
         identity: authored_identity(
             &acceptance_root,
@@ -191,6 +310,7 @@ pub(crate) fn load_authored(
         acceptance_root,
         environment,
         contract,
+        withheld,
     })
 }
 
@@ -260,11 +380,34 @@ fn authored() -> Result<&'static [LoadedAuthored], ContractFailure> {
 
 /// Every compiled-in authored contract, reachable only by the artifact and
 /// Solid runtime it states. Fold it in above the certified tier.
-pub fn compiled_in_authored_contracts() -> Result<AcceptedContractIndex, ContractFailure> {
+/// A veto withholds only the authored claims explicitly conditioned on the
+/// integration premise. It does not assert a defect or demote unrelated IR.
+pub(crate) fn compiled_in_authored_contracts_for_project(
+    facts: &solid_facts::ProjectFacts,
+) -> Result<AcceptedContractIndex, ContractFailure> {
     Ok(AcceptedContractIndex::from_artifact_acceptances(
-        authored()?
-            .iter()
-            .map(|loaded| (loaded.identity.clone(), loaded.contract.clone())),
+        authored()?.iter().map(|loaded| {
+            let vetoed = loaded.entry.premises.iter().any(|premise| {
+                matches!(
+                    premises::scan(
+                        facts,
+                        &loaded.entry.package_name,
+                        &loaded.entry.package_version,
+                        premise
+                    ),
+                    premises::PremiseState::Vetoed(_)
+                )
+            });
+            (
+                loaded.identity.clone(),
+                if vetoed {
+                    loaded.withheld.as_ref().unwrap_or(&loaded.contract)
+                } else {
+                    &loaded.contract
+                }
+                .clone(),
+            )
+        }),
     ))
 }
 
