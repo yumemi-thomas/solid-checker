@@ -45,7 +45,7 @@ when its body contains calls/member reads; an inert literal needs no such proof.
 MixedInstances and MixedSameInstance share makeDecor's definition obligation.
 
 AsyncMemberPreference and RetainedMemberPreference must gain no SC8015 from a
-summary or deferred read. SynchronousMemberPreference and DirectMemoPreference
+deferred or unproven-timing read. SynchronousMemberPreference and DirectMemoPreference
 pin direct synchronous dependencies. The nested/loop factories explicitly return
 unbranded callable types, so legacy SourceAccessor type discovery cannot disguise
 a refused transport. This matches the review examples' published-type-legal

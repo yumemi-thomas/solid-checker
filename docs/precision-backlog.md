@@ -29503,10 +29503,12 @@ Refused exact callable implementations outside the source function universe
 retain SC9012 dispatch obligations when their bodies contain calls/member reads;
 no reactive summary or parameter identity is invented. Inert literals stay clean.
 
-Preference rules now require a read proved synchronous in the governing
-expression: summary-attributed rows and host/callee/callback timing uncertainty
-cannot prove a condition dependency. Direct memo-wrapper/accessor reads remain
-eligible. Per-analysis indexes replace repeated project-wide receiver/provider,
+Preference rules no longer accept a read whose invocation timing is unproven
+(host, callee or callback timing, missing JSX census) as a condition
+dependency. A synchronous summary-attributed read stays eligible, as before
+this series: refusing those removed 34 existing prefer-show findings from the
+rc.13 corpus. Async members are refused for transport, so a read after `await`
+cannot reach a condition through it. Per-analysis indexes replace repeated project-wide receiver/provider,
 source-origin and declaration scans; selected function bodies are indexed too.
 The release make target refreshes the session benchmark used by performance
 certification. The review controls and caller-only retained/cold IR comparison
