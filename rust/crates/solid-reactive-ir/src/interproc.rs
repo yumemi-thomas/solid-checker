@@ -6141,11 +6141,16 @@ fn interprocedural_result_reads_for_file(
         ) {
             dispatch_obligations.truncate(obligations_before);
         }
-        if runs_in_object_callable(file, call.callee) {
-            continue;
-        }
-        if (inside_non_component_function(file, call.callee, lookup)
-            || runs_in_unproven_stored_literal(file, call.callee, entities, symbol_names, lookup))
+        let object_callable = runs_in_object_callable(file, call.callee);
+        if !object_callable
+            && (inside_non_component_function(file, call.callee, lookup)
+                || runs_in_unproven_stored_literal(
+                    file,
+                    call.callee,
+                    entities,
+                    symbol_names,
+                    lookup,
+                ))
             && named_callback_execution_role(file, call.callee, lookup).is_none()
         {
             continue;
@@ -6156,7 +6161,7 @@ fn interprocedural_result_reads_for_file(
                 .iter()
                 .filter(|callback| callback.protocol.is_value_enumeration())
             {
-                let (reads, obligation, get_dependencies) =
+                let (mut reads, obligation, get_dependencies) =
                     property_gets::reads(property_gets::ReadContext {
                         file,
                         call,
@@ -6170,6 +6175,11 @@ fn interprocedural_result_reads_for_file(
                         symbol_names,
                         lookup,
                     });
+                if object_callable {
+                    for read in &mut reads {
+                        read.callee_callback_timing = true;
+                    }
+                }
                 result.extend(reads);
                 dispatch_obligations.extend(obligation);
                 dependencies.extend(get_dependencies);
@@ -6398,12 +6408,13 @@ fn interprocedural_result_reads_for_file(
                                 callback_execution,
                                 lookup,
                             ),
-                            callee_callback_timing: callee_callback_timing(
-                                file,
-                                call.span,
-                                callback_execution,
-                                lookup,
-                            ),
+                            callee_callback_timing: object_callable
+                                || callee_callback_timing(
+                                    file,
+                                    call.span,
+                                    callback_execution,
+                                    lookup,
+                                ),
                             project_consumer_non_strict: false,
                             callback_invocation_unproven: accessor_read.is_some()
                                 && lookup.contract_inline_accessor_invocation(
@@ -6715,9 +6726,8 @@ fn interprocedural_result_reads_for_file(
                     host_callback_timing: host_callback_timing(file, call.span, execution, lookup),
                     project_consumer_non_strict: false,
                     callback_invocation_unproven: false,
-                    callee_callback_timing: callee_callback_timing(
-                        file, call.span, execution, lookup,
-                    ),
+                    callee_callback_timing: object_callable
+                        || callee_callback_timing(file, call.span, execution, lookup),
                     package_internal,
                     summary_attributed: !direct,
                 });
@@ -8312,6 +8322,112 @@ fn interprocedural_reads(
             dispatch_obligations.extend(obligations);
         }
     }
+    // A retained callable's definition is an obligation, never an invocation.
+    // Once an actual consumer projects this exact read with a synchronous
+    // entry proof, keep that consumer's row alone. Do this after merging all
+    // files (including cached rows), so definition-site uncertainty cannot
+    // contaminate a cross-file consumer's independently proven execution.
+    let projected_origins = result
+        .iter()
+        .filter(|read| !read.is_uncertifiable())
+        .filter_map(|read| {
+            let origin = read.origin.as_ref()?;
+            let file = lookup.file_by_path(read.location.path.as_ref())?;
+            let call = file.ast.calls.iter().find(|call| {
+                u64::from(call.span.start) == read.location.start_byte
+                    && u64::from(call.span.end) == read.location.end_byte
+            })?;
+            let transported = transported_calls.get(&location(file.path.shared(), call.callee));
+            let (callee_file, callee) = match transported {
+                Some(accessor_provenance::Callable::Function { path, span }) => {
+                    let file = lookup.file_by_path(path)?;
+                    (file, file.ast.functions.iter().find(|f| f.span == *span)?)
+                }
+                _ => lookup.function_for_symbol(lookup.callee_symbol(file, call.callee)?)?,
+            };
+            if call.construct
+                || callee.generator
+                || (transported.is_none()
+                    && (lookup.callee_symbols(file, call.callee).len() > 1
+                        || !lookup.function_value_is_current(callee_file, callee)))
+            {
+                return None;
+            }
+            let mut entered =
+                directly_entered_functions(callee_file, callee, lookup, &transported_calls);
+            entered.push((callee_file.path.to_string(), callee.span));
+            // JSX and event consumers intentionally do not promote summaries
+            // to strict reads. They can still replace a definition obligation
+            // when this same entry proof reaches the original read itself.
+            if read.summary_attributed {
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(origin.start_byte),
+                    u32::try_from(origin.end_byte),
+                ) else {
+                    return None;
+                };
+                let source = lookup.file_by_path(origin.path.as_ref())?;
+                if !entered.iter().any(|(path, span)| {
+                    path == source.path.as_str()
+                        && source.ast.functions.iter().any(|function| {
+                            function.span == *span
+                                && body_site_runs_during_call(
+                                    source,
+                                    function,
+                                    Span::new(start, end),
+                                )
+                        })
+                }) {
+                    return None;
+                }
+            }
+            Some((
+                (
+                    read.accessor.clone(),
+                    read.declaration.clone(),
+                    origin.clone(),
+                ),
+                entered,
+            ))
+        })
+        .fold(
+            HashMap::<_, HashSet<_>>::new(),
+            |mut projected, (key, entered)| {
+                projected.entry(key).or_default().extend(entered);
+                projected
+            },
+        );
+    result.retain(|read| {
+        let Some(origin) = read.origin.as_ref() else {
+            return true;
+        };
+        let Some(file) = lookup.file_by_path(read.location.path.as_ref()) else {
+            return true;
+        };
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(read.location.start_byte),
+            u32::try_from(read.location.end_byte),
+        ) else {
+            return true;
+        };
+        let span = Span::new(start, end);
+        !runs_in_object_callable(file, span)
+            || !projected_origins
+                .get(&(
+                    read.accessor.clone(),
+                    read.declaration.clone(),
+                    origin.clone(),
+                ))
+                .is_some_and(|entered| {
+                    entered.iter().any(|(path, entered)| {
+                        path == file.path.as_str()
+                            && file.ast.functions.iter().any(|function| {
+                                function.span == *entered
+                                    && body_site_runs_during_call(file, function, span)
+                            })
+                    })
+                })
+    });
     // An exported helper that invokes a member supplied by a parameter has
     // callers outside the analyzed project. Normal project analysis must keep
     // that boundary explicit. Contract emission can discharge this specific

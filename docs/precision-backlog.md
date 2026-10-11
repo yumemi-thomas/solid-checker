@@ -29469,7 +29469,7 @@ so exact implementations present in that closure can supply this proof without
 a package contract. A declaration-only or absent implementation still needs
 package/source authority; the package name and Accessor type supply none.
 
-The round-2 false-positive fix withholds definition-site interprocedural reads
+The round-2 false-positive fix withholds definition-site interprocedural violations
 inside object-stored callables, including separately bound shorthand members
 and transparent wrappers with exact binder identity. JSX-returning callback
 members do not borrow component execution merely because component discovery
@@ -29478,6 +29478,17 @@ calls, whose own body/JSX/effect execution establishes the role. Callback prop
 objects whose invocation is not projected acquire no guessed body violation.
 The fixture pins both cross-file JSX consumer shapes and an exact body-call
 positive; this is not general callback-prop invocation analysis.
+
+Round 3 corrects the over-withholding of proof obligations: an object-stored
+callable whose invocation is not projected retains the ordinary SC1001
+callee-callback-timing uncertifiable finding. After merging result files,
+only an independently proven synchronous consumer entry into that exact
+callable may replace its definition-site obligation with the consumer row.
+Matching a shared accessor declaration/origin alone cannot discharge another
+callback's obligation. The retaining local-factory control stays uncertifiable;
+ObjectConsumerBody stays a violation. The nested-helper fixture additionally
+pins obligations for its stored object callbacks while retaining all body-call
+positives. This does not prove general option-object or prop-object dispatch.
 
 Strict published rc.13 typing checks, scoped snapshots and focused native checks
 are recorded in rust/target/research/accessor-provenance/RESULT.md. Corpus recall,

@@ -145,3 +145,26 @@ export function ObjectConsumerBody() {
   const value = decor.notes();
   return <p>{value}</p>;
 }
+
+function retainAnimation(options: { onFrame: () => number }) {
+  return () => options.onFrame();
+}
+export function RetainedOptionCallback() {
+  const [isAnimating] = createSignal(false);
+  const animate = () => isAnimating() ? 1 : 0;
+  const frame = retainAnimation({ onFrame: () => animate() });
+  return <button onClick={() => frame()}>Animate</button>;
+}
+
+function makeTrackedDecor() {
+  const feed = collection(1);
+  const notes = () => {
+    const row = feed.rows();
+    return <p>{row}</p>;
+  };
+  return { notes };
+}
+export function ObjectConsumerTracked() {
+  const decor = makeTrackedDecor();
+  return <p>{decor.notes()}</p>;
+}

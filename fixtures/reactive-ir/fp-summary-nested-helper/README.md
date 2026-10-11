@@ -25,8 +25,9 @@ from a JSX child expression, a handler, or a memo raises nothing.
 | derived chain read in a JSX child | none | tracked JSX expression |
 | chain through `createMemo`, read in JSX | none | same |
 | helper passed to `onClick` by reference, or called in a handler literal | none | runs at event time |
-| helper stored in an object, never called | none | no call, no read |
-| helper called from an anonymous closure stored in an object property or an array element | none | nothing proves the closure runs while the body does (`runs_in_unproven_stored_literal`) |
+| helper stored in an object, never proven called | `SC1001` uncertifiable at its definition | retaining the callable proves no invocation timing |
+| helper called from an anonymous closure stored in an object property | `SC1001` uncertifiable at its definition | the member's invocation is not projected; the lexical body supplies no proof |
+| helper called from an anonymous closure stored in an array element | none | existing array-storage withholding (`runs_in_unproven_stored_literal`) |
 | `read()` / `b()` called in the body | `SC1001` violation at the call | the call runs the helper inside the strict window |
 | helper called from an immediately invoked literal in the body | `SC1001` violation | the literal runs where it is written |
 | `Button` reading `props.variant` once in the body | `SC1001` violation | direct read, unchanged |
@@ -46,3 +47,8 @@ Remaining approximation: a helper handed to an unknown callee in the body
 (`run(helper)`) is not reported here at all -- the summary path claims a read
 only at a call that names the helper; whether the callee invokes it is the
 callee-callback-timing question (`fixtures/reactive-ir/callee-callback-timing`).
+
+Object-stored callables retain explicit callee-callback-timing obligations when
+their invocations are not projected. This covers StoredNotCalled and
+StoredInProperty without charging their enclosing component with a violation;
+all five proven body/IIFE/prop positives above remain unchanged.

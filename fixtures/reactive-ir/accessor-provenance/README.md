@@ -18,7 +18,15 @@ projection is not claimed: the current exported-consumer dispatch obligation
 may remain. ObjectConsumerBody supplies the positive: an exact factory returns
 the notes closure and the consumer invokes decor.notes() in its own body,
 where SC1001 must retain the original signal read. Object construction itself
-never proves callback invocation.
+never proves callback invocation. Unprojected definitions retain the ordinary
+callee-callback-timing SC1001 obligation. RetainedOptionCallback mirrors an
+object-literal option callback passed to a local factory that retains it: the
+read through animate must stay uncertifiable, even though the returned factory
+closure is invoked from an event. A proven invocation suppresses only the
+definition that its exact synchronous call path enters; another callback using
+the same accessor origin must keep its own obligation.
+ObjectConsumerTracked separately pins an exact member invocation in tracked JSX:
+its consumer proof removes the definition obligation and leaves the read clean.
 
 The reduced stub preserves the published rc.13 claim-bearing signal/memo,
 effect and context signatures (including effect cleanup-or-void returns).
