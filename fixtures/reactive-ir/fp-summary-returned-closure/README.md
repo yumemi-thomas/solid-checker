@@ -30,8 +30,11 @@ Scope and approximations:
 - The closure's reads are **not** attributed to a later `m.busy()` call in a
   component body, so `const b = m.busy()` written in the body is no longer
   reported through the hook call. That claim needs the member call resolved to
-  the anonymous literal, which has no symbol; it stays an open approximation
-  (silence, not a proven or uncertifiable result).
+  the anonymous literal, which has no symbol. Round-4 accessor transport retains
+  an SC9012 dispatch obligation at an exact returned callable whose body has
+  calls/member reads but whose implementation is absent from the producer's
+  function universe. It does not synthesize a summary node or borrow JSX/event
+  execution. The hook's construction still gains no guessed read violation.
 
 | Case | Finding | Why |
 | --- | --- | --- |

@@ -19,7 +19,11 @@ pub(super) enum Callable {
 
 enum Value {
     Callable(Callable),
-    Object { path: String, span: Span },
+    Object {
+        path: String,
+        span: Span,
+        context: bool,
+    },
 }
 
 pub(super) struct Resolver<'a, 'facts> {
@@ -28,20 +32,230 @@ pub(super) struct Resolver<'a, 'facts> {
     pub accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub source_kinds: &'a HashMap<SymbolId, crate::ReactiveSourceKind>,
     pub names: &'a HashMap<SymbolId, SymbolId>,
+    functions: HashSet<(String, Span)>,
+    binding_locations: HashMap<SymbolId, Location>,
+    declarations: HashMap<SymbolId, (SymbolId, Location)>,
+    uses: HashMap<Location, ClosedUses>,
+    providers: HashMap<Location, Vec<Option<(String, Span)>>>,
+    source_origins: HashSet<SymbolId>,
+}
+
+#[derive(Default)]
+struct ClosedUses {
+    object_escaped: bool,
+    callable_escaped: bool,
+    context_escaped: bool,
 }
 
 impl Resolver<'_, '_> {
+    pub fn new<'a, 'facts>(
+        facts: &'a ProjectFacts,
+        lookup: &'a SemanticLookup<'facts>,
+        accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+        source_kinds: &'a HashMap<SymbolId, crate::ReactiveSourceKind>,
+        names: &'a HashMap<SymbolId, SymbolId>,
+        functions: HashSet<(String, Span)>,
+    ) -> Resolver<'a, 'facts> {
+        let mut resolver = Resolver {
+            facts,
+            lookup,
+            accessors,
+            source_kinds,
+            names,
+            functions,
+            binding_locations: HashMap::new(),
+            declarations: HashMap::new(),
+            uses: HashMap::new(),
+            providers: HashMap::new(),
+            source_origins: HashSet::new(),
+        };
+        for file in &facts.files {
+            for binding in &file.ast.bindings {
+                for name in &binding.names {
+                    if let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) {
+                        resolver.binding_locations.insert(
+                            symbol.clone(),
+                            location(file.path.shared(), binding.pattern),
+                        );
+                        if let Some(display) = file.source_text(name.span) {
+                            resolver.declarations.insert(
+                                symbol.clone(),
+                                (
+                                    SymbolId::from(display),
+                                    location(file.path.shared(), name.span),
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        // Census each exact reference once. A receiver proves closure only
+        // when its selected member is immediately called; a Get that escapes
+        // an object/member cannot certify a later invocation.
+        for file in &facts.files {
+            let callees = file
+                .ast
+                .calls
+                .iter()
+                .map(|c| file.ast.peel_ts_sugar_span(c.callee))
+                .collect::<HashSet<_>>();
+            let receivers = file
+                .ast
+                .members
+                .iter()
+                .filter(|m| {
+                    !file.ast.computed_members.contains(&m.span) && callees.contains(&m.span)
+                })
+                .map(|m| file.ast.peel_ts_sugar_span(m.object))
+                .collect::<HashSet<_>>();
+            let returned = file
+                .ast
+                .returns
+                .iter()
+                .filter_map(|r| r.argument)
+                .map(|s| file.ast.peel_ts_sugar_span(s))
+                .collect::<HashSet<_>>();
+            let properties = file
+                .ast
+                .object_properties
+                .iter()
+                .filter(|p| p.data)
+                .map(|p| file.ast.peel_ts_sugar_span(p.value))
+                .collect::<HashSet<_>>();
+            let mut provider_values = HashSet::new();
+            let mut context_tags = HashSet::new();
+            for element in &file.ast.jsx_elements {
+                let target = if let Some(member) = lookup.dialect.context_provider_member() {
+                    (element.member_property.and_then(|p| file.source_text(p)) == Some(member))
+                        .then_some(element.member_object)
+                        .flatten()
+                } else {
+                    Some(element.name.span)
+                };
+                let Some(target) = target else { continue };
+                if !lookup.is_context_reference(file.path.as_str(), target) {
+                    continue;
+                }
+                if let Some(key) = resolver.binding_key(file, target) {
+                    let mut values = element
+                        .attributes
+                        .iter()
+                        .filter(|a| file.source_text(a.local_name) == Some("value"));
+                    let value = values.next().and_then(|a| a.expression);
+                    let valid = values.next().is_none() && element.spreads.is_empty();
+                    resolver
+                        .providers
+                        .entry(key)
+                        .or_default()
+                        .push(value.filter(|_| valid).map(|v| (file.path.to_string(), v)));
+                    if let Some(value) = value.filter(|_| valid) {
+                        provider_values.insert(file.ast.peel_ts_sugar_span(value));
+                    }
+                    context_tags.insert(target);
+                    context_tags.insert(element.name.span);
+                    context_tags.extend(element.closing_name);
+                }
+            }
+            let context_reads = file
+                .ast
+                .calls
+                .iter()
+                .filter(|c| resolver.role(file, c) == Some(ContextRole::Read))
+                .filter_map(|c| c.arguments.first())
+                .map(|a| file.ast.peel_ts_sugar_span(a.span))
+                .collect::<HashSet<_>>();
+            for id in file
+                .ast
+                .identifiers
+                .iter()
+                .filter(|id| id.role == ast::IdentifierRole::Reference)
+            {
+                let Some(key) = resolver.binding_key(file, id.span) else {
+                    continue;
+                };
+                let written = file
+                    .ast
+                    .assignments
+                    .iter()
+                    .any(|a| a.target.contains(id.span))
+                    || file.ast.deleted_targets.iter().any(|s| s.contains(id.span))
+                    || file
+                        .ast
+                        .iteration_targets
+                        .iter()
+                        .any(|s| s.contains(id.span));
+                let uses = resolver.uses.entry(key).or_default();
+                uses.object_escaped |= written
+                    || !(receivers.contains(&id.span) || provider_values.contains(&id.span));
+                uses.callable_escaped |= written
+                    || !(callees.contains(&id.span)
+                        || returned.contains(&id.span)
+                        || properties.contains(&id.span)
+                        || provider_values.contains(&id.span));
+                uses.context_escaped |= written
+                    || !(context_reads.contains(&id.span) || context_tags.contains(&id.span));
+            }
+            for export in file.ast.exports.iter() {
+                for binding in file.ast.exported_bindings(export) {
+                    resolver
+                        .uses
+                        .entry(location(file.path.shared(), binding.pattern))
+                        .or_default()
+                        .object_escaped = true;
+                }
+            }
+        }
+        for file in &facts.files {
+            for binding in &file.ast.bindings {
+                if !binding.immutable {
+                    continue;
+                }
+                for name in &binding.names {
+                    if let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span)
+                        && !source_has_runtime_witness(
+                            symbol,
+                            accessors,
+                            lookup.entities(),
+                            names,
+                            lookup,
+                        )
+                        && !crate::indexes::binding_written(file, name.span)
+                        && resolver.source_call(file, name.span).as_ref() == Some(symbol)
+                    {
+                        resolver.source_origins.insert(symbol.clone());
+                    }
+                }
+            }
+        }
+        resolver
+    }
+
+    fn binding_key(&self, file: &FileFacts, span: Span) -> Option<Location> {
+        if let Some((declared, binding, _)) =
+            self.lookup.binding_at_reference(file.path.as_str(), span)
+        {
+            return Some(location(declared.path.shared(), binding.pattern));
+        }
+        if let Some(key) = self
+            .lookup
+            .entities()
+            .at(file.path.as_str(), span)
+            .and_then(|s| self.binding_locations.get(s))
+        {
+            return Some(key.clone());
+        }
+        let declaration = file.ast.reference_declaration(span)?;
+        let binding = file
+            .ast
+            .bindings
+            .iter()
+            .find(|b| b.names.iter().any(|n| n.span == declaration))?;
+        Some(location(file.path.shared(), binding.pattern))
+    }
+
     pub fn has_source_origin(&self, symbol: &SymbolId) -> bool {
-        self.facts.files.iter().any(|file| {
-            file.ast.bindings.iter().any(|binding| {
-                binding.immutable
-                    && binding.names.iter().any(|name| {
-                        self.lookup.entities().at(file.path.as_str(), name.span) == Some(symbol)
-                            && !crate::indexes::binding_written(file, name.span)
-                    })
-                    && self.source_call(file, binding.names[0].span).as_ref() == Some(symbol)
-            })
-        })
+        self.source_origins.contains(symbol)
     }
     pub fn source_call(&self, file: &FileFacts, callee: Span) -> Option<SymbolId> {
         match self.value(file, callee, 24, &mut false)? {
@@ -49,36 +263,61 @@ impl Resolver<'_, '_> {
             _ => None,
         }
     }
-    pub fn calls(&self) -> HashMap<Location, Callable> {
+    pub fn calls(&self) -> (HashMap<Location, Callable>, HashSet<Location>) {
         let mut calls = HashMap::new();
-        for file in &self.facts.files {
-            for call in &file.ast.calls {
+        let mut unavailable = HashSet::new();
+        for call_file in &self.facts.files {
+            for call in &call_file.ast.calls {
                 let mut transported = false;
-                if let Some(Value::Callable(target)) =
-                    self.value(file, call.callee, 24, &mut transported)
-                    && transported
-                {
-                    calls.insert(location(file.path.shared(), call.callee), target);
+                let value = self.value(call_file, call.callee, 24, &mut transported);
+                if transported {
+                    match value {
+                        Some(Value::Callable(Callable::Function { path, span }))
+                            if !self.functions.contains(&(path.clone(), span)) =>
+                        {
+                            let file = self
+                                .lookup
+                                .file_by_path(&path)
+                                .expect("resolved function file");
+                            let function = file
+                                .ast
+                                .functions
+                                .iter()
+                                .find(|f| f.span == span)
+                                .expect("resolved function span");
+                            // Preserve the missing implementation obligation without
+                            // admitting a synthetic node or inferring its summary.
+                            if file
+                                .ast
+                                .calls
+                                .iter()
+                                .any(|c| function.body.contains(c.span))
+                                || file
+                                    .ast
+                                    .members
+                                    .iter()
+                                    .any(|m| function.body.contains(m.span))
+                            {
+                                unavailable.insert(location(call_file.path.shared(), call.callee));
+                            }
+                        }
+                        Some(Value::Callable(target)) => {
+                            calls.insert(location(call_file.path.shared(), call.callee), target);
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
-        calls
+        (calls, unavailable)
     }
 
     pub fn read(&self, symbol: &SymbolId, file: &FileFacts, span: Span) -> Option<SummaryRead> {
-        let (display, declaration) = self.accessors.get(symbol).cloned().or_else(|| {
-            self.facts.files.iter().find_map(|file| {
-                file.ast.bindings.iter().find_map(|binding| {
-                    let name = binding.names.iter().find(|name| {
-                        self.lookup.entities().at(file.path.as_str(), name.span) == Some(symbol)
-                    })?;
-                    Some((
-                        SymbolId::from(file.source_text(name.span)?),
-                        location(file.path.shared(), name.span),
-                    ))
-                })
-            })
-        })?;
+        let (display, declaration) = self
+            .accessors
+            .get(symbol)
+            .or_else(|| self.declarations.get(symbol))
+            .cloned()?;
         Some(SummaryRead {
             contract_read_context: None,
             symbol: symbol.clone(),
@@ -117,7 +356,7 @@ impl Resolver<'_, '_> {
         }
         let span = file.ast.peel_ts_sugar_span(span);
         if let Some(function) = file.ast.functions.iter().find(|f| f.span == span) {
-            if function.generator {
+            if function.generator || function.r#async {
                 return None;
             }
             return Some(Value::Callable(Callable::Function {
@@ -150,8 +389,9 @@ impl Resolver<'_, '_> {
             if file.ast.computed_members.contains(&span) {
                 return None;
             }
-            let Value::Object { path, span: object } =
-                self.value(file, member.object, depth - 1, transported)?
+            let Value::Object {
+                path, span: object, ..
+            } = self.value(file, member.object, depth - 1, transported)?
             else {
                 return None;
             };
@@ -181,7 +421,7 @@ impl Resolver<'_, '_> {
                     return None;
                 }
             }
-            return Some(value);
+            return matches!(value, Value::Callable(_)).then_some(value);
         }
         if let Some(call) = file.ast.calls.iter().find(|c| c.span == span) {
             if call.construct || !file.ast.straight_line_calls.contains(&call.span) {
@@ -190,7 +430,11 @@ impl Resolver<'_, '_> {
             if self.role(file, call) == Some(ContextRole::Read) {
                 *transported = true;
                 let (provider_file, value) = self.provider(file, call)?;
-                return self.value(provider_file, value, depth - 1, transported);
+                let mut value = self.value(provider_file, value, depth - 1, transported)?;
+                if let Value::Object { context, .. } = &mut value {
+                    *context = true;
+                }
+                return Some(value);
             }
             let Value::Callable(Callable::Function { path, span }) =
                 self.value(file, call.callee, depth - 1, transported)?
@@ -207,12 +451,24 @@ impl Resolver<'_, '_> {
             }
             let returned = single_return(target_file, function)?;
             *transported = true;
-            return self.value(target_file, returned, depth - 1, transported);
+            let value = self.value(target_file, returned, depth - 1, transported)?;
+            if let Value::Object {
+                path,
+                span,
+                context: false,
+            } = &value
+                && (path != target_file.path.as_str()
+                    || *span != target_file.ast.peel_ts_sugar_span(returned))
+            {
+                return None;
+            }
+            return Some(value);
         }
         if closed_properties(file, span).is_some() {
             return Some(Value::Object {
                 path: file.path.to_string(),
                 span,
+                context: false,
             });
         }
         let (bound_file, binding, symbol) = self
@@ -281,7 +537,7 @@ impl Resolver<'_, '_> {
         if call.arguments.len() != 1 || call.arguments[0].spread {
             return None;
         }
-        let (context_file, binding, symbol) = self.lookup.binding_at_reference(
+        let (context_file, binding, _) = self.lookup.binding_at_reference(
             file.path.as_str(),
             file.ast.peel_ts_sugar_span(call.arguments[0].span),
         )?;
@@ -298,82 +554,16 @@ impl Resolver<'_, '_> {
         {
             return None;
         }
-        let mut providers = Vec::new();
-        for candidate in &self.facts.files {
-            for element in &candidate.ast.jsx_elements {
-                let provider = if let Some(member) = self.lookup.dialect.context_provider_member() {
-                    (element
-                        .member_property
-                        .and_then(|p| candidate.source_text(p))
-                        == Some(member))
-                    .then_some(element.member_object)
-                    .flatten()
-                } else {
-                    Some(element.name.span)
-                };
-                if !provider.is_some_and(|span| {
-                    self.same_binding(candidate, span, context_file, binding, &symbol)
-                }) {
-                    continue;
-                }
-                let mut values = element
-                    .attributes
-                    .iter()
-                    .filter(|a| candidate.source_text(a.local_name) == Some("value"));
-                let value = values.next()?.expression?;
-                if values.next().is_some() || !element.spreads.is_empty() {
-                    return None;
-                }
-                providers.push((candidate, value));
-            }
-            for id in candidate
-                .ast
-                .identifiers
-                .iter()
-                .filter(|id| id.role == ast::IdentifierRole::Reference)
-            {
-                if !self.same_binding(candidate, id.span, context_file, binding, &symbol) {
-                    continue;
-                }
-                let read = candidate.ast.calls.iter().any(|c| {
-                    self.role(candidate, c) == Some(ContextRole::Read)
-                        && c.arguments
-                            .first()
-                            .is_some_and(|a| candidate.ast.peel_ts_sugar_span(a.span) == id.span)
-                });
-                let jsx = candidate.ast.jsx_elements.iter().any(|e| {
-                    e.name.span == id.span
-                        || e.closing_name == Some(id.span)
-                        || e.member_object == Some(id.span)
-                });
-                if !read && !jsx {
-                    return None;
-                }
-            }
+        let key = location(context_file.path.shared(), binding.pattern);
+        if self.uses.get(&key).is_some_and(|uses| uses.context_escaped) {
+            return None;
         }
+        let providers = self.providers.get(&key)?;
         if providers.len() != 1 {
             return None;
         }
-        providers.pop()
-    }
-
-    fn same_binding(
-        &self,
-        file: &FileFacts,
-        span: Span,
-        declared: &FileFacts,
-        binding: &ast::BindingFact,
-        symbol: &SymbolId,
-    ) -> bool {
-        self.lookup
-            .binding_at_reference(file.path.as_str(), span)
-            .is_some_and(|(f, b, _)| f.path == declared.path && b.pattern == binding.pattern)
-            || self.lookup.entities().at(file.path.as_str(), span) == Some(symbol)
-            || (file.path == declared.path
-                && file
-                    .ast
-                    .reference_declaration(span)
-                    .is_some_and(|d| binding.names.iter().any(|n| n.span == d)))
+        let (path, value) = providers[0].as_ref()?;
+        Some((self.lookup.file_by_path(path)?, *value))
     }
 
     fn created_accessor(&self, file: &FileFacts, span: Span, depth: usize) -> bool {
@@ -421,77 +611,14 @@ impl Resolver<'_, '_> {
         binding: &ast::BindingFact,
         object: bool,
     ) -> bool {
-        let Some(symbol) = self
-            .lookup
-            .entities()
-            .at(file.path.as_str(), binding.names[0].span)
-        else {
-            return false;
-        };
-        for candidate in &self.facts.files {
-            for id in candidate
-                .ast
-                .identifiers
-                .iter()
-                .filter(|id| id.role == ast::IdentifierRole::Reference)
-            {
-                if !self.same_binding(candidate, id.span, file, binding, symbol) {
-                    continue;
-                }
-                let at = id.span;
-                if candidate
-                    .ast
-                    .assignments
-                    .iter()
-                    .any(|a| a.target.contains(at))
-                    || candidate.ast.deleted_targets.iter().any(|d| d.contains(at))
-                {
-                    return false;
-                }
-                let receiver = candidate.ast.members.iter().any(|m| {
-                    candidate.ast.peel_ts_sugar_span(m.object) == at
-                        && !candidate.ast.computed_members.contains(&m.span)
-                });
-                if receiver {
-                    continue;
-                }
-                let provider = candidate.ast.jsx_elements.iter().any(|e| {
-                    let target = e.member_object.unwrap_or(e.name.span);
-                    self.lookup
-                        .is_context_reference(candidate.path.as_str(), target)
-                        && e.attributes.iter().any(|a| {
-                            candidate.source_text(a.local_name) == Some("value")
-                                && a.expression == Some(at)
-                        })
-                });
-                if object {
-                    if provider {
-                        continue;
-                    }
-                    return false;
-                }
-                let called = candidate
-                    .ast
-                    .calls
-                    .iter()
-                    .any(|c| candidate.ast.peel_ts_sugar_span(c.callee) == at);
-                let returned = candidate
-                    .ast
-                    .returns
-                    .iter()
-                    .filter_map(|r| r.argument)
-                    .any(|r| candidate.ast.peel_ts_sugar_span(r) == at);
-                let property = candidate
-                    .ast
-                    .object_properties
-                    .iter()
-                    .any(|p| p.data && p.value == at);
-                if !called && !returned && !property && !provider {
-                    return false;
-                }
+        let key = location(file.path.shared(), binding.pattern);
+        self.uses.get(&key).is_none_or(|uses| {
+            if object {
+                !uses.object_escaped
+            } else {
+                !uses.callable_escaped
             }
-        }
-        true
+        })
     }
 }
 

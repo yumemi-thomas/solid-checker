@@ -5703,6 +5703,7 @@ pub(super) struct InterproceduralResultReadContext<'a, 'b> {
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(super) lookup: &'a SemanticLookup<'b>,
     transported_calls: &'a HashMap<Location, accessor_provenance::Callable>,
+    unavailable_calls: &'a HashSet<Location>,
     provenance: &'a accessor_provenance::Resolver<'a, 'b>,
 }
 
@@ -5732,6 +5733,7 @@ fn interprocedural_result_reads_for_file(
         symbol_names,
         lookup,
         transported_calls,
+        unavailable_calls,
         provenance,
     } = context;
     let mut result = Vec::new();
@@ -5753,6 +5755,22 @@ fn interprocedural_result_reads_for_file(
         let valid_call = lookup
             .resolved_callee_call(file, call.callee)
             .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
+        if unavailable_calls.contains(&callee)
+            && !lookup
+                .resolved_callee_call(file, call.callee)
+                .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Recovery)
+        {
+            dispatch_obligations.push(StaticDefect {
+                kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: label.clone(),
+                    member: None,
+                },
+                location: callee.clone(),
+                analysis_context: "returned-callable-outside-source-universe".into(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
         if lookup
             .resolved_callee_call(file, call.callee)
             .and_then(|resolved| resolved.declaration.as_ref())
@@ -7420,50 +7438,25 @@ fn interprocedural_reads(
             nodes.extend(file_nodes);
         }
     }
-    let provenance = accessor_provenance::Resolver {
+    let provenance = accessor_provenance::Resolver::new(
         facts,
         lookup,
         accessors,
         source_kinds,
-        names: symbol_names,
-    };
-    let transported_calls = provenance.calls();
-    // Type Facts' finite summary universe can omit an anonymous returned
-    // literal. Admit only implementations selected by the exact transport
-    // proof, never every lexically contained function.
-    for target in transported_calls.values() {
-        let accessor_provenance::Callable::Function { path, span } = target else {
-            continue;
-        };
-        if nodes
+        symbol_names,
+        nodes
             .iter()
-            .any(|node| node.path == *path && node.span == *span)
-        {
-            continue;
-        }
-        let Some(file) = lookup.file_by_path(path) else {
-            continue;
-        };
-        let Some(function) = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == *span)
-        else {
-            continue;
-        };
-        nodes.push(SummaryNode {
-            path: path.clone(),
-            span: *span,
-            body: function.body,
-            name: None,
-            symbol: None,
-            runtime_identity: String::new(),
-            parameters: Vec::new(),
-            exported: false,
-            r#async: function.r#async,
-        });
-    }
+            .map(|node| (node.path.clone(), node.span))
+            .collect(),
+    );
+    let (transported_calls, unavailable_calls) = provenance.calls();
+    let transported_bodies = transported_calls
+        .values()
+        .filter_map(|target| match target {
+            accessor_provenance::Callable::Function { path, span } => Some((path.as_str(), *span)),
+            accessor_provenance::Callable::Accessor(_) => None,
+        })
+        .collect::<HashSet<_>>();
     let nodes_by_path = function_indices_by_path(&nodes);
     let indexes = nodes
         .iter()
@@ -7606,9 +7599,8 @@ fn interprocedural_reads(
             ) else {
                 continue;
             };
-            let selected_body = transported_calls.values().any(|target| matches!(target,
-                accessor_provenance::Callable::Function { path, span } if *path == nodes[owner].path && *span == nodes[owner].span
-            ));
+            let selected_body =
+                transported_bodies.contains(&(nodes[owner].path.as_str(), nodes[owner].span));
             let source = selected_body
                 .then(|| provenance.source_call(file, call.callee))
                 .flatten();
@@ -8162,6 +8154,7 @@ fn interprocedural_reads(
         symbol_names,
         lookup: context.lookup,
         transported_calls: &transported_calls,
+        unavailable_calls: &unavailable_calls,
         provenance: &provenance,
     };
     if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
@@ -8322,112 +8315,9 @@ fn interprocedural_reads(
             dispatch_obligations.extend(obligations);
         }
     }
-    // A retained callable's definition is an obligation, never an invocation.
-    // Once an actual consumer projects this exact read with a synchronous
-    // entry proof, keep that consumer's row alone. Do this after merging all
-    // files (including cached rows), so definition-site uncertainty cannot
-    // contaminate a cross-file consumer's independently proven execution.
-    let projected_origins = result
-        .iter()
-        .filter(|read| !read.is_uncertifiable())
-        .filter_map(|read| {
-            let origin = read.origin.as_ref()?;
-            let file = lookup.file_by_path(read.location.path.as_ref())?;
-            let call = file.ast.calls.iter().find(|call| {
-                u64::from(call.span.start) == read.location.start_byte
-                    && u64::from(call.span.end) == read.location.end_byte
-            })?;
-            let transported = transported_calls.get(&location(file.path.shared(), call.callee));
-            let (callee_file, callee) = match transported {
-                Some(accessor_provenance::Callable::Function { path, span }) => {
-                    let file = lookup.file_by_path(path)?;
-                    (file, file.ast.functions.iter().find(|f| f.span == *span)?)
-                }
-                _ => lookup.function_for_symbol(lookup.callee_symbol(file, call.callee)?)?,
-            };
-            if call.construct
-                || callee.generator
-                || (transported.is_none()
-                    && (lookup.callee_symbols(file, call.callee).len() > 1
-                        || !lookup.function_value_is_current(callee_file, callee)))
-            {
-                return None;
-            }
-            let mut entered =
-                directly_entered_functions(callee_file, callee, lookup, &transported_calls);
-            entered.push((callee_file.path.to_string(), callee.span));
-            // JSX and event consumers intentionally do not promote summaries
-            // to strict reads. They can still replace a definition obligation
-            // when this same entry proof reaches the original read itself.
-            if read.summary_attributed {
-                let (Ok(start), Ok(end)) = (
-                    u32::try_from(origin.start_byte),
-                    u32::try_from(origin.end_byte),
-                ) else {
-                    return None;
-                };
-                let source = lookup.file_by_path(origin.path.as_ref())?;
-                if !entered.iter().any(|(path, span)| {
-                    path == source.path.as_str()
-                        && source.ast.functions.iter().any(|function| {
-                            function.span == *span
-                                && body_site_runs_during_call(
-                                    source,
-                                    function,
-                                    Span::new(start, end),
-                                )
-                        })
-                }) {
-                    return None;
-                }
-            }
-            Some((
-                (
-                    read.accessor.clone(),
-                    read.declaration.clone(),
-                    origin.clone(),
-                ),
-                entered,
-            ))
-        })
-        .fold(
-            HashMap::<_, HashSet<_>>::new(),
-            |mut projected, (key, entered)| {
-                projected.entry(key).or_default().extend(entered);
-                projected
-            },
-        );
-    result.retain(|read| {
-        let Some(origin) = read.origin.as_ref() else {
-            return true;
-        };
-        let Some(file) = lookup.file_by_path(read.location.path.as_ref()) else {
-            return true;
-        };
-        let (Ok(start), Ok(end)) = (
-            u32::try_from(read.location.start_byte),
-            u32::try_from(read.location.end_byte),
-        ) else {
-            return true;
-        };
-        let span = Span::new(start, end);
-        !runs_in_object_callable(file, span)
-            || !projected_origins
-                .get(&(
-                    read.accessor.clone(),
-                    read.declaration.clone(),
-                    origin.clone(),
-                ))
-                .is_some_and(|entered| {
-                    entered.iter().any(|(path, entered)| {
-                        path == file.path.as_str()
-                            && file.ast.functions.iter().any(|function| {
-                                function.span == *entered
-                                    && body_site_runs_during_call(file, function, span)
-                            })
-                    })
-                })
-    });
+    // Keep definition-site obligations even when one consumer is proven.
+    // Another instance or opaque consumer of the same callable can remain
+    // unresolved; a projected origin is not an exhaustive invocation census.
     // An exported helper that invokes a member supplied by a parameter has
     // callers outside the analyzed project. Normal project analysis must keep
     // that boundary explicit. Contract emission can discharge this specific

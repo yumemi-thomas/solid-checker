@@ -75,7 +75,12 @@ impl ReactiveReadIndex {
                     // when their surrounding function is only a possible
                     // component. A style preference cannot promote the 1.x
                     // catalog's historical all-props heuristic into proof.
-                    proven: !read.uncertain || read.kind.as_ref() != "component-props",
+                    proven: (!read.uncertain || read.kind.as_ref() != "component-props")
+                        && !read.summary_attributed
+                        && !read.host_callback_timing
+                        && !read.callee_callback_timing
+                        && !read.callback_invocation_unproven
+                        && !read.missing_jsx_census,
                 });
         }
         for reads in by_path.values_mut() {
@@ -86,8 +91,9 @@ impl ReactiveReadIndex {
 
     /// Whether evaluating exactly `expression` performs a proven reactive
     /// read outside a nested function. A read summarized onto an enclosing
-    /// call remains eligible: that is the interprocedural proof that invoking
-    /// the helper executes the dependency. An unresolved read never qualifies.
+    /// call qualifies only with an independent synchronous entry proof (and
+    /// therefore no summary-attribution/timing uncertainty). Source identity
+    /// alone never proves a dependency of the governing expression.
     pub(super) fn has_proven_read(
         &self,
         context: &UpstreamCompatContext<'_>,

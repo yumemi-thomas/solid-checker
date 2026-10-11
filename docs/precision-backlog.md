@@ -29481,14 +29481,36 @@ positive; this is not general callback-prop invocation analysis.
 
 Round 3 corrects the over-withholding of proof obligations: an object-stored
 callable whose invocation is not projected retains the ordinary SC1001
-callee-callback-timing uncertifiable finding. After merging result files,
-only an independently proven synchronous consumer entry into that exact
-callable may replace its definition-site obligation with the consumer row.
-Matching a shared accessor declaration/origin alone cannot discharge another
-callback's obligation. The retaining local-factory control stays uncertifiable;
+callee-callback-timing uncertifiable finding. Round 4 never suppresses that
+definition-site obligation: a proven consumer does not establish the behavior
+of another instance or opaque consumer of the same callable. The retaining local-factory control stays uncertifiable;
 ObjectConsumerBody stays a violation. The nested-helper fixture additionally
 pins obligations for its stored object callbacks while retaining all body-call
 positives. This does not prove general option-object or prop-object dispatch.
+
+Round 4 narrows transport to one direct member of the factory's single
+unconditional returned literal, with an exact accessor binding or synchronous
+non-generator arrow already in source discovery's function universe. Nested
+objects and synthetic node admission are removed. The receiver census accepts
+only immediately called static members (plus the exact context provider-value
+handoff); aliases, argument/return/storage/export/spread/destructuring uses and
+assignment/delete/for-of/for-in targets refuse transport for the binding. Context
+selection remains exact, default-less, with exactly one provider. Unsupported
+shapes preserve the ordinary findings/obligations and gain no guessed transport
+violation. The existing type-driven source discovery is unchanged; the focused
+nested controls use the review's unbranded callable return shape.
+Refused exact callable implementations outside the source function universe
+retain SC9012 dispatch obligations when their bodies contain calls/member reads;
+no reactive summary or parameter identity is invented. Inert literals stay clean.
+
+Preference rules now require a read proved synchronous in the governing
+expression: summary-attributed rows and host/callee/callback timing uncertainty
+cannot prove a condition dependency. Direct memo-wrapper/accessor reads remain
+eligible. Per-analysis indexes replace repeated project-wide receiver/provider,
+source-origin and declaration scans; selected function bodies are indexed too.
+The release make target refreshes the session benchmark used by performance
+certification. The review controls and caller-only retained/cold IR comparison
+are recorded in rust/target/research/accessor-provenance/RESULT-4.md.
 
 Strict published rc.13 typing checks, scoped snapshots and focused native checks
 are recorded in rust/target/research/accessor-provenance/RESULT.md. Corpus recall,

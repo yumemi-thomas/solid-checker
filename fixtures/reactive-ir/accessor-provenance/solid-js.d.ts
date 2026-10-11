@@ -1,7 +1,7 @@
 declare namespace JSX {
   type Element = unknown;
   interface ElementChildrenAttribute { children: {}; }
-  interface IntrinsicElements { p: { children?: unknown }; button: { onClick?: () => void; children?: unknown }; }
+  interface IntrinsicElements { p: { children?: unknown }; span: { children?: unknown }; button: { onClick?: () => void; children?: unknown }; }
 }
 declare module "@solidjs/web" { export namespace JSX { type Element = unknown; } }
 

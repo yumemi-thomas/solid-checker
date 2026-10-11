@@ -9,6 +9,99 @@ use solid_facts_backend::{
 };
 
 #[test]
+fn refused_anonymous_member_caller_edit_matches_cold_analysis() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/accessor-provenance");
+    let directory = temporary_directory("provenance-caller-edit");
+    for name in [
+        "tsconfig.json",
+        "solid-js.d.ts",
+        "warm-factory.ts",
+        "Warm.tsx",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::copy(
+        fixture.join("node_modules/solid-js/package.json"),
+        stub.join("package.json"),
+    )
+    .unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("Warm.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) = NativeIncrementalSession::open_pipelined(
+        dialect::default_dialect(),
+        project.clone(),
+        typescript,
+    )
+    .unwrap();
+    let first = warm.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let source = fs::read_to_string(&caller)
+        .unwrap()
+        .replace("store.other()", "store.value()");
+    let edited = warm
+        .edit(
+            vec![SourceChange {
+                path: caller.clone(),
+                version: 1,
+                source: Some(source.clone()),
+                compiler_options: CompilerOptions::default(),
+            }],
+            None,
+        )
+        .unwrap();
+    assert!(warm.last_build_timings().source_files_reused > 0);
+    let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
+    let (retained, timings) = incremental
+        .build(&edited, dialect::default_dialect().vocabulary)
+        .unwrap();
+    assert_eq!(
+        timings.interprocedural_graph_reused_files,
+        timings.source_discovery_reused_files
+    );
+    assert!(retained.static_defects.iter().any(|defect| {
+        defect.location.path.as_ref() == caller
+            && defect.analysis_context == "returned-callable-outside-source-universe"
+            && matches!(
+                defect.kind,
+                solid_reactive_ir::StaticDefectKind::ReactiveDispatchUnresolved { .. }
+            )
+    }));
+    assert!(
+        !retained
+            .reads
+            .iter()
+            .any(|read| read.location.path.as_ref() == caller)
+    );
+    assert_eq!(
+        retained, fresh,
+        "a refused anonymous member must not change the graph node universe across caller edits"
+    );
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn native_incremental_session_reuses_oxc_and_solid_facts() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,

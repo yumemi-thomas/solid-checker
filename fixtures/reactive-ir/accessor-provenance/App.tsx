@@ -168,3 +168,145 @@ export function ObjectConsumerTracked() {
   const decor = makeTrackedDecor();
   return <p>{decor.notes()}</p>;
 }
+
+function nestedCollection(): { inner: { rows: () => number } } {
+  const [rows] = createSignal(1);
+  return { inner: { rows } };
+}
+function replaceInner(inner: { rows: () => number }) { inner.rows = () => 0; }
+export function NestedHelperMutation() {
+  const store = nestedCollection();
+  replaceInner(store.inner);
+  const value = store.inner.rows();
+  return <p>{value}</p>;
+}
+export function NestedAliasMutation() {
+  const store = nestedCollection();
+  const inner = store.inner;
+  inner.rows = () => 0;
+  const value = store.inner.rows();
+  return <p>{value}</p>;
+}
+export function NestedOpaqueHelper() {
+  const store = nestedCollection();
+  unknown(store.inner);
+  const value = store.inner.rows();
+  return <p>{value}</p>;
+}
+export function NestedUnmutated() {
+  const store = nestedCollection();
+  const value = store.inner.rows();
+  return <p>{value}</p>;
+}
+export function MixedInstances() {
+  const unproven = makeDecor();
+  unknown(unproven);
+  const tracked = makeDecor();
+  return <p>{tracked.notes()}</p>;
+}
+export function MixedSameInstance() {
+  const decor = makeDecor();
+  unknown(decor);
+  return <p>{decor.notes()}</p>;
+}
+export function MemberAlias() {
+  const store = collection(1);
+  const rows = store.rows;
+  const value = rows();
+  return <p>{value}</p>;
+}
+export function LoopMemberWrite() {
+  const store = collection(1);
+  for (store.rows of [() => 0]) {}
+  const value = store.rows();
+  return <p>{value}</p>;
+}
+export function LoopMemberKeyWrite() {
+  const store = loopCollection();
+  for (store.label in { replaced: true }) {}
+  const value = store.rows();
+  return <p>{value}</p>;
+}
+function loopCollection(): { rows: () => number; label: string } {
+  const [rows] = createSignal(1);
+  return { rows, label: "initial" };
+}
+function asyncCollection(): { ready: () => Promise<number> } {
+  const [rows] = createSignal(1);
+  return { ready: async () => {
+    await Promise.resolve();
+    return rows();
+  } };
+}
+export function AsyncMemberPreference() {
+  const store = asyncCollection();
+  return <p>{(store.ready() instanceof Promise) && <span>ready</span>}</p>;
+}
+function retainedCondition(): { ready: () => Promise<number> } {
+  const [rows] = createSignal(1);
+  return { ready: () => Promise.resolve().then(() => rows()) };
+}
+export function RetainedMemberPreference() {
+  const store = retainedCondition();
+  return <p>{(store.ready() instanceof Promise) && <span>ready</span>}</p>;
+}
+export function SynchronousMemberPreference() {
+  const store = collection(1);
+  return <p>{store.rows() > 0 && <span>ready</span>}</p>;
+}
+export function DirectMemoPreference() {
+  const value = memo();
+  return <p>{value.value() > 0 && <span>ready</span>}</p>;
+}
+function makeRunner() {
+  return { run: (read: () => number) => read() };
+}
+export function ParameterCallback() {
+  const [count] = createSignal(1);
+  const runner = makeRunner();
+  const value = runner.run(count);
+  return <p>{value}</p>;
+}
+export function ClosureParameterCallback() {
+  const [count] = createSignal(1);
+  const runner = makeRunner();
+  const value = runner.run(() => count());
+  return <p>{value}</p>;
+}
+function makeDeferredRunner() {
+  return { run: (read: () => number) => Promise.resolve().then(read) };
+}
+export function DeferredParameterCallback() {
+  const [count] = createSignal(1);
+  const runner = makeDeferredRunner();
+  const value = runner.run(count);
+  return <p>{value instanceof Promise ? "waiting" : "ready"}</p>;
+}
+
+function aliasFactory(): { rows: () => number } {
+  const [rows] = createSignal(1);
+  const result = { rows };
+  return result;
+}
+export function ReturnedObjectAlias() {
+  const store = aliasFactory();
+  const value = store.rows();
+  return <p>{value}</p>;
+}
+export function ContextEscaped() {
+  const account = useAccount();
+  unknown(account);
+  const value = account.state();
+  return <p>{value}</p>;
+}
+export function ContextMemberAlias() {
+  const account = useAccount();
+  const state = account.state;
+  const value = state();
+  return <p>{value}</p>;
+}
+export const exportedStore = collection(1);
+export function ExportedReceiver() {
+  const value = exportedStore.rows();
+  return <p>{value}</p>;
+}
