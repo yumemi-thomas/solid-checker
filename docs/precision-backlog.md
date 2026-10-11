@@ -29462,8 +29462,22 @@ event and plain-member controls acquire no violations. Mutable or escaped
 containers, aliases/destructuring, spread/computed/getter/method literals,
 alternative returns, defaulted contexts, multiple providers, compiled provider
 calls and unknown implementation targets remain outside this proof. The ordinary
-returned-getter boundary above is unchanged. Kui's @kui/kernel implementation
-lies outside its analyzed solution leaf and still needs package/source authority.
+returned-getter boundary above is unchanged. Source admission is the Type Facts
+program's non-declaration import closure, not only the tsconfig include list.
+Kui's shell resolves its workspace symlink and @kui/kernel's source entrypoint,
+so exact implementations present in that closure can supply this proof without
+a package contract. A declaration-only or absent implementation still needs
+package/source authority; the package name and Accessor type supply none.
+
+The round-2 false-positive fix withholds definition-site interprocedural reads
+inside object-stored callables, including separately bound shorthand members
+and transparent wrappers with exact binder identity. JSX-returning callback
+members do not borrow component execution merely because component discovery
+recognizes their return. Their summaries remain available to exact consumer
+calls, whose own body/JSX/effect execution establishes the role. Callback prop
+objects whose invocation is not projected acquire no guessed body violation.
+The fixture pins both cross-file JSX consumer shapes and an exact body-call
+positive; this is not general callback-prop invocation analysis.
 
 Strict published rc.13 typing checks, scoped snapshots and focused native checks
 are recorded in rust/target/research/accessor-provenance/RESULT.md. Corpus recall,

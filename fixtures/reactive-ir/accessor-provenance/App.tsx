@@ -110,3 +110,38 @@ export function RefusedFactories(props: { flag: boolean; key: string }) {
   const values = [a.rows(), b.rows(), c.rows()];
   return <p>{values.join()}</p>;
 }
+
+import { AttributeConsumer, ExpressionConsumer } from "./consumer";
+
+export function PropObjectNotes() {
+  const feed = collection(1);
+  const notes = () => {
+    const row = feed.rows();
+    return <p>{row}</p>;
+  };
+  const decor = { notes };
+  return <AttributeConsumer decor={decor} />;
+}
+export function PropObjectHeader() {
+  const feed = collection(1);
+  const decor = {
+    header: () => {
+      const head = feed.selected();
+      return <p>{head}</p>;
+    },
+  };
+  return <ExpressionConsumer decor={decor} />;
+}
+function makeDecor() {
+  const feed = collection(1);
+  const notes = () => {
+    const row = feed.rows();
+    return <p>{row}</p>;
+  };
+  return { notes };
+}
+export function ObjectConsumerBody() {
+  const decor = makeDecor();
+  const value = decor.notes();
+  return <p>{value}</p>;
+}

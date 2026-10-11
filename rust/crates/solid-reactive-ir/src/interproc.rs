@@ -422,6 +422,26 @@ fn runs_in_unproven_stored_literal(
     }
 }
 
+/// An object member retains a callable; constructing or passing the object
+/// does not invoke it. A JSX-returning member can satisfy component discovery
+/// without having a render invocation, so that classification must not lend
+/// its definition a body role. Its summary still projects reads at exact
+/// calls, with those calls' own execution roles.
+fn runs_in_object_callable(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.ast.functions_body_containing(span).any(|function| {
+        let binding = function_binding_name(file, function).map(|name| name.span);
+        file.ast.object_properties.iter().any(|property| {
+            let value = file
+                .ast
+                .peel_ts_sugar_span(property.shorthand_binding.unwrap_or(property.value));
+            value == function.span
+                || binding.is_some_and(|binding| {
+                    value == binding || file.ast.reference_declaration(value) == Some(binding)
+                })
+        })
+    })
+}
+
 fn is_retained_value_position(
     file: &solid_facts::FileFacts,
     literal: Span,
@@ -6120,6 +6140,9 @@ fn interprocedural_result_reads_for_file(
                 | ExecutionRole::DiscardedRendering
         ) {
             dispatch_obligations.truncate(obligations_before);
+        }
+        if runs_in_object_callable(file, call.callee) {
+            continue;
         }
         if (inside_non_component_function(file, call.callee, lookup)
             || runs_in_unproven_stored_literal(file, call.callee, entities, symbol_names, lookup))

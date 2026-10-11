@@ -164,6 +164,26 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
+      "start": 4248,
+      "end": 4261,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-provenance/consumer.tsx",
+      "start": 203,
+      "end": 309,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/accessor-provenance/context.tsx",

@@ -10,6 +10,16 @@ and two providers must not acquire a guessed violation.
 An async helper's after-await read must not borrow the effect apply role of its
 initial entry; that detached continuation remains uncertifiable.
 
+PropObjectNotes and PropObjectHeader retain JSX-returning callbacks in a prop
+object. The cross-file consumers invoke them in a JSX attribute and through a
+helper in a JSX expression; their definitions must acquire no violation from
+their enclosing component or from returning JSX. Prop-object invocation
+projection is not claimed: the current exported-consumer dispatch obligation
+may remain. ObjectConsumerBody supplies the positive: an exact factory returns
+the notes closure and the consumer invokes decor.notes() in its own body,
+where SC1001 must retain the original signal read. Object construction itself
+never proves callback invocation.
+
 The reduced stub preserves the published rc.13 claim-bearing signal/memo,
 effect and context signatures (including effect cleanup-or-void returns).
 Renderer and unused options are scaffolding. The independent published-typing

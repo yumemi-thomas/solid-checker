@@ -625,4 +625,38 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn object_callable_definitions_never_supply_their_invocation_role() {
+        for (source, stored) in [
+            ("const decor = { header: () => read() };", true),
+            ("const notes = () => read(); const decor = { notes };", true),
+            (
+                "const notes = () => read(); const decor = { notes: (notes as () => number) };",
+                true,
+            ),
+            ("consume({ header: () => inline(() => read()) });", true),
+            (
+                "const notes = () => read(); function other(notes) { return { notes }; }",
+                false,
+            ),
+            (
+                "function Consumer() { const value = read(); return value; }",
+                false,
+            ),
+        ] {
+            let file = file(source);
+            let read = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| call.static_callee(&file.source) == Some("read"))
+                .unwrap();
+            assert_eq!(
+                super::super::runs_in_object_callable(&file, read.span),
+                stored,
+                "{source}"
+            );
+        }
+    }
 }
