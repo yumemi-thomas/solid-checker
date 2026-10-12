@@ -29603,14 +29603,19 @@ wrapper channel parked on `wip/provenance-2`; with it, that site is SC1001.
 
 Remaining approximations:
 
-- SC2003's own-setter exemption (`upstream_compat/shared_reactivity.rs`,
-  `inside_own_setter_callback`) proves the exemption only for a callee that
-  resolves to the own `createStore` tuple's second slot. Any other callee keeps
-  the violation, including one that is the own setter at runtime: an alias
-  (`const s = setStore`), a member (`holder.set`), a call (`pick()`) or a
-  conditional of setters. Those are false violations. An unresolved callee
-  should make the write uncertifiable, and only a proven other target should
-  keep SC2003. This is pre-existing, and the rc.13 corpus has no SC2003 row.
+- Resolved: SC2003's own-setter exemption used to keep the violation for any
+  callee not proven to be the own tuple slot, including the own setter at
+  runtime through an alias, a member, `pick()` or a conditional. The
+  pre-filter index had accidentally exempted own-first composites
+  (`setStore.bind(null)(…)`) through leading-token identity, and the exact
+  index exposed them as false SC2003s. `enclosing_setter` is now three-valued:
+  own setter exempts, a proven other target (a primitive-created tuple's
+  setter, or a standard-library function that does not invoke a handed
+  function value) keeps the violation, and anything else is uncertifiable.
+  Still open (pre-existing false-violation risk): a write in a lexically
+  separate function handed to the own setter (`const f = () => { store.x = 1 };
+  setStore(f)`) has no enclosing callback argument, so it keeps SC2003 though
+  the write commits. The rc.13 corpus has no SC2003 row.
 - A context member withheld by a blocked, ambiguous or unkeyed provider census
   is silent, not an SC9012 obligation: `calls` drops a transported lookup that
   fails without recording an unavailable entry.

@@ -10,6 +10,56 @@
       "start": 1023,
       "end": 1033,
       "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx",
+      "start": 1926,
+      "end": 1936,
+      "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx",
+      "start": 2164,
+      "end": 2174,
+      "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx",
+      "start": 2374,
+      "end": 2384,
+      "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx",
+      "start": 2690,
+      "end": 2700,
+      "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx",
+      "start": 2981,
+      "end": 2991,
+      "fixes": 0
     }
   ]
 }
