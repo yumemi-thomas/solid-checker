@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { SourceMap } from "node:module";
-import { bootstrapFeedbackEntry, feedbackEntryBootstrapPlugin, resolveFeedbackEntries, validateFeedbackDocument, validateFeedbackServedEntries } from "../scripts/feedback-entry-bootstrap.mjs";
+import { bootstrapFeedbackEntry, completeFeedbackEntryOutput, feedbackEntryBootstrapPlugin, normalizeFeedbackEntryRequest, pinFeedbackEntryOutput, resolveFeedbackEntries, validateFeedbackDocument, validateFeedbackServedEntries } from "../scripts/feedback-entry-bootstrap.mjs";
 import { captureFeedbackOptimizer, configureFeedbackOptimizer, createFeedbackOptimizerObserver, resolveFeedbackRuntime } from "../scripts/feedback-optimizer.mjs";
-import { feedbackReadPlugin, mergeDocumentStates } from "../scripts/feedback-browser.mjs";
-import { createServer } from "vite";
+import { feedbackReadPlugin, mergeDocumentStates, mergeFeedbackServerConfiguration } from "../scripts/feedback-browser.mjs";
+import { createServer, mergeConfig } from "vite";
 
 test("optimizer retains CommonJS includes and discovery while excluding all Solid runtime subpaths", () => {
   const options = () => ({ noDiscovery: true, include: ["solid-js", "solid-js/store", "@solidjs/signals", "style-to-js", "a > @solidjs/web", "solid-js > cjs-helper"], exclude: ["other"] });
@@ -44,6 +44,42 @@ test("entry prefix preserves bytes and exact line/column attribution", () => {
   assert.equal(result.code, 'import "virtual:bootstrap";\n' + code);
   const map = new SourceMap(result.map);
   assert.deepEqual(map.findEntry(2, 17), { generatedLine: 2, generatedColumn: 17, originalSource: "/app.js", originalLine: 1, originalColumn: 17, name: undefined });
+  const completed = completeFeedbackEntryOutput(result, "/app.js", "\0bootstrap", "/");
+  assert.equal(completed.code, 'import "/@id/__x00__bootstrap";\n' + result.code);
+  assert.deepEqual(new SourceMap(completed.map).findEntry(3, 17), { ...map.findEntry(2, 17), generatedLine: 3 });
+  assert.equal(completeFeedbackEntryOutput(completed, "/app.js", "\0bootstrap", "/"), completed);
+});
+
+test("physical and query-sensitive virtual entry selection matches Vite's HTTP transform IDs", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-entry-request-")));
+  let server;
+  try {
+    writeFileSync(join(root, "entry.js"), "export const physical = true;");
+    const transformed = [], entries = new Set();
+    server = await createServer({ root, base: "/app/", configFile: false, logLevel: "silent",
+      server: { host: "127.0.0.1", port: 0 }, optimizeDeps: { noDiscovery: true }, plugins: [{
+        name: "query-sensitive-entry",
+        resolveId(id) { if (id.startsWith("virtual:entry?")) return "\0" + id;
+          if (id.startsWith("\0virtual:entry?")) return id; if (id === "virtual:bootstrap") return "\0bootstrap"; },
+        load(id) { if (id.startsWith("\0")) return "export const virtual = true;"; },
+        transform(_code, id) { transformed.push(id); }
+      }, feedbackEntryBootstrapPlugin(entries, "virtual:bootstrap")] });
+    await server.listen();
+    const documentUrl = `http://127.0.0.1:${server.httpServer.address().port}/app/`;
+    for (const path of ["entry.js", "@id/virtual:entry", "@id/__x00__virtual:entry"])
+      for (const encoded of ["%26", "%2F", "%3F", "%23"]) {
+        const url = new URL(`${path}?label=a${encoded}b&t=1234567890123&import=`, documentUrl).href;
+        const [selected] = await resolveFeedbackEntries([{ url }], documentUrl, server);
+        entries.add(selected.id);
+        const response = await fetch(url, { headers: { "sec-fetch-dest": "script" } });
+        const code = await response.text();
+        assert.equal(response.status, 200, code);
+        assert(transformed.includes(selected.id), `Selected ID did not reach the actual HTTP transform: ${selected.id}`);
+        assert(selected.id.endsWith(`?label=a${encoded}b`));
+        pinFeedbackEntryOutput({ code }, selected.id, "\0bootstrap", "/app/");
+      }
+    assert.equal(normalizeFeedbackEntryRequest("/app/@id/__x00__entry?t=1234567890123", "/app/"), "\0entry");
+  } finally { if (server) await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test("bootstrap transforms only selected client entries, leaving virtual helpers, CSS and SSR alone", () => {
@@ -54,6 +90,10 @@ test("bootstrap transforms only selected client entries, leaving virtual helpers
   assert.equal(plugin.transform.call({}, "run();", "/entry.js", { ssr: true }), null);
   assert.equal(plugin.transform.call({ environment: { name: "ssr" } }, "run();", "/entry.js"), null);
   assert.deepEqual(observed, [...entries]);
+  const reader = feedbackReadPlugin({ snapshot: {}, runtimeInputs: new Map(), coverage: {} });
+  assert.equal(reader.transformIndexHtml()[0].attrs.src, "/@id/virtual:solid-checker-feedback-entry");
+  assert.equal(reader.transformIndexHtml("", { server: { config: { base: "/app/" } } })[0].attrs.src,
+    "/app/@id/virtual:solid-checker-feedback-entry");
 });
 
 test("middleware cannot replace or add module entries while retaining a successful binding", () => {
@@ -64,28 +104,50 @@ test("middleware cannot replace or add module entries while retaining a successf
   assert.throws(() => validateFeedbackServedEntries([entries[0].url, null], entries, [helper]), /unselected module entry/);
 });
 
-test("entry bootstrap subscribes and binds before entry dependencies emit reads and diagnostics", async () => {
+for (const late of [false, true]) test(`entry bootstrap precedes application post imports and Vite helpers (hook-order-post=${late})`, async () => {
   const plugin = feedbackReadPlugin({ snapshot: {}, runtimeInputs: new Map(), coverage: {} });
   const data = code => "data:text/javascript;base64," + Buffer.from(code).toString("base64");
-  const messages = [], runtime = data(`export const reads=globalThis.__solidCheckerReads={events:[],diagnostics:[],stats:{reads:0,retained:0,dropped:0,bytes:0},scopes:{rows:[],dropped:0},diagnostic(e){this.diagnostics.push(e)}};`);
-  const solid = data(`export const OBSERVE={diagnostics:{subscribe(callback){globalThis.__feedbackEmit=callback}}};`);
+  const messages = [], runtime = data(`export const reads=globalThis.__solidCheckerReads={events:[],diagnostics:[],stats:{reads:0,retained:0,dropped:0,bytes:0},scopes:{rows:[],dropped:0},diagnostic(e){this.diagnostics.push(e)}}; // late=${late}`);
+  const solid = data(`export const OBSERVE={diagnostics:{subscribe(callback){globalThis.__feedbackEmit=callback}}}; // late=${late}`);
   const bootstrap = data(plugin.load("\0solid-checker-feedback-entry").replace(JSON.stringify("/@fs" + new URL("../scripts/feedback-read-runtime.mjs", import.meta.url).pathname), JSON.stringify(runtime))
     .replace("'solid-js'", JSON.stringify(solid)));
   const dependency = data(`if(!globalThis.__solidCheckerDocument)throw Error('entry ran before bootstrap');
-    globalThis.__solidCheckerReads.events.push({kind:'untracked-read'});globalThis.__feedbackEmit({code:'STRICT_READ_UNTRACKED'});`);
+    globalThis.__solidCheckerReads.events.push({kind:'untracked-read'});globalThis.__feedbackEmit({code:'STRICT_READ_UNTRACKED'}); // late=${late}`);
   const previous = Object.fromEntries(["addEventListener", "__solidCheckerFlush", "__solidCheckerDocument", "__solidCheckerReads", "__feedbackEmit"].map(key => [key, globalThis[key]]));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-entry-order-")));
+  let server;
   try {
     globalThis.addEventListener = () => {};
     globalThis.__solidCheckerFlush = payload => messages.push(JSON.parse(payload));
-    await import(data(bootstrapFeedbackEntry(`import ${JSON.stringify(dependency)};`, "\0actual-entry", bootstrap).code));
+    writeFileSync(join(root, "entry.js"), "globalThis.__feedbackEntryExecuted = true; if (import.meta.hot) {};");
+    const entryId = join(root, "entry.js"), pins = [];
+    const prepend = (code, id) => { if (id === entryId) return { code: `import ${JSON.stringify(dependency)};\n${code}`, map: null }; };
+    const application = { root, configFile: false, logLevel: "silent", optimizeDeps: { noDiscovery: true }, plugins: [{
+      name: "application-post-startup", enforce: "post",
+      transform: late ? { order: "post", handler: prepend } : prepend
+    }] };
+    const collector = { plugins: [{ name: "bootstrap-loader", resolveId(id) { if (id === "virtual:bootstrap") return "\0bootstrap"; },
+      load(id) { if (id === "\0bootstrap") return "export {};"; } },
+      feedbackEntryBootstrapPlugin(new Set([entryId]), "virtual:bootstrap", (_id, code) => pins.push(code))] };
+    server = await createServer(mergeFeedbackServerConfiguration({ mergeConfig }, application, collector));
+    const transformedEntry = completeFeedbackEntryOutput(await server.transformRequest("/entry.js"), entryId, "\0bootstrap", "/");
+    pinFeedbackEntryOutput(transformedEntry, entryId, "\0bootstrap", "/");
+    if (!late) assert(pins[0].startsWith(`import ${JSON.stringify(dependency)};`));
+    assert(transformedEntry.code.includes(`import ${JSON.stringify(dependency)};`));
+    const client = data("export const createHotContext = () => ({});");
+    await import(data(transformedEntry.code.replaceAll(JSON.stringify("/@id/__x00__bootstrap"), JSON.stringify(bootstrap))
+      .replace(JSON.stringify("/@vite/client"), JSON.stringify(client)).replaceAll("import.meta.hot", "globalThis.__feedbackHot")));
+    assert.equal(globalThis.__feedbackEntryExecuted, true);
     const final = { id: globalThis.__solidCheckerDocument, state: globalThis.__solidCheckerReads };
     validateFeedbackDocument(final);
     const result = mergeDocumentStates(messages, final);
     assert.deepEqual(result.documents, { loaded: 1, reported: 1, lost: 0 });
     assert.equal(result.events.length, 1); assert.equal(result.diagnostics[0].code, "STRICT_READ_UNTRACKED");
     assert.throws(() => validateFeedbackDocument(null), /bootstrap did not bind/);
-    assert.throws(() => validateFeedbackDocument(final, { loaded: 1 }, 2), /missed a navigated document/);
+    assert.throws(() => pinFeedbackEntryOutput({ code: 'import "startup";\n' + transformedEntry.code }, entryId, "\0bootstrap", "/"), /does not start/);
   } finally {
+    if (server) await server.close(); rmSync(root, { recursive: true, force: true }); delete globalThis.__feedbackEntryExecuted;
+    delete globalThis.__feedbackHot;
     for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; }
   }
 });
@@ -135,6 +197,7 @@ test("optimized metadata and bundles are pinned; runtime inlining, substitution 
     writeFileSync(join(ssr, "cjs.js"), 'export {value} from "./chunk.js";');
     writeFileSync(join(ssr, "_metadata.json"), JSON.stringify({ ...metadata, browserHash: "ssr-browser" }));
     const observer = createFeedbackOptimizerObserver(cache, () => {}, sourcesForFacades);
+    observer.configure({ cacheDir: cache, environments: { client: {}, ssr: {} } });
     observer.observe(readFileSync(file, "utf8"), file + "?v=first");
     assert.equal(observer.finish().generations.find(row => row.environment === "ssr").metadata.browserHash, "ssr-browser");
     writeFileSync(file, 'export {other} from "./chunk.js";');
@@ -143,6 +206,56 @@ test("optimized metadata and bundles are pinned; runtime inlining, substitution 
     observer.observe(readFileSync(file, "utf8"), file + "?v=second");
     assert.equal(observer.finish().generations.filter(row => row.environment === "client").length, 2);
     assert.throws(() => observer.observe("substituted bytes", file + "?v=second"), /previous transform changed/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("retired and processing optimizer directories never invent environments or require inventories", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-retired-")));
+  try {
+    const cache = join(root, "cache"); mkdirSync(cache);
+    const src = join(root, "input.js"); writeFileSync(src, "export {};");
+    const metadata = { hash: "hash", lockfileHash: "lock", configHash: "config", browserHash: "current",
+      optimized: { cjs: { file: "facade.js", src } }, chunks: {} };
+    for (const directory of ["deps", "deps_ssr", "deps_temp_retired", "deps_ssr_temp_retired", "deps_unknown"]) {
+      mkdirSync(join(cache, directory));
+      writeFileSync(join(cache, directory, "_metadata.json"), JSON.stringify(metadata));
+      writeFileSync(join(cache, directory, "facade.js"), "export {};");
+    }
+    const sources = new Map(["client", "ssr"].map(environment => [environment, { environment, id: "actual-input" }]));
+    let deleting = false, deleted = false;
+    const retired = ["deps_temp_retired", "deps_ssr_temp_retired"];
+    const observer = createFeedbackOptimizerObserver(cache, () => {
+      if (deleting && !deleted) {
+        for (const directory of retired) rmSync(join(cache, directory), { recursive: true });
+        deleted = true;
+      }
+    }, sources);
+    observer.configure({ cacheDir: cache, environments: { client: {}, ssr: {} } });
+    assert.deepEqual(observer.finish().generations.map(row => row.environment), ["client", "ssr"]);
+    // Deterministically delete retired outputs during a committed generation's
+    // finalization, as Vite's asynchronous removal can do independently.
+    deleting = true;
+    assert.deepEqual(observer.finish().generations.map(row => row.environment), ["client", "ssr"]);
+    assert(deleted);
+    assert.throws(() => observer.observe("export {};", join(cache, "deps_unknown/facade.js")), /configured committed environment/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("configured cache aliases preserve Vite metadata's lexical relative source paths", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-cache-alias-")));
+  try {
+    const actual = join(root, "deep/cache"), alias = join(root, "alias");
+    mkdirSync(join(actual, "deps"), { recursive: true }); symlinkSync(actual, alias);
+    const src = join(root, "input.js"); writeFileSync(src, "export {};");
+    const file = join(alias, "deps/facade.js"); writeFileSync(file, "export {};");
+    writeFileSync(join(alias, "deps/_metadata.json"), JSON.stringify({ hash: "hash", lockfileHash: "lock", configHash: "config",
+      browserHash: "browser", optimized: { cjs: { file: "facade.js", src: "../../input.js" } }, chunks: {} }));
+    const recorded = [], observer = createFeedbackOptimizerObserver(alias, path => recorded.push(path),
+      new Map([["source", { environment: "client", id: src }]]));
+    observer.configure({ cacheDir: alias, environments: { client: {} } });
+    observer.observe("export {};", file);
+    assert.equal(observer.finish().generations[0].dependencies[0].src, src);
+    assert(recorded.includes(src));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

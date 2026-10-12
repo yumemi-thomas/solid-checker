@@ -18,17 +18,23 @@ export async function resolveFeedbackEntries(rows, documentUrl, server) {
     assert(row.url, "Browser feedback requires external module entries; inline module entries cannot be bootstrapped exactly");
     const url = new URL(row.url);
     assert.equal(url.origin, origin, "Browser feedback cannot bootstrap a foreign module entry");
-    let request = url.pathname + url.search;
-    if (request.startsWith(base)) request = "/" + request.slice(base.length);
+    const request = normalizeFeedbackEntryRequest(url.pathname + url.search, base);
     if (request === "/@vite/client") continue;
-    let id = decodeURIComponent(request);
-    if (id.startsWith("/@id/")) id = id.slice(5).replace("__x00__", "\0");
-    const resolved = await client.pluginContainer.resolveId(id);
+    const resolved = await client.pluginContainer.resolveId(request);
     assert(resolved && !resolved.external, `Browser feedback cannot resolve module entry: ${row.url}`);
     entries.push({ url: row.url, request, id: resolved.id });
   }
   assert(entries.length, "Browser feedback needs a resolvable application module entry");
   return entries;
+}
+
+// Vite 8's base/transform middleware helpers are private. Mirror its exact
+// transport operations, including preserving URI-reserved query characters.
+export function normalizeFeedbackEntryRequest(request, base = "/") {
+  if (request.startsWith(base)) request = "/" + request.slice(base.length);
+  request = decodeURI(request.replace(/\bt=\d{13}&?\b/, "").replace(/[?&]$/, "")).replace("__x00__", "\0");
+  request = request.replace(/(\?|&)import=?(?:&|$)/, "$1").replace(/[?&]$/, "");
+  return request.startsWith("/@id/") ? request.slice(5).replace("__x00__", "\0") : request;
 }
 
 // Leave the entry bytes otherwise intact. A first static import evaluates the
@@ -47,9 +53,31 @@ export function bootstrapFeedbackEntry(code, id, specifier) {
   } };
 }
 
-export function validateFeedbackDocument(final, documents, navigated = 0) {
+export function validateFeedbackDocument(final) {
   assert(final?.id && final.state?.stats, "Browser feedback bootstrap did not bind the loaded document; runtime collection is unavailable");
-  assert(!documents || documents.loaded >= navigated, "Browser feedback bootstrap missed a navigated document; runtime collection is unavailable");
+}
+
+export function pinFeedbackEntryOutput(result, id, specifier, base) {
+  const expected = base + "@id/" + specifier.replace("\0", "__x00__");
+  assert(result?.code.startsWith(`import ${JSON.stringify(expected)};`),
+    `Completed entry output does not start with the collector import: ${id}`);
+  return result.code;
+}
+
+export function completeFeedbackEntryOutput(result, id, specifier, base) {
+  assert(typeof result?.code === "string", "Selected entry has no completed Vite output");
+  const prefix = `import ${JSON.stringify(base + "@id/" + specifier.replace("\0", "__x00__"))};\n`;
+  // Import analysis itself can prepend Vite's HMR/dynamic-import helpers.
+  // Reassert ordering at the HTTP transform boundary, after every hook. The
+  // already-resolved bootstrap dependency remains in Vite's module graph;
+  // importing it again does not evaluate it twice. Shift the completed map.
+  if (!result.code.startsWith(prefix)) {
+    assert(!result.map || typeof result.map.mappings === "string", "Completed entry source map cannot be shifted exactly");
+    result = { ...result, code: prefix + result.code,
+      map: result.map ? { ...result.map, mappings: ";" + result.map.mappings } : null };
+  }
+  pinFeedbackEntryOutput(result, id, specifier, base);
+  return result;
 }
 
 export function validateFeedbackServedEntries(urls, entries, auxiliary) {

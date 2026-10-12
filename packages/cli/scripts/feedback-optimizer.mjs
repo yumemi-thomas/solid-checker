@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const feedbackRuntimePackages = ["solid-js", "@solidjs/signals", "@solidjs/web"];
@@ -76,8 +76,9 @@ export async function resolveFeedbackRuntime(id, importer, options, resolveId, i
 
 // Optimizer artifacts are ephemeral; validate them before cache teardown and
 // retain their pins in the report rather than replaying deleted files later.
-export function captureFeedbackOptimizer(cache, record, observed = new Map(), sources = new Map(), environment = "client") {
-  const metadataPath = join(cache, environment === "client" ? "deps" : "deps_" + environment, "_metadata.json");
+export function captureFeedbackOptimizer(cache, record, observed = new Map(), sources = new Map(), environment = "client",
+  directory = join(cache, environment === "client" ? "deps" : "deps_" + environment)) {
+  const metadataPath = join(directory, "_metadata.json");
   if (!existsSync(metadataPath)) {
     assert.equal(observed.size, 0, "Optimized dependency bytes were served without optimizer metadata");
     return { metadata: null, dependencies: [], chunks: [], inputs: [], sources: [] };
@@ -127,28 +128,43 @@ export function captureFeedbackOptimizer(cache, record, observed = new Map(), so
 
 export function createFeedbackOptimizerObserver(cache, record, sources = new Map()) {
   const generations = new Map();
+  const directories = new Map([["client", join(cache, "deps")]]);
   const capture = environment => {
-    const directory = environment === "client" ? "deps" : "deps_" + environment;
-    const metadata = join(cache, directory, "_metadata.json");
+    const directory = directories.get(environment);
+    assert(directory, "Optimized dependency is outside a configured environment");
+    const metadata = join(directory, "_metadata.json");
     assert(existsSync(metadata), "Optimized dependency bytes were served without optimizer metadata");
     const key = environment + ":" + hash(readFileSync(metadata));
     let generation = generations.get(key);
     if (!generation) {
       generation = { environment, ...captureFeedbackOptimizer(cache, record, new Map(),
-        new Map([...sources].filter(([, row]) => row.environment === environment)), environment), transforms: [] };
+        new Map([...sources].filter(([, row]) => row.environment === environment)), environment, directory), transforms: [] };
       generations.set(key, generation);
     }
     return generation;
   };
   return {
+    configure(config) {
+      directories.clear();
+      // getDepsCacheDir is private in Vite 8: its exact committed directory is
+      // resolved cacheDir + deps + the configured environment's suffix.
+      for (const [name, options] of Object.entries(config.environments ?? { client: config })) {
+        const cacheDir = resolve(options.cacheDir ?? config.cacheDir), suffix = name === "client" ? "deps" : "deps_" + name;
+        assert(inside(realpathSync(cache), join(realpathSync(cacheDir), suffix)), "Optimizer environment cache escaped this run's cache");
+        // Metadata's relative paths use Vite's lexical cache path. Resolving
+        // them against its canonical alias can change the meaning of `../`.
+        const directory = join(cacheDir, suffix);
+        directories.set(name, directory);
+      }
+    },
     observe(code, id) {
       const path = id.split("?")[0];
       if (!existsSync(path)) return false;
       const canonical = realpathSync(path);
       if (!inside(realpathSync(cache), canonical)) return false;
-      const directory = relative(realpathSync(cache), canonical).split(sep)[0];
-      assert(directory === "deps" || directory.startsWith("deps_"), "Optimized dependency is outside an inventoried environment");
-      const generation = capture(directory === "deps" ? "client" : directory.slice(5));
+      const environment = [...directories].find(([, directory]) => existsSync(directory) && inside(realpathSync(directory), canonical))?.[0];
+      assert(environment, "Optimized dependency is outside a configured committed environment");
+      const generation = capture(environment);
       const pin = generation.inputs.find(row => row.path === canonical);
       assert(pin, `Served optimizer output is absent from metadata: ${canonical}`);
       assert.equal(hash(readFileSync(canonical)), pin.sha256, `Served optimized dependency changed within its generation: ${canonical}`);
@@ -160,11 +176,11 @@ export function createFeedbackOptimizerObserver(cache, record, sources = new Map
       // Earlier generations were pinned when loaded; Vite may have replaced
       // their files during legitimate reoptimization. Validate the final ones
       // before teardown, without misidentifying old bytes as the new output.
-      for (const directory of readdirSync(cache)) {
-        if (!(directory === "deps" || directory.startsWith("deps_")) || !existsSync(join(cache, directory, "_metadata.json"))) continue;
-        const environment = directory === "deps" ? "client" : directory.slice(5), generation = capture(environment);
+      for (const [environment, directory] of directories) {
+        if (!existsSync(join(directory, "_metadata.json"))) continue;
+        const generation = capture(environment);
         captureFeedbackOptimizer(cache, record, new Map(generation.inputs.map(pin => [pin.path, pin])),
-          new Map([...sources].filter(([, row]) => row.environment === environment)), environment);
+          new Map([...sources].filter(([, row]) => row.environment === environment)), environment, directory);
       }
       return { generations: [...generations.values()] };
     }

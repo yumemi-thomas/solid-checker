@@ -11,7 +11,8 @@ import { selectAssertionFeedback } from "./feedback-assertion-selector.mjs";
 import { instrumentFeedbackSource } from "./feedback-source-hook.mjs";
 import { selectReadFeedback } from "./feedback-read-selector.mjs";
 import { classifyUnmappedFrames, createFrameAttributor, operationFrame, siteExpressionKind, summarizeCandidateScopes, summarizeUnmapped } from "./feedback-attribution.mjs";
-import { feedbackEntryBootstrapPlugin, feedbackHtmlEntries, resolveFeedbackEntries, validateFeedbackDocument, validateFeedbackServedEntries } from "./feedback-entry-bootstrap.mjs";
+import { completeFeedbackEntryOutput, feedbackEntryBootstrapPlugin, feedbackHtmlEntries, normalizeFeedbackEntryRequest, resolveFeedbackEntries, validateFeedbackDocument } from "./feedback-entry-bootstrap.mjs";
+import { observeFeedbackDocuments } from "./feedback-documents.mjs";
 import { configureFeedbackOptimizer, createFeedbackOptimizerObserver, feedbackRuntimePackages, resolveFeedbackRuntime } from "./feedback-optimizer.mjs";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -333,7 +334,9 @@ export function mergeFeedbackServerConfiguration(tools, application, collector) 
   // Capture hooks must see original source before an application compiler's
   // `pre` transform. Vite's ordinary merge concatenates application plugins
   // first, which would make instrumentation inspect already compiled code.
-  merged.plugins = [...(collector.plugins ?? []), ...(application.plugins ?? [])];
+  const prefix = plugin => plugin.name === "solid-checker-feedback-entry-bootstrap";
+  merged.plugins = [...(collector.plugins ?? []).filter(plugin => !prefix(plugin)), ...(application.plugins ?? []),
+    ...(collector.plugins ?? []).filter(prefix)];
   return merged;
 }
 
@@ -406,7 +409,8 @@ export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage, record, 
       coverage.bootstrap = { id: virtual, sha256: hash(code) };
       return code;
     },
-    transformIndexHtml() { return [{ tag: "script", attrs: { type: "module", src: "/@id/" + publicId }, injectTo: "head-prepend" }]; },
+    transformIndexHtml(_html, context) { return [{ tag: "script", attrs: { type: "module",
+      src: (context?.server?.config.base ?? "/") + "@id/" + publicId }, injectTo: "head-prepend" }]; },
     transform(code, id) {
       const path = id.split("?")[0];
       if (!path.endsWith("/dist/dev-shared.js")) return null;
@@ -502,6 +506,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
   try {
     server = await tools.createServer(mergeFeedbackServerConfiguration(tools, application, { configFile: false, root, cacheDir: cache,
     plugins: [{ name: "solid-checker-feedback-lifecycle", enforce: "pre",
+      configResolved(config) { optimizer.configure(config); },
       configureServer(allocated) { server = allocated; serverDiagnostics.install(allocated); } },
       feedbackReadPlugin({ snapshot, runtimeInputs, coverage, record, optimizerSources }), {
       name: "solid-checker-feedback-optimizer-output", enforce: "pre",
@@ -538,25 +543,33 @@ async function collectProject(project, scenario, tools, browser, responses = new
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
     context = await browser.newContext(feedbackContextOptions(scenario)); context.setDefaultTimeout(12000);
     await context.route("**/*", route => routeFeedbackRequest(route, origin, responses, blockedRequests, refusedResponses));
-    const page = await context.newPage(), documentMessages = [], navigatedDocuments = new Set();
+    const page = await context.newPage();
     // A raw CDP binding: Playwright's exposed bindings drop calls from a
     // document that is already unloading, which is exactly the flush needed.
     const cdp = await context.newCDPSession(page);
-    cdp.on("Page.frameNavigated", ({ frame }) => {
-      if (!frame.parentId && frame.url !== "about:blank") navigatedDocuments.add(frame.loaderId);
-    });
-    cdp.on("Runtime.bindingCalled", ({ name, payload }) => {
-      if (name !== "__solidCheckerFlush") return;
-      try { documentMessages.push(JSON.parse(payload)); } catch { documentMessages.push({ phase: "malformed" }); }
-    });
-    await cdp.send("Runtime.enable");
-    await cdp.send("Runtime.addBinding", { name: "__solidCheckerFlush" });
-    await cdp.send("Page.enable");
+    const documentObserver = await observeFeedbackDocuments(cdp);
     const documentUrl = new URL(server.config.base, origin).href;
     const entries = await resolveFeedbackEntries(await page.evaluate(feedbackHtmlEntries,
       { html: readFileSync(entry.path, "utf8"), url: documentUrl }), documentUrl, server);
     entry.entries = entries;
     const graph = (server.environments?.client ?? server).moduleGraph;
+    const client = server.environments?.client ?? server, transformRequest = client.transformRequest.bind(client);
+    const bootstrap = await client.pluginContainer.resolveId(bootstrapId);
+    assert(bootstrap && !bootstrap.external, "Collector bootstrap module could not be resolved");
+    client.transformRequest = async (request, ...options) => {
+      let result = await transformRequest(request, ...options);
+      const selected = entries.find(row => row.request === normalizeFeedbackEntryRequest(request));
+      const module = await graph.getModuleByUrl(request);
+      if (selected) assert.equal(module?.id, selected.id, "Selected entry ID differs from the served entry transform ID");
+      if (entryIds.has(module?.id)) {
+        result = completeFeedbackEntryOutput(result, module.id, bootstrap.id, server.config.base);
+        const pin = entryTransforms.get(module.id);
+        assert(pin, "Completed entry has no bootstrap transform");
+        pin.completedSha256 = hash(result.code);
+        result = { ...result, etag: `"${pin.completedSha256}"` };
+      }
+      return result;
+    };
     for (const row of entries) {
       entryIds.add(row.id);
       const module = graph.getModuleById(row.id);
@@ -583,17 +596,15 @@ async function collectProject(project, scenario, tools, browser, responses = new
     const { assertions, checkpoints, failure } = await executeFeedbackScenario(page, scenario);
     await waitForBootstrap();
     const final = await page.evaluate(() => globalThis.__solidCheckerDocument ? { id: globalThis.__solidCheckerDocument,
-      modules: [...document.querySelectorAll('script[type="module"]')].map(script => script.hasAttribute("src") ? script.src : null),
       state: { events: globalThis.__solidCheckerReads?.events ?? [], stats: globalThis.__solidCheckerReads?.stats ?? null,
         scopes: globalThis.__solidCheckerReads?.scopes ?? { rows: [], dropped: 0 }, diagnostics: globalThis.__solidCheckerReads?.diagnostics ?? [] } } : null);
     try { validateFeedbackDocument(final); } catch (error) { await failBootstrap(error); }
-    validateFeedbackServedEntries(final.modules, entries, [new URL("@vite/client", documentUrl).href,
-      new URL("/@id/" + bootstrapId, origin).href]);
+    entry.documents = await documentObserver.finish(page, entries, [new URL("@vite/client", documentUrl).href,
+      new URL("@id/" + bootstrapId, documentUrl).href], final);
     entry.transforms = [...entryTransforms.values()];
-    assert(entries.every(row => entryTransforms.has(row.id)), "Browser feedback did not bootstrap every selected module entry");
-    const raw = mergeDocumentStates(documentMessages, final);
-    validateFeedbackDocument(final, raw.documents, navigatedDocuments.size);
-    raw.documents.topLevelNavigations = navigatedDocuments.size;
+    assert(entries.every(row => entryTransforms.get(row.id)?.completedSha256), "Browser feedback did not bootstrap every selected module entry's completed output");
+    const raw = mergeDocumentStates(documentObserver.messages, final);
+    raw.documents.topLevelNavigations = entry.documents.length;
     coverage.documents = raw.documents;
     const capture = captureTemplate(snapshot), maps = new Map();
     const attribute = createFrameAttributor({ origin, root, sourceFiles, collectorPaths: [realpathSync(runtimePath)],

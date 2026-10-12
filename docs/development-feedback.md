@@ -187,19 +187,33 @@ its bytes. The browser parses that physical HTML in an inert document, using
 its real base-URL and HTML attribute rules. Every external module entry (apart
 from Vite's client) must resolve through Vite's client environment; inline,
 foreign and unresolved module entries refuse. Each selected entry receives a
-first static bootstrap import before its dependencies execute, with an exact
+first static bootstrap import after application client transforms, before its dependencies execute, with an exact
 identity source map. This also binds captured application HTML whose middleware
 bypasses Vite's HTML transforms. Unselected virtual helper/CSS modules and server transforms
 receive no entry prefix. `execution.entry.entries` retains the exact URLs and
-resolved IDs; `transforms` pins the entry code before and after the prefix.
+resolved IDs. Request normalization mirrors Vite's HTTP base stripping, timestamp
+removal, `decodeURI` and `/@id/`/null-marker unwrapping, preserving encoded reserved
+query characters. The served transform's module ID must equal the selected ID.
+`transforms` pins the entry code before and after the prefix and the completed
+Vite output (`completedSha256`); completed output must start with the collector import.
+If Vite import analysis or a hook with late transform ordering prepends a helper,
+the completed-output boundary reasserts the resolved collector import first and
+shifts the existing source map by one line. A repeated static import of that same
+resolved module evaluates the bootstrap only once.
 A twelve-second binding wait precedes scenario actions and final collection, because streamed
 server markup can become visible before its client module executes.
 A loaded document without a telemetry binding, a selected entry without a
 bootstrap transform, or a top-level navigation missing from the bound-document
-records refuses. The final served document must retain the selected module URLs
-and contain no extra module entries beyond Vite's client and the collector's own
-HTML bootstrap; otherwise collection refuses rather than trusting changed
-middleware HTML or an injected entry's ordering.
+records refuses. Each top-level loader must have its own default execution-context
+binding; iframe starts neither satisfy that requirement nor contribute telemetry.
+Every served top-level HTML response is obtained through CDP Network observation,
+bounded to two seconds per body, 1 MiB per response, 8 MiB total and 64 documents.
+Missing, failed, oversized or unavailable bodies refuse explicitly. Each response
+must contain the selected module URLs and no extra module entries beyond Vite's
+client and the collector's own HTML bootstrap, even if startup removes script
+elements or a later navigation serves different entries. `execution.entry.documents`
+retains each response's digest, byte count, entries, frame/loader and bootstrap
+execution-context identity. The final DOM cannot substitute for that history.
 Missing binding failures retain bounded page-error and failed-
 module summaries. `execution.coverage.documents.topLevelNavigations` counts
 distinct CDP document loader IDs, excluding same-document route changes.
@@ -229,6 +243,11 @@ optimizer inputs retain IDs and transformed-code digests, or explicitly mark
 unavailable source bytes for an optimizer API that exposes only the load ID.
 The collector checks loaded optimizer bytes against that generation's inventory,
 then validates the final inventories before removing its temporary cache.
+Environment names and committed cache directories come from resolved Vite
+configuration, using Vite's exact `deps`/`deps_<environment>` convention. Arbitrary
+cache children never create environments. Processing and retired `deps_temp_*`
+and `deps_<environment>_temp_*` directories are ignored, including during their
+asynchronous deletion; earlier observed generations retain their existing pins.
 Legitimate reoptimization retains both old and new generation pins; changed bytes
 under unchanged metadata refuse. Ephemeral output pins remain in the report and
 are not replayed after replacement or deletion. `transforms` records Vite module
