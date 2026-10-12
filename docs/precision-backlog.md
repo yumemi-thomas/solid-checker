@@ -29678,10 +29678,16 @@ Focused retained/cold controls pin handoff/refusal and visible-veto transitions.
 The additive normalized nullish-test operand table supplies syntax identity;
 old absent tables withhold that observation, with no producer/protocol change.
 
-Source-only prediction: recall-r4 Beacon orientation now has its guarded wrapper
-and destructured sibling receiver joins. Compass selectedIssueId/provider-query
-sites remain open: mountShell has two call sites, its store comes through a
-createRoot callback result, and destination helpers are exported. No fresh corpus
-measurement or complete MISS-to-HIT conversion is claimed. No
+Measured on the rc.13 corpus (browser host), together with exact-identifier
+identity (section below): 567 → 568 violations and 3,715 → 3,719 uncertifiable,
+nothing removed. The added violation is the runtime-confirmed recall-r4 Beacon
+miss `tabs/index.tsx:66` (`ctx.orientation()` in effect apply, through the
+guarded `useTabs` wrapper). The four added uncertifiable results are SC9012
+dispatch obligations in expenses-app (three) and an SC1001 obligation in
+viviana-ui-web. Compass selectedIssueId/provider-query sites remain open:
+mountShell has two call sites, its store comes through a createRoot callback
+result, and destination helpers are exported. The context fixtures here are
+applications (`"private": true`), because an open program closes no context
+census. No
 package names, Accessor types, generic callback dispatch, synthetic functions,
 borrowed execution roles or obligation suppression are admitted.

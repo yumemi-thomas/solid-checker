@@ -5,6 +5,44 @@ use crate::process_support::temporary_directory;
 use solid_facts::compiler::CompilerOptions;
 use solid_facts_backend::{NativeIncrementalSession, SourceChange, TypeFactsSession, dialect};
 
+/// The copied fixtures are applications: an open program closes no context
+/// provider census, so every build here is a closed program.
+fn closed_options() -> solid_reactive_ir::RuleOptions {
+    let mut options = solid_reactive_ir::RuleOptions::default();
+    options.runtime.program_boundary = Some(solid_reactive_ir::ProgramBoundary::Closed);
+    options
+}
+
+fn closed_cold(
+    facts: &solid_facts::ProjectFacts,
+    dialect: &dyn solid_dialect::Dialect,
+) -> solid_reactive_ir::Program {
+    solid_reactive_ir::build_with_accepted_contracts_measured(
+        facts,
+        dialect,
+        &solid_reactive_ir::contract_semantics::AcceptedContractIndex::default(),
+        &closed_options(),
+    )
+    .unwrap()
+    .0
+}
+
+fn closed_warm(
+    incremental: &mut solid_reactive_ir::IncrementalBuilder,
+    facts: &solid_facts::ProjectFacts,
+    dialect: &dyn solid_dialect::Dialect,
+) -> (solid_reactive_ir::Program, solid_reactive_ir::BuildTimings) {
+    let (program, timings) = incremental
+        .build_with_accepted_contracts_shared(
+            facts,
+            dialect,
+            &solid_reactive_ir::contract_semantics::AcceptedContractIndex::default(),
+            &closed_options(),
+        )
+        .unwrap();
+    ((*program).clone(), timings)
+}
+
 fn copied_fixture(label: &str, sources: &[&str]) -> PathBuf {
     copied_fixture_named(label, "accessor-provenance", sources)
 }
@@ -80,7 +118,7 @@ fn returned_array_edits_match_cold_in_both_directions() {
             .unwrap();
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (program, _) = incremental.build(&first, vocabulary).unwrap();
+    let (program, _) = closed_warm(&mut incremental, &first, vocabulary);
     let consumer_read = |program: &solid_reactive_ir::Program| {
         program.reads.iter().any(|read| {
             read.location.path.as_ref() == caller
@@ -109,8 +147,8 @@ fn returned_array_edits_match_cold_in_both_directions() {
                 None,
             )
             .unwrap();
-        let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
-        let (warm, _) = incremental.build(&facts, vocabulary).unwrap();
+        let cold = closed_cold(&facts, vocabulary);
+        let (warm, _) = closed_warm(&mut incremental, &facts, vocabulary);
         assert_eq!(consumer_read(&cold), reads, "array transition {version}");
         assert_eq!(
             warm, cold,
@@ -196,7 +234,7 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
             .unwrap();
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (program, _) = incremental.build(&first, vocabulary).unwrap();
+    let (program, _) = closed_warm(&mut incremental, &first, vocabulary);
     let consumer_read = |program: &solid_reactive_ir::Program| {
         program.reads.iter().any(|read| {
             read.location.path.as_ref() == caller
@@ -266,8 +304,8 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
             )
             .unwrap();
         assert!(session.last_build_timings().source_files_reused > 0);
-        let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
-        let (warm, timings) = incremental.build(&facts, vocabulary).unwrap();
+        let cold = closed_cold(&facts, vocabulary);
+        let (warm, timings) = closed_warm(&mut incremental, &facts, vocabulary);
         assert!(
             timings.source_discovery_reused_files > 0,
             "exercise reuse of unchanged caller/factory facts"
@@ -325,7 +363,7 @@ fn context_intermediate_handoff_edits_match_cold_in_both_directions() {
             .unwrap();
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (program, _) = incremental.build(&first, vocabulary).unwrap();
+    let (program, _) = closed_warm(&mut incremental, &first, vocabulary);
     let consumer_read = |program: &solid_reactive_ir::Program| {
         program.reads.iter().any(|read| {
             read.context.as_ref() == "Body"
@@ -354,8 +392,8 @@ fn context_intermediate_handoff_edits_match_cold_in_both_directions() {
                 None,
             )
             .unwrap();
-        let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
-        let (warm, _) = incremental.build(&facts, vocabulary).unwrap();
+        let cold = closed_cold(&facts, vocabulary);
+        let (warm, _) = closed_warm(&mut incremental, &facts, vocabulary);
         assert_eq!(
             consumer_read(&cold),
             reads,
@@ -418,8 +456,8 @@ fn context_intermediate_handoff_edits_match_cold_in_both_directions() {
                     None,
                 )
                 .unwrap();
-            let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
-            let (warm, _) = incremental.build(&facts, vocabulary).unwrap();
+            let cold = closed_cold(&facts, vocabulary);
+            let (warm, _) = closed_warm(&mut incremental, &facts, vocabulary);
             assert_eq!(
                 consumer_read(&cold),
                 expected,
@@ -464,7 +502,7 @@ fn single_call_parameter_edits_match_cold_in_both_directions() {
             .unwrap();
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (program, _) = incremental.build(&first, vocabulary).unwrap();
+    let (program, _) = closed_warm(&mut incremental, &first, vocabulary);
     let consumer_read = |program: &solid_reactive_ir::Program| {
         program.reads.iter().any(|read| {
             read.location.path.as_ref() == caller
@@ -493,8 +531,8 @@ fn single_call_parameter_edits_match_cold_in_both_directions() {
                 None,
             )
             .unwrap();
-        let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
-        let (warm, _) = incremental.build(&facts, vocabulary).unwrap();
+        let cold = closed_cold(&facts, vocabulary);
+        let (warm, _) = closed_warm(&mut incremental, &facts, vocabulary);
         assert_eq!(
             consumer_read(&cold),
             expected,
