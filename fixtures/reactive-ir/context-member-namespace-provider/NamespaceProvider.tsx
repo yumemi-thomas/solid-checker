@@ -1,7 +1,7 @@
 import { createSignal, useContext } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { ThemeContext } from "./theme";
-import * as themes from "./theme";
+import { ThemeContext } from "./theme-context";
+import * as themes from "./theme-context";
 
 export function ThemeProvider(props: { children?: JSX.Element }) {
   const [mode] = createSignal("dark");

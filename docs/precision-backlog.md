@@ -29575,9 +29575,11 @@ expressions and conditionals. Accessor provenance then took a helper's boolean
 return for the shared context object and vetoed the whole context, so one
 helper such as `isActive = () => ctx.active() === "a"` hid every other member
 read of that context. The index now admits an entity span only when it is
-exactly one identifier (an identifier fact or a binder reference). Accessor
-provenance gates its own value, context-origin and useContext-argument
-fallbacks the same way.
+exactly one identifier (an identifier fact or a binder reference) once
+transparent TypeScript wrappers are peeled: `setStore!` and `setStore as typeof
+setStore` still name the setter, and the own-setter write exemption keeps them
+(`own-setter-wrapper-identity`). Accessor provenance gates its own value,
+context-origin and useContext-argument fallbacks the same way.
 
 Two census rules changed with it:
 
@@ -29590,8 +29592,9 @@ Two census rules changed with it:
   arbitrary escaping reference. An open program keeps the specifier an escape.
 
 Fixtures: `context-member-identity` (export-list positive, comparison helpers
-in JSX/attribute/event positions, namespace second-provider negative) and
-`context-member-identity-open`. Corpus (rc.13, browser host): 567 violations
+in JSX attribute and event positions), `context-member-namespace-provider`
+(namespace second-provider negative; the veto is project-wide, so it needs its
+own project) and `context-member-identity-open`. Corpus (rc.13, browser host): 567 violations
 and 3,715 uncertifiable before and after, with no finding moved. Beacon's
 runtime-confirmed `tabs/index.tsx:66` additionally needs the truthiness-guard
 wrapper channel parked on `wip/provenance-2`; with it, that site is SC1001.

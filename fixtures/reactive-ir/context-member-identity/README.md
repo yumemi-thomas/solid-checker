@@ -11,11 +11,10 @@ signal only through exact identifier identity.
   its leading `ctx` token, not the boolean's value, so it must not be read as
   the shared context object and veto the context. `TabsList`'s untracked
   `ctx.orientation()` is SC1001.
-- `Theme.tsx` / `theme.ts` (negative): a second provider rendered through the
-  namespace member `themes.ThemeContext` has no exact identifier tag. It cannot
-  be attributed to one context binding, so no provider census is closed and
-  `ThemeLabel`'s read is not attributed to the signal. Without `FixedTheme` the
-  same read is SC1001.
+
+The namespace-member provider negative is `context-member-namespace-provider`:
+an unkeyed provider withholds every context in its project, so it cannot share
+one with this positive.
 
 The open counterpart is `context-member-identity-open`: an open program closes no
 context's provider census.

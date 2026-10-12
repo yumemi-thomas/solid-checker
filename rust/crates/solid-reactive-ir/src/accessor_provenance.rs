@@ -1080,6 +1080,7 @@ impl Resolver<'_, '_> {
 /// Whether `span` is exactly one identifier, as opposed to an expression an
 /// identifier merely begins.
 fn exact_identifier(file: &FileFacts, span: Span) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
     file.ast
         .identifiers
         .binary_search_by_key(&span, |id| id.span)

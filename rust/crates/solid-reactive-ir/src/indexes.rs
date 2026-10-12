@@ -2533,7 +2533,8 @@ impl<'a> SemanticLookup<'a> {
             // An entity demanded at a composite expression carries the symbol
             // of the token it begins with (`ctx.a() === "x"` names `ctx`), not
             // the expression's value, so only an exact identifier span is a
-            // reference to that binding.
+            // reference to that binding. Transparent TypeScript wrappers
+            // (`x!`, `x as T`, parentheses) preserve the value and stay admitted.
             let files = self
                 .facts
                 .files
@@ -2549,7 +2550,7 @@ impl<'a> SemanticLookup<'a> {
                     else {
                         continue;
                     };
-                    let span = Span::new(start_u32, end_u32);
+                    let span = file.ast.peel_ts_sugar_span(Span::new(start_u32, end_u32));
                     let identifier = file
                         .ast
                         .identifiers
