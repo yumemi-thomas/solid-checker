@@ -333,3 +333,15 @@ test("the transform boundary compares Vite's already-decoded request without dec
   // An unselected dependency with a literal-percent query is simply not selected.
   assert.equal(selectedFeedbackEntry(entries, "/src/dep.ts?x=5%"), undefined);
 });
+
+test("entry selection strips the raw base exactly as Vite's base middleware does", () => {
+  // base: "/app" keeps rawBase "/app"; Vite's stripBase maps the exact base to "/".
+  assert.equal(normalizeFeedbackEntryRequest("/app", "/app"), "/");
+  assert.equal(normalizeFeedbackEntryRequest("/app/src/main.ts", "/app"), "/src/main.ts");
+  // A query-bearing exact base is not the base, and a longer pathname is not a prefix.
+  assert.equal(normalizeFeedbackEntryRequest("/app?x=1", "/app"), "/app?x=1");
+  assert.equal(normalizeFeedbackEntryRequest("/apple.js", "/app"), "/apple.js");
+  // The trailing-slash spelling strips its prefix; base "/" installs no base middleware.
+  assert.equal(normalizeFeedbackEntryRequest("/app/src/main.ts", "/app/"), "/src/main.ts");
+  assert.equal(normalizeFeedbackEntryRequest("/src/main.ts", "/"), "/src/main.ts");
+});

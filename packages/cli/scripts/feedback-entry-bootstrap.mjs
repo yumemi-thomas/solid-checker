@@ -12,7 +12,8 @@ export function feedbackHtmlEntries({ html, url }) {
 }
 
 export async function resolveFeedbackEntries(rows, documentUrl, server) {
-  const origin = new URL(documentUrl).origin, base = server.config.base;
+  // Vite's base middleware strips the raw (unnormalized) base, not config.base.
+  const origin = new URL(documentUrl).origin, base = server.config.rawBase ?? server.config.base;
   const entries = [], client = server.environments?.client ?? server;
   for (const row of rows) {
     assert(row.url, "Browser feedback requires external module entries; inline module entries cannot be bootstrapped exactly");
@@ -39,7 +40,14 @@ export function selectedFeedbackEntry(entries, request) {
 // Vite 8's base/transform middleware helpers are private. Mirror its exact
 // transport operations, including preserving URI-reserved query characters.
 export function normalizeFeedbackEntryRequest(request, base = "/") {
-  if (request.startsWith(base)) request = "/" + request.slice(base.length);
+  // Vite's baseMiddleware (installed only for a base other than "/"): when the
+  // clean pathname starts with the raw base, stripBase the whole URL — an exact
+  // match becomes "/", a `${base}/…` prefix is removed, anything else is kept.
+  if (base !== "/" && request.replace(/[?#].*$/s, "").startsWith(base)) {
+    const devBase = base.endsWith("/") ? base : base + "/";
+    if (request === base) request = "/";
+    else if (request.startsWith(devBase)) request = request.slice(devBase.length - 1);
+  }
   request = decodeURI(request.replace(/\bt=\d{13}&?\b/, "").replace(/[?&]$/, "")).replace("__x00__", "\0");
   request = request.replace(/(\?|&)import=?(?:&|$)/, "$1").replace(/[?&]$/, "");
   return request.startsWith("/@id/") ? request.slice(5).replace("__x00__", "\0") : request;
