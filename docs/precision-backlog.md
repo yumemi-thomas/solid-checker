@@ -29569,19 +29569,28 @@ work; no new package authority or complete corpus recall is claimed.
 
 A Type Facts entity demanded at a composite expression span carries the symbol
 of the token the expression begins with: the entity at `ctx.a() === "x"` names
-`ctx`. `bindings_by_reference` indexed every such entity span, so
-`binding_at_reference` answered a binding for whole comparisons, member
+`ctx`. `bindings_by_reference` indexes every such entity span, so
+`binding_at_reference` answers a binding for whole comparisons, member
 expressions and conditionals. Accessor provenance then took a helper's boolean
 return for the shared context object and vetoed the whole context, so one
 helper such as `isActive = () => ctx.active() === "a"` hid every other member
-read of that context. The index now admits an entity span only when it is
-exactly one identifier (an identifier fact or a binder reference) once
-transparent TypeScript wrappers are peeled, and `binding_at_reference` peels a
-missed query span the same way. So `setStore!`, `setStore as typeof setStore`,
-`satisfies`, angle-bracket assertions and any nesting of them still name the
-setter, and the own-setter write exemption keeps them
-(`own-setter-wrapper-identity`). Accessor provenance gates its own value,
-context-origin and useContext-argument fallbacks the same way.
+read of that context. Accessor provenance now requires an exact identifier
+(an identifier fact or binder reference, after peeling transparent TypeScript
+wrappers) before its value, context-origin, useContext-argument and
+provider-tag lookups use a binding.
+
+The index itself keeps the composite keys. Dropping them globally was tried
+and withdrawn after review: several proofs that withhold a finding read those
+keys. An own-first composite setter (`setStore.bind(null)`), an absent handler
+(`on-foo={absent ?? absent}`) and a reused owner (`runWithOwner(owner ?? owner,
+…)`) all became false SC2003, SC1007 and SC4001 results
+(`composite-reference-withholding`; rust/target/research/context-member/REVIEW-3.md
+and REVIEW-5.md). Any other consumer that needs value identity must gate on
+an exact identifier the same way. The one global change is that
+`binding_at_reference` retries a missed span through transparent wrappers when
+it peels to exactly one identifier. So `setStore!`, `as`, `satisfies`,
+angle-bracket assertions and any nesting of them name the setter, and the
+own-setter write exemption keeps them (`own-setter-wrapper-identity`).
 
 Two census rules changed with it:
 
@@ -29604,10 +29613,10 @@ wrapper channel parked on `wip/provenance-2`; with it, that site is SC1001.
 Remaining approximations:
 
 - SC2003's own-setter exemption (`upstream_compat/shared_reactivity.rs`,
-  `inside_own_setter_callback`) keeps its pre-index behaviour. It exempts a
+  `inside_own_setter_callback`) is unchanged from dcf6dabee. It exempts a
   write when the callee resolves to the own `createStore` tuple's second slot,
-  exactly or (through `binding_at_leading_reference`) by the leading-token
-  symbol the composite callee's entity names, such as `setStore.bind(null)`.
+  exactly or by the leading-token symbol the composite callee's entity names in
+  the reference index, such as `setStore.bind(null)`.
   That identity is imprecise, but the exemption can only withhold a finding.
   These pre-existing false violations remain: the own setter reached through
   an alias (`const s = setStore`), a member (`holder.set`), a call (`pick()`),

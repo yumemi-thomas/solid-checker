@@ -2474,10 +2474,18 @@ impl<'a> SemanticLookup<'a> {
         let references = self.bindings_by_reference().get(path)?;
         let key = |span: Span| (u64::from(span.start), u64::from(span.end));
         // Transparent TypeScript wrappers, however nested, preserve the value
-        // of the identifier they wrap; only that exact identifier is indexed.
+        // of the identifier they wrap. A missed wrapped span resolves as that
+        // identifier, and only when it peels to exactly one identifier.
         let resolution = references.get(&key(span)).or_else(|| {
-            let peeled = self.file_by_path(path)?.ast.peel_ts_sugar_span(span);
-            (peeled != span)
+            let file = self.file_by_path(path)?;
+            let peeled = file.ast.peel_ts_sugar_span(span);
+            let identifier = file
+                .ast
+                .identifiers
+                .binary_search_by_key(&peeled, |id| id.span)
+                .is_ok()
+                || file.ast.reference_declaration(peeled).is_some();
+            (peeled != span && identifier)
                 .then(|| references.get(&key(peeled)))
                 .flatten()
         })?;
@@ -2487,34 +2495,6 @@ impl<'a> SemanticLookup<'a> {
             &file.ast.bindings[resolution.binding],
             resolution.symbol.clone(),
         ))
-    }
-
-    /// The binding of the symbol the entity demanded at `span` names, even
-    /// when `span` is a composite expression and the symbol is only that of
-    /// its leading token. This is not value identity. Use it only for a proof
-    /// that can withhold a finding but never establish one, as the reference
-    /// index did before it admitted exact identifiers only.
-    pub(super) fn binding_at_leading_reference(
-        &self,
-        path: &str,
-        span: Span,
-    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact, SymbolId)> {
-        if let Some(found) = self.binding_at_reference(path, span) {
-            return Some(found);
-        }
-        let symbol = self.entities.at(path, span).or_else(|| {
-            let peeled = self.file_by_path(path)?.ast.peel_ts_sugar_span(span);
-            self.entities.at(path, peeled)
-        })?;
-        self.facts.files.iter().find_map(|file| {
-            file.ast.bindings.iter().find_map(|binding| {
-                binding
-                    .names
-                    .iter()
-                    .any(|name| self.entities.at(file.path.as_str(), name.span) == Some(symbol))
-                    .then(|| (file, binding, symbol.clone()))
-            })
-        })
     }
 
     fn bindings_by_reference(&self) -> &BindingsByReference {
@@ -2566,34 +2546,12 @@ impl<'a> SemanticLookup<'a> {
             //
             // An entity demanded at a composite expression carries the symbol
             // of the token it begins with (`ctx.a() === "x"` names `ctx`), not
-            // the expression's value, so only an exact identifier span is a
-            // reference to that binding. Transparent TypeScript wrappers
-            // (`x!`, `x as T`, parentheses) preserve the value and stay admitted.
-            let files = self
-                .facts
-                .files
-                .iter()
-                .map(|file| (file.path.as_str(), file))
-                .collect::<HashMap<_, _>>();
+            // the expression's value. Those keys are retained because several
+            // proofs withhold findings through them; a consumer needing value
+            // identity must first require an exact identifier span (accessor
+            // provenance's `exact_identifier`).
             for (path, entities) in &self.entities.by_path {
-                let Some(file) = files.get(path.as_str()) else {
-                    continue;
-                };
                 for ((start, end), symbol) in entities {
-                    let (Ok(start_u32), Ok(end_u32)) = (u32::try_from(*start), u32::try_from(*end))
-                    else {
-                        continue;
-                    };
-                    let span = file.ast.peel_ts_sugar_span(Span::new(start_u32, end_u32));
-                    let identifier = file
-                        .ast
-                        .identifiers
-                        .binary_search_by_key(&span, |id| id.span)
-                        .is_ok()
-                        || file.ast.reference_declaration(span).is_some();
-                    if !identifier {
-                        continue;
-                    }
                     if let Some(resolution) = by_symbol.get(symbol) {
                         by_path
                             .entry(path.clone())

@@ -398,6 +398,8 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/context-member-namespace-provider/node_modules/**
 !fixtures/reactive-ir/own-setter-wrapper-identity/node_modules/
 !fixtures/reactive-ir/own-setter-wrapper-identity/node_modules/**
+!fixtures/reactive-ir/composite-reference-withholding/node_modules/
+!fixtures/reactive-ir/composite-reference-withholding/node_modules/**
 !fixtures/reactive-ir/transported-member-stability/node_modules/
 !fixtures/reactive-ir/transported-member-stability/node_modules/**
 !fixtures/reactive-ir/transported-member-stability-assign/node_modules/

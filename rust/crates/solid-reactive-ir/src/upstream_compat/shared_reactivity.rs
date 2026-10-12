@@ -730,14 +730,9 @@ fn inside_own_setter_callback(
         {
             return false;
         }
-        // The exemption only ever withholds this finding, so it keeps the
-        // leading-token identity the reference index used to admit for a
-        // composite callee (`setStore.bind(null)`): an imprecise match can
-        // miss a dropped write but never assert one. Exact references,
-        // including transparent wrappers, resolve first.
         let Some((binding_file, binding, callee_symbol)) = context
             .lookup
-            .binding_at_leading_reference(file.path.as_str(), call.callee)
+            .binding_at_reference(file.path.as_str(), call.callee)
         else {
             return false;
         };
