@@ -194,12 +194,12 @@ receive no entry prefix. `execution.entry.entries` retains the exact URLs and
 resolved IDs. Request normalization mirrors Vite's HTTP base stripping, timestamp
 removal, `decodeURI` and `/@id/`/null-marker unwrapping, preserving encoded reserved
 query characters. The served transform's module ID must equal the selected ID.
-It does not follow other request rewriting ahead of Vite's transform middleware —
-a `server.proxy` `bypass` that returns a new URL, or application middleware that
-rewrites `req.url` for a module entry. Such an entry either fails to resolve or
-reaches the transform under a different request; both refuse explicitly (an
-unresolved entry, or a selected entry with no binding or completed output), so
-the run is not measured rather than mis-measured.
+Collection rests on a premise: the dev server serves each module URL as that
+module, with no request rewriting onto another module ahead of Vite's transform
+middleware. It is vetoed where visible: a resolved `server.proxy` entry with a
+`bypass` function refuses the run, since a bypass can serve one module URL as
+another. Application middleware that rewrites `req.url` for module requests is
+outside the premise.
 `transforms` pins the entry code before and after the prefix and the completed
 Vite output (`completedSha256`); completed output must start with the collector import.
 If Vite import analysis or a hook with late transform ordering prepends a helper,

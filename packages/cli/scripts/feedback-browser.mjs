@@ -293,6 +293,16 @@ export function validateFeedbackRoot(root, appTree, reportedRoot) {
   return canonical;
 }
 
+// The collector premise: the dev server serves each module URL as that module.
+// A `server.proxy` entry with a `bypass` function can rewrite a request onto
+// another module before Vite's transform middleware, so it is a visible veto.
+// Application middleware that rewrites module requests is outside the premise.
+export function validateFeedbackRequestRouting(serverConfig) {
+  for (const [context, option] of Object.entries(serverConfig?.proxy ?? {}))
+    assert(typeof option !== "object" || option === null || typeof option.bypass !== "function",
+      `Browser feedback cannot follow server.proxy[${JSON.stringify(context)}].bypass: it can serve a module URL as another module`);
+}
+
 export function feedbackPhysicalEntry(root, appTree) {
   assert(existsSync(join(root, "index.html")), "Browser feedback needs an application index.html");
   const path = realpathSync(join(root, "index.html"));
@@ -537,6 +547,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
     server: { host: "127.0.0.1", port: 0, fs: { allow: [root, dirname(runtimePath), dirname(dirname(runtimePath)), tools.root] } },
     customLogger: serverDiagnostics.logger, logLevel: "silent" }));
     const effectiveRoot = validateFeedbackRoot(server.config.root, runtimeOptions.appTree ?? root, root);
+    validateFeedbackRequestRouting(server.config.server);
     const entry = feedbackPhysicalEntry(effectiveRoot, runtimeOptions.appTree ?? root);
     record(entry.path);
     await server.listen();

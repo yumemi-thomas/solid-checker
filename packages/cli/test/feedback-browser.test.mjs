@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { createReadCollector } from "../scripts/feedback-read-runtime.mjs";
 import { selectAssertionFeedback } from "../scripts/feedback-assertion-selector.mjs";
-import { closeFeedbackResources, closeFeedbackResourcesAfter, createFeedbackDiagnostics, executeFeedbackScenario, feedbackContextOptions, feedbackPhysicalEntry, loadFeedbackConfiguration, loadSuppliedResponses,
+import { closeFeedbackResources, closeFeedbackResourcesAfter, validateFeedbackRequestRouting, createFeedbackDiagnostics, executeFeedbackScenario, feedbackContextOptions, feedbackPhysicalEntry, loadFeedbackConfiguration, loadSuppliedResponses,
   mergeFeedbackServerConfiguration, routeFeedbackRequest, selectFeedbackModels, validateFeedbackRoot, validateFeedbackRuntimeOptions, validateFeedbackScenario } from "../scripts/feedback-browser.mjs";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -474,4 +474,11 @@ test("a dropped server capture disables body association for every failed script
   assert.equal(result.capturesDropped, 1);
   assert.equal(result.failedModules[0].body, undefined);
   assert.match(result.failedModules[0].bodyUnavailable, /dropped/);
+});
+
+test("a server.proxy bypass function vetoes the run: it can serve a module URL as another module", () => {
+  validateFeedbackRequestRouting({});
+  validateFeedbackRequestRouting({ proxy: { "/api": "http://127.0.0.1:1", "/rpc": { target: "http://127.0.0.1:1" } } });
+  assert.throws(() => validateFeedbackRequestRouting({ proxy: { "/src/a.js": { target: "http://127.0.0.1:1", bypass: () => "/src/b.js" } } }),
+    /server\.proxy\["\/src\/a\.js"\]\.bypass/);
 });
