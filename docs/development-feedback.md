@@ -198,8 +198,11 @@ Collection rests on a premise: the dev server serves each module URL as that
 module, with no request rewriting onto another module ahead of Vite's transform
 middleware. It is vetoed where visible: a resolved `server.proxy` entry with a
 `bypass` function refuses the run, since a bypass can serve one module URL as
-another. Application middleware that rewrites `req.url` for module requests is
-outside the premise.
+another. The veto reads the resolved proxy options once; any option value (object,
+array or function) whose `bypass` is a function refuses. Application middleware
+that rewrites `req.url` for module requests, and deliberately concealed
+configuration (a Proxy object or a stateful getter that yields a different
+`bypass` on each read), are outside the premise.
 `transforms` pins the entry code before and after the prefix and the completed
 Vite output (`completedSha256`); completed output must start with the collector import.
 If Vite import analysis or a hook with late transform ordering prepends a helper,
