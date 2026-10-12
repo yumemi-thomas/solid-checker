@@ -183,9 +183,61 @@ must remain inside the app tree and equal the reported root; a hook changing
 that selection refuses. That effective root must have a physical `index.html`
 whose canonical path is an app-tree file. Missing indexes and symlink escapes
 refuse. `execution.entry` records its path and `execution.runtimeInputs` pins
-its bytes. The collector supplies no generated HTML entry or mount function.
-Without an application config, the collector supplies the Solid plugin. Dependency optimization
-is disabled so the reviewed native reader passes through the capture hook.
+its bytes. The browser parses that physical HTML in an inert document, using
+its real base-URL and HTML attribute rules. Every external module entry (apart
+from Vite's client) must resolve through Vite's client environment; inline,
+foreign and unresolved module entries refuse. Each selected entry receives a
+first static bootstrap import before its dependencies execute, with an exact
+identity source map. This also binds captured application HTML whose middleware
+bypasses Vite's HTML transforms. Unselected virtual helper/CSS modules and server transforms
+receive no entry prefix. `execution.entry.entries` retains the exact URLs and
+resolved IDs; `transforms` pins the entry code before and after the prefix.
+A twelve-second binding wait precedes scenario actions and final collection, because streamed
+server markup can become visible before its client module executes.
+A loaded document without a telemetry binding, a selected entry without a
+bootstrap transform, or a top-level navigation missing from the bound-document
+records refuses. The final served document must retain the selected module URLs
+and contain no extra module entries beyond Vite's client and the collector's own
+HTML bootstrap; otherwise collection refuses rather than trusting changed
+middleware HTML or an injected entry's ordering.
+Missing binding failures retain bounded page-error and failed-
+module summaries. `execution.coverage.documents.topLevelNavigations` counts
+distinct CDP document loader IDs, excluding same-document route changes.
+The collector supplies no generated HTML entry or mount function.
+Without an application config, the collector supplies the Solid plugin.
+
+Vite dependency discovery and CommonJS prebundling remain enabled. Only
+`solid-js`, `@solidjs/signals`, `@solidjs/web` and their subpaths are excluded
+and deduplicated, so their installed files still pass through the byte-reviewed
+reader hook. Runtime resolution removes Vite's optimizer `v` query and uses the
+canonical installed path: discovering another dependency must not instantiate
+the same runtime again under a different browser hash. Resolving separate
+installed roots for one runtime package refuses. Application includes for other
+packages are retained. Vite keeps
+excluded bare imports external even inside included dependency bundles; optimizer
+input hooks additionally refuse any of those runtime packages entering a bundle,
+including through relative paths or aliases. Changed or unreviewed reader bytes
+still refuse. Available optimizer source maps are checked for inlined runtime
+files and for source-content disagreement with the installed files.
+`execution.optimizedDependencies.generations` records each observed optimizer
+generation and environment (`client`, and any server environment used by the
+application middleware): the
+metadata digest, lockfile/config/browser hashes, dependency and chunk lists,
+output/map file digests, and observed optimizer inputs. Physical inputs and
+package identity manifests are pinned in `execution.runtimeInputs`; generated
+optimizer inputs retain IDs and transformed-code digests, or explicitly mark
+unavailable source bytes for an optimizer API that exposes only the load ID.
+The collector checks loaded optimizer bytes against that generation's inventory,
+then validates the final inventories before removing its temporary cache.
+Legitimate reoptimization retains both old and new generation pins; changed bytes
+under unchanged metadata refuse. Ephemeral output pins remain in the report and
+are not replayed after replacement or deletion. `transforms` records Vite module
+transforms, which can include warmup or attribution loads in addition to HTTP
+requests; it does not assert that every inventoried output executed in the browser.
+This records optimizer inputs and output; it does
+not authenticate arbitrary application/config/plugin side effects or certify
+server execution. Missing inventories, inlined runtimes and changed served output
+refuse rather than becoming empty runtime evidence.
 SSR needs a separate adapter. Requests to other origins are blocked unless the
 scenario supplies a response for that exact URL (below); config loading executes
 the application's existing config.

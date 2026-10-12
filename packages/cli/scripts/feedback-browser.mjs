@@ -11,9 +11,12 @@ import { selectAssertionFeedback } from "./feedback-assertion-selector.mjs";
 import { instrumentFeedbackSource } from "./feedback-source-hook.mjs";
 import { selectReadFeedback } from "./feedback-read-selector.mjs";
 import { classifyUnmappedFrames, createFrameAttributor, operationFrame, siteExpressionKind, summarizeCandidateScopes, summarizeUnmapped } from "./feedback-attribution.mjs";
+import { feedbackEntryBootstrapPlugin, feedbackHtmlEntries, resolveFeedbackEntries, validateFeedbackDocument, validateFeedbackServedEntries } from "./feedback-entry-bootstrap.mjs";
+import { configureFeedbackOptimizer, createFeedbackOptimizerObserver, feedbackRuntimePackages, resolveFeedbackRuntime } from "./feedback-optimizer.mjs";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const runtimePath = fileURLToPath(new URL("./feedback-read-runtime.mjs", import.meta.url));
+const bootstrapId = "virtual:solid-checker-feedback-entry";
 
 export function validateFeedbackScenario(scenario) {
   assert.equal(scenario.schemaVersion, 1);
@@ -374,26 +377,34 @@ export async function executeFeedbackScenario(page, scenario) {
 }
 
 // Vite transform boundary: only one byte-reviewed native artifact is edited.
-// Every other runtime module remains original code executed by the application.
-export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage }) {
-  const virtual = "\0solid-checker-feedback-entry", publicId = "virtual:solid-checker-feedback-entry";
+// Entry modules separately receive only a bootstrap dependency; optimizer
+// bundles never substitute for the reviewed reader's installed artifact.
+export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage, record, optimizerSources }) {
+  const virtual = "\0solid-checker-feedback-entry", publicId = bootstrapId;
+  const runtimeInstances = new Map();
   return {
     name: "solid-checker-feedback-reads", enforce: "pre",
-    resolveId(id) { if (id === publicId) return virtual; },
+    resolveId(id, importer, options) {
+      if (id === publicId) return virtual;
+      return resolveFeedbackRuntime(id, importer, options, this.resolve.bind(this), runtimeInstances, record);
+    },
     load(id) {
       if (id !== virtual) return;
       // Each document reports its start and, when unloaded, its state: a full
       // page load would otherwise discard everything recorded before it.
       // Chromium delivers a binding call from beforeunload but not pagehide.
       // Reads during unload itself are not reported.
-      return `import {reads} from ${JSON.stringify("/@fs" + runtimePath)};
+      const code = `import {reads} from ${JSON.stringify("/@fs" + runtimePath)};
         import * as Solid from 'solid-js';
+        if (!globalThis.__solidCheckerDocument) {
         globalThis.__solidCheckerDocument=crypto.randomUUID();
         Solid.OBSERVE?.diagnostics?.subscribe(event=>reads.diagnostic(event));
         globalThis.__solidCheckerFlush?.(JSON.stringify({phase:'start',id:globalThis.__solidCheckerDocument}));
         addEventListener('beforeunload',()=>globalThis.__solidCheckerFlush?.(JSON.stringify({phase:'end',
           id:globalThis.__solidCheckerDocument,state:{events:reads.events,stats:reads.stats,scopes:reads.scopes,
-          diagnostics:reads.diagnostics}})));`;
+          diagnostics:reads.diagnostics}}))); }`;
+      coverage.bootstrap = { id: virtual, sha256: hash(code) };
+      return code;
     },
     transformIndexHtml() { return [{ tag: "script", attrs: { type: "module", src: "/@id/" + publicId }, injectTo: "head-prepend" }]; },
     transform(code, id) {
@@ -412,13 +423,7 @@ export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage }) {
       return result;
     },
     configResolved(config) {
-      // The framework plugin adds prebundled includes during config merging.
-      // Bypass them so reviewed reader bytes execute through this hook and
-      // ephemeral optimizer output cannot masquerade as a package artifact.
-      for (const options of [config.optimizeDeps, ...Object.values(config.environments ?? {}).map(row => row.optimizeDeps)].filter(Boolean)) {
-        options.include = []; options.noDiscovery = true;
-        options.exclude = [...new Set([...(options.exclude ?? []), "solid-js", "@solidjs/signals", "@solidjs/web"])];
-      }
+      configureFeedbackOptimizer(config, { record, sources: optimizerSources });
       validateFeedbackInputs(snapshot.manifest);
     }
   };
@@ -471,6 +476,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
   const runtimeInputs = new Map(), coverage = { nativeReader: null, sourceInstrumentation: [], complete: false,
     ...(conflictingLeafModels.size ? { conflictingLeafModels: [...conflictingLeafModels] } : {}) }, unmapped = [];
   const instrumented = new Map();
+  const entryIds = new Set(), entryTransforms = new Map(), optimizerSources = new Map();
   const sourceFiles = new Map(snapshot.sources.filter(source => !source.isDeclarationFile)
     .map(source => [resolve(source.fileName), source]));
   const record = path => {
@@ -488,6 +494,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
   record(runtimePath);
   const application = configuration.config;
   const cache = mkdtempSync(join(tmpdir(), "solid-feedback-vite-"));
+  const optimizer = createFeedbackOptimizerObserver(cache, record, optimizerSources);
   let server, context;
   const pageErrors = [], blockedRequests = [], refusedResponses = [], consoleDiagnostics = [];
   let consoleDiagnosticsDropped = 0;
@@ -496,7 +503,10 @@ async function collectProject(project, scenario, tools, browser, responses = new
     server = await tools.createServer(mergeFeedbackServerConfiguration(tools, application, { configFile: false, root, cacheDir: cache,
     plugins: [{ name: "solid-checker-feedback-lifecycle", enforce: "pre",
       configureServer(allocated) { server = allocated; serverDiagnostics.install(allocated); } },
-      feedbackReadPlugin({ snapshot, runtimeInputs, coverage }), {
+      feedbackReadPlugin({ snapshot, runtimeInputs, coverage, record, optimizerSources }), {
+      name: "solid-checker-feedback-optimizer-output", enforce: "pre",
+      transform(code, id) { optimizer.observe(code, id); }
+    }, {
       name: "solid-checker-development-source", enforce: "pre",
       transform(code, id) {
         const path = id.split("?")[0], model = models.get(path);
@@ -510,11 +520,15 @@ async function collectProject(project, scenario, tools, browser, responses = new
       name: "solid-checker-feedback-inputs", enforce: "post",
       transform(_code, id) {
         const path = id.split("?")[0];
-        if (existsSync(path) && /\.[cm]?[jt]sx?$/.test(path)) record(path);
+        if (existsSync(path) && /\.[cm]?[jt]sx?$/.test(path)) {
+          if (!inside(realpathSync(cache), realpathSync(path))) record(path);
+        }
       }
-    }],
-    resolve: { dedupe: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
-    optimizeDeps: { noDiscovery: true, include: [], exclude: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
+    }, feedbackEntryBootstrapPlugin(entryIds, bootstrapId, (id, code, transformed) => {
+      entryTransforms.set(id, { id, sha256: hash(code), instrumentedSha256: hash(transformed) });
+    })],
+    resolve: { dedupe: feedbackRuntimePackages },
+    optimizeDeps: { noDiscovery: false, exclude: feedbackRuntimePackages },
     server: { host: "127.0.0.1", port: 0, fs: { allow: [root, dirname(runtimePath), dirname(dirname(runtimePath)), tools.root] } },
     customLogger: serverDiagnostics.logger, logLevel: "silent" }));
     const effectiveRoot = validateFeedbackRoot(server.config.root, runtimeOptions.appTree ?? root, root);
@@ -524,16 +538,30 @@ async function collectProject(project, scenario, tools, browser, responses = new
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
     context = await browser.newContext(feedbackContextOptions(scenario)); context.setDefaultTimeout(12000);
     await context.route("**/*", route => routeFeedbackRequest(route, origin, responses, blockedRequests, refusedResponses));
-    const page = await context.newPage(), documentMessages = [];
+    const page = await context.newPage(), documentMessages = [], navigatedDocuments = new Set();
     // A raw CDP binding: Playwright's exposed bindings drop calls from a
     // document that is already unloading, which is exactly the flush needed.
     const cdp = await context.newCDPSession(page);
+    cdp.on("Page.frameNavigated", ({ frame }) => {
+      if (!frame.parentId && frame.url !== "about:blank") navigatedDocuments.add(frame.loaderId);
+    });
     cdp.on("Runtime.bindingCalled", ({ name, payload }) => {
       if (name !== "__solidCheckerFlush") return;
       try { documentMessages.push(JSON.parse(payload)); } catch { documentMessages.push({ phase: "malformed" }); }
     });
     await cdp.send("Runtime.enable");
     await cdp.send("Runtime.addBinding", { name: "__solidCheckerFlush" });
+    await cdp.send("Page.enable");
+    const documentUrl = new URL(server.config.base, origin).href;
+    const entries = await resolveFeedbackEntries(await page.evaluate(feedbackHtmlEntries,
+      { html: readFileSync(entry.path, "utf8"), url: documentUrl }), documentUrl, server);
+    entry.entries = entries;
+    const graph = (server.environments?.client ?? server).moduleGraph;
+    for (const row of entries) {
+      entryIds.add(row.id);
+      const module = graph.getModuleById(row.id);
+      if (module) graph.invalidateModule(module);
+    }
     page.on("pageerror", error => pageErrors.push({ message: error.message, stack: error.stack }));
     page.on("response", response => serverDiagnostics.response(response, origin));
     page.on("console", message => {
@@ -541,12 +569,31 @@ async function collectProject(project, scenario, tools, browser, responses = new
       if (consoleDiagnostics.length >= 256) { consoleDiagnosticsDropped++; return; }
       consoleDiagnostics.push({ severity: message.type(), message: message.text(), location: message.location() });
     });
-    await page.goto(new URL(server.config.base, origin).href, { waitUntil: "domcontentloaded" });
+    async function failBootstrap(error) {
+      const diagnostic = await serverDiagnostics.finish();
+      error.message += `; entry transforms: ${entryTransforms.size}/${entries.length}; page errors: ${JSON.stringify(pageErrors.slice(0, 8).map(row => row.message.slice(0, 2000)))}; failed modules: ${JSON.stringify(diagnostic.failedModules.slice(0, 8).map(row => ({ url: row.url, status: row.status, body: row.body?.text.slice(0, 2000), bodyUnavailable: row.bodyUnavailable })))}`;
+      throw error;
+    }
+    const waitForBootstrap = () => page.waitForFunction(() => globalThis.__solidCheckerDocument && globalThis.__solidCheckerReads?.stats)
+      .catch(() => failBootstrap(new Error("Browser feedback bootstrap did not bind the loaded document within 12000 ms; runtime collection is unavailable")));
+    await page.goto(documentUrl, { waitUntil: "domcontentloaded" });
+    // Middleware can stream visible server markup before its async client
+    // module has bound telemetry. Wait for binding before acting on that UI.
+    await waitForBootstrap();
     const { assertions, checkpoints, failure } = await executeFeedbackScenario(page, scenario);
+    await waitForBootstrap();
     const final = await page.evaluate(() => globalThis.__solidCheckerDocument ? { id: globalThis.__solidCheckerDocument,
+      modules: [...document.querySelectorAll('script[type="module"]')].map(script => script.hasAttribute("src") ? script.src : null),
       state: { events: globalThis.__solidCheckerReads?.events ?? [], stats: globalThis.__solidCheckerReads?.stats ?? null,
         scopes: globalThis.__solidCheckerReads?.scopes ?? { rows: [], dropped: 0 }, diagnostics: globalThis.__solidCheckerReads?.diagnostics ?? [] } } : null);
+    try { validateFeedbackDocument(final); } catch (error) { await failBootstrap(error); }
+    validateFeedbackServedEntries(final.modules, entries, [new URL("@vite/client", documentUrl).href,
+      new URL("/@id/" + bootstrapId, origin).href]);
+    entry.transforms = [...entryTransforms.values()];
+    assert(entries.every(row => entryTransforms.has(row.id)), "Browser feedback did not bootstrap every selected module entry");
     const raw = mergeDocumentStates(documentMessages, final);
+    validateFeedbackDocument(final, raw.documents, navigatedDocuments.size);
+    raw.documents.topLevelNavigations = navigatedDocuments.size;
     coverage.documents = raw.documents;
     const capture = captureTemplate(snapshot), maps = new Map();
     const attribute = createFrameAttributor({ origin, root, sourceFiles, collectorPaths: [realpathSync(runtimePath)],
@@ -621,6 +668,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
         return text === undefined ? null : Buffer.from(text).subarray(0, byte).toString().split("\n").length;
       } });
     coverage.unmapped = summarizeUnmapped(unmapped);
+    const optimizedDependencies = optimizer.finish();
     capture.runtimeInputs = [...runtimeInputs.values()];
     for (const pin of capture.runtimeInputs) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Runtime input changed: ${pin.path}`);
     validateFeedbackInputs(snapshot.manifest);
@@ -636,7 +684,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
         ...(row.requestBody !== undefined ? { requestBody: row.requestBody, requestBodySha256: row.requestBodySha256, matchedRequestBodySha256: row.matchedRequestBodySha256 ?? null } : {}), status: row.status, contentType: row.contentType,
         body: row.pin, served: row.served, channel: "scenario-input" })),
       pageErrors, consoleDiagnostics, consoleDiagnosticsDropped, serverDiagnostics: await serverDiagnostics.finish(), failure,
-      entry, runtimeInputs: capture.runtimeInputs, ...(scenario.viewport ? { viewport: scenario.viewport } : {}),
+      entry, optimizedDependencies, runtimeInputs: capture.runtimeInputs, ...(scenario.viewport ? { viewport: scenario.viewport } : {}),
       configuration: configuration.configuration, typingErrors: snapshot.typingErrors };
   } catch (error) {
     if (!server) error.message += "; no Vite server was exposed for cleanup; partial startup resources may remain until CLI exit";

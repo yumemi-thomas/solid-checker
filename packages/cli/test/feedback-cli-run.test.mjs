@@ -11,7 +11,7 @@ const cli = fileURLToPath(new URL("../bin/solid-checker.mjs", import.meta.url));
 // browser installation, native build or network is needed. A lingering plugin
 // timer reproduces the post-JSON shutdown failure seen in the corpus.
 for (const [solution, nativeStatus, failure] of [[false, 0], [true, 1],
-  ...["config-load", "configure-hook", "early-create", "root-escape", "root-hook", "missing-index", "cleanup-hang", "comparison-native"].map(failure => [false, 0, failure])]) {
+  ...["config-load", "configure-hook", "early-create", "root-escape", "root-hook", "missing-index", "cleanup-hang", "comparison-native", "unbound-document"].map(failure => [false, 0, failure])]) {
   test(`feedback run drains JSON and diagnostics and exits despite plugin timers (solution=${solution}, failure=${failure ?? "none"})`, () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-cli-run-")));
   try {
@@ -23,7 +23,7 @@ for (const [solution, nativeStatus, failure] of [[false, 0], [true, 1],
     }
     const project = solution ? join(root, "tsconfig.json") : join(root, "a/tsconfig.json");
     if (solution) writeFileSync(project, JSON.stringify({ files: [], references: [{ path: "./a" }, { path: "./b" }] }));
-    if (failure !== "missing-index") writeFileSync(join(root, "index.html"), '<html><body></body></html>');
+    if (failure !== "missing-index") writeFileSync(join(root, "index.html"), '<html><body><script type="module" src="/a/source.ts"></script></body></html>');
     const config = join(root, "vite.config.mjs"); writeFileSync(config, 'export default {};');
     const scenarioPath = join(root, "scenario.json"), viewport = { width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 };
     writeFileSync(scenarioPath, JSON.stringify({ schemaVersion: 1, viewport, steps: [{ action: "wait-for-selector", selector: "body" }] }));
@@ -47,6 +47,11 @@ for (const [solution, nativeStatus, failure] of [[false, 0], [true, 1],
         log(['server',config.root]); setInterval(()=>{},1000);
         ${failure === "early-create" ? 'throw new Error("Vite failed before exposing a server");' : ''}
         const server = {config:{base:'/',root:${JSON.stringify(failure === "root-hook" ? join(root, "a") : root)}},
+          pluginContainer:{resolveId:async()=>({id:${JSON.stringify(join(root, "a/source.ts"))}})},
+          moduleGraph:{getModuleById:()=>({}),invalidateModule(){
+            for(const plugin of config.plugins) if(plugin.name==='solid-checker-feedback-entry-bootstrap')
+              plugin.transform.call({},'export const source=1;',${JSON.stringify(join(root, "a/source.ts"))});
+          }},
           middlewares:{use(){}},httpServer:{address:()=>({port:1234})},listen:async()=>{},close:async()=>{
             log(['server-close']); ${failure === "cleanup-hang" ? 'await new Promise(()=>{});' : ''}
           }};
@@ -58,8 +63,12 @@ for (const [solution, nativeStatus, failure] of [[false, 0], [true, 1],
       export const chromium = {launch:async()=>({version:()=> 'test-browser',close:async()=>log(['browser-close']),
         newContext:async options=>{log(['context',options]); return {
           setDefaultTimeout(){},route:async()=>{},close:async()=>log(['context-close']),
-          newCDPSession:async()=>({on(){},send:async()=>{}}),newPage:async()=>({on(){},goto:async()=>{},
-            locator:()=>({waitFor:async()=>{}}),evaluate:async fn=>fn.toString().includes('__solidCheckerDocument') ? null : {events:0,text:''}})
+          newCDPSession:async()=>({on(){},send:async()=>{}}),newPage:async()=>({on(){},goto:async()=>{},waitForFunction:async()=>{${failure === "unbound-document" ? 'throw Error("binding timeout");' : ''}},
+            locator:()=>{log(['scenario-action']);return {waitFor:async()=>{}};},evaluate:async fn=>fn.toString().includes('DOMParser')
+              ? [{url:'http://127.0.0.1:1234/a/source.ts',inline:null}]
+              : fn.toString().includes('__solidCheckerDocument')
+                ? ${failure === "unbound-document" ? "null" : "{id:'test-document',modules:['http://127.0.0.1:1234/a/source.ts'],state:{events:[],stats:{reads:0,retained:0,dropped:0,bytes:0},diagnostics:[]}}"}
+                : {events:0,text:''}})
         };}
       })};`);
     pkg("@jridgewell/trace-mapping", 'export class TraceMap {} export function originalPositionFor() {}');
@@ -74,10 +83,11 @@ for (const [solution, nativeStatus, failure] of [[false, 0], [true, 1],
       const expected = { "config-load": /timer-bearing config failed/, "configure-hook": /configure hook failed/,
         "early-create": /no Vite server was exposed for cleanup/, "root-escape": /outside the app tree/,
         "root-hook": /changed the reported root/, "missing-index": /needs an application index.html/,
-        "cleanup-hang": /server close timed out/, "comparison-native": /status 9/ }[failure];
+        "cleanup-hang": /server close timed out/, "comparison-native": /status 9/, "unbound-document": /bootstrap did not bind/ }[failure];
       assert.match(report.failure.message, expected); assert.match(run.stderr, expected);
       const events = readFileSync(lifecycle, "utf8").trim().split("\n").map(JSON.parse);
       assert(events.some(row => row[0] === "browser-close"));
+      if (failure === "unbound-document") assert(!events.some(row => row[0] === "scenario-action"));
       if (!["config-load", "early-create", "root-escape"].includes(failure)) assert(events.some(row => row[0] === "server-close"));
       return;
     }
