@@ -20,3 +20,14 @@ export function AssertedOtherSetter() {
   const [other, setOther] = createStore({ count: 0 });
   return <button onClick={() => (setOther as typeof setOther)(() => { store.open = true; })}>{String(store.open)}{other.count}</button>;
 }
+
+// Nested wrappers peel to the same identifier.
+export function NestedOwnSetter() {
+  const [store, setStore] = createStore({ open: false });
+  return <button onClick={() => ((setStore as typeof setStore)!)(() => { store.open = true; })}>{String(store.open)}</button>;
+}
+
+export function SatisfiedOwnSetter() {
+  const [store, setStore] = createStore({ open: false });
+  return <button onClick={() => ((setStore satisfies typeof setStore)!)(() => { store.open = true; })}>{String(store.open)}</button>;
+}

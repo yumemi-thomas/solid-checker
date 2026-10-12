@@ -2471,10 +2471,16 @@ impl<'a> SemanticLookup<'a> {
         path: &str,
         span: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact, SymbolId)> {
-        let resolution = self
-            .bindings_by_reference()
-            .get(path)?
-            .get(&(u64::from(span.start), u64::from(span.end)))?;
+        let references = self.bindings_by_reference().get(path)?;
+        let key = |span: Span| (u64::from(span.start), u64::from(span.end));
+        // Transparent TypeScript wrappers, however nested, preserve the value
+        // of the identifier they wrap; only that exact identifier is indexed.
+        let resolution = references.get(&key(span)).or_else(|| {
+            let peeled = self.file_by_path(path)?.ast.peel_ts_sugar_span(span);
+            (peeled != span)
+                .then(|| references.get(&key(peeled)))
+                .flatten()
+        })?;
         let file = &self.facts.files[resolution.file];
         Some((
             file,

@@ -29576,8 +29576,10 @@ return for the shared context object and vetoed the whole context, so one
 helper such as `isActive = () => ctx.active() === "a"` hid every other member
 read of that context. The index now admits an entity span only when it is
 exactly one identifier (an identifier fact or a binder reference) once
-transparent TypeScript wrappers are peeled: `setStore!` and `setStore as typeof
-setStore` still name the setter, and the own-setter write exemption keeps them
+transparent TypeScript wrappers are peeled, and `binding_at_reference` peels a
+missed query span the same way. So `setStore!`, `setStore as typeof setStore`,
+`satisfies`, angle-bracket assertions and any nesting of them still name the
+setter, and the own-setter write exemption keeps them
 (`own-setter-wrapper-identity`). Accessor provenance gates its own value,
 context-origin and useContext-argument fallbacks the same way.
 
@@ -29601,6 +29603,14 @@ wrapper channel parked on `wip/provenance-2`; with it, that site is SC1001.
 
 Remaining approximations:
 
+- SC2003's own-setter exemption (`upstream_compat/shared_reactivity.rs`,
+  `inside_own_setter_callback`) proves the exemption only for a callee that
+  resolves to the own `createStore` tuple's second slot. Any other callee keeps
+  the violation, including one that is the own setter at runtime: an alias
+  (`const s = setStore`), a member (`holder.set`), a call (`pick()`) or a
+  conditional of setters. Those are false violations. An unresolved callee
+  should make the write uncertifiable, and only a proven other target should
+  keep SC2003. This is pre-existing, and the rc.13 corpus has no SC2003 row.
 - A context member withheld by a blocked, ambiguous or unkeyed provider census
   is silent, not an SC9012 obligation: `calls` drops a transported lookup that
   fails without recording an unavailable entry.

@@ -1,9 +1,9 @@
 # Own-setter write through a TypeScript-wrapped setter
 
-Claim: a Type Facts entity demanded at a wrapped callee (`setStore!`,
-`setStore as typeof setStore`) names the setter, because transparent
-TypeScript wrappers preserve the value. The exact-identifier reference index
-therefore peels them before testing identity, and a write through the store's
+Claim: a wrapped callee (`setStore!`, `setStore as typeof setStore`,
+`satisfies`, `<typeof setStore>setStore` in a .ts file, and any nesting of
+them) is the setter, because transparent TypeScript wrappers preserve the
+value. Reference lookup peels them to the exact identifier, so a write through the store's
 own proxy inside its own setter's draft callback stays silent. A write inside
 another store's (wrapped) setter is still SC2003.
 
