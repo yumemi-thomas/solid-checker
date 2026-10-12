@@ -299,7 +299,9 @@ export function validateFeedbackRoot(root, appTree, reportedRoot) {
 // Application middleware that rewrites module requests is outside the premise.
 export function validateFeedbackRequestRouting(serverConfig) {
   for (const [context, option] of Object.entries(serverConfig?.proxy ?? {}))
-    assert(typeof option !== "object" || option === null || typeof option.bypass !== "function",
+    // Any option value can carry a bypass: Vite copies own properties of
+    // objects, arrays and function-valued options alike into the request.
+    assert(option === null || option === undefined || typeof option.bypass !== "function",
       `Browser feedback cannot follow server.proxy[${JSON.stringify(context)}].bypass: it can serve a module URL as another module`);
 }
 

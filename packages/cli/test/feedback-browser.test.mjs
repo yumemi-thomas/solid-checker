@@ -481,4 +481,9 @@ test("a server.proxy bypass function vetoes the run: it can serve a module URL a
   validateFeedbackRequestRouting({ proxy: { "/api": "http://127.0.0.1:1", "/rpc": { target: "http://127.0.0.1:1" } } });
   assert.throws(() => validateFeedbackRequestRouting({ proxy: { "/src/a.js": { target: "http://127.0.0.1:1", bypass: () => "/src/b.js" } } }),
     /server\.proxy\["\/src\/a\.js"\]\.bypass/);
+  // A function-valued or array-valued option carries its bypass just the same.
+  const fn = Object.assign(function proxyOptions() {}, { target: "http://127.0.0.1:1", bypass: () => "/src/b.js" });
+  assert.throws(() => validateFeedbackRequestRouting({ proxy: { "/src/a.js": fn } }), /bypass/);
+  const list = Object.assign([], { bypass: () => "/src/b.js" });
+  assert.throws(() => validateFeedbackRequestRouting({ proxy: { "/src/a.js": list } }), /bypass/);
 });
