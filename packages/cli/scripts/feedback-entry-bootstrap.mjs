@@ -28,6 +28,14 @@ export async function resolveFeedbackEntries(rows, documentUrl, server) {
   return entries;
 }
 
+// The selected entry for a request at the client transform boundary. Vite's
+// HTTP middleware has already base-stripped, timestamp-stripped, URI-decoded
+// and unwrapped that request; decoding it again would throw on a literal `%`
+// or change its identity, so it is compared exactly as Vite passes it.
+export function selectedFeedbackEntry(entries, request) {
+  return entries.find(row => row.request === request);
+}
+
 // Vite 8's base/transform middleware helpers are private. Mirror its exact
 // transport operations, including preserving URI-reserved query characters.
 export function normalizeFeedbackEntryRequest(request, base = "/") {

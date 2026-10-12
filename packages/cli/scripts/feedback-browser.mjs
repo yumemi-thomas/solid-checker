@@ -11,7 +11,7 @@ import { selectAssertionFeedback } from "./feedback-assertion-selector.mjs";
 import { instrumentFeedbackSource } from "./feedback-source-hook.mjs";
 import { selectReadFeedback } from "./feedback-read-selector.mjs";
 import { classifyUnmappedFrames, createFrameAttributor, operationFrame, siteExpressionKind, summarizeCandidateScopes, summarizeUnmapped } from "./feedback-attribution.mjs";
-import { completeFeedbackEntryOutput, feedbackEntryBootstrapPlugin, feedbackHtmlEntries, normalizeFeedbackEntryRequest, resolveFeedbackEntries, validateFeedbackDocument } from "./feedback-entry-bootstrap.mjs";
+import { completeFeedbackEntryOutput, feedbackEntryBootstrapPlugin, feedbackHtmlEntries, resolveFeedbackEntries, selectedFeedbackEntry, validateFeedbackDocument } from "./feedback-entry-bootstrap.mjs";
 import { observeFeedbackDocuments } from "./feedback-documents.mjs";
 import { configureFeedbackOptimizer, createFeedbackOptimizerObserver, feedbackRuntimePackages, resolveFeedbackRuntime } from "./feedback-optimizer.mjs";
 
@@ -558,7 +558,7 @@ async function collectProject(project, scenario, tools, browser, responses = new
     assert(bootstrap && !bootstrap.external, "Collector bootstrap module could not be resolved");
     client.transformRequest = async (request, ...options) => {
       let result = await transformRequest(request, ...options);
-      const selected = entries.find(row => row.request === normalizeFeedbackEntryRequest(request));
+      const selected = selectedFeedbackEntry(entries, request);
       const module = await graph.getModuleByUrl(request);
       if (selected) assert.equal(module?.id, selected.id, "Selected entry ID differs from the served entry transform ID");
       if (entryIds.has(module?.id)) {

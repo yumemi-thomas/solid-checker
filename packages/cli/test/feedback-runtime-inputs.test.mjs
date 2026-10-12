@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { SourceMap } from "node:module";
-import { bootstrapFeedbackEntry, completeFeedbackEntryOutput, feedbackEntryBootstrapPlugin, normalizeFeedbackEntryRequest, pinFeedbackEntryOutput, resolveFeedbackEntries, validateFeedbackDocument, validateFeedbackServedEntries } from "../scripts/feedback-entry-bootstrap.mjs";
+import { bootstrapFeedbackEntry, completeFeedbackEntryOutput, feedbackEntryBootstrapPlugin, normalizeFeedbackEntryRequest, pinFeedbackEntryOutput, resolveFeedbackEntries, selectedFeedbackEntry, validateFeedbackDocument, validateFeedbackServedEntries } from "../scripts/feedback-entry-bootstrap.mjs";
 import { captureFeedbackOptimizer, configureFeedbackOptimizer, createFeedbackOptimizerObserver, resolveFeedbackRuntime } from "../scripts/feedback-optimizer.mjs";
 import { feedbackReadPlugin, mergeDocumentStates, mergeFeedbackServerConfiguration } from "../scripts/feedback-browser.mjs";
 import { createServer, mergeConfig } from "vite";
@@ -317,4 +317,19 @@ test("runtime version queries are stable, other queries survive, and separate in
     await assert.rejects(resolveFeedbackRuntime(paths[1], undefined, {}, resolve, instances), /Multiple installed Solid runtime instances/);
     assert.equal(await resolveFeedbackRuntime("unknown", undefined, {}, async () => null, instances), null);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("the transform boundary compares Vite's already-decoded request without decoding it again", () => {
+  // Selection normalizes the raw HTML URL once, as Vite's HTTP middleware does.
+  const entries = ["/src/main.ts?label=100%25", "/src/main.ts?code=%2561"]
+    .map((url, index) => ({ url, request: normalizeFeedbackEntryRequest(url), id: `/abs/main-${index}` }));
+  assert.equal(entries[0].request, "/src/main.ts?label=100%");
+  assert.equal(entries[1].request, "/src/main.ts?code=%61");
+  // Vite then passes those decoded forms to transformRequest: they must select
+  // without throwing on a literal `%`, and `%61` must not become `a`.
+  assert.equal(selectedFeedbackEntry(entries, "/src/main.ts?label=100%"), entries[0]);
+  assert.equal(selectedFeedbackEntry(entries, "/src/main.ts?code=%61"), entries[1]);
+  assert.equal(selectedFeedbackEntry(entries, "/src/main.ts?code=a"), undefined);
+  // An unselected dependency with a literal-percent query is simply not selected.
+  assert.equal(selectedFeedbackEntry(entries, "/src/dep.ts?x=5%"), undefined);
 });
