@@ -266,6 +266,11 @@ pub struct AstFacts {
     pub parameter_properties: Vec<Span>,
     pub spreads: Vec<SpreadFact>,
     pub conditional_tests: Vec<Span>,
+    /// Exact operands of equality tests against `null` or the binder-proven
+    /// global `undefined`, or the left operand of a discarded `??` expression.
+    /// These observations neither coerce nor escape the operand.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nullish_test_operands: Vec<Span>,
     #[serde(default)]
     pub conditional_expressions: Vec<ConditionalExpressionFact>,
     #[serde(default)]
@@ -648,6 +653,10 @@ pub struct BindingFact {
 pub struct ObjectBindingFact {
     pub property: CompactString,
     pub local: NamedSpan,
+    /// An unescaped static identifier key, rather than a quoted/computed key.
+    /// Absent older facts confer no permission for plain-identifier transport.
+    #[serde(default)]
+    pub plain_identifier_key: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1558,6 +1567,7 @@ impl AstFacts {
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
+            nullish_test_operands: Vec::new(),
             conditional_expressions: Vec::new(),
             logical_expressions: Vec::new(),
             object_properties: Vec::new(),
@@ -1717,6 +1727,7 @@ struct Collector<'s, 'semantic> {
     parameter_properties: Vec<Span>,
     spreads: Vec<SpreadFact>,
     conditional_tests: Vec<Span>,
+    nullish_test_operands: Vec<Span>,
     conditional_expressions: Vec<ConditionalExpressionFact>,
     logical_expressions: Vec<LogicalExpressionFact>,
     object_properties: Vec<ObjectPropertyFact>,
@@ -1871,6 +1882,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
+            nullish_test_operands: Vec::new(),
             conditional_expressions: Vec::new(),
             logical_expressions: Vec::new(),
             object_properties: Vec::new(),
@@ -1933,6 +1945,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.parameter_properties.sort_unstable();
         self.spreads.sort_by_key(|fact| fact.span);
         self.conditional_tests.sort_unstable();
+        self.nullish_test_operands.sort_unstable();
         self.conditional_expressions.sort_by_key(|fact| fact.span);
         self.logical_expressions.sort_by_key(|fact| fact.span);
         self.object_properties.sort_by_key(|fact| fact.span);
@@ -1993,6 +2006,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             parameter_properties: self.parameter_properties,
             spreads: self.spreads,
             conditional_tests: self.conditional_tests,
+            nullish_test_operands: self.nullish_test_operands,
             conditional_expressions: self.conditional_expressions,
             logical_expressions: self.logical_expressions,
             object_properties: self.object_properties,
@@ -2087,6 +2101,10 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                             .trim_matches(['\'', '"']);
                         Some(ObjectBindingFact {
                             property: property_name.into(),
+                            plain_identifier_key: matches!(&property.key,
+                                PropertyKey::StaticIdentifier(key)
+                                    if self.source.get(key.span.start as usize..key.span.end as usize)
+                                        == Some(key.name.as_str())),
                             local: NamedSpan {
                                 span: span(local.span),
                             },
@@ -3510,6 +3528,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_logical_expression(&mut self, expression: &LogicalExpression<'a>) {
+        if expression.operator == LogicalOperator::Coalesce
+            && self.discarded_expression == Some(expression.span)
+        {
+            self.nullish_test_operands
+                .push(span(peel_ts_sugar(&expression.left).span()));
+        }
         self.logical_expressions.push(LogicalExpressionFact {
             span: span(expression.span),
             left: span(expression.left.span()),
@@ -3957,6 +3981,26 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
         use oxc_syntax::operator::BinaryOperator;
+
+        if matches!(
+            expression.operator,
+            BinaryOperator::StrictEquality
+                | BinaryOperator::StrictInequality
+                | BinaryOperator::Equality
+                | BinaryOperator::Inequality
+        ) {
+            for (value, tested) in [
+                (&expression.left, &expression.right),
+                (&expression.right, &expression.left),
+            ] {
+                if matches!(peel_ts_sugar(tested), Expression::NullLiteral(_))
+                    || matches!(peel_ts_sugar(tested), Expression::Identifier(id) if self.is_global_undefined(id))
+                {
+                    self.nullish_test_operands
+                        .push(span(peel_ts_sugar(value).span()));
+                }
+            }
+        }
 
         // The producer's `coercingBinaryOperators`, exactly: every operator
         // that applies ToPrimitive to both operands. `===`/`!==`, `in` and
@@ -4677,6 +4721,32 @@ export async function App(props: { title: string }) {
     }
 
     #[test]
+    fn nullish_tests_observe_exact_operands_without_value_escape() {
+        let source = r#"
+declare const value: object;
+value === undefined; null !== (value as object); value == null;
+value ?? (() => { throw new Error("missing"); })();
+const alias = value ?? {};
+function shadow(undefined: object) { return value === undefined; }
+value === {}; value > null;
+"#;
+        let facts = extract("tests.ts", source).unwrap();
+        let operands = facts
+            .nullish_test_operands
+            .iter()
+            .map(|span| &source[span.start as usize..span.end as usize])
+            .collect::<Vec<_>>();
+        assert_eq!(operands, ["value", "value", "value", "value"]);
+        let escaped = source.find("const alias = value").unwrap() + "const alias = ".len();
+        assert!(
+            !facts
+                .nullish_test_operands
+                .iter()
+                .any(|span| span.start as usize == escaped)
+        );
+    }
+
+    #[test]
     fn peels_only_transparent_typescript_wrappers_and_names_methods() {
         let source = r#"
 declare const fn: () => number;
@@ -4702,6 +4772,16 @@ class Box { helper() { return fn(); } }
             .map(|name| &source[name.span.start as usize..name.span.end as usize])
             .collect::<Vec<_>>();
         assert_eq!(methods, ["helper", "helper"]);
+    }
+
+    #[test]
+    fn object_binding_keys_distinguish_plain_identifiers_from_literal_spellings() {
+        let facts = extract("bindings.ts", r#"const { read: plain, "read": quoted, r\u0065ad: escaped, ["read"]: computed } = value;"#).unwrap();
+        let slots = &facts.bindings[0].object_slots;
+        assert_eq!(slots.len(), 3, "computed keys remain absent");
+        assert!(slots[0].plain_identifier_key);
+        assert!(!slots[1].plain_identifier_key);
+        assert!(!slots[2].plain_identifier_key);
     }
 
     #[test]

@@ -40,6 +40,46 @@
       "start": 845,
       "end": 882,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-forwarding/App.tsx",
+      "start": 1022,
+      "end": 1039,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-forwarding/App.tsx",
+      "start": 1200,
+      "end": 1213,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-forwarding/guards.tsx",
+      "start": 488,
+      "end": 507,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-member-forwarding/guards.tsx",
+      "start": 962,
+      "end": 982,
+      "fixes": 0
     }
   ]
 }

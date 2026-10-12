@@ -29661,12 +29661,27 @@ escapes beyond immediate map/forEach. Literal slots come from existing normalize
 return facts; no new syntax schema or producer protocol is introduced.
 
 One exact context wrapper may return an immutable intermediate context binding
-without other uses. Context cardinality, the complete joined receiver census
-and member stability still apply. Guarded intermediates, parameter-supplied
-provider values, destructuring and opaque escapes remain withheld.
+with pure truthiness/nullish observations. Const destructuring selects direct
+members only when every unescaped identifier key binds a plain identifier used solely as an immediate callee;
+defaults/rest/computed/nested patterns and escaped members remain refused.
+Context cardinality, the joined receiver census and member stability still apply.
 
-The recall-r4 Beacon orientation and Compass selectedIssueId/provider-query
-sites require additional guarded/destructured receiver or parameter provenance.
-This bounded transport does not claim their runtime MISS sites are fixed. No
+An unwritten plain parameter may carry an exact transported object or provider
+array from a current unexported function's only exact direct call. Source/binder
+and Type Facts reference censuses close that call; any second reference/call,
+export, alias, storage, pass, spread, default/rest parameter or `arguments` use
+refuses. Parameter receiver escapes join back into the argument census. ADR 0193's
+open/closed program boundary remains authoritative for library exports, and
+this narrower channel also refuses app exports. Async helper pre-await entry
+retains the caller's role; post-await execution stays uncertifiable.
+Focused retained/cold controls pin handoff/refusal and visible-veto transitions.
+The additive normalized nullish-test operand table supplies syntax identity;
+old absent tables withhold that observation, with no producer/protocol change.
+
+Source-only prediction: recall-r4 Beacon orientation now has its guarded wrapper
+and destructured sibling receiver joins. Compass selectedIssueId/provider-query
+sites remain open: mountShell has two call sites, its store comes through a
+createRoot callback result, and destination helpers are exported. No fresh corpus
+measurement or complete MISS-to-HIT conversion is claimed. No
 package names, Accessor types, generic callback dispatch, synthetic functions,
 borrowed execution roles or obligation suppression are admitted.

@@ -338,7 +338,7 @@ fn context_intermediate_handoff_edits_match_cold_in_both_directions() {
     for (version, source, reads) in [
         (1, aliased, false),
         (2, original.clone(), true),
-        (3, guarded, false),
+        (3, guarded, true),
         (4, original.clone(), true),
         (5, written, false),
         (6, original, true),
@@ -365,6 +365,186 @@ fn context_intermediate_handoff_edits_match_cold_in_both_directions() {
             warm, cold,
             "context handoff census dependency, edit {version}"
         );
+    }
+    let caller = directory
+        .join("App.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&caller).unwrap();
+    let mut version = 6;
+    for refused in [
+        source.replace(
+            "orientation: readOrientation }",
+            "orientation: readOrientation = () => 0 }",
+        ),
+        source
+            .replace(
+                "orientation: readOrientation }",
+                "orientation: readOrientation, ...rest }",
+            )
+            .replace(
+                "const n = readOrientation();",
+                "void rest; const n = readOrientation();",
+            ),
+        source.replace(
+            "const n = readOrientation();",
+            "const alias = readOrientation; void alias; const n = readOrientation();",
+        ),
+        source.replace(
+            "const { orientation } = value;",
+            "const { orientation } = value; const alias = orientation; void alias;",
+        ),
+        source.replace(
+            "orientation: readOrientation }",
+            "\"orientation\": readOrientation }",
+        ),
+        source.replace(
+            "orientation: readOrientation }",
+            "orient\\u0061tion: readOrientation }",
+        ),
+    ] {
+        for (changed, expected) in [(refused, false), (source.clone(), true)] {
+            version += 1;
+            let facts = session
+                .edit(
+                    vec![SourceChange {
+                        path: caller.clone(),
+                        version,
+                        source: Some(changed),
+                        compiler_options: CompilerOptions::default(),
+                    }],
+                    None,
+                )
+                .unwrap();
+            let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
+            let (warm, _) = incremental.build(&facts, vocabulary).unwrap();
+            assert_eq!(
+                consumer_read(&cold),
+                expected,
+                "destructured context transition {version}"
+            );
+            assert_eq!(
+                warm, cold,
+                "destructured context census dependency, edit {version}"
+            );
+        }
+    }
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn single_call_parameter_edits_match_cold_in_both_directions() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = copied_fixture_named(
+        "parameter-flow-edit",
+        "provider-array-provenance",
+        &["factory.ts"],
+    );
+    let source = "import { makeProviders, type Provider } from './factory';\nfunction queryProviders(providers: Provider[]) { return providers.map(p => p.query('body')); }\nexport function Body() { const providers = makeProviders(); const values = queryProviders(providers); return <p>{values.join()}</p>; }\n";
+    fs::write(directory.join("App.tsx"), source).unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("App.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let vocabulary = dialect::default_dialect().vocabulary;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (program, _) = incremental.build(&first, vocabulary).unwrap();
+    let consumer_read = |program: &solid_reactive_ir::Program| {
+        program.reads.iter().any(|read| {
+            read.location.path.as_ref() == caller
+                && read.context.as_ref() == "Body"
+                && read.transported
+                && !read.summary_attributed
+                && !read.is_uncertifiable()
+        })
+    };
+    assert!(
+        consumer_read(&program),
+        "one exact handoff must carry the consumer read: {:?}",
+        program.reads
+    );
+    let mut version = 0;
+    let mut check = |changed: String, expected: bool| {
+        version += 1;
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: caller.clone(),
+                    version,
+                    source: Some(changed),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
+        let (warm, _) = incremental.build(&facts, vocabulary).unwrap();
+        assert_eq!(
+            consumer_read(&cold),
+            expected,
+            "parameter transition {version}"
+        );
+        assert_eq!(
+            warm, cold,
+            "parameter handoff/census dependency, edit {version}"
+        );
+    };
+    for refused in [
+        source.replace("return <p>", "void queryProviders(providers); return <p>"),
+        source.replace("function queryProviders", "export function queryProviders"),
+        source.replace(
+            "{ return providers.map",
+            "{ providers = []; return providers.map",
+        ),
+        source.replace("providers: Provider[]", "providers: Provider[] = []"),
+        source.replace(
+            "{ return providers.map",
+            "{ void arguments; return providers.map",
+        ),
+        source.replace(
+            "const values = queryProviders(providers)",
+            "const alias = queryProviders; const values = alias(providers)",
+        ),
+        source.replace(
+            "{ return providers.map",
+            "{ const alias = providers; void alias; return providers.map",
+        ),
+        source.replace(
+            "{ return providers.map",
+            "{ providers.pop(); return providers.map",
+        ),
+        source.replace(
+            "queryProviders(providers); return",
+            "queryProviders(...[providers] as [Provider[]]); return",
+        ),
+        format!(
+            "{source}\ndeclare function retain(fn: typeof queryProviders): void; retain(queryProviders);\n"
+        ),
+        format!(
+            "{source}\nconst pair: [object, string] = [{{}}, 'query']; Reflect.set(...pair, 'replacement');\n"
+        ),
+        format!(
+            "{source}\nconst other = {{ query: () => 0 }}; other['query' as const] = () => 0;\n"
+        ),
+    ] {
+        check(refused, false);
+        check(source.into(), true);
     }
     drop(session);
     fs::remove_dir_all(directory).unwrap();

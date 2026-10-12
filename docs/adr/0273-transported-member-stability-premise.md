@@ -105,13 +105,14 @@ arrow may invoke one exact member on its element parameter as its entire body
 expression. Conditional/block callbacks and maps inside named/stored callback
 definitions remain refused. Its execution role
 comes from the iteration call site; the member's definition supplies no role.
-The exact immutable array binding has only immediate map/forEach receiver uses.
+The exact immutable array binding has only immediate map/forEach receiver uses
+or an admitted single-call parameter handoff with the same receiver census.
 Index replacement/deletion, length writes, push/pop/splice/shift/unshift/sort/
-reverse/fill/copyWithin, Object/Reflect mutation and any alias, helper argument,
+reverse/fill/copyWithin, Object/Reflect mutation and any alias, unsupported helper argument,
 storage, export, spread, destructuring or iteration use veto that binding.
 The same written-name/wildcard index vetoes the selected element member and
-visible map/forEach replacement. No array element aliases or helper-parameter
-provenance are inferred; holes, spreads and alternative returns are refused.
+visible map/forEach replacement. No array element aliases are inferred; holes,
+spreads and alternative returns are refused.
 This retains the existing unpatched standard-library runtime premise.
 Array-derived violations additionally require an exact local runtime source
 origin (including admitted memo wrappers). Type-only or external origins stay
@@ -121,13 +122,34 @@ participates in retained transport identity even when a summary is unchanged.
 An exact context wrapper may forward its immutable intermediate binding via
 its single return, with no other use beyond the ordinary receiver census.
 This handoff still joins the context-wide census and member stability veto.
-Truth checks, aliases, destructuring and opaque escapes of that intermediate
-remain refused; a guarded useContext wrapper is not newly certified.
+Pure truthiness and nullish equality tests of the exact context binding do not
+escape it. A discarded nullish-coalescing expression may test it too; a
+coalescing result assigned, returned or passed onward is still refused. The
+wrapper must retain its one exact unconditional return. Aliases and opaque
+escapes remain refused.
+
+A const object pattern may select direct callable members with plain identifier
+bindings only: no defaults, rest, computed keys or nesting. Every selected
+key must itself be an unescaped static identifier (quoted keys stay refused).
+Every selected binding is used solely as an immediate callee. Selection consults the same
+written-name/wildcard veto, and the context-wide receiver join includes these
+bindings. An escaped destructured member also refuses its source receiver.
+
+A plain unwritten parameter may carry an exact transported object or array
+from one exact direct call to an unexported current function. The function's
+complete source/binder and Type Facts reference censuses must contain that one
+call alone; aliases, stored/passed values, a second call, argument spreads,
+default/rest parameters and any `arguments`/`eval` use refuse the channel. ADR 0193's
+open-program rule still refuses published-library exports; this bounded
+channel additionally refuses app exports. Parameter and argument censuses join
+in both directions required for withholding, including chained handoffs.
+Parameter provenance supplies no execution role: an async helper's post-await
+invocations remain uncertifiable. No callback-result transport is added.
 
 Direct accessor calls, callable context values and other independent reads are
 outside this object-member premise. Definition obligations are never suppressed
 by another invocation. Transport-derived preference dependencies remain refused.
 Defaulted/multiple providers, computed/spread/getter/method literals, nested,
-mutable/aliased/escaped/exported/destructured receivers, nonliteral/multiple
-factory returns, async members and implementations absent from source discovery
+mutable/aliased/escaped/exported receivers, unsupported destructuring,
+nonliteral/multiple factory returns, async members and implementations absent from source discovery
 remain withheld. Unpatched built-in/runtime premises retain their existing scope.

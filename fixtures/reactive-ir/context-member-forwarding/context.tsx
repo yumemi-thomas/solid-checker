@@ -7,5 +7,6 @@ export function Provider() {
 }
 export function useValue(): Value {
   const value = useContext(Context);
+  if (!value) throw new Error("missing context");
   return value;
 }

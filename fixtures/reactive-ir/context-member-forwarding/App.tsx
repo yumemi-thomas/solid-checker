@@ -27,3 +27,24 @@ export function NamespaceWrapped() {
   const orientation = (value.orientation as () => number)();
   return <p>{orientation}</p>;
 }
+
+export function DestructuredBody() {
+  const { orientation: readOrientation } = useValue();
+  const n = readOrientation();
+  return <p>{n}</p>;
+}
+export function DestructuredApply() {
+  const value = useValue();
+  const { orientation } = value;
+  createEffect(() => 1, () => { void orientation(); });
+  return <p>apply</p>;
+}
+export function DestructuredTracked() {
+  const { orientation } = useValue();
+  const n = createMemo(() => orientation());
+  return <p>{n()}</p>;
+}
+export function DestructuredPreference() {
+  const { orientation } = useValue();
+  return <p>{orientation() && <span>ready</span>}</p>;
+}
