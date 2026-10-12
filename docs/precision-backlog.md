@@ -29564,3 +29564,43 @@ Strict published rc.13 typing checks, scoped snapshots and focused native checks
 are recorded in rust/target/research/accessor-provenance/RESULT.md. Corpus recall,
 ownership/oracle/contract sweeps and full verification remain the lead's handoff
 work; no new package authority or complete corpus recall is claimed.
+
+### Exact identifier identity for bindings and context providers (2026-10-12)
+
+A Type Facts entity demanded at a composite expression span carries the symbol
+of the token the expression begins with: the entity at `ctx.a() === "x"` names
+`ctx`. `bindings_by_reference` indexed every such entity span, so
+`binding_at_reference` answered a binding for whole comparisons, member
+expressions and conditionals. Accessor provenance then took a helper's boolean
+return for the shared context object and vetoed the whole context, so one
+helper such as `isActive = () => ctx.active() === "a"` hid every other member
+read of that context. The index now admits an entity span only when it is
+exactly one identifier (an identifier fact or a binder reference). Accessor
+provenance gates its own value, context-origin and useContext-argument
+fallbacks the same way.
+
+Two census rules changed with it:
+
+- A JSX provider whose tag is not one exact identifier, such as the namespace
+  member `<themes.ThemeContext value>`, used to be keyed to the wrong binding or
+  dropped from the provider census. A second provider written that way could go
+  uncounted. Any such provider now closes no context's census.
+- In a closed program, a local `export { name }` is censused like
+  `export const name` (shared object and context value escaped), not as an
+  arbitrary escaping reference. An open program keeps the specifier an escape.
+
+Fixtures: `context-member-identity` (export-list positive, comparison helpers
+in JSX/attribute/event positions, namespace second-provider negative) and
+`context-member-identity-open`. Corpus (rc.13, browser host): 567 violations
+and 3,715 uncertifiable before and after, with no finding moved. Beacon's
+runtime-confirmed `tabs/index.tsx:66` additionally needs the truthiness-guard
+wrapper channel parked on `wip/provenance-2`; with it, that site is SC1001.
+
+Remaining approximations:
+
+- A context member withheld by a blocked, ambiguous or unkeyed provider census
+  is silent, not an SC9012 obligation: `calls` drops a transported lookup that
+  fails without recording an unavailable entry.
+- In an open program, an exported `const` context or wrapper still keeps the
+  project's own provider census. An unseen importer could provide another value
+  or replace a member, so this needs its own open-program escape rule.

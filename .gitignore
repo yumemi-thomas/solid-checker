@@ -390,6 +390,10 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/inferred-host-callback-invocation/node_modules/**
 !fixtures/reactive-ir/accessor-provenance/node_modules/
 !fixtures/reactive-ir/accessor-provenance/node_modules/**
+!fixtures/reactive-ir/context-member-identity/node_modules/
+!fixtures/reactive-ir/context-member-identity/node_modules/**
+!fixtures/reactive-ir/context-member-identity-open/node_modules/
+!fixtures/reactive-ir/context-member-identity-open/node_modules/**
 !fixtures/reactive-ir/transported-member-stability/node_modules/
 !fixtures/reactive-ir/transported-member-stability/node_modules/**
 !fixtures/reactive-ir/transported-member-stability-assign/node_modules/

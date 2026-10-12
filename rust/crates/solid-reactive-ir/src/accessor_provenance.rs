@@ -39,6 +39,7 @@ pub(super) struct Resolver<'a, 'facts> {
     providers: HashMap<Location, Vec<Option<(String, Span)>>>,
     source_origins: HashSet<SymbolId>,
     blocked_contexts: HashSet<Location>,
+    unkeyed_provider: bool,
     member_stability: MemberStability,
 }
 
@@ -275,6 +276,14 @@ struct ClosedUses {
     context_value_escaped: bool,
 }
 
+impl ClosedUses {
+    /// An exported binding's shared object can be replaced by any importer.
+    fn export(&mut self) {
+        self.object_escaped = true;
+        self.context_value_escaped = true;
+    }
+}
+
 impl Resolver<'_, '_> {
     pub fn new<'a, 'facts>(
         facts: &'a ProjectFacts,
@@ -297,6 +306,7 @@ impl Resolver<'_, '_> {
             providers: HashMap::new(),
             source_origins: HashSet::new(),
             blocked_contexts: HashSet::new(),
+            unkeyed_provider: false,
             member_stability: MemberStability::index(facts, lookup),
         };
         for file in &facts.files {
@@ -367,7 +377,16 @@ impl Resolver<'_, '_> {
                 if !lookup.is_context_reference(file.path.as_str(), target) {
                     continue;
                 }
-                if let Some(key) = resolver.binding_key(file, target) {
+                // A provider whose tag is not one exact identifier (a
+                // namespace member, for one) cannot be attributed to one
+                // context binding, so no context's provider census is closed.
+                let key = exact_identifier(file, target)
+                    .then(|| resolver.binding_key(file, target))
+                    .flatten();
+                if key.is_none() {
+                    resolver.unkeyed_provider = true;
+                }
+                if let Some(key) = key {
                     let mut values = element
                         .attributes
                         .iter()
@@ -395,6 +414,19 @@ impl Resolver<'_, '_> {
                 .filter_map(|c| c.arguments.first())
                 .map(|a| file.ast.peel_ts_sugar_span(a.span))
                 .collect::<HashSet<_>>();
+            // In a closed program, a local `export { name }` publishes the
+            // binding exactly as an `export const` declaration does: every
+            // importer is itself a censused reference. It is therefore
+            // censused as an export rather than as an escaping reference.
+            // An open program keeps the specifier an escape.
+            let export_specifiers = file
+                .ast
+                .exports
+                .iter()
+                .filter(|e| lookup.program_closed && e.module.is_none() && !e.type_only)
+                .flat_map(|e| e.specifiers.iter().filter(|s| !s.type_only))
+                .map(|s| s.local.span)
+                .collect::<HashSet<_>>();
             for id in file
                 .ast
                 .identifiers
@@ -404,6 +436,10 @@ impl Resolver<'_, '_> {
                 let Some(key) = resolver.binding_key(file, id.span) else {
                     continue;
                 };
+                if export_specifiers.contains(&id.span) {
+                    resolver.uses.entry(key).or_default().export();
+                    continue;
+                }
                 let written = file
                     .ast
                     .assignments
@@ -432,12 +468,11 @@ impl Resolver<'_, '_> {
             }
             for export in file.ast.exports.iter() {
                 for binding in file.ast.exported_bindings(export) {
-                    let uses = resolver
+                    resolver
                         .uses
                         .entry(location(file.path.shared(), binding.pattern))
-                        .or_default();
-                    uses.object_escaped = true;
-                    uses.context_value_escaped = true;
+                        .or_default()
+                        .export();
                 }
             }
         }
@@ -809,6 +844,12 @@ impl Resolver<'_, '_> {
                 context: false,
             });
         }
+        // A demanded entity at a composite span carries its leading token's
+        // symbol, not the expression's value: `ctx.a() === "x"` names `ctx`.
+        // Only an exact identifier denotes its binding.
+        if !exact_identifier(file, span) {
+            return None;
+        }
         let (bound_file, binding, symbol) = self
             .lookup
             .binding_at_reference(file.path.as_str(), span)
@@ -872,13 +913,16 @@ impl Resolver<'_, '_> {
         file: &FileFacts,
         call: &ast::CallFact,
     ) -> Option<(&'a FileFacts, Span)> {
-        if call.arguments.len() != 1 || call.arguments[0].spread {
+        if self.unkeyed_provider || call.arguments.len() != 1 || call.arguments[0].spread {
             return None;
         }
-        let (context_file, binding, _) = self.lookup.binding_at_reference(
-            file.path.as_str(),
-            file.ast.peel_ts_sugar_span(call.arguments[0].span),
-        )?;
+        let argument = file.ast.peel_ts_sugar_span(call.arguments[0].span);
+        if !exact_identifier(file, argument) {
+            return None;
+        }
+        let (context_file, binding, _) = self
+            .lookup
+            .binding_at_reference(file.path.as_str(), argument)?;
         if !binding.immutable
             || binding.shape != ast::BindingShape::Identifier
             || binding.names.len() != 1
@@ -932,11 +976,15 @@ impl Resolver<'_, '_> {
                 return None;
             }
             if self.role(file, call) == Some(ContextRole::Read) {
-                return (call.arguments.len() == 1 && !call.arguments[0].spread)
-                    .then(|| {
-                        self.binding_key(file, file.ast.peel_ts_sugar_span(call.arguments[0].span))
-                    })
-                    .flatten();
+                let argument = call
+                    .arguments
+                    .first()
+                    .map(|a| file.ast.peel_ts_sugar_span(a.span))?;
+                return (call.arguments.len() == 1
+                    && !call.arguments[0].spread
+                    && exact_identifier(file, argument))
+                .then(|| self.binding_key(file, argument))
+                .flatten();
             }
             let callee = file.ast.peel_ts_sugar_span(call.callee);
             let target = self
@@ -955,6 +1003,9 @@ impl Resolver<'_, '_> {
                 single_return(target_file, function)?,
                 depth - 1,
             );
+        }
+        if !exact_identifier(file, span) {
+            return None;
         }
         let (bound_file, binding, _) =
             self.lookup.binding_at_reference(file.path.as_str(), span)?;
@@ -1015,6 +1066,16 @@ impl Resolver<'_, '_> {
             }
         })
     }
+}
+
+/// Whether `span` is exactly one identifier, as opposed to an expression an
+/// identifier merely begins.
+fn exact_identifier(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .identifiers
+        .binary_search_by_key(&span, |id| id.span)
+        .is_ok()
+        || file.ast.reference_declaration(span).is_some()
 }
 
 fn single_return(file: &FileFacts, function: &ast::FunctionFact) -> Option<Span> {

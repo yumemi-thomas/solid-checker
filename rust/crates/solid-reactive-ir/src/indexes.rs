@@ -2529,8 +2529,36 @@ impl<'a> SemanticLookup<'a> {
             // was demanded at a use. Conversely, exact entity facts can exist
             // at a use omitted from that reference projection. Retain both
             // compiler proofs, matching the former direct-or-reference query.
+            //
+            // An entity demanded at a composite expression carries the symbol
+            // of the token it begins with (`ctx.a() === "x"` names `ctx`), not
+            // the expression's value, so only an exact identifier span is a
+            // reference to that binding.
+            let files = self
+                .facts
+                .files
+                .iter()
+                .map(|file| (file.path.as_str(), file))
+                .collect::<HashMap<_, _>>();
             for (path, entities) in &self.entities.by_path {
+                let Some(file) = files.get(path.as_str()) else {
+                    continue;
+                };
                 for ((start, end), symbol) in entities {
+                    let (Ok(start_u32), Ok(end_u32)) = (u32::try_from(*start), u32::try_from(*end))
+                    else {
+                        continue;
+                    };
+                    let span = Span::new(start_u32, end_u32);
+                    let identifier = file
+                        .ast
+                        .identifiers
+                        .binary_search_by_key(&span, |id| id.span)
+                        .is_ok()
+                        || file.ast.reference_declaration(span).is_some();
+                    if !identifier {
+                        continue;
+                    }
                     if let Some(resolution) = by_symbol.get(symbol) {
                         by_path
                             .entry(path.clone())
