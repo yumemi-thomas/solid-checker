@@ -98,6 +98,32 @@ Addition and removal both compare the full retained/cold Program. Callback-fed
 context mutation controls also cover the review's separate direct consumer.
 No premise state is retained independently.
 
+Returned provider arrays additionally require one exact factory's single array
+literal of closed object literals and source-discovered synchronous arrow
+members. A standard-library-identified map/forEach with an inline synchronous
+arrow may invoke one exact member on its element parameter as its entire body
+expression. Conditional/block callbacks and maps inside named/stored callback
+definitions remain refused. Its execution role
+comes from the iteration call site; the member's definition supplies no role.
+The exact immutable array binding has only immediate map/forEach receiver uses.
+Index replacement/deletion, length writes, push/pop/splice/shift/unshift/sort/
+reverse/fill/copyWithin, Object/Reflect mutation and any alias, helper argument,
+storage, export, spread, destructuring or iteration use veto that binding.
+The same written-name/wildcard index vetoes the selected element member and
+visible map/forEach replacement. No array element aliases or helper-parameter
+provenance are inferred; holes, spreads and alternative returns are refused.
+This retains the existing unpatched standard-library runtime premise.
+Array-derived violations additionally require an exact local runtime source
+origin (including admitted memo wrappers). Type-only or external origins stay
+attributed through ordinary helper hops. The per-analysis source-origin set
+participates in retained transport identity even when a summary is unchanged.
+
+An exact context wrapper may forward its immutable intermediate binding via
+its single return, with no other use beyond the ordinary receiver census.
+This handoff still joins the context-wide census and member stability veto.
+Truth checks, aliases, destructuring and opaque escapes of that intermediate
+remain refused; a guarded useContext wrapper is not newly certified.
+
 Direct accessor calls, callable context values and other independent reads are
 outside this object-member premise. Definition obligations are never suppressed
 by another invocation. Transport-derived preference dependencies remain refused.

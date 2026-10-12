@@ -14,7 +14,12 @@ use crate::{SymbolId, indexes::SemanticLookup, location, owners::containing_ast_
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum Callable {
     Accessor(SymbolId),
-    Function { path: String, span: Span },
+    Function {
+        path: String,
+        span: Span,
+    },
+    /// Exact synchronous element-member invocations at a built-in map/forEach.
+    ArrayMembers(Vec<(String, Span)>),
 }
 
 enum Value {
@@ -23,6 +28,10 @@ enum Value {
         path: String,
         span: Span,
         context: bool,
+    },
+    Array {
+        path: String,
+        elements: Vec<Span>,
     },
 }
 
@@ -38,6 +47,7 @@ pub(super) struct Resolver<'a, 'facts> {
     uses: HashMap<Location, ClosedUses>,
     providers: HashMap<Location, Vec<Option<(String, Span)>>>,
     source_origins: HashSet<SymbolId>,
+    runtime_source_origins: HashSet<SymbolId>,
     blocked_contexts: HashSet<Location>,
     unkeyed_provider: bool,
     member_stability: MemberStability,
@@ -271,6 +281,7 @@ fn mutation_builtin<'a>(
 #[derive(Default)]
 struct ClosedUses {
     object_escaped: bool,
+    array_escaped: bool,
     callable_escaped: bool,
     context_escaped: bool,
     context_value_escaped: bool,
@@ -280,6 +291,7 @@ impl ClosedUses {
     /// An exported binding's shared object can be replaced by any importer.
     fn export(&mut self) {
         self.object_escaped = true;
+        self.array_escaped = true;
         self.context_value_escaped = true;
     }
 }
@@ -305,6 +317,7 @@ impl Resolver<'_, '_> {
             uses: HashMap::new(),
             providers: HashMap::new(),
             source_origins: HashSet::new(),
+            runtime_source_origins: HashSet::new(),
             blocked_contexts: HashSet::new(),
             unkeyed_provider: false,
             member_stability: MemberStability::index(facts, lookup),
@@ -334,6 +347,12 @@ impl Resolver<'_, '_> {
         // when its selected member is immediately called; a Get that escapes
         // an object/member cannot certify a later invocation.
         for file in &facts.files {
+            let array_receivers = file
+                .ast
+                .calls
+                .iter()
+                .filter_map(|call| array_iteration_receiver(file, call, lookup))
+                .collect::<HashSet<_>>();
             let callees = file
                 .ast
                 .calls
@@ -355,6 +374,18 @@ impl Resolver<'_, '_> {
                 .iter()
                 .filter_map(|r| r.argument)
                 .map(|s| file.ast.peel_ts_sugar_span(s))
+                .collect::<HashSet<_>>();
+            // An exact context wrapper may forward its immutable intermediate
+            // binding once. This is a handoff to the eventual receiver census,
+            // not permission for an arbitrary object return or other escape.
+            let context_returns = file
+                .ast
+                .functions
+                .iter()
+                .filter(|f| !f.r#async && !f.generator && lookup.function_value_is_current(file, f))
+                .filter_map(|f| single_return(file, f))
+                .map(|s| file.ast.peel_ts_sugar_span(s))
+                .filter(|s| resolver.context_origin(file, *s, 24).is_some())
                 .collect::<HashSet<_>>();
             let properties = file
                 .ast
@@ -453,7 +484,10 @@ impl Resolver<'_, '_> {
                         .any(|s| s.contains(id.span));
                 let uses = resolver.uses.entry(key).or_default();
                 uses.object_escaped |= written
-                    || !(receivers.contains(&id.span) || provider_values.contains(&id.span));
+                    || !(receivers.contains(&id.span)
+                        || provider_values.contains(&id.span)
+                        || context_returns.contains(&id.span));
+                uses.array_escaped |= written || !array_receivers.contains(&id.span);
                 uses.callable_escaped |= written
                     || !(callees.contains(&id.span)
                         || returned.contains(&id.span)
@@ -464,7 +498,8 @@ impl Resolver<'_, '_> {
                 uses.context_value_escaped |= written
                     || !(receivers.contains(&id.span)
                         || callees.contains(&id.span)
-                        || provider_values.contains(&id.span));
+                        || provider_values.contains(&id.span)
+                        || context_returns.contains(&id.span));
             }
             for export in file.ast.exports.iter() {
                 for binding in file.ast.exported_bindings(export) {
@@ -482,15 +517,18 @@ impl Resolver<'_, '_> {
                     continue;
                 }
                 for name in &binding.names {
-                    if let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span)
-                        && !source_has_runtime_witness(
-                            symbol,
-                            accessors,
-                            lookup.entities(),
-                            names,
-                            lookup,
-                        )
-                        && !crate::indexes::binding_written(file, name.span)
+                    let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) else {
+                        continue;
+                    };
+                    if source_has_runtime_witness(
+                        symbol,
+                        accessors,
+                        lookup.entities(),
+                        names,
+                        lookup,
+                    ) {
+                        resolver.runtime_source_origins.insert(symbol.clone());
+                    } else if !crate::indexes::binding_written(file, name.span)
                         && resolver.source_call(file, name.span).as_ref() == Some(symbol)
                     {
                         resolver.source_origins.insert(symbol.clone());
@@ -623,6 +661,14 @@ impl Resolver<'_, '_> {
     pub fn has_source_origin(&self, symbol: &SymbolId) -> bool {
         self.source_origins.contains(symbol)
     }
+    pub fn has_runtime_source_origin(&self, symbol: &SymbolId) -> bool {
+        self.runtime_source_origins.contains(symbol)
+    }
+    pub fn proven_source_origins(&self) -> impl Iterator<Item = &SymbolId> {
+        self.runtime_source_origins
+            .iter()
+            .chain(self.source_origins.iter())
+    }
     pub fn has_extra_source_origins(&self) -> bool {
         !self.source_origins.is_empty()
     }
@@ -637,6 +683,35 @@ impl Resolver<'_, '_> {
         let mut unavailable = HashSet::new();
         for call_file in &self.facts.files {
             for call in &call_file.ast.calls {
+                if let Some(targets) = self.array_members(call_file, call) {
+                    let callee = location(call_file.path.shared(), call.callee);
+                    if targets.iter().all(|target| self.functions.contains(target)) {
+                        calls.insert(callee, Callable::ArrayMembers(targets));
+                    } else if targets.iter().any(|(path, span)| {
+                        let file = self
+                            .lookup
+                            .file_by_path(path)
+                            .expect("resolved array member file");
+                        let function = file
+                            .ast
+                            .functions
+                            .iter()
+                            .find(|f| f.span == *span)
+                            .expect("resolved array member");
+                        file.ast
+                            .calls
+                            .iter()
+                            .any(|c| function.body.contains(c.span))
+                            || file
+                                .ast
+                                .members
+                                .iter()
+                                .any(|m| function.body.contains(m.span))
+                    }) {
+                        unavailable.insert(callee);
+                    }
+                    continue;
+                }
                 let mut transported = false;
                 let value = self.value(call_file, call.callee, 24, &mut transported);
                 if transported {
@@ -679,6 +754,119 @@ impl Resolver<'_, '_> {
             }
         }
         (calls, unavailable)
+    }
+
+    fn array_members(&self, file: &FileFacts, call: &ast::CallFact) -> Option<Vec<(String, Span)>> {
+        let receiver = array_iteration_receiver(file, call, self.lookup)?;
+        // A stored or named callback's witnessed use cannot establish its
+        // other invocations. Leave those definitions and obligations alone;
+        // only direct call-site execution and ordinary helper entry compose.
+        if super::runs_in_object_callable(file, call.span)
+            || crate::execution_role::named_callback_execution_role(file, call.callee, self.lookup)
+                .is_some()
+        {
+            return None;
+        }
+        if matches!(self.member_stability.state("map"), Stability::Vetoed(_))
+            || matches!(self.member_stability.state("forEach"), Stability::Vetoed(_))
+        {
+            return None;
+        }
+        if call.arguments.len() != 1 || call.arguments[0].spread {
+            return None;
+        }
+        let callback_span = file.ast.peel_ts_sugar_span(call.arguments[0].span);
+        let callback = file
+            .ast
+            .functions
+            .iter()
+            .find(|f| f.span == callback_span)?;
+        if callback.kind != ast::FunctionKind::Arrow
+            || callback.r#async
+            || callback.generator
+            || !callback.expression_body
+            || callback.parameters.len() != 1
+            || callback.rest_parameter
+        {
+            return None;
+        }
+        let parameter = &callback.parameters[0];
+        let [name] = parameter.names.as_slice() else {
+            return None;
+        };
+        if parameter.initializer.is_some() || parameter.pattern != name.span {
+            return None;
+        }
+        // Exactly one invocation; no deferred nested body, alias or element escape.
+        let mut invocations = file
+            .ast
+            .calls
+            .iter()
+            .filter(|c| callback.body.contains(c.span));
+        let invocation = invocations.next()?;
+        if invocations.next().is_some()
+            || invocation.construct
+            || invocation.arguments.iter().any(|a| a.spread)
+            || file.ast.peel_ts_sugar_span(callback.body) != invocation.span
+            || !super::body_site_runs_during_call(file, callback, invocation.span)
+        {
+            return None;
+        }
+        let member = file.ast.members.iter().find(|m| {
+            m.span == file.ast.peel_ts_sugar_span(invocation.callee)
+                && !file.ast.computed_members.contains(&m.span)
+        })?;
+        let object = file.ast.peel_ts_sugar_span(member.object);
+        if file.ast.reference_declaration(object) != Some(name.span)
+            || file.ast.identifiers.iter().any(|id| {
+                id.role == ast::IdentifierRole::Reference
+                    && file.ast.reference_declaration(id.span) == Some(name.span)
+                    && id.span != object
+            })
+        {
+            return None;
+        }
+        let name = file.source_text(member.property)?;
+        if matches!(self.member_stability.state(name), Stability::Vetoed(_)) {
+            return None;
+        }
+        let Value::Array { path, elements } = self.value(file, receiver, 24, &mut false)? else {
+            return None;
+        };
+        let array_file = self.lookup.file_by_path(&path)?;
+        let mut targets = Vec::new();
+        for element in elements {
+            let properties = closed_properties(array_file, element)?;
+            let property = properties.into_iter().find(|p| {
+                array_file
+                    .source_text(p.key)
+                    .map(|s| s.trim_matches(['\'', '"']))
+                    == Some(name)
+            })?;
+            let Value::Callable(Callable::Function { path, span }) = self.value(
+                array_file,
+                property.shorthand_binding.unwrap_or(property.value),
+                24,
+                &mut false,
+            )?
+            else {
+                return None;
+            };
+            let selected = self
+                .lookup
+                .file_by_path(&path)?
+                .ast
+                .functions
+                .iter()
+                .find(|f| f.span == span)?;
+            if selected.kind != ast::FunctionKind::Arrow || selected.r#async || selected.generator {
+                return None;
+            }
+            if !targets.contains(&(path.clone(), span)) {
+                targets.push((path, span));
+            }
+        }
+        (!targets.is_empty()).then_some(targets)
     }
 
     pub fn read(&self, symbol: &SymbolId, file: &FileFacts, span: Span) -> Option<SummaryRead> {
@@ -825,6 +1013,14 @@ impl Resolver<'_, '_> {
             let returned = single_return(target_file, function)?;
             *transported = true;
             let value = self.value(target_file, returned, depth - 1, transported)?;
+            if matches!(value, Value::Array { .. })
+                && !target_file
+                    .ast
+                    .array_literals
+                    .contains(&target_file.ast.peel_ts_sugar_span(returned))
+            {
+                return None;
+            }
             if let Value::Object {
                 path,
                 span,
@@ -842,6 +1038,15 @@ impl Resolver<'_, '_> {
                 path: file.path.to_string(),
                 span,
                 context: false,
+            });
+        }
+        if file.ast.array_literals.contains(&span) {
+            // ReturnStructure owns the exact slots, including holes/spreads.
+            // Do not infer them from contained object spans.
+            let elements = returned_array_elements(file, span)?;
+            return Some(Value::Array {
+                path: file.path.to_string(),
+                elements,
             });
         }
         // A demanded entity at a composite span carries its leading token's
@@ -899,6 +1104,14 @@ impl Resolver<'_, '_> {
             return None;
         }
         let value = self.value(bound_file, binding.initializer?, depth - 1, transported)?;
+        if matches!(value, Value::Array { .. }) {
+            let key = location(bound_file.path.shared(), binding.pattern);
+            return self
+                .uses
+                .get(&key)
+                .is_none_or(|uses| !uses.array_escaped)
+                .then_some(value);
+        }
         if !self.binding_is_closed(bound_file, binding, matches!(value, Value::Object { .. })) {
             return None;
         }
@@ -1088,6 +1301,39 @@ fn exact_identifier(file: &FileFacts, span: Span) -> bool {
         || file.ast.reference_declaration(span).is_some()
 }
 
+/// The signature names the built-in operation; the admitted fresh literal
+/// and closed receiver census establish the runtime array identity. A typed
+/// custom receiver cannot become an array solely from this signature.
+fn array_iteration_receiver(
+    file: &FileFacts,
+    call: &ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    if call.construct {
+        return None;
+    }
+    let declaration = lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    let property = match declaration.qualified_name.as_ref() {
+        "Array.map" | "ReadonlyArray.map" => "map",
+        "Array.forEach" | "ReadonlyArray.forEach" => "forEach",
+        _ => return None,
+    };
+    if declaration.location.path != declaration.source_file
+        || std::path::Path::new(declaration.source_file.as_ref())
+            .file_name()?
+            .to_str()?
+            != "lib.es5.d.ts"
+    {
+        return None;
+    }
+    let member = file.ast.members.iter().find(|m| {
+        m.span == file.ast.peel_ts_sugar_span(call.callee)
+            && !file.ast.computed_members.contains(&m.span)
+            && file.source_text(m.property) == Some(property)
+    })?;
+    Some(file.ast.peel_ts_sugar_span(member.object))
+}
+
 fn single_return(file: &FileFacts, function: &ast::FunctionFact) -> Option<Span> {
     if let Some(returned) = &function.expression_return {
         return returned.argument;
@@ -1100,6 +1346,39 @@ fn single_return(file: &FileFacts, function: &ast::FunctionFact) -> Option<Span>
         return None;
     }
     returned.argument
+}
+
+fn returned_array_elements(file: &FileFacts, span: Span) -> Option<Vec<Span>> {
+    let span = file.ast.peel_ts_sugar_span(span);
+    if !file.ast.array_literals.contains(&span) {
+        return None;
+    }
+    let returned = file
+        .ast
+        .returns
+        .iter()
+        .chain(
+            file.ast
+                .functions
+                .iter()
+                .filter_map(|f| f.expression_return.as_ref()),
+        )
+        .find(|r| {
+            r.argument
+                .is_some_and(|s| file.ast.peel_ts_sugar_span(s) == span)
+        })?;
+    let structure = returned.structure.as_ref()?;
+    if !structure.complete_literal || structure.elements.is_empty() {
+        return None;
+    }
+    structure
+        .elements
+        .iter()
+        .map(|s| {
+            let s = file.ast.peel_ts_sugar_span((*s)?);
+            closed_properties(file, s).map(|_| s)
+        })
+        .collect()
 }
 
 /// Literal syntax supplies member identity only when its entire own property
@@ -1233,6 +1512,46 @@ mod tests {
             let span = file.ast.bindings[0].initializer.unwrap();
             assert_eq!(
                 closed_properties(&file, span).is_some(),
+                admitted,
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn returned_array_census_requires_every_exact_slot_to_be_a_closed_object() {
+        for (source, admitted) in [
+            (
+                "function make() { return [{ query: read }, { query: other }]; }",
+                true,
+            ),
+            ("const make = () => ([{ query: read }] as const);", true),
+            (
+                "function make() { return [{ query: read }, ...other]; }",
+                false,
+            ),
+            ("function make() { return [{ query: read }, ,]; }", false),
+            ("function make() { return [{ query: read }, 0]; }", false),
+            ("function make() { return [[{ query: read }]]; }", false),
+            (
+                "function make() { return [{ query: read, ...extra }]; }",
+                false,
+            ),
+            ("function make() { return [{ [key]: read }]; }", false),
+            (
+                "function make() { return [{ get query() { return read; } }]; }",
+                false,
+            ),
+            (
+                "function make() { return [{ query() { return read(); } }]; }",
+                false,
+            ),
+            ("function make() { return []; }", false),
+        ] {
+            let file = file(source);
+            let returned = single_return(&file, &file.ast.functions[0]).unwrap();
+            assert_eq!(
+                returned_array_elements(&file, returned).is_some(),
                 admitted,
                 "{source}"
             );

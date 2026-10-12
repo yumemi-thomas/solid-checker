@@ -406,3 +406,11 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/transported-member-stability-assign/node_modules/**
 !fixtures/reactive-ir/transported-member-stability-key/node_modules/
 !fixtures/reactive-ir/transported-member-stability-key/node_modules/**
+!fixtures/reactive-ir/provider-array-provenance/node_modules/
+!fixtures/reactive-ir/provider-array-provenance/node_modules/**
+!fixtures/reactive-ir/context-member-forwarding/node_modules/
+!fixtures/reactive-ir/context-member-forwarding/node_modules/**
+!fixtures/reactive-ir/provider-array-vetoes/node_modules/
+!fixtures/reactive-ir/provider-array-vetoes/node_modules/**
+!fixtures/reactive-ir/context-member-refusals/node_modules/
+!fixtures/reactive-ir/context-member-refusals/node_modules/**

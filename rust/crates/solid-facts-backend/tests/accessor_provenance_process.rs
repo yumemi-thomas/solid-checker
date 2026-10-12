@@ -6,8 +6,12 @@ use solid_facts::compiler::CompilerOptions;
 use solid_facts_backend::{NativeIncrementalSession, SourceChange, TypeFactsSession, dialect};
 
 fn copied_fixture(label: &str, sources: &[&str]) -> PathBuf {
+    copied_fixture_named(label, "accessor-provenance", sources)
+}
+
+fn copied_fixture_named(label: &str, name: &str, sources: &[&str]) -> PathBuf {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let fixture = root.join("fixtures/reactive-ir/accessor-provenance");
+    let fixture = root.join("fixtures/reactive-ir").join(name);
     let directory = temporary_directory(label);
     for name in ["tsconfig.json", "solid-js.d.ts"]
         .into_iter()
@@ -15,14 +19,141 @@ fn copied_fixture(label: &str, sources: &[&str]) -> PathBuf {
     {
         fs::copy(fixture.join(name), directory.join(name)).unwrap();
     }
-    let stub = directory.join("node_modules/solid-js");
-    fs::create_dir_all(&stub).unwrap();
-    fs::copy(
-        fixture.join("node_modules/solid-js/package.json"),
-        stub.join("package.json"),
-    )
-    .unwrap();
+    for package in ["solid-js", "@solidjs/signals", "@solidjs/web"] {
+        let stub = directory.join("node_modules").join(package);
+        fs::create_dir_all(&stub).unwrap();
+        fs::copy(
+            fixture
+                .join("node_modules")
+                .join(package)
+                .join("package.json"),
+            stub.join("package.json"),
+        )
+        .unwrap();
+    }
     directory
+}
+
+#[test]
+fn returned_array_edits_match_cold_in_both_directions() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = copied_fixture_named(
+        "array-provenance-edit",
+        "provider-array-provenance",
+        &["factory.ts"],
+    );
+    let source = "import { makeProviders } from './factory';\nexport function Body() {\n const providers = makeProviders();\n const values = providers.map(p => p.query('body'));\n return <p>{values.join()}</p>;\n}\n";
+    fs::write(directory.join("App.tsx"), source).unwrap();
+    fs::write(directory.join("fakejs.ts"), "import type { Signal } from 'solid-js';\nexport type { SourceAccessor } from 'solid-js';\nexport declare function createSignal<T>(value: T): Signal<T>;\n").unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("App.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let factory = directory
+        .join("factory.ts")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let original = fs::read_to_string(&factory).unwrap();
+    let without_read = original.replace("return first();", "return 0      ;");
+    assert_ne!(original, without_read);
+    assert_eq!(original.len(), without_read.len());
+    let without_origin = original.replace("\"solid-js\"", "\"./fakejs\"");
+    assert_eq!(
+        original.len(),
+        without_origin.len(),
+        "keep the selected arrows' spans unchanged"
+    );
+    let vocabulary = dialect::default_dialect().vocabulary;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (program, _) = incremental.build(&first, vocabulary).unwrap();
+    let consumer_read = |program: &solid_reactive_ir::Program| {
+        program.reads.iter().any(|read| {
+            read.location.path.as_ref() == caller
+                && read.accessor.as_ref() == "first"
+                && read.transported
+                && !read.summary_attributed
+                && !read.is_uncertifiable()
+        })
+    };
+    assert!(
+        consumer_read(&program),
+        "the literal array must supply a proven consumer read: {:?}",
+        program.reads
+    );
+    let mut version = 0;
+    let mut check = |path: &str, source: String, reads: bool| {
+        version += 1;
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: path.into(),
+                    version,
+                    source: Some(source),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
+        let (warm, _) = incremental.build(&facts, vocabulary).unwrap();
+        assert_eq!(consumer_read(&cold), reads, "array transition {version}");
+        assert_eq!(
+            warm, cold,
+            "array transport or summary dependency, edit {version}"
+        );
+    };
+    check(&factory, without_read, false);
+    check(&factory, original.clone(), true);
+    for mutation in [
+        "providers[0] = { query: () => 0 };",
+        "providers.length = 0;",
+        "providers.push({ query: () => 0 });",
+        "providers.pop();",
+        "providers.splice(0, 1);",
+        "providers.shift();",
+        "providers.unshift({ query: () => 0 });",
+        "providers.sort();",
+        "providers.reverse();",
+        "providers.fill({ query: () => 0 });",
+        "providers.copyWithin(0, 1);",
+        "Object.assign(providers, { 0: {query: () => 0} });",
+        "Object.defineProperty(providers, '0', {value: {query: () => 0}});",
+        "const alias = providers; void alias;",
+    ] {
+        let mutated = source.replace(" const values", &format!(" {mutation}\n const values"));
+        check(&caller, mutated, false);
+        check(&caller, source.into(), true);
+    }
+    // Isolated positional-spread wildcard: neither another wildcard nor an
+    // escaped array binding can mask whether the common builtin guard ran.
+    for mutation in [
+        "const pair: [object, string] = [{}, 'query']; Reflect.set(...pair, 'replacement');",
+        "Object.defineProperty({}, `query`, { value: () => 0 });",
+        "const args: [object, object] = [{}, { query: () => 0 }]; Object.assign(...args);",
+        "const other = {query: () => 0}; other['query' as const] = () => 0;",
+    ] {
+        check(&factory, format!("{original}\n{mutation}\n"), false);
+        check(&factory, original.clone(), true);
+    }
+    check(&factory, without_origin, false);
+    check(&factory, original, true);
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
@@ -149,6 +280,90 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
         assert_eq!(
             warm, cold,
             "transported target dependency must follow the helper summary, edit {version}"
+        );
+    }
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn context_intermediate_handoff_edits_match_cold_in_both_directions() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = copied_fixture_named(
+        "context-handoff-edit",
+        "context-member-forwarding",
+        &["context.tsx", "App.tsx"],
+    );
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let context = directory
+        .join("context.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let original = fs::read_to_string(&context).unwrap();
+    let aliased = original.replace(
+        "return value;",
+        "const alias = value; void alias; return value;",
+    );
+    let guarded = original.replace(
+        "return value;",
+        "if (!value) throw new Error('missing'); return value;",
+    );
+    let written = format!(
+        "{original}\nconst unrelated = {{ orientation: () => 0 }}; unrelated.orientation = () => 0;\n"
+    );
+    let vocabulary = dialect::default_dialect().vocabulary;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (program, _) = incremental.build(&first, vocabulary).unwrap();
+    let consumer_read = |program: &solid_reactive_ir::Program| {
+        program.reads.iter().any(|read| {
+            read.context.as_ref() == "Body"
+                && read.transported
+                && !read.summary_attributed
+                && !read.is_uncertifiable()
+        })
+    };
+    assert!(consumer_read(&program));
+    for (version, source, reads) in [
+        (1, aliased, false),
+        (2, original.clone(), true),
+        (3, guarded, false),
+        (4, original.clone(), true),
+        (5, written, false),
+        (6, original, true),
+    ] {
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: context.clone(),
+                    version,
+                    source: Some(source),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
+        let (warm, _) = incremental.build(&facts, vocabulary).unwrap();
+        assert_eq!(
+            consumer_read(&cold),
+            reads,
+            "context handoff transition {version}"
+        );
+        assert_eq!(
+            warm, cold,
+            "context handoff census dependency, edit {version}"
         );
     }
     drop(session);

@@ -29644,3 +29644,29 @@ application (`"private": true`); its snapshot is unchanged.
 `context-member-identity-open` pins both the export-list and the `export const`
 forms. The corpus result is unchanged: no corpus finding depended on an open
 program's context.
+
+## Exact returned provider arrays and context intermediate handoffs (2026-10-12)
+
+Reactive IR carries source-discovered synchronous arrow member identities from
+one factory's single returned array literal of closed object literals to an
+exact standard-library map/forEach call. An inline synchronous arrow invokes
+one immediate member on its element parameter as the entire callback expression.
+Conditional/block callbacks and named/stored callback definitions remain refused.
+The call site's role remains
+authoritative; definition obligations and transported preference withholding
+remain unchanged. ADR 0273's name/wildcard veto applies to element members and
+visible map/forEach replacement. A once-per-analysis receiver census refuses
+index/length replacement, every mutating array method, reflection and all array
+escapes beyond immediate map/forEach. Literal slots come from existing normalized
+return facts; no new syntax schema or producer protocol is introduced.
+
+One exact context wrapper may return an immutable intermediate context binding
+without other uses. Context cardinality, the complete joined receiver census
+and member stability still apply. Guarded intermediates, parameter-supplied
+provider values, destructuring and opaque escapes remain withheld.
+
+The recall-r4 Beacon orientation and Compass selectedIssueId/provider-query
+sites require additional guarded/destructured receiver or parameter provenance.
+This bounded transport does not claim their runtime MISS sites are fixed. No
+package names, Accessor types, generic callback dispatch, synthetic functions,
+borrowed execution roles or obligation suppression are admitted.

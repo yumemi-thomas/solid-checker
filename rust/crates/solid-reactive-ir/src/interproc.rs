@@ -5722,6 +5722,7 @@ pub(super) struct InterproceduralResultReadContext<'a, 'b> {
     pub(super) lookup: &'a SemanticLookup<'b>,
     transported_calls: &'a HashMap<Location, accessor_provenance::Callable>,
     unavailable_calls: &'a HashSet<Location>,
+    array_member_bodies: &'a HashSet<(String, Span)>,
     provenance: &'a accessor_provenance::Resolver<'a, 'b>,
 }
 
@@ -5752,6 +5753,7 @@ fn interprocedural_result_reads_for_file(
         lookup,
         transported_calls,
         unavailable_calls,
+        array_member_bodies,
         provenance,
     } = context;
     let mut result = Vec::new();
@@ -5789,7 +5791,10 @@ fn interprocedural_result_reads_for_file(
                 uncertain: true,
             });
         }
-        if lookup
+        if !matches!(
+            transported,
+            Some(accessor_provenance::Callable::ArrayMembers(_))
+        ) && lookup
             .resolved_callee_call(file, call.callee)
             .and_then(|resolved| resolved.declaration.as_ref())
             .is_some_and(|declaration| declaration.standard_library)
@@ -5798,7 +5803,8 @@ fn interprocedural_result_reads_for_file(
             // standard/platform library declaration. Its implementation is
             // outside the package and cannot contribute package-owned
             // reactive reads; callback bodies were already connected by the
-            // graph's exact argument-behavior proof.
+            // graph's exact argument-behavior proof. Exact returned array
+            // members additionally project their reads at this iteration call.
             continue;
         }
         // A member invoked on the innermost function's parameter is not a
@@ -5848,6 +5854,9 @@ fn interprocedural_result_reads_for_file(
                 "project-callable:{path}:{}:{}",
                 span.start, span.end
             )),
+            Some(accessor_provenance::Callable::ArrayMembers(_)) => {
+                Some("project-array-members".into())
+            }
             None => None,
         };
         let Some(symbol) = transported_symbol.as_deref().or_else(|| {
@@ -5858,12 +5867,25 @@ fn interprocedural_result_reads_for_file(
         }) else {
             continue;
         };
-        dependencies.insert(match transported {
-            Some(accessor_provenance::Callable::Function { path, span }) => {
+        if let Some(accessor_provenance::Callable::ArrayMembers(targets)) = transported {
+            dependencies.extend(targets.iter().map(|(path, span)| {
                 InterproceduralResultDependency::InlineFunction(path.clone(), *span)
+            }));
+        }
+        match transported {
+            Some(accessor_provenance::Callable::Function { path, span }) => {
+                dependencies.insert(InterproceduralResultDependency::InlineFunction(
+                    path.clone(),
+                    *span,
+                ));
             }
-            _ => InterproceduralResultDependency::Symbol(SymbolId::from(symbol)),
-        });
+            Some(accessor_provenance::Callable::ArrayMembers(_)) => {}
+            _ => {
+                dependencies.insert(InterproceduralResultDependency::Symbol(SymbolId::from(
+                    symbol,
+                )));
+            }
+        }
         let (label, mut effective, target) = if let Some(transported) = transported {
             match transported {
                 accessor_provenance::Callable::Accessor(symbol) => (
@@ -5880,6 +5902,18 @@ fn interprocedural_result_reads_for_file(
                         continue;
                     };
                     (label, summaries[target].to_vec(), Some(target))
+                }
+                accessor_provenance::Callable::ArrayMembers(targets) => {
+                    let mut reads = Vec::new();
+                    for target in targets {
+                        let Some(index) = context.result.indexes.get(target) else {
+                            continue;
+                        };
+                        for read in summaries[*index].iter() {
+                            push_unique_summary_read(&mut reads, read.clone());
+                        }
+                    }
+                    (label, reads, None)
                 }
             }
         } else if let Some(candidates) = ambiguous_candidates {
@@ -6630,7 +6664,48 @@ fn interprocedural_result_reads_for_file(
         // itself be in its caller's synchronous prefix; the leaf read must
         // pass the same test. Entry alone never proves the whole async body.
         let entered = std::cell::OnceCell::new();
+        let array_entry = matches!(
+            transported,
+            Some(accessor_provenance::Callable::ArrayMembers(_))
+        ) || (!array_member_bodies.is_empty()
+            && direct_callee.is_some_and(|(callee_file, callee)| {
+                array_member_bodies.contains(&(callee_file.path.to_string(), callee.span))
+                    || entered
+                        .get_or_init(|| {
+                            directly_entered_functions(
+                                callee_file,
+                                callee,
+                                lookup,
+                                transported_calls,
+                            )
+                        })
+                        .iter()
+                        .any(|key| array_member_bodies.contains(key))
+            }));
         let read_is_direct = |read: &SummaryRead| -> bool {
+            let proven_origin = || {
+                provenance.has_runtime_source_origin(&read.symbol)
+                    || provenance.has_source_origin(&read.symbol)
+            };
+            if array_entry && !proven_origin() {
+                return false;
+            }
+            if let Some(accessor_provenance::Callable::ArrayMembers(targets)) = transported {
+                // The callback invokes each exact element member inline at
+                // this map call. Its definition's execution role is irrelevant.
+                return !file.ast.any_jsx_containing(call.span)
+                    && targets.iter().any(|(path, span)| {
+                        let Some(target_file) = lookup.file_by_path(path) else {
+                            return false;
+                        };
+                        let Some(function) =
+                            target_file.ast.functions.iter().find(|f| f.span == *span)
+                        else {
+                            return false;
+                        };
+                        captured_body_read_runs_during_call(target_file, function, read)
+                    });
+            }
             if matches!(
                 transported,
                 Some(accessor_provenance::Callable::Accessor(_))
@@ -6738,7 +6813,8 @@ fn interprocedural_result_reads_for_file(
             // one that reached this call through a project wrapper -- its
             // symbol is still the contracted export whose state it reads, and
             // the wrapper's call does not make that read the caller's.
-            let package_internal = crate::contract_declared_state(&read.declaration)
+            let package_internal = (!array_entry || direct)
+                && crate::contract_declared_state(&read.declaration)
                 && (read.symbol.as_str() == symbol
                     || lookup
                         .contract_export_identity(read.symbol.as_str())
@@ -7079,6 +7155,44 @@ fn enter_directly_called(
             || !body_site_runs_during_call(file, function, call.span)
             || file.ast.any_jsx_containing(call.span)
         {
+            continue;
+        }
+        if let Some(accessor_provenance::Callable::ArrayMembers(targets)) = transported {
+            for (target_path, target_span) in targets {
+                let Some(callee_file) = lookup.file_by_path(target_path) else {
+                    continue;
+                };
+                let Some(callee) = callee_file
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|f| f.span == *target_span)
+                else {
+                    continue;
+                };
+                let key = (target_path.clone(), *target_span);
+                if path.contains(&key) {
+                    return false;
+                }
+                if entered.contains(&key) {
+                    continue;
+                }
+                entered.push(key.clone());
+                if path.len() < MAX_DEPTH {
+                    path.push(key);
+                    if !enter_directly_called(
+                        callee_file,
+                        callee,
+                        lookup,
+                        transported_calls,
+                        path,
+                        entered,
+                    ) {
+                        return false;
+                    }
+                    path.pop();
+                }
+            }
             continue;
         }
         let candidates = lookup.callee_symbols(file, call.callee);
@@ -7484,16 +7598,34 @@ fn interprocedural_reads(
             .collect(),
     );
     let (transported_calls, unavailable_calls) = provenance.calls();
-    let transport_identity_matches = interprocedural_result_cache.as_ref().is_none_or(|cache| {
-        cache.transported_calls == transported_calls && cache.unavailable_calls == unavailable_calls
-    });
-    let transported_bodies = transported_calls
+    let array_source_origins = if transported_calls
         .values()
-        .filter_map(|target| match target {
-            accessor_provenance::Callable::Function { path, span } => Some((path.as_str(), *span)),
-            accessor_provenance::Callable::Accessor(_) => None,
-        })
-        .collect::<HashSet<_>>();
+        .any(|target| matches!(target, accessor_provenance::Callable::ArrayMembers(_)))
+    {
+        provenance.proven_source_origins().cloned().collect()
+    } else {
+        HashSet::new()
+    };
+    let transport_identity_matches = interprocedural_result_cache.as_ref().is_none_or(|cache| {
+        cache.transported_calls == transported_calls
+            && cache.unavailable_calls == unavailable_calls
+            && cache.array_source_origins == array_source_origins
+    });
+    let mut transported_bodies = HashSet::new();
+    let mut array_member_bodies = HashSet::new();
+    for target in transported_calls.values() {
+        match target {
+            accessor_provenance::Callable::Function { path, span } => {
+                transported_bodies.insert((path.as_str(), *span));
+            }
+            accessor_provenance::Callable::ArrayMembers(targets) => {
+                array_member_bodies.extend(targets.iter().cloned());
+                transported_bodies
+                    .extend(targets.iter().map(|(path, span)| (path.as_str(), *span)));
+            }
+            accessor_provenance::Callable::Accessor(_) => {}
+        }
+    }
     let nodes_by_path = function_indices_by_path(&nodes);
     let indexes = nodes
         .iter()
@@ -7667,6 +7799,16 @@ fn interprocedural_reads(
                     {
                         transported_edges.insert((owner, *target));
                         edges[owner].push(*target);
+                    }
+                }
+                accessor_provenance::Callable::ArrayMembers(targets) => {
+                    for target in targets {
+                        if let Some(target) = indexes.get(target)
+                            && !edges[owner].contains(target)
+                        {
+                            transported_edges.insert((owner, *target));
+                            edges[owner].push(*target);
+                        }
                     }
                 }
             }
@@ -8222,11 +8364,13 @@ fn interprocedural_reads(
         lookup: context.lookup,
         transported_calls: &transported_calls,
         unavailable_calls: &unavailable_calls,
+        array_member_bodies: &array_member_bodies,
         provenance: &provenance,
     };
     if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
         cache.transported_calls.clone_from(&transported_calls);
         cache.unavailable_calls.clone_from(&unavailable_calls);
+        cache.array_source_origins.clone_from(&array_source_origins);
         // Call-role proofs inspect callee syntax beyond its read summary:
         // moving an await/default/edge can preserve that summary byte for
         // byte. Until syntax dependencies are retained per hop, a changed,

@@ -313,6 +313,9 @@ pub(crate) struct CachedInterproceduralResults {
     pub(crate) transported_calls:
         HashMap<Location, crate::interproc::accessor_provenance::Callable>,
     pub(crate) unavailable_calls: HashSet<Location>,
+    /// Array-derived directness depends on runtime origins even when the
+    /// selected function and its read summary remain unchanged.
+    pub(crate) array_source_origins: HashSet<SymbolId>,
     pub(crate) dependency_states:
         HashMap<InterproceduralResultDependency, InterproceduralResultDependencyState>,
     pub(crate) dependency_users: HashMap<InterproceduralResultDependency, usize>,
