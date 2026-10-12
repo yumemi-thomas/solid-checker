@@ -29603,19 +29603,23 @@ wrapper channel parked on `wip/provenance-2`; with it, that site is SC1001.
 
 Remaining approximations:
 
-- Resolved: SC2003's own-setter exemption used to keep the violation for any
-  callee not proven to be the own tuple slot, including the own setter at
-  runtime through an alias, a member, `pick()` or a conditional. The
-  pre-filter index had accidentally exempted own-first composites
-  (`setStore.bind(null)(…)`) through leading-token identity, and the exact
-  index exposed them as false SC2003s. `enclosing_setter` is now three-valued:
-  own setter exempts, a proven other target (a primitive-created tuple's
-  setter, or a standard-library function that does not invoke a handed
-  function value) keeps the violation, and anything else is uncertifiable.
-  Still open (pre-existing false-violation risk): a write in a lexically
-  separate function handed to the own setter (`const f = () => { store.x = 1 };
-  setStore(f)`) has no enclosing callback argument, so it keeps SC2003 though
-  the write commits. The rc.13 corpus has no SC2003 row.
+- SC2003's own-setter exemption (`upstream_compat/shared_reactivity.rs`,
+  `inside_own_setter_callback`) keeps its pre-index behaviour. It exempts a
+  write when the callee resolves to the own `createStore` tuple's second slot,
+  exactly or (through `binding_at_leading_reference`) by the leading-token
+  symbol the composite callee's entity names, such as `setStore.bind(null)`.
+  That identity is imprecise, but the exemption can only withhold a finding.
+  These pre-existing false violations remain: the own setter reached through
+  an alias (`const s = setStore`), a member (`holder.set`), a call (`pick()`),
+  a composite whose leading token is another binding, a function value handed
+  to it (`[cb].forEach(setStore)`, `promise.then(setStore)`), or a lexically
+  separate callback (`const f = () => { store.x = 1 }; setStore(f)`). A
+  three-valued rework was reviewed and withdrawn on 2026-10-12. Neither a
+  standard-library callee nor a primitive-created tuple proves "not the own
+  setter": `forEach(setStore)`, an overridden or structural `forEach`, and a
+  reassigned `let` setter all refuted it (rust/target/research/context-member/REVIEW-4.md).
+  A sound rule needs value flow to the setter and its own uncertifiable
+  reason and message. The rc.13 corpus has no SC2003 row.
 - A context member withheld by a blocked, ambiguous or unkeyed provider census
   is silent, not an SC9012 obligation: `calls` drops a transported lookup that
   fails without recording an unavailable entry.

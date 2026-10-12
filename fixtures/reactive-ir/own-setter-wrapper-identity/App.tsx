@@ -32,36 +32,9 @@ export function SatisfiedOwnSetter() {
   return <button onClick={() => ((setStore satisfies typeof setStore)!)(() => { store.open = true; })}>{String(store.open)}</button>;
 }
 
-// Uncertifiable: each callee is the own setter at runtime, but its identity
-// is not the destructured slot, so the write is neither exempt nor proven
-// dropped.
-export function AliasedOwnSetter() {
-  const [store, setStore] = createStore({ open: false });
-  const set = setStore;
-  return <button onClick={() => set(() => { store.open = true; })}>{String(store.open)}</button>;
-}
-
-export function MemberOwnSetter() {
-  const [store, setStore] = createStore({ open: false });
-  const holder = { set: setStore };
-  return <button onClick={() => holder.set(() => { store.open = true; })}>{String(store.open)}</button>;
-}
-
+// An own-first composite callee keeps the exemption it had before the exact
+// reference index: the exemption only withholds, and this write commits.
 export function BoundOwnSetter() {
   const [store, setStore] = createStore({ open: false });
   return <button onClick={() => setStore.bind(null)(() => { store.open = true; })}>{String(store.open)}</button>;
-}
-
-// Uncertifiable: a project function may forward its callback to the setter.
-export function ForwardedCallback() {
-  const [store] = createStore({ open: false });
-  const run = (callback: () => void) => callback();
-  return <button onClick={() => run(() => { store.open = true; })}>{String(store.open)}</button>;
-}
-
-// Positive: a standard-library callee cannot be the setter, so the write is
-// dropped (SC2003).
-export function LibraryCallback() {
-  const [store] = createStore({ open: false });
-  return <button onClick={() => [1].forEach(() => { store.open = true; })}>{String(store.open)}</button>;
 }

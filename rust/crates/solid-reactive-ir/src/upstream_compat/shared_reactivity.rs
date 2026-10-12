@@ -685,15 +685,11 @@ fn no_direct_mutation(
         // through another store's setter it is silently dropped). A write
         // through the store rooted lexically inside that store's own setter
         // callback is therefore correct code, not a dropped write.
-        let mut setter_unproven = false;
         if target == DirectMutationTarget::Store
             && context.dialect.store_setter_callback_enables_proxy_writes()
+            && inside_own_setter_callback(file, context, assignment.target, symbol)
         {
-            match enclosing_setter(file, context, assignment.target, symbol) {
-                EnclosingSetter::Own => continue,
-                EnclosingSetter::Unknown => setter_unproven = true,
-                EnclosingSetter::Other => {}
-            }
+            continue;
         }
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
@@ -703,132 +699,60 @@ fn no_direct_mutation(
             location: location(file.path.shared(), assignment.target),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: setter_unproven
-                || (props && context.uncertain_prop_sources.contains(symbol)),
+            uncertain: props && context.uncertain_prop_sources.contains(symbol),
         });
     }
-}
-
-/// How the callbacks lexically enclosing a store write relate to that store's
-/// own setter.
-enum EnclosingSetter {
-    /// A callback passed to the store's own setter: the write commits.
-    Own,
-    /// Some enclosing callee could be the own setter but is not proven to be:
-    /// an alias, a member, a call result, a user function that may forward.
-    Unknown,
-    /// Every enclosing callee is proven not to be the own setter.
-    Other,
 }
 
 /// Whether `target` (an assignment through a store proxy rooted at
 /// `store_symbol`) sits lexically inside a callback passed to that store's
 /// *own* setter.
 ///
-/// The pairing is proven, not guessed, in both directions. Only a callee
-/// proven to be the own setter exempts the write, and only callees proven not
-/// to be it keep the finding. An eagerly evaluated argument (no function
-/// between the assignment and the argument) is not a callback. A callee that
-/// could still be the own setter at runtime leaves the write uncertifiable.
-fn enclosing_setter(
+/// The pairing is proven, not guessed: the callee must resolve to the second
+/// slot of the exact array destructuring whose first slot is `store_symbol` —
+/// `const [store, setStore] = createStore(...)`. Another store's setter, a
+/// same-spelled local, or an eagerly evaluated argument (no function between
+/// the assignment and the argument) all fail the proof and keep the finding.
+fn inside_own_setter_callback(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     target: Span,
     store_symbol: &crate::SymbolId,
-) -> EnclosingSetter {
-    let mut unknown = false;
-    for (call, index) in file.ast.arguments_containing(target) {
+) -> bool {
+    file.ast.arguments_containing(target).any(|(call, index)| {
         let argument = &call.arguments[index];
-        // The write must run when the callee invokes the callback, not while
+        // The write must run when the setter invokes the callback, not while
         // building the argument list.
         if !file
             .ast
             .functions_within(argument.span)
             .any(|function| function.body.contains(target))
         {
-            continue;
+            return false;
         }
-        match callee_setter(file, context, call, store_symbol) {
-            EnclosingSetter::Own => return EnclosingSetter::Own,
-            EnclosingSetter::Unknown => unknown = true,
-            EnclosingSetter::Other => {}
+        // The exemption only ever withholds this finding, so it keeps the
+        // leading-token identity the reference index used to admit for a
+        // composite callee (`setStore.bind(null)`): an imprecise match can
+        // miss a dropped write but never assert one. Exact references,
+        // including transparent wrappers, resolve first.
+        let Some((binding_file, binding, callee_symbol)) = context
+            .lookup
+            .binding_at_leading_reference(file.path.as_str(), call.callee)
+        else {
+            return false;
+        };
+        if binding.shape != solid_facts::ast::BindingShape::Array {
+            return false;
         }
-    }
-    if unknown {
-        EnclosingSetter::Unknown
-    } else {
-        EnclosingSetter::Other
-    }
-}
-
-/// Whether this call's callee is `store_symbol`'s own setter.
-///
-/// Own: the peeled callee resolves to the second slot of the exact array
-/// destructuring whose first slot is `store_symbol`. Other: the second slot
-/// of a tuple a dialect primitive created for another source, which is a fresh
-/// setter, or a standard-library function that cannot invoke a function value
-/// it is handed. Anything else is unknown, not proof of a dropped write.
-fn callee_setter(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    call: &solid_facts::ast::CallFact,
-    store_symbol: &crate::SymbolId,
-) -> EnclosingSetter {
-    if call.construct {
-        return EnclosingSetter::Unknown;
-    }
-    let callee = file.ast.peel_ts_sugar_span(call.callee);
-    if let Some((binding_file, binding, callee_symbol)) = context
-        .lookup
-        .binding_at_reference(file.path.as_str(), callee)
-    {
-        if binding.shape == solid_facts::ast::BindingShape::Array {
-            let slot_symbol = |slot: usize| {
-                binding
-                    .array_slots
-                    .get(slot)
-                    .and_then(Option::as_ref)
-                    .and_then(|name| context.entities.at(binding_file.path.as_str(), name.span))
-            };
-            if slot_symbol(1) == Some(&callee_symbol) {
-                if slot_symbol(0) == Some(store_symbol) {
-                    return EnclosingSetter::Own;
-                }
-                if slot_symbol(0)
-                    .is_some_and(|source| context.source_primitives.contains_key(source))
-                {
-                    return EnclosingSetter::Other;
-                }
-            }
-        }
-        return EnclosingSetter::Unknown;
-    }
-    match context
-        .lookup
-        .standard_library_declaration(file, call, typefacts::CallKind::Call)
-    {
-        // These invoke a function value they are handed, which may be the
-        // setter itself.
-        Some(declaration)
-            if matches!(
-                declaration.qualified_name.as_ref(),
-                "Function.call"
-                    | "Function.apply"
-                    | "Function.bind"
-                    | "CallableFunction.call"
-                    | "CallableFunction.apply"
-                    | "CallableFunction.bind"
-                    | "NewableFunction.call"
-                    | "NewableFunction.apply"
-                    | "NewableFunction.bind"
-                    | "Reflect.apply"
-            ) =>
-        {
-            EnclosingSetter::Unknown
-        }
-        Some(_) => EnclosingSetter::Other,
-        None => EnclosingSetter::Unknown,
-    }
+        let slot_symbol = |slot: usize| {
+            binding
+                .array_slots
+                .get(slot)
+                .and_then(Option::as_ref)
+                .and_then(|name| context.entities.at(binding_file.path.as_str(), name.span))
+        };
+        slot_symbol(1) == Some(&callee_symbol) && slot_symbol(0) == Some(store_symbol)
+    })
 }
 
 /// Whether this identifier is the callee of a call — the correct use.
