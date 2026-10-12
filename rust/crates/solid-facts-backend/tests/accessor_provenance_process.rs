@@ -195,8 +195,16 @@ fn context_receiver_census_edits_match_cold_in_both_directions() {
         NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
             .unwrap();
     let first = session.analyze().unwrap();
+    // An open program closes no context provider census; this census is
+    // the application's.
+    let mut options = solid_reactive_ir::RuleOptions::default();
+    options.runtime.program_boundary = Some(solid_reactive_ir::ProgramBoundary::Closed);
+    let contracts = solid_reactive_ir::contract_semantics::AcceptedContractIndex::default();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (program, _) = incremental.build(&first, vocabulary).unwrap();
+    let program = incremental
+        .build_with_accepted_contracts_shared(&first, vocabulary, &contracts, &options)
+        .unwrap()
+        .0;
     let consumer_read = |program: &solid_reactive_ir::Program| {
         program.reads.iter().any(|read| {
             read.context.as_ref() == "CrossConsumerMutation"
@@ -243,8 +251,16 @@ fn context_receiver_census_edits_match_cold_in_both_directions() {
                 None,
             )
             .unwrap();
-        let cold = solid_reactive_ir::build(&facts, vocabulary).unwrap();
-        let (warm, _) = incremental.build(&facts, vocabulary).unwrap();
+        let cold = solid_reactive_ir::build_with_accepted_contracts_measured(
+            &facts, vocabulary, &contracts, &options,
+        )
+        .unwrap()
+        .0;
+        let warm = (*incremental
+            .build_with_accepted_contracts_shared(&facts, vocabulary, &contracts, &options)
+            .unwrap()
+            .0)
+            .clone();
         assert_eq!(
             consumer_read(&cold),
             reads,

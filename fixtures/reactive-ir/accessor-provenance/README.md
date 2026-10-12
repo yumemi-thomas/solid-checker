@@ -84,3 +84,6 @@ Vetoes withhold transport and keep ordinary obligations. Mutation controls use
 distinct dead/stale names so this project retains its independent rows/state
 positive expectations. The transported-member-stability projects pin the new
 premise, three review examples, exact builtin identity and wildcard refusal.
+
+The fixture is an application (`package.json` `"private": true`): an open
+program closes no context's provider census (see `context-member-identity-open`).

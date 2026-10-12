@@ -29601,6 +29601,15 @@ Remaining approximations:
 - A context member withheld by a blocked, ambiguous or unkeyed provider census
   is silent, not an SC9012 obligation: `calls` drops a transported lookup that
   fails without recording an unavailable entry.
-- In an open program, an exported `const` context or wrapper still keeps the
-  project's own provider census. An unseen importer could provide another value
-  or replace a member, so this needs its own open-program escape rule.
+
+Open programs (2026-10-12, follow-up): useContext is a channel any code beneath
+a provider can use. In a library, an unseen importer can provide an exported
+context itself, or reach the shared value through an exported wrapper or a
+returned closure and replace a member where ADR 0273's name index cannot see
+the write. The exported `const` form used to keep the project's own provider
+census anyway. An open program now closes no context's census.
+`accessor-provenance`, whose context positives relied on that, is declared an
+application (`"private": true`); its snapshot is unchanged.
+`context-member-identity-open` pins both the export-list and the `export const`
+forms. The corpus result is unchanged: no corpus finding depended on an open
+program's context.

@@ -17,7 +17,8 @@ signal only through exact identifier identity.
   `ThemeLabel`'s read is not attributed to the signal. Without `FixedTheme` the
   same read is SC1001.
 
-The open counterpart is `context-member-identity-open`.
+The open counterpart is `context-member-identity-open`: an open program closes no
+context's provider census.
 
 Remaining approximation: a withheld context member is silent rather than an
 SC9012 obligation (docs/precision-backlog.md).

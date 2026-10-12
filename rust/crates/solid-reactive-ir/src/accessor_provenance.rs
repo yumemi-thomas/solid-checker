@@ -913,7 +913,16 @@ impl Resolver<'_, '_> {
         file: &FileFacts,
         call: &ast::CallFact,
     ) -> Option<(&'a FileFacts, Span)> {
-        if self.unkeyed_provider || call.arguments.len() != 1 || call.arguments[0].spread {
+        // useContext is a channel any code beneath the provider can use. In an
+        // open program, unseen importers can reach the value through an
+        // exported context, wrapper or returned closure and replace a member
+        // where ADR 0273's name index cannot see the write, so no context's
+        // provider census is closed.
+        if !self.lookup.program_closed
+            || self.unkeyed_provider
+            || call.arguments.len() != 1
+            || call.arguments[0].spread
+        {
             return None;
         }
         let argument = file.ast.peel_ts_sugar_span(call.arguments[0].span);
