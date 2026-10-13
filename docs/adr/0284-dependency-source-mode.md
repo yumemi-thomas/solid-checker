@@ -21,12 +21,20 @@ the analysis already proves project code.
 fixture's `.solid-checker/runtime.json`) analyzes the runtime source of an
 installed package as project code.
 
-1. **Selection.** The package's `exports` (or `module`/`main`) are read the way
-   a Vite + `vite-plugin-solid` browser development build reads them: the first
-   key in document order among `solid`, `browser`, `development`, `import`,
-   `module` and `default`. A pattern (`./*`), an array, or no selectable
-   target is an error naming the package. A package the project does not
-   install is skipped with a note. Nothing guesses a file.
+1. **Selection.** The package's `exports` are read the way a Vite +
+   `vite-plugin-solid` build for the declared host reads them. The first key
+   in document order wins among `solid`, `import`, `module`, `default`, and the
+   host's own conditions: its target (`browser` or `node`), its build
+   (`development` or `production`) and every `--runtime-condition`.
+   - **No `exports`:** Vite's `mainFields` decide: `browser` (string form) for
+     a browser host, then `module`, then `main`. A per-file `browser` map is
+     refused.
+   - **Host required:** the mode refuses to run without a declared
+     `--runtime-target` and `--runtime-build`, because the file a package
+     loads depends on both.
+   - **Other refusals:** a pattern (`./*`), an array, or no selectable target
+     is an error naming the package. A package the project does not install is
+     skipped with a note. Nothing guesses a file.
 2. **Closure.** Relative static imports and re-exports are walked from the
    entry, inside the package, to at most 4,000 files. A relative import that
    resolves to no source file is an error.
@@ -48,8 +56,11 @@ installed package as project code.
    as when only declarations are seen:
    - a package's own `DEV`, `OBSERVE` or hydration-host use vetoes no
      project finding (standard runtime configuration premise);
-   - a member write or reflective write inside a package (ADR 0273's veto
-     index) vetoes only members of objects that same package creates.
+   - a write inside a package that could name any member (ADR 0273's
+     wildcard veto, such as `Object.assign` with an open source) vetoes only
+     members of objects that same package creates. A write naming its member
+     vetoes that member everywhere, because the project may have handed the
+     package the object.
 
 ## Consequences
 
@@ -70,6 +81,21 @@ installed package as project code.
 - A summary-propagated read inside an effect apply is labelled "rendering
   function" rather than "apply callback". This also happens in base mode, so
   it is wording, not role.
+
+## Review round 1
+
+An adversarial review found two false violations, both fixed:
+- a fixed browser/development condition set selected the source a Node or
+  production host never loads;
+- without `exports`, `module` was read before `browser`.
+
+It also found that scoping named writes per package discarded a visible
+write on a project object. A project factory that hands its object to a
+package that replaces a member stayed a violation. Named writes are now
+global. The same shape in project code alone
+(`const tag = { label }; relabel(tag); tag.label()`) is a false violation
+that does not depend on this mode. It is recorded in docs/precision-backlog.md
+and is being fixed separately.
 
 ## Evidence
 

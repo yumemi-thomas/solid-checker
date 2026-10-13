@@ -69,10 +69,12 @@ pub(super) struct Resolver<'a, 'facts> {
 struct MemberStability {
     written: HashMap<String, Location>,
     all: Option<Location>,
-    /// ADR 0284: the vetoes written inside a package analyzed as source, by
-    /// its root. Dependency internals are outside ADR 0273's premise, as when
-    /// only the package's declarations are seen, so a write there vetoes
-    /// only members of objects that package creates.
+    /// ADR 0284: the wildcard vetoes written inside a package analyzed as
+    /// source, by its root. Dependency internals are outside ADR 0273's
+    /// premise, as when only the package's declarations are seen, so a write
+    /// that could name any member vetoes only members of objects that package
+    /// creates. A write naming its member vetoes it everywhere (review
+    /// round 1): the package may write it on an object the project handed it.
     dependencies: HashMap<String, MemberStability>,
 }
 
@@ -208,6 +210,11 @@ impl MemberStability {
                     }
                     _ => unreachable!("mutation builtin catalog"),
                 }
+            }
+        }
+        for package in project.dependencies.values_mut() {
+            for (name, site) in package.written.drain() {
+                project.written.entry(name).or_insert(site);
             }
         }
         project

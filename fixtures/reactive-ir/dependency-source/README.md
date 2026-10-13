@@ -16,6 +16,10 @@ instead of requiring a contract.
   open source vetoes members only of objects the package creates (ADR 0273's
   dependency internals), so this project's context member still transports.
 
+`.solid-checker/runtime.json` declares a browser development host: the mode
+refuses to run without a target and a build, because the file a package loads
+depends on both.
+
 Without the flag the same sources report SC9011 at `useLabel` and
 `useLabelMemo` (no contract describes them) and keep `Greeting`.
 

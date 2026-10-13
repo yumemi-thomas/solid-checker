@@ -1,1 +1,1 @@
-{ "dependencySources": ["dep-hooks"] }
+{ "target": "browser", "build": "development", "dependencySources": ["dep-hooks"] }

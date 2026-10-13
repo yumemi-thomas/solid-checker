@@ -3,9 +3,10 @@
 //!
 //! TypeScript resolves an import of a package to its declarations, so the
 //! package's JavaScript never enters the program. This module selects the
-//! file a Solid browser build loads for each requested specifier (the
-//! package's `exports` read with the `solid`, `browser`, `development`,
-//! `import`, `module` and `default` conditions, in document order), walks its
+//! file a Vite + `vite-plugin-solid` build for the declared host loads for
+//! each requested specifier (the package's `exports` read in document order
+//! with `solid`, `import`, `module`, `default` and the host's own conditions:
+//! its target, its build and every `--runtime-condition`), walks its
 //! relative imports to a closure, and writes a sibling tsconfig that extends
 //! the project's and lists that closure as root files with `allowJs`. The
 //! caller then binds each import of the package, and each relative import
@@ -24,16 +25,9 @@ use std::path::{Path, PathBuf};
 
 use crate::host_constants::{Ordered, find_package_root, split_bare_specifier};
 
-/// The conditions a Vite + `vite-plugin-solid` development build in the
-/// browser sets, in no order: `exports` is read in its own document order.
-const CONDITIONS: &[&str] = &[
-    "solid",
-    "browser",
-    "development",
-    "import",
-    "module",
-    "default",
-];
+/// The conditions every Vite + `vite-plugin-solid` build sets, beside the
+/// host's: `exports` is read in its own document order.
+const BUILD_CONDITIONS: &[&str] = &["solid", "import", "module", "default"];
 const MAX_CLOSURE_FILES: usize = 4000;
 const SOURCE_EXTENSIONS: &[&str] = &[".js", ".jsx", ".mjs", ".ts", ".tsx", ".mts"];
 
@@ -76,12 +70,22 @@ impl DependencySources {
     }
 }
 
+/// The declared host a package entry is selected for.
+#[derive(Clone, Debug)]
+pub struct Host {
+    /// The host's conditions: `browser` or `node`, `development` or
+    /// `production`, and every `--runtime-condition`.
+    pub conditions: BTreeSet<String>,
+    pub browser: bool,
+}
+
 /// Select, walk and write. `tsconfig` is the project's canonical tsconfig.
 /// `None` when the project installs none of the packages: the analysis is
 /// then the ordinary one.
 pub fn prepare(
     tsconfig: &Path,
     specifiers: &[String],
+    host: &Host,
 ) -> Result<Option<DependencySources>, String> {
     let directory = tsconfig
         .parent()
@@ -108,9 +112,9 @@ pub fn prepare(
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Ordered>(&bytes).ok())
             .ok_or_else(|| format!("--dependency-source {specifier:?}: unreadable package.json"))?;
-        let relative = entry_target(&manifest, &subpath).ok_or_else(|| {
+        let relative = entry_target(&manifest, &subpath, host).ok_or_else(|| {
             format!(
-                "--dependency-source {specifier:?}: no runtime entry for {subpath} under the solid/browser/import conditions"
+                "--dependency-source {specifier:?}: no runtime entry for {subpath} under the declared host's conditions"
             )
         })?;
         let entry = root
@@ -186,8 +190,11 @@ fn is_source(path: &Path) -> bool {
             .any(|extension| name.ends_with(extension))
 }
 
-/// The runtime target `exports` (or `module`/`main`) selects for `subpath`.
-fn entry_target(manifest: &Ordered, subpath: &str) -> Option<String> {
+/// The runtime target `exports` selects for `subpath`, or without `exports`
+/// the fields Vite reads (`mainFields`): `browser` for a browser host, then
+/// `module`, then `main`. An object `browser` field remaps files one by one,
+/// which this does not model, so a browser host refuses it.
+fn entry_target(manifest: &Ordered, subpath: &str, host: &Host) -> Option<String> {
     match manifest.get("exports") {
         Some(exports) => {
             let entry = match exports {
@@ -197,20 +204,26 @@ fn entry_target(manifest: &Ordered, subpath: &str) -> Option<String> {
                 _ if subpath == "." => exports,
                 _ => return None,
             };
-            select(entry, 0)
+            select(entry, host, 0)
         }
-        None if subpath == "." => manifest
-            .get("module")
-            .or_else(|| manifest.get("main"))
-            .and_then(Ordered::as_str)
-            .map(str::to_owned),
+        None if subpath == "." => {
+            let browser = host.browser.then(|| manifest.get("browser")).flatten();
+            if browser.is_some_and(|field| field.as_str().is_none()) {
+                return None;
+            }
+            browser
+                .or_else(|| manifest.get("module"))
+                .or_else(|| manifest.get("main"))
+                .and_then(Ordered::as_str)
+                .map(str::to_owned)
+        }
         None => None,
     }
 }
 
 /// Node's conditional resolution: the first key, in document order, that is
 /// a set condition and resolves.
-fn select(entry: &Ordered, depth: usize) -> Option<String> {
+fn select(entry: &Ordered, host: &Host, depth: usize) -> Option<String> {
     if depth > 16 {
         return None;
     }
@@ -218,8 +231,10 @@ fn select(entry: &Ordered, depth: usize) -> Option<String> {
         Ordered::String(target) if !target.contains('*') => Some(target.clone()),
         Ordered::Object(map) => map
             .iter()
-            .filter(|(key, _)| CONDITIONS.contains(&key.as_str()))
-            .find_map(|(_, value)| select(value, depth + 1)),
+            .filter(|(key, _)| {
+                BUILD_CONDITIONS.contains(&key.as_str()) || host.conditions.contains(key.as_str())
+            })
+            .find_map(|(_, value)| select(value, host, depth + 1)),
         _ => None,
     }
 }
@@ -306,8 +321,19 @@ fn resolve_relative(directory: &Path, module: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{entry_target, prepare, select};
+    use super::{Host, entry_target, prepare, select};
     use crate::host_constants::Ordered;
+
+    fn ordered(json: &str) -> Ordered {
+        serde_json::from_str(json).unwrap()
+    }
+
+    fn host(conditions: &[&str]) -> Host {
+        Host {
+            conditions: conditions.iter().map(|&c| c.to_owned()).collect(),
+            browser: conditions.contains(&"browser"),
+        }
+    }
 
     #[test]
     fn a_project_installing_none_of_the_packages_is_analyzed_as_usual() {
@@ -318,43 +344,80 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         let tsconfig = directory.join("tsconfig.json");
         std::fs::write(&tsconfig, "{}").unwrap();
-        let prepared = prepare(&tsconfig, &["not-installed-here".to_owned()]).unwrap();
+        let prepared = prepare(
+            &tsconfig,
+            &["not-installed-here".to_owned()],
+            &host(&["browser", "development"]),
+        )
+        .unwrap();
         let written = std::fs::read_dir(&directory).unwrap().count();
         std::fs::remove_dir_all(&directory).unwrap();
         assert!(prepared.is_none());
         assert_eq!(written, 1, "no sibling tsconfig is written");
     }
 
-    fn ordered(json: &str) -> Ordered {
-        serde_json::from_str(json).unwrap()
-    }
-
     #[test]
     fn conditions_are_read_in_document_order() {
+        let browser = host(&["browser", "development"]);
         let router = ordered(
             r#"{"exports":{".":{"solid":"./dist/index.jsx","default":"./dist/index.js"}}}"#,
         );
         assert_eq!(
-            entry_target(&router, ".").as_deref(),
+            entry_target(&router, ".", &browser).as_deref(),
             Some("./dist/index.jsx")
         );
         let tanstack = ordered(
             r#"{"exports":{".":{"solid":{"types":"./a.d.ts","default":"./dist/source/index.jsx"},"import":{"types":"./b.d.ts","default":"./dist/esm/index.js"}}}}"#,
         );
         assert_eq!(
-            entry_target(&tanstack, ".").as_deref(),
+            entry_target(&tanstack, ".", &browser).as_deref(),
             Some("./dist/source/index.jsx")
         );
         let node_first = ordered(r#"{"exports":{"node":"./node.js","import":"./browser.js"}}"#);
         assert_eq!(
-            entry_target(&node_first, ".").as_deref(),
+            entry_target(&node_first, ".", &browser).as_deref(),
             Some("./browser.js")
         );
         let plain = ordered(r#"{"module":"./dist/index.js","main":"./dist/index.cjs"}"#);
         assert_eq!(
-            entry_target(&plain, ".").as_deref(),
+            entry_target(&plain, ".", &browser).as_deref(),
             Some("./dist/index.js")
         );
-        assert!(select(&ordered(r#"{"require":"./a.cjs"}"#), 0).is_none());
+        assert!(select(&ordered(r#"{"require":"./a.cjs"}"#), &browser, 0).is_none());
+    }
+
+    #[test]
+    fn the_declared_host_selects_the_entry() {
+        // Review round 1: a fixed browser/development set read the source a
+        // Node or production build never loads.
+        let split = ordered(
+            r#"{"exports":{"node":"./dist/node.js","development":{"solid":"./src/index.jsx"},"production":"./dist/prod.js","default":"./dist/index.js"}}"#,
+        );
+        assert_eq!(
+            entry_target(&split, ".", &host(&["node", "development"])).as_deref(),
+            Some("./dist/node.js")
+        );
+        assert_eq!(
+            entry_target(&split, ".", &host(&["browser", "production"])).as_deref(),
+            Some("./dist/prod.js")
+        );
+        assert_eq!(
+            entry_target(&split, ".", &host(&["browser", "development"])).as_deref(),
+            Some("./src/index.jsx")
+        );
+        // Without `exports`, a browser host reads `browser` before `module`,
+        // and refuses a per-file `browser` map.
+        let fields =
+            ordered(r#"{"browser":"./browser.js","module":"./module.js","main":"./main.js"}"#);
+        assert_eq!(
+            entry_target(&fields, ".", &host(&["browser", "development"])).as_deref(),
+            Some("./browser.js")
+        );
+        assert_eq!(
+            entry_target(&fields, ".", &host(&["node", "development"])).as_deref(),
+            Some("./module.js")
+        );
+        let remap = ordered(r#"{"browser":{"./a.js":"./b.js"},"module":"./module.js"}"#);
+        assert!(entry_target(&remap, ".", &host(&["browser", "development"])).is_none());
     }
 }

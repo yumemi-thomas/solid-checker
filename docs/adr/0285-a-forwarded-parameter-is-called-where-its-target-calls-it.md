@@ -39,6 +39,10 @@ declaration is initialized when its module is instantiated, even inside an
 import cycle. The `project-callback-uses` case `ForwardedInlineBody` pins the
 `const` refusal.
 
+A module with direct `eval` adds nothing to the completion table, because
+`eval` can write any parameter it sees (review round 1). That applies to
+ADR 0277's direct calls too.
+
 Summary parameter positions skip destructured parameters, but the completion
 table's positions do not. A forward is therefore admitted only when no
 destructured parameter precedes `p`.
@@ -59,7 +63,13 @@ destructured parameter precedes `p`.
 ## Evidence
 
 - **Fixture** `reactive-ir/parameter-forwarding-completion`: 2 violations,
-  1 clean, 6 silent refusals. `tsc --noEmit` is clean.
+  1 clean, 7 silent refusals (one is the direct-`eval` module).
+  `tsc --noEmit` is clean.
+- **Review round 1:** about 110 shapes were probed and none was a false
+  violation, apart from direct `eval`. The probes covered short-circuits,
+  branches, loops, `try` forms, written or shadowed parameters, aliased
+  callees, `call`/`apply`/`bind`, async and generator functions, overloads,
+  recursion, and cyclic imports.
 - **Fixture** `reactive-ir/dependency-source` (ADR 0284) needs this rule for
   its `LabelNow` case.
 - **Coverage:** no other snapshot moved.

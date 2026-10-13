@@ -1543,6 +1543,19 @@ impl<'a> SemanticLookup<'a> {
             // ADR 0285: calls passing a parameter on to another function.
             let mut forwards = Vec::new();
             for file in &facts.files {
+                // Direct `eval` can write any parameter it sees (review
+                // round 1 of ADR 0285).
+                if file
+                    .ast
+                    .module_hazards
+                    .iter()
+                    .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+                    || file.ast.calls.iter().any(|call| {
+                        file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("eval")
+                    })
+                {
+                    continue;
+                }
                 let mut parameters = HashMap::<&str, (Span, usize)>::new();
                 for function in &file.ast.functions {
                     if function.r#async || function.generator {

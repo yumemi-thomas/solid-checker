@@ -3474,9 +3474,23 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let dependency_sources = if request.dependency_sources.is_empty() {
         None
     } else {
+        // A package's entry depends on the host's target and build (review
+        // round 1), so neither may be left to a default.
+        let (Some(target), Some(_)) = (request.runtime.target, request.runtime.build) else {
+            return Err(
+                "--dependency-source needs --runtime-target and --runtime-build: \
+                 the file a package loads depends on both"
+                    .into(),
+            );
+        };
+        let host = solid_facts_backend::dependency_sources::Host {
+            conditions: request.runtime.selected_conditions(),
+            browser: target == RuntimeTarget::Browser,
+        };
         let prepared = solid_facts_backend::dependency_sources::prepare(
             Path::new(&request.project_id),
             &request.dependency_sources,
+            &host,
         )?;
         if let Some(prepared) = &prepared {
             request.project_id = prepared.tsconfig.to_string_lossy().into_owned();

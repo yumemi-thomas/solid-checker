@@ -29926,3 +29926,20 @@ unchanged (562/3,731). Open:
 - the contract path still counts a getter-body read in a branch arm, under
   the statically-present-code premise (ADR 0275); the new path does not.
   Aligning the two is an owner decision.
+
+## Review round 1 of ADRs 0283-0285 (2026-10-13)
+
+- **ADR 0283:** about 230 probes found no false violation. One plausible gap
+  is untested: a retained session where only a third file's `never` guard
+  changes.
+- **ADR 0284:** entry selection now follows the declared host (target, build,
+  conditions) and Vite's `mainFields`. The mode refuses to run without a
+  target and a build. A package's named member writes veto everywhere; only
+  its wildcard writes are scoped to its own objects.
+- **ADR 0285:** a module with direct `eval` adds nothing to the completion
+  table.
+- **Open, project code, not mode-specific:** a member read that resolves to
+  an accessor by property-symbol identity ignores a hand-off of its object.
+  `const tag = { label }; relabel(tag); tag.label()` is reported SC1001 even
+  though `relabel` replaces `label`. The same happens through a factory
+  return and with the longhand `{ label: label }`.

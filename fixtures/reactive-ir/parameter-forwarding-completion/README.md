@@ -16,6 +16,7 @@ position on every completion. Chains compose to a fixpoint.
 | `Replaced` | forwards another value | clean |
 | `AfterPattern` | a destructured parameter precedes `source` | silent |
 | `ArrowTarget` | forwards into a `const` arrow | silent |
+| `Evaluated` | a module with direct `eval` (`evaluated.ts`) | silent |
 
 `Guarded`, `Maybe` and `Timer` are silent rather than uncertifiable: a
 forward that is not proven to run was silent before this change too.

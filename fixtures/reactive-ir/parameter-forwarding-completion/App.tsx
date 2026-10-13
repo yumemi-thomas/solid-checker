@@ -10,6 +10,7 @@ import {
   useReplaced,
   useTimer,
 } from "./helpers";
+import { useEvaluated } from "./evaluated";
 
 declare const flag: boolean;
 
@@ -64,5 +65,11 @@ export function AfterPattern() {
 export function ArrowTarget() {
   const [name] = createSignal("a");
   const label = useArrowTarget(name);
+  return <p>{label}</p>;
+}
+
+export function Evaluated() {
+  const [name] = createSignal("a");
+  const label = useEvaluated(name);
   return <p>{label}</p>;
 }
