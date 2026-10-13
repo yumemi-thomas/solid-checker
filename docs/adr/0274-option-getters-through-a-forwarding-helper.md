@@ -47,9 +47,10 @@ real corpus call open:
      A field initializer runs at instantiation, and the compiler wraps a
      dynamic JSX prop or child in a getter its consumer runs, so neither
      runs where it is written;
-   - neither the helper nor its module carries a directive other than
-     `"use strict"`. `"use server"` makes the compiler replace a client
-     helper with an RPC reference, so its body does not run at the call.
+   - neither the helper nor its module carries any directive. `"use server"`
+     makes the compiler replace a client helper with an RPC reference, so its
+     body does not run at the call, and the server-function directive is
+     configurable to any text, `"use strict"` included.
 
    The caller's argument must then be the same exact receiver ADR 0225
    requires, and the getters run with the caller's call role. `new`
@@ -92,7 +93,8 @@ real corpus call open:
   found direct `eval` behind TypeScript wrappers, in the helper and in a
   getter. Round 4 (REVIEW-4.md) found a construction or read inside a JSX
   prop, which the compiler defers to its consumer. Round 5 (REVIEW-5.md)
-  found JSX fragments and a `"use server"` helper. Each now stays
+  found JSX fragments and a `"use server"` helper. Round 6 (REVIEW-6.md)
+  found a configured server-function directive of `"use strict"`. Each now stays
   uncertifiable, and the unit tests pin the syntactic shapes. The helper-side
   rule became an allowlist after round 5.
 - Unit tests: `a_helper_forwards_only_an_untouched_parameter_on_its_straight_line`

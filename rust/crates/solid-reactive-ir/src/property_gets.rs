@@ -289,18 +289,15 @@ fn helper_forwards(
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<ContractCallback> {
-    // A directive (`"use server"`, …) can hand the function to a compiler or
-    // host that replaces it, so its body need not run at the call.
-    let directive = |value: &str| value != "use strict";
+    // A directive can hand the function to a compiler or host that replaces
+    // it, so its body need not run at the call. `"use server"` is the
+    // default, and the server-function directive is configurable to any text
+    // (`"use strict"` included), so every directive refuses.
     if function.r#async
         || function.generator
         || !lookup.function_value_is_current(file, function)
-        || function.directives.iter().any(|value| directive(value))
-        || file
-            .ast
-            .module_directives
-            .iter()
-            .any(|fact| directive(&fact.value))
+        || !function.directives.is_empty()
+        || !file.ast.module_directives.is_empty()
     {
         return Vec::new();
     }
