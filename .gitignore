@@ -444,3 +444,5 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/literal-member-handoff/node_modules/**
 !fixtures/reactive-ir/dependency-source-owner/node_modules/
 !fixtures/reactive-ir/dependency-source-owner/node_modules/**
+!fixtures/reactive-ir/dependency-source-all/node_modules/
+!fixtures/reactive-ir/dependency-source-all/node_modules/**

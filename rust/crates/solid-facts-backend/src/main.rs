@@ -3539,12 +3539,47 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                         .any(|component| component.as_os_str() == "node_modules")
             })
             .collect::<Vec<_>>();
-        let prepared = solid_facts_backend::dependency_sources::prepare(
-            Path::new(&request.project_id),
-            &specifiers.into_iter().collect::<Vec<_>>(),
-            &host,
-            &project_files,
-        )?;
+        // ADR 0291: `*` selects every package the project loads at run
+        // time, and every package those load, except the dialect's own
+        // runtime.
+        let prepared = if request
+            .dependency_sources
+            .iter()
+            .any(|source| source == "*")
+        {
+            let requests = project_sources
+                .iter()
+                .flat_map(|source| {
+                    solid_facts_backend::dependency_sources::runtime_bare_imports_of(
+                        &source.path,
+                        &source.source,
+                    )
+                    .into_iter()
+                    .map(|specifier| (PathBuf::from(&source.path), specifier))
+                })
+                .collect::<Vec<_>>();
+            let excluded = dialect
+                .vocabulary
+                .primitive_defining_packages()
+                .iter()
+                .map(|name| (*name).to_owned())
+                .collect::<BTreeSet<_>>();
+            solid_facts_backend::dependency_sources::prepare_all(
+                Path::new(&request.project_id),
+                requests,
+                &host,
+                &project_files,
+                &excluded,
+                dialect.vocabulary.ecosystem_scopes(),
+            )?
+        } else {
+            solid_facts_backend::dependency_sources::prepare(
+                Path::new(&request.project_id),
+                &specifiers.into_iter().collect::<Vec<_>>(),
+                &host,
+                &project_files,
+            )?
+        };
         if let Some(prepared) = &prepared {
             request.project_id = prepared.tsconfig.to_string_lossy().into_owned();
         }

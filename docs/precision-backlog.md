@@ -30001,3 +30001,15 @@ otherwise it is an obligation. readingroom's `createTimer` cleanup is back
 - every package-located finding other than owner requirements, which stays
   unreported as package-intrinsic. Of the 36 package-located violations
   measured, 34 were intrinsic.
+
+## Every Solid package from source (2026-10-13, ADR 0291)
+
+`--dependency-source '*'` selects every Solid package the project loads at run
+time, transitively. Each is resolved from its importer. Workspace packages
+are excluded, and so are packages that are not analyzable, which keep their
+contracts. `exports` subpath patterns now resolve. On the rc.13 corpus it
+gives 560 violations (the same rows as the 11-package list) and 3,244
+uncertifiable (base mode: 562/3,731), at about 2.9× base mode's time. Open:
+- non-Solid libraries are not analyzed;
+- `exports` arrays and `browser` maps are refused;
+- the cost.
