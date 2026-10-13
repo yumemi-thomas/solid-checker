@@ -29938,8 +29938,9 @@ unchanged (562/3,731). Open:
   its wildcard writes are scoped to its own objects.
 - **ADR 0285:** a module with direct `eval` adds nothing to the completion
   table.
-- **Open, project code, not mode-specific:** a member read that resolves to
-  an accessor by property-symbol identity ignores a hand-off of its object.
+- **Project code, not mode-specific (fixed by ADR 0286):** a member read
+  that resolves to an accessor by property-symbol identity ignored a hand-off
+  of its object.
   `const tag = { label }; relabel(tag); tag.label()` is reported SC1001 even
   though `relabel` replaces `label`. The same happens through a factory
   return and with the longhand `{ label: label }`.

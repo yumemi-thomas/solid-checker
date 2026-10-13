@@ -106,8 +106,7 @@ write on a project object. A project factory that hands its object to a
 package that replaces a member stayed a violation. Named writes are now
 global. The same shape in project code alone
 (`const tag = { label }; relabel(tag); tag.label()`) is a false violation
-that does not depend on this mode. It is recorded in docs/precision-backlog.md
-and is being fixed separately.
+that does not depend on this mode. ADR 0286 fixes it.
 
 ## Review round 2
 
