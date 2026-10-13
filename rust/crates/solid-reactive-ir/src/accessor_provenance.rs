@@ -76,6 +76,12 @@ struct MemberStability {
     /// creates. A write naming its member vetoes it everywhere (review
     /// round 1): the package may write it on an object the project handed it.
     dependencies: HashMap<String, MemberStability>,
+    /// ADR 0282, narrowed: a reflective write (`Object.assign`,
+    /// `defineProperty`, `Reflect.set`, ...) whose target is spelled through a
+    /// `prototype`, in any analyzed file. Destructuring runs
+    /// `Array.prototype[Symbol.iterator]`, and that is the one way a write
+    /// reaches a fresh returned array literal.
+    prototype_target: Option<Location>,
 }
 
 enum Stability<'a> {
@@ -106,6 +112,7 @@ impl MemberStability {
 
     fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
         let mut project = Self::default();
+        let mut prototype_target = None;
         for file in &facts.files {
             let index = match facts.dependency_source_root(file.path.as_str()) {
                 Some(root) => project.dependencies.entry(root.to_owned()).or_default(),
@@ -117,6 +124,15 @@ impl MemberStability {
                     continue;
                 };
                 let site = location(file.path.shared(), call.span);
+                // A spread can supply any target, a prototype included.
+                if call.arguments.first().is_some_and(|target| {
+                    target.spread
+                        || file
+                            .source_text(target.span)
+                            .is_some_and(|text| text.contains("prototype"))
+                }) {
+                    prototype_target.get_or_insert_with(|| site.clone());
+                }
                 // A spread argument shifts every later position (a tuple can
                 // supply target, key and value at once), so no key position is
                 // known: it could write any member.
@@ -217,6 +233,7 @@ impl MemberStability {
                 project.written.entry(name).or_insert(site);
             }
         }
+        project.prototype_target = prototype_target;
         project
     }
 
@@ -1587,9 +1604,12 @@ impl Resolver<'_, '_> {
         if bound_file.path != file.path
             || !simple_array_binding(binding)
             // Destructuring runs `Array.prototype[Symbol.iterator]`. Like ADR
-            // 0273's members, its stability is a premise; a write whose key
-            // no literal names is the one veto visible here.
-            || self.member_stability.all.is_some()
+            // 0273's members, its stability is a premise, vetoed by a visible
+            // reflective write through a prototype. Any other wildcard write
+            // cannot reach the array: it is a literal created at the return
+            // and destructured by the call's own binding, so nothing else
+            // ever holds it (ADR 0288 review).
+            || self.member_stability.prototype_target.is_some()
         {
             return None;
         }
@@ -1609,15 +1629,7 @@ impl Resolver<'_, '_> {
         else {
             return None;
         };
-        // ADR 0284: a wildcard write inside a package analyzed as source
-        // vetoes the tuples that package creates.
-        if !*transported
-            || self
-                .facts
-                .dependency_source_root(&path)
-                .and_then(|root| self.member_stability.dependencies.get(root))
-                .is_some_and(|package| package.all.is_some())
-        {
+        if !*transported {
             return None;
         }
         // A slot past the literal's end destructures `undefined`.

@@ -1,4 +1,4 @@
-# ADR 0288: Host-dead return sites are the fold's; the tuple wall is the wildcard veto
+# ADR 0288: Host-dead return sites are the fold's; the tuple veto is narrowed to prototype writes
 
 - Status: accepted (2026-10-13). No engine change.
 - Owner: fixtures `reactive-ir/host-dead-return`, `host-dead-return-server`
@@ -52,21 +52,24 @@ refuse the factory.
      target alone would be wrong there.
    - A project-file constant would have to be authenticated by the
      inferred-host machinery. That is a separate slice.
-3. **The wildcard veto stays.** Lifting it for tuples changes a premise, so it
-   is for the owner to decide. The case for it, not adopted here:
-   - The destructured array is the factory's fresh literal, and no other
-     code holds it. A member write can reach the destructuring only through
-     `Array.prototype` or `%ArrayIteratorPrototype%`.
-   - A direct `Array.prototype[Symbol.iterator] = f` has a non-literal
-     computed key, so it is already outside ADR 0273's premise and vetoes
-     nothing.
-   - The one veto left, an `Object.assign`/`Reflect.set`/`defineProperty`
-     with an open key, does not look at its target.
-
-   Taking the standard runtime configuration premise (intrinsics are not
-   patched) for the iterator would make the premise consistent. No sound
-   target-aware narrowing exists: app-game's target is a store-setter
-   callback's parameter.
+3. **The wildcard veto is narrowed for tuples** (lead decision, 2026-10-13,
+   after this ADR's measurement).
+   - **No other code holds the array.** It is the factory's fresh literal,
+     created at the `return` and destructured by the call's own binding, so a
+     write to an ordinary object can never reach it. Destructuring can change
+     only through `Array.prototype` or `%ArrayIteratorPrototype%`.
+   - **What still vetoes:** a reflective write (`Object.assign`,
+     `Reflect.set`, `defineProperty`, …) whose target is spelled through a
+     `prototype`, or is a spread, in any analyzed file, package code
+     included. `host-dead-return-prototype` pins it.
+   - **Outside the premise:** a direct
+     `Array.prototype[Symbol.iterator] = f` has a non-literal computed key.
+     A prototype reached through an alias is outside it too. Both are
+     outside ADR 0273's premise, under the standard runtime configuration
+     premise that intrinsics are not patched.
+   - **Every other wildcard write** (ADR 0273's `all`) no longer refuses a
+     tuple. app-game's `setValues((draft) => Object.assign(draft, next))` is
+     one.
 
 ## Measurement of the premise (experiment only, not committed)
 
@@ -94,14 +97,22 @@ The second raf site needs the `lazy` difference as well.
 
 ## Consequences
 
-- Coverage gains three projects: `host-dead-return` with 4 `SC1001`
-  violations, and `-server` and `-wildcard` with none. No other snapshot
-  moved.
-- The corpus is unchanged in both modes: 562/3,731 base and 559/3,556
-  dependency, identical rows to `v-final.tsv` and `v-dep-final.tsv`.
+- **Coverage:** four projects are added.
+  - `host-dead-return` has 4 `SC1001` violations, and `-server` has none.
+  - `-wildcard` has 1 `SC1001` once the veto is narrowed.
+  - `-prototype` has none.
+
+  No other snapshot moved.
+- **Corpus with the narrowed veto** (rc.13, release binary, `--browser`):
+  - base: 562 violations (unchanged), 3,731 → 3,737 uncertifiable;
+  - dependency mode, 11 packages: 560 → 561 violations;
+  - dependency mode, `*`: 560 → 561 violations.
+
+  The added violation is raf's `renderer.tsx:32:3`, a true positive reported
+  in contract mode too. The second raf site is uncertifiable, as measured
+  above.
 - ADR 0282's "createRAF itself stays silent … slice 2" is true only for base
-  mode, where raf is bound by its contract and not analyzed. In dependency
-  mode, the wildcard veto is what keeps it silent.
+  mode, where raf is bound by its contract and not analyzed.
 - Still refused, silent:
   - a live return under a folded control test
     (`if (!isServer) { …; return [...] }`, `ClientLoop`);

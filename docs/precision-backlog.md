@@ -30074,3 +30074,12 @@ Open:
 - a live return under a folded control test (`if (!isServer) { return … }`),
   `isServer || flag`, a namespace-imported `isServer`, and
   `return isServer ? a : b`.
+
+## The tuple veto is narrowed to prototype writes (2026-10-13, ADR 0288)
+
+A wildcard member write (ADR 0273's `all`) no longer refuses ADR 0282's tuple
+slots. The array is a fresh literal no other code holds. A reflective write
+through a `prototype`, or a spread target, still refuses. The raf loop in
+app-game's `renderer.tsx` is reported in dependency mode (+1 true positive),
+and base mode gains 6 uncertifiable rows. Outside the premise: a prototype
+reached through an alias.
