@@ -37,6 +37,15 @@ const corpus = JSON.parse(readFileSync(join(fixturesRoot, "corpus.json"), "utf8"
 if (corpus.schemaVersion !== 1 || corpus.format !== "solid-checker-package-contract-generator-corpus") {
   throw new Error("fixture corpus manifest is not stable schema version 1");
 }
+// A fixture the corpus certifies under a declared host (ADR 0140) is named in
+// `hosts`: its `contract generate` runs with `--host`, exactly as a per-host
+// certification does. Every other fixture is generated host free.
+const hosts = corpus.hosts ?? {};
+for (const [name, host] of Object.entries(hosts)) {
+  if (!corpus.fixtures.includes(name) || !["browser", "node"].includes(host)) {
+    throw new Error(`corpus host declaration ${name}: ${host} names no listed fixture or no host`);
+  }
+}
 const fixtures = corpus.fixtures.map(name => join(fixturesRoot, name));
 const temporary = mkdtempSync(join(tmpdir(), "solid-checker-contract-corpus-"));
 
@@ -70,7 +79,8 @@ async function generate(directory) {
         "--output",
         output,
         "--integrity",
-        integrity
+        integrity,
+        ...(hosts[name] ? [`--host=${hosts[name]}`] : [])
       ],
       {
         cwd: root,
@@ -110,11 +120,20 @@ async function generate(directory) {
           1
         )
       : null;
-    if (audit && (!Array.isArray(audit.refusals) || !Array.isArray(audit.inapplicable))) {
+    if (
+      audit &&
+      (!Array.isArray(audit.refusals) ||
+        !Array.isArray(audit.inapplicable) ||
+        !Array.isArray(audit.withheldClaims) ||
+        !Array.isArray(audit.declinedClosures))
+    ) {
       throw new Error(`${name} produced an invalid artifact-case refusal sidecar`);
     }
     const auditedCases = audit
-      ? audit.refusals.length + audit.inapplicable.length
+      ? audit.refusals.length +
+        audit.inapplicable.length +
+        audit.withheldClaims.length +
+        audit.declinedClosures.length
       : 0;
     if (update) {
       writeFileSync(expectedRefusal, rendered);
@@ -144,6 +163,8 @@ async function generate(directory) {
       refused: true,
       refusedArtifactCases: audit?.refusals.length ?? 0,
       inapplicableArtifactCases: audit?.inapplicable.length ?? 0,
+      withheldClaims: audit?.withheldClaims.length ?? 0,
+      declinedClosures: audit?.declinedClosures.length ?? 0,
       cases: 0,
       closureCandidates: 0,
       unresolvedClaims: 0,
@@ -170,14 +191,23 @@ async function generate(directory) {
     refusals.package?.name !== contract.package.name ||
     refusals.package?.version !== contract.package.version ||
     !Array.isArray(refusals.refusals) ||
-    !Array.isArray(refusals.inapplicable)
+    !Array.isArray(refusals.inapplicable) ||
+    !Array.isArray(refusals.withheldClaims) ||
+    !Array.isArray(refusals.declinedClosures)
   ) {
     throw new Error(`${name} produced an invalid artifact-case refusal sidecar`);
   }
-  // An inapplicable disposition is not a refusal, but it is still a recorded
-  // census decision: pin the sidecar whenever either array carries a row, so a
-  // disposition cannot appear, change class, or vanish unreviewed.
-  const auditedCases = refusals.refusals.length + refusals.inapplicable.length;
+  // None of an inapplicable disposition, a withheld claim, and a declined
+  // closure proposal is a refusal, but all three are recorded census
+  // decisions: pin the sidecar whenever any array carries a row, so a
+  // disposition, a claim the generator refused to publish, or the blocker that
+  // made it decline to propose a closed domain cannot appear, change class,
+  // role or kind, or vanish unreviewed.
+  const auditedCases =
+    refusals.refusals.length +
+    refusals.inapplicable.length +
+    refusals.withheldClaims.length +
+    refusals.declinedClosures.length;
   if (update) {
     copyFileSync(output, expected);
     copyFileSync(plan, expectedPlan);
@@ -210,6 +240,8 @@ async function generate(directory) {
     refused: false,
     refusedArtifactCases: refusals.refusals.length,
     inapplicableArtifactCases: refusals.inapplicable.length,
+    withheldClaims: refusals.withheldClaims.length,
+    declinedClosures: refusals.declinedClosures.length,
     cases: Object.values(contract.entrypoints).reduce((count, entrypoint) => count + entrypoint.cases.length, 0),
     closureCandidates: planned.closureCandidates.length,
     unresolvedClaims: planned.unresolvedClaims.length,
@@ -224,6 +256,8 @@ try {
       result.cases += row.cases;
       result.refusedArtifactCases += row.refusedArtifactCases;
       result.inapplicableArtifactCases += row.inapplicableArtifactCases;
+      result.withheldClaims += row.withheldClaims;
+      result.declinedClosures += row.declinedClosures;
       result.closureCandidates += row.closureCandidates;
       result.unresolvedClaims += row.unresolvedClaims;
       result.positiveOperations += row.positiveOperations;
@@ -232,6 +266,8 @@ try {
     {
       refusedArtifactCases: 0,
       inapplicableArtifactCases: 0,
+      withheldClaims: 0,
+      declinedClosures: 0,
       cases: 0,
       closureCandidates: 0,
       unresolvedClaims: 0,
@@ -243,6 +279,8 @@ try {
       `${rows.filter(row => row.refused).length} exact fail-closed refusals, ` +
       `${aggregate.refusedArtifactCases} local artifact-case refusals, ` +
       `${aggregate.inapplicableArtifactCases} inapplicable artifact cases, ` +
+      `${aggregate.withheldClaims} withheld claims, ` +
+      `${aggregate.declinedClosures} declined closure proposals, ` +
       `${aggregate.cases} artifact cases, ${aggregate.positiveOperations} possible operations, ` +
       `${aggregate.closureCandidates} proof candidates, ${aggregate.unresolvedClaims} local open claims`
   );

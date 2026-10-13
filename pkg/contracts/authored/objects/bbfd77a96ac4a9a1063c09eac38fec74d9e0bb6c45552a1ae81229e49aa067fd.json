@@ -1,0 +1,399 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "19bdf17ae734b7395b8acd34448dafae7c70280e87f0f215d3e26a490ed2a2da",
+            "path": "./dist/index.js",
+            "sha256": "1cfdac6a285173d42c7b3d47f52372755b919def2d7c56bf7501a8e93303abf1"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "fe720c183c7182125dfd64a4e29bb71dc013da693fac2c33ff8b35a558b9e8f2"
+          },
+          "exports": {
+            "createPulse": "open-callable",
+            "createVibrate": "authored-createVibrate",
+            "frequencyToPattern": "authored-frequencyToPattern",
+            "isVibrationSupported": "authored-isVibrationSupported",
+            "makePulse": "open-callable",
+            "makeVibrate": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-ni5srTKSzfwZTZ5Sq3SikOgTNCgSvqBgCh7PxclXrf7OeM+UYPybWju7SIYMDkThaW3x67ebf5hLdAikqwx9Iw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "71e5a2bfd7d67338ff92029ee5b7f1e220baaff7d6e9aef8bc7dd7700fcef76d"
+    },
+    "name": "@solid-primitives/vibrate",
+    "version": "1.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createVibrate": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": [
+          "create-vibrating"
+        ],
+        "computations": [
+          "pattern-effect"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "resources": [
+          {
+            "id": "vibrating",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "pattern-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create-vibrating",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "vibrating"
+            ]
+          },
+          {
+            "id": "pattern-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "pattern-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "pattern-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "pattern-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "pattern-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "pattern-start",
+            "kind": "invoke",
+            "trigger": {
+              "event": "result-access"
+            },
+            "at": {
+              "event": "result-access",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "pattern-interval",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "vibrating",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "start",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "stop",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "supported",
+                  "value": {
+                    "kind": "plain"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "pattern-compute"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "pattern-start"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "pattern-interval"
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-frequencyToPattern": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "array",
+              "element": {
+                "kind": "plain"
+              }
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-isVibrationSupported": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "about": "Misuse/correct pairs for the most-imported non-@solid-primitives packages of the 38-app corpus, at the versions those apps install with Solid 2.0.0-rc.9. Read by misuse-runtime-ledger.mjs --cases. Each pair differs only in where the package's reactive value is read.",
+  "cases": [
+    {
+      "id": "router-useLocation-top-level-read",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "useLocation",
+      "rule": "strict-read-untracked",
+      "misuse": "import { createRouter, useLocation } from \"@solidjs/router\";\n\nfunction Home() {\n  const location = useLocation();\n  const path = location.pathname;\n  return <p>{path}</p>;\n}\n\nconst Router = createRouter({ routes: [{ path: \"/\", component: Home }] });\n\nexport default function App() {\n  return <Router>{(props) => <main>{props.children}</main>}</Router>;\n}\n",
+      "correct": "import { createRouter, useLocation } from \"@solidjs/router\";\n\nfunction Home() {\n  const location = useLocation();\n  return <p>{location.pathname}</p>;\n}\n\nconst Router = createRouter({ routes: [{ path: \"/\", component: Home }] });\n\nexport default function App() {\n  return <Router>{(props) => <main>{props.children}</main>}</Router>;\n}\n"
+    },
+    {
+      "id": "router-useSearchParams-top-level-read",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.26",
+      "export": "useSearchParams",
+      "rule": "strict-read-untracked",
+      "misuse": "import { createRouter, useSearchParams } from \"@solidjs/router\";\n\nfunction Home() {\n  const [search] = useSearchParams();\n  const query = search.q ?? \"none\";\n  return <p>{String(query)}</p>;\n}\n\nconst Router = createRouter({ routes: [{ path: \"/\", component: Home }] });\n\nexport default function App() {\n  return <Router>{(props) => <main>{props.children}</main>}</Router>;\n}\n",
+      "correct": "import { createRouter, useSearchParams } from \"@solidjs/router\";\n\nfunction Home() {\n  const [search] = useSearchParams();\n  return <p>{String(search.q ?? \"none\")}</p>;\n}\n\nconst Router = createRouter({ routes: [{ path: \"/\", component: Home }] });\n\nexport default function App() {\n  return <Router>{(props) => <main>{props.children}</main>}</Router>;\n}\n"
+    },
+    {
+      "id": "tanstack-router-useLocation-top-level-read",
+      "package": "@tanstack/solid-router",
+      "version": "2.0.0-rc.8",
+      "export": "useLocation",
+      "rule": "strict-read-untracked",
+      "misuse": "import { Outlet, RouterProvider, createRootRoute, createRoute, createRouter, useLocation } from \"@tanstack/solid-router\";\n\nfunction Home() {\n  const location = useLocation();\n  const path = location().pathname;\n  return <p>{path}</p>;\n}\n\nconst rootRoute = createRootRoute({ component: () => <Outlet /> });\nconst indexRoute = createRoute({ getParentRoute: () => rootRoute, path: \"/\", component: Home });\nconst router = createRouter({ routeTree: rootRoute.addChildren([indexRoute]) });\n\nexport default function App() {\n  return <RouterProvider router={router} />;\n}\n",
+      "correct": "import { Outlet, RouterProvider, createRootRoute, createRoute, createRouter, useLocation } from \"@tanstack/solid-router\";\n\nfunction Home() {\n  const location = useLocation();\n  return <p>{location().pathname}</p>;\n}\n\nconst rootRoute = createRootRoute({ component: () => <Outlet /> });\nconst indexRoute = createRoute({ getParentRoute: () => rootRoute, path: \"/\", component: Home });\nconst router = createRouter({ routeTree: rootRoute.addChildren([indexRoute]) });\n\nexport default function App() {\n  return <RouterProvider router={router} />;\n}\n"
+    },
+    {
+      "id": "tanstack-query-useQuery-top-level-read",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.3",
+      "export": "useQuery",
+      "rule": "strict-read-untracked",
+      "misuse": "import { QueryClient, QueryClientProvider, useQuery } from \"@tanstack/solid-query\";\n\nconst client = new QueryClient();\n\nfunction Status() {\n  const query = useQuery(() => ({ queryKey: [\"answer\"], queryFn: async () => 42 }));\n  const status = query.status;\n  return <p>{status}</p>;\n}\n\nexport default function App() {\n  return <QueryClientProvider client={client}><Status /></QueryClientProvider>;\n}\n",
+      "correct": "import { QueryClient, QueryClientProvider, useQuery } from \"@tanstack/solid-query\";\n\nconst client = new QueryClient();\n\nfunction Status() {\n  const query = useQuery(() => ({ queryKey: [\"answer\"], queryFn: async () => 42 }));\n  return <p>{query.status}</p>;\n}\n\nexport default function App() {\n  return <QueryClientProvider client={client}><Status /></QueryClientProvider>;\n}\n"
+    },
+    {
+      "id": "tanstack-query-useQuery-module-scope",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.3",
+      "export": "useQuery",
+      "rule": "missing-owner",
+      "misuse": "import { QueryClient, useQuery } from \"@tanstack/solid-query\";\n\nconst client = new QueryClient();\nexport const answer = useQuery(() => ({ queryKey: [\"answer\"], queryFn: async () => 42 }), () => client);\n",
+      "correct": "import { createRoot } from \"solid-js\";\nimport { QueryClient, useQuery } from \"@tanstack/solid-query\";\n\nconst client = new QueryClient();\nexport const answer = createRoot(() => useQuery(() => ({ queryKey: [\"answer\"], queryFn: async () => 42 }), () => client));\n"
+    }
+  ],
+  "excluded": [
+    {
+      "package": "@tanstack/solid-virtual",
+      "version": "3.13.40",
+      "reason": "imports solid-js/store, a Solid 1.x entry point that solid-js 2.0.0-rc.9 does not export; the package cannot load under Solid 2, so no misuse/correct pair can run"
+    }
+  ]
+}

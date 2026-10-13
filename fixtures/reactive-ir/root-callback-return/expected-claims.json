@@ -1,0 +1,45 @@
+{
+  "status": "observed; findings snapshot is fixtures/findings-snapshots/reactive-ir__root-callback-return.json",
+  "strictReadViolations": [
+    "TimerRead",
+    "CounterRead",
+    "PaginationRead",
+    "ObjectRead",
+    "SignalRead",
+    "MemoRead",
+    "SelectedRead",
+    "SelectedObjectRead",
+    "WrappedRead"
+  ],
+  "strictReadClean": [
+    "TrackedReads",
+    "ShadowedRoot"
+  ],
+  "noProvenStrictRead": [
+    "UnresolvedReads",
+    "ShadowedBinding"
+  ],
+  "unresolvedRootsKeepPriorEvidence": [
+    "named",
+    "multiple",
+    "conditional",
+    "conditionalStatement",
+    "disposeParameter",
+    "disposal",
+    "disposeResult",
+    "asyncResult",
+    "unknown",
+    "promised",
+    "choice",
+    "namedExpression",
+    "escaped",
+    "shorthand",
+    "localEscape",
+    "mutable",
+    "defaulted",
+    "restItems",
+    "rest",
+    "tupleContainer",
+    "shadowedBinding"
+  ]
+}

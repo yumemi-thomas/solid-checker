@@ -11,8 +11,11 @@ const FRAMEWORK_SCOPES = new Map([
   [
     "@tanstack/charts",
     {
-      version: "0.15.0",
-      exportMapSha256: "f30015b841aa5d47d369081a605b0665002cd3b2310572d9cb38fa5e1d41b8c1",
+      // Re-reviewed at 0.18.0 on 2026-09-27: `./solid` is unchanged
+      // (types/solid/import to the same files); the one new subpath,
+      // `./renderer/rect`, is framework-neutral and falls in the excluded set.
+      version: "0.18.0",
+      exportMapSha256: "6ee777379c5ec57e686d8d942e2c844cc363319faf53d60e2728ca64390a5ab7",
       selectedEntrypoints: ["./solid"],
       excludedEntrypoints: {
         definition: "all-runtime-exports-except-selected",

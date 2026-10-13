@@ -29,7 +29,54 @@ reactivity analysis but cannot be established. Covered forms include:
   such as `Array.prototype.filter` after `await`, when the callback body is
   hidden behind a wrapper or is async; and
 - an exported structured return whose shorthand value depends on an ambiguous,
-  bare/path-mapped, or global binding that cannot be joined exactly.
+  bare/path-mapped, or global binding that cannot be joined exactly; and
+- a callback that runs whenever the call's **returned object is read**, which
+  is rc.9's `omit(props, predicate)`. See below.
+
+### `omit` predicates (Solid 2.0.0-rc.9)
+
+`@solidjs/signals@2.0.0-rc.9` accepts `omit(props, hidden)` with a single
+function argument (`keys.length === 1 && typeof keys[0] === "function"`,
+`dist/dev.js:4380`). Where `Proxy` exists, `omit` stores the predicate in the
+view it returns, and the view's traps call it on every property get, `in` test
+and key enumeration, and on every merge or spread of the view
+(`dist/dev-shared.js:273`, `dist/dev.js:3495-3498`, `:4178-4241`). Those calls
+run in the reading computation's tracking scope and under its owner. Without
+`Proxy`, `omit` calls it once per property during the call (`:4408-4427`).
+
+The call site does not decide where the view is read, so code inside the
+predicate is never reported as a violation. It is not placed in the component
+body either. A predicate is certified only when it is proven inert, and
+otherwise it gets this finding at the predicate argument, with one of three
+reasons in `analysisContext`:
+
+| reason | the predicate |
+| --- | --- |
+| `result-access-callback-reactive-operation` | reads or writes reactive state: a recorded read, write, action or async read, or a reference to a signal, setter, action, store or props binding |
+| `result-access-callback-opaque-call` | calls something that is not a resolved standard-library function, such as a project helper, a package export or an unresolved callee |
+| `result-access-callback-body-unresolved` | has no inspectable body at this call: an import, a call result, a member, a `let` |
+
+Inert means the literal written at the position, or a `function` or `const`
+arrow in the same file that the argument names exactly, contains none of the
+above. `(key) => key === "a"` and
+`(key) => typeof key === "string" && key.startsWith("_")` are inert. A value
+proven not to be a function, like `omit(props, "a")`, is a key list and is
+not a predicate.
+
+The same holds one project wrapper away. If
+`function hideBy(props, hidden) { return omit(props, hidden); }` is called in
+the project, the argument at `hidden`'s position is judged at that call. The
+wrapper's own `omit` claims nothing, because the body is its callers'. An
+exported wrapper still keeps an open callback for callers outside the project
+([package-contract-incomplete](package-contract-incomplete.md)).
+
+Not followed: a predicate forwarded through two or more wrappers, through a
+destructured or renamed parameter, or through a spread argument. Code in such
+a predicate takes the role of the code around it.
+
+rc.3's `omit` never invokes an argument, and rc.3's typings reject a function
+key (TS2345). Under the audited vocabulary, and under a release analyzed with
+it, the second argument is a key list and this section does not apply.
 
 Finite candidate sets are not automatically uncertain. If every exact
 candidate is present and has the same reactive-read summary, the checker uses

@@ -1,0 +1,10 @@
+{
+  "name": "rc9-callback-forms",
+  "version": "1.0.0",
+  "type": "module",
+  "peerDependencies": {
+    "@solidjs/web": "^2.0.0-rc.9",
+    "solid-js": "^2.0.0-rc.9"
+  },
+  "exports": "./index.ts"
+}

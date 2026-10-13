@@ -1,0 +1,3 @@
+function createProjectionNext(fn, seed, options) {
+  return createProjectionNextInternal(fn, seed, options).store;
+}

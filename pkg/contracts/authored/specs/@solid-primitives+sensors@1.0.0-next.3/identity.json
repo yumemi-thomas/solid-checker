@@ -1,0 +1,103 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/sensors",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-xnRR/KyM/Uf/MZQEKArR1oQ06cFOX41xUHHH+RcxXyk7nMXcGy6+NsbjhA1EvNwD6jTYuhoEXbnlkPlCgD3AeQ==",
+      "snapshotRoot": "sha256:a9cac64937a209cfa773e5eacf6c388da7c8d27627e588e76d4dd1cc13bed60d",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "0dea16f4abe391607e91ab458ef04fe078fb30708118279fed31c5fef7e4c9e6",
+                  "path": "./dist/index.js",
+                  "sha256": "ed8b7a04b31d7368d675e92745eef4bd3eca51cabff48c60cf75eb5ea950151f"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "8252c6a0e7ccbd870690e6f713f456e9c93c38254f351d76f685bc226f8b35b9"
+                },
+                "exports": {
+                  "createAccelerometer": "summary-eebbb8da04bcf52dbff3bd50457c3152a2183f79bc78329a62bf4289080f5f48",
+                  "createBattery": "summary-71c011babef7cedcc7f5002f06d8cb19c446c3a3672cb91a7ae3541dfab6c686",
+                  "createCompass": "summary-5d51ce4f793b431024ba083e605d78b2c24625d7a8934c8ebfceb54a389c9dfa",
+                  "createGyroscope": "summary-79801c5523cb543bfdc5d7a8624ea1e147fd6be70ea0f1fc4f76109ceea0439f",
+                  "createSensor": "summary-b5964ba98383937d9b15bc65e935d49716f5a00302d88670b5992453d174312e",
+                  "makeAccelerometer": "summary-5193bd57094e309b057a67be81b7f8051877b2df2f27b222e0fdf1e45324c76e",
+                  "makeBattery": "summary-8934ec0620e13cf96b318c4b6a371c29fb038dc6b0ad2124065b14b6182b3346",
+                  "makeCompass": "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa",
+                  "makeGyroscope": "summary-5193bd57094e309b057a67be81b7f8051877b2df2f27b222e0fdf1e45324c76e",
+                  "makeSensor": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-xnRR/KyM/Uf/MZQEKArR1oQ06cFOX41xUHHH+RcxXyk7nMXcGy6+NsbjhA1EvNwD6jTYuhoEXbnlkPlCgD3AeQ==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "bc12741535a6dc78a37422ef0d309246cc412422f7707c8a227ff00c5cfb0139"
+          },
+          "name": "@solid-primitives/sensors",
+          "version": "1.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-eebbb8da04bcf52dbff3bd50457c3152a2183f79bc78329a62bf4289080f5f48": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-71c011babef7cedcc7f5002f06d8cb19c446c3a3672cb91a7ae3541dfab6c686": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-5d51ce4f793b431024ba083e605d78b2c24625d7a8934c8ebfceb54a389c9dfa": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-79801c5523cb543bfdc5d7a8624ea1e147fd6be70ea0f1fc4f76109ceea0439f": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b5964ba98383937d9b15bc65e935d49716f5a00302d88670b5992453d174312e": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-5193bd57094e309b057a67be81b7f8051877b2df2f27b222e0fdf1e45324c76e": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-8934ec0620e13cf96b318c4b6a371c29fb038dc6b0ad2124065b14b6182b3346": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

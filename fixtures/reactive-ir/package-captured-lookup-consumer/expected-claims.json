@@ -1,0 +1,26 @@
+{
+  "status": "observed; findings snapshot is fixtures/findings-snapshots/reactive-ir__package-captured-lookup-consumer.json",
+  "violations": [
+    "Body"
+  ],
+  "clean": [
+    "Tracked"
+  ],
+  "uncertifiable": [
+    "Namespace",
+    "SetterRetained",
+    "MissingKey",
+    "DynamicKey",
+    "CustomResolver",
+    "Getter",
+    "Escaped",
+    "Shadowed",
+    "Deferred",
+    "ExtraArgument"
+  ],
+  "rules": [
+    "strict-read-untracked",
+    "reactive-dispatch-unresolved"
+  ],
+  "notes": "Namespace was predicted a violation; observed uncertifiable (reactive-source-uncaptured on the namespace-created dict), the conservative direction."
+}

@@ -1,0 +1,183 @@
+{
+  "diagnostic": true,
+  "newCertifiedEntrypoints": 0,
+  "completeRowTransitions": 0,
+  "results": [
+    {
+      "resultPath": "/private/tmp/next-explicit-graph-IEVgaG/result.json",
+      "resultDigest": "sha256:f8bc2fb5ccd0f5854ba02db8f2318f7fdffaa6869d87895cd8b4506652eea723",
+      "diagnostic": true,
+      "baseline": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-08-defined-input-full.json",
+      "baselineDigest": "sha256:1f94bbe1309b743d5b4b4ed760ef67e5da8414a84664826ac384194d2fb92025",
+      "probeId": "@solid-primitives/local-store@1.1.4|solid1|only",
+      "out": "/private/tmp/next-explicit-graph-IEVgaG",
+      "cases": [
+        {
+          "entrypoint": ".",
+          "conditions": []
+        }
+      ],
+      "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-d7HbyF/node_modules/@solid-primitives/.solid-checker-certification-15cd951ecbd32abda55fc05d33e4b1501d91b67e8991fd5655354e3da19cd77e.mjs",
+      "elapsedMs": 1417,
+      "misses": [],
+      "failure": "CertificationRefusal: witness-acquisition refused for demand sha256:dd5553badc0a9d8cf6bfaa843f278ab243238c9a282faf7ca76653e80fe99846: solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:95ca4fb224b612be708f91c9e37fa435885e4b43ab2a158248bda340f7d9c7f3: Type Facts certification failed for graph node @solid-primitives/local-store@1.1.4 (.) during live graph export-value verification: Type Facts demand sha256:dd5553badc0a9d8cf6bfaa843f278ab243238c9a282faf7ca76653e80fe99846 is locally open: recursive-value-shape (artifact-case:778d77fd1d2a5ddc23b51a7c8c22de1f68336a4b1e0bf80da67a6ec32bed3513:default): operation value path is locally open (complete=false, presence=Required, callability=NonCallable, reasons=[\"unresolvedGeneric\"])",
+      "result": null,
+      "graph": {
+        "requestedCases": 1,
+        "retainedProposalCases": 0,
+        "preparedDependencyGraphCases": 1,
+        "rootCases": 1,
+        "canonicalNodes": 2,
+        "acquiredPublishedArtifacts": 3,
+        "acquisitionUnits": 2,
+        "graphAcquisitionDurationMs": 1.8,
+        "resolutionSession": {
+          "requests": 0,
+          "semanticAcquisitions": 0,
+          "semanticCacheHits": 0,
+          "semanticCacheInvalidations": 0,
+          "moduleDescriptionsParsed": 14,
+          "typeScriptProgramsCreated": 0
+        },
+        "compilerSourceClosureCensus": 1,
+        "proposalGenerations": 2,
+        "proposalGenerationsShared": 0,
+        "proposalFrontiers": [
+          {
+            "nodes": 1,
+            "durationMs": 694.05
+          },
+          {
+            "nodes": 1,
+            "durationMs": 62.98
+          }
+        ],
+        "graphNodeReferences": 2,
+        "nativeCertificationTransactions": 1,
+        "typeFactsCaseSetBatches": 1
+      },
+      "nativeDigest": "sha256:60897419545cbee73e4daa76034658f9198752f8f3a3c3ab5d99d082944e4f55",
+      "producerDigest": "sha256:c51605838483492782470e4c281558ba294a8d2ba451f68769757d6b4db3ed03"
+    },
+    {
+      "resultPath": "/private/tmp/next-explicit-graph-pBb2YZ/result.json",
+      "resultDigest": "sha256:d7d78a959cd1967fdc1789df10061d18b57993d2e6e6bc02cd1b7ce106aacf5f",
+      "diagnostic": true,
+      "baseline": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-08-defined-input-full.json",
+      "baselineDigest": "sha256:1f94bbe1309b743d5b4b4ed760ef67e5da8414a84664826ac384194d2fb92025",
+      "probeId": "@solid-primitives/flux-store@1.0.0-next.2|solid2|head",
+      "out": "/private/tmp/next-explicit-graph-pBb2YZ",
+      "cases": [
+        {
+          "entrypoint": ".",
+          "conditions": []
+        }
+      ],
+      "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-cCNzug/node_modules/@solid-primitives/.solid-checker-certification-8a1a00efcf8be6fe5628354d0388f0366cb0da51c1f6da24d1b5517716200a5e.mjs",
+      "elapsedMs": 2483,
+      "misses": [],
+      "failure": "CertificationRefusal: witness-acquisition refused for demand sha256:b09ee0fc47fb77927c43aaf1bc1594d671f053211a9ca7738b3fd27b54e607ef: solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:a042564426115eebd5237218a547a8f6d019bfda76f64a8d953ead84dc529cd5: Type Facts certification failed for graph node @solid-primitives/flux-store@1.0.0-next.2 (.) during live graph export-value verification: Type Facts demand sha256:b09ee0fc47fb77927c43aaf1bc1594d671f053211a9ca7738b3fd27b54e607ef is locally open: recursive-value-shape (artifact-case:af2f050f1ed143d49120e5a4fb6f1067764545957116e79da376fee0fe5c8596:createFluxStore): operation value path is locally open (complete=false, presence=Required, callability=NonCallable, reasons=[\"unresolvedGeneric\"])",
+      "result": null,
+      "graph": {
+        "requestedCases": 1,
+        "retainedProposalCases": 0,
+        "preparedDependencyGraphCases": 1,
+        "rootCases": 1,
+        "canonicalNodes": 3,
+        "acquiredPublishedArtifacts": 3,
+        "acquisitionUnits": 2,
+        "graphAcquisitionDurationMs": 1.83,
+        "resolutionSession": {
+          "requests": 0,
+          "semanticAcquisitions": 0,
+          "semanticCacheHits": 0,
+          "semanticCacheInvalidations": 0,
+          "moduleDescriptionsParsed": 73,
+          "typeScriptProgramsCreated": 0
+        },
+        "compilerSourceClosureCensus": 0,
+        "proposalGenerations": 3,
+        "proposalGenerationsShared": 0,
+        "proposalFrontiers": [
+          {
+            "nodes": 1,
+            "durationMs": 1100.36
+          },
+          {
+            "nodes": 1,
+            "durationMs": 407.3
+          },
+          {
+            "nodes": 1,
+            "durationMs": 72.69
+          }
+        ],
+        "graphNodeReferences": 3,
+        "nativeCertificationTransactions": 1,
+        "typeFactsCaseSetBatches": 1
+      },
+      "nativeDigest": "sha256:60897419545cbee73e4daa76034658f9198752f8f3a3c3ab5d99d082944e4f55",
+      "producerDigest": "sha256:c51605838483492782470e4c281558ba294a8d2ba451f68769757d6b4db3ed03"
+    },
+    {
+      "resultPath": "/private/tmp/next-explicit-graph-Qkcgl2/result.json",
+      "resultDigest": "sha256:6164d2d07080498669e33b3111b9171de04b002beae9f04c325e32f84b44ce2d",
+      "diagnostic": true,
+      "baseline": "/Users/thomas/Documents/Github/solid-checker/rust/target/ecosystem-investigations/2026-09-08-defined-input-full.json",
+      "baselineDigest": "sha256:1f94bbe1309b743d5b4b4ed760ef67e5da8414a84664826ac384194d2fb92025",
+      "probeId": "@solid-primitives/flux-store@1.0.0-next.2|solid2|floor",
+      "out": "/private/tmp/next-explicit-graph-Qkcgl2",
+      "cases": [
+        {
+          "entrypoint": ".",
+          "conditions": []
+        }
+      ],
+      "importer": "/private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-r6YZ7O/node_modules/@solid-primitives/.solid-checker-certification-83d3acf02e9b289ed5e48676168cad204afb0987b6b10f00b49dd1363087c0a5.mjs",
+      "elapsedMs": 1997,
+      "misses": [],
+      "failure": "CertificationRefusal: witness-acquisition refused for demand sha256:597374ed381fed90a20686025a1705bf5464eca370901c239ec5ea203b3d5a1d: solid-checker-rust: published graph finalization failed: Type Facts certification failed for published graph sha256:60f71eaa168166958634919d91bd6787bbd91fc8ee9703a19e0505fee09a8011: Type Facts certification failed for graph node @solid-primitives/flux-store@1.0.0-next.2 (.) during live graph export-value verification: Type Facts demand sha256:597374ed381fed90a20686025a1705bf5464eca370901c239ec5ea203b3d5a1d is locally open: recursive-value-shape (artifact-case:9d4b1397e8fe6f27d13a99ab023512ea003c44247b6068e8572e6904f3dcacb6:createFluxStore): operation value path is locally open (complete=false, presence=Required, callability=NonCallable, reasons=[\"unresolvedGeneric\"])",
+      "result": null,
+      "graph": {
+        "requestedCases": 1,
+        "retainedProposalCases": 0,
+        "preparedDependencyGraphCases": 1,
+        "rootCases": 1,
+        "canonicalNodes": 3,
+        "acquiredPublishedArtifacts": 3,
+        "acquisitionUnits": 2,
+        "graphAcquisitionDurationMs": 1.63,
+        "resolutionSession": {
+          "requests": 0,
+          "semanticAcquisitions": 0,
+          "semanticCacheHits": 0,
+          "semanticCacheInvalidations": 0,
+          "moduleDescriptionsParsed": 65,
+          "typeScriptProgramsCreated": 0
+        },
+        "compilerSourceClosureCensus": 0,
+        "proposalGenerations": 3,
+        "proposalGenerationsShared": 0,
+        "proposalFrontiers": [
+          {
+            "nodes": 1,
+            "durationMs": 822.98
+          },
+          {
+            "nodes": 1,
+            "durationMs": 374.96
+          },
+          {
+            "nodes": 1,
+            "durationMs": 67.9
+          }
+        ],
+        "graphNodeReferences": 3,
+        "nativeCertificationTransactions": 1,
+        "typeFactsCaseSetBatches": 1
+      },
+      "nativeDigest": "sha256:60897419545cbee73e4daa76034658f9198752f8f3a3c3ab5d99d082944e4f55",
+      "producerDigest": "sha256:c51605838483492782470e4c281558ba294a8d2ba451f68769757d6b4db3ed03"
+    }
+  ]
+}

@@ -1,0 +1,359 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "7399a3a2823e796d2971b01ed1e164494702d398ec4e7fc3677c7f0089ffca1b",
+            "path": "./dist/index.js",
+            "sha256": "b29ed6ff980293aa40088855ea5b2e23cc67471f7639de0a6e12040d28628d42"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "7bc06acf33647a0f6773e4fc9dd4614288b2f4bb498b1fd54675227f1ca794da"
+          },
+          "exports": {
+            "createVideo": "open-callable",
+            "createVideoFrameCallback": "authored-createVideoFrameCallback",
+            "createVideoPlayer": "open-callable",
+            "makeVideo": "open-callable",
+            "makeVideoFrameCallback": "open-callable",
+            "makeVideoPlayer": "open-callable",
+            "setVideoSrc": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-M+R6HGvKMqRXy9mGEwpyq+IAZew7kBEJYfL58i+1QGuuTGtiCQjeXGME7fe4UG/mDldW56WA/TRSJEGeF8kQxg==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "97e14600a150535db5ecfbcdb73ddf56d8eaba46f53685b5929db0249dfc2534"
+    },
+    "name": "@solid-primitives/video",
+    "version": "1.0.0-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createVideoFrameCallback": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [
+          "create-running"
+        ],
+        "resources": [
+          {
+            "id": "running",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "video-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "computations": [
+          "video-effect"
+        ],
+        "cleanups": [
+          "video-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "initial-el"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "tracked-el"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "frame"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create-running",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "running"
+            ]
+          },
+          {
+            "id": "initial-el",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call"
+            }
+          },
+          {
+            "id": "video-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "video-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "tracked-el",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "video-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "video-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "frame",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "video-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "running"
+                },
+                {
+                  "kind": "effectful-callable",
+                  "call": {
+                    "closed": [
+                      "reads",
+                      "creates",
+                      "callbacks",
+                      "returns"
+                    ],
+                    "reads": [],
+                    "creates": [],
+                    "callbacks": [],
+                    "returns": [
+                      "start-return"
+                    ],
+                    "operations": [
+                      {
+                        "id": "start-return",
+                        "kind": "return",
+                        "trigger": {
+                          "event": "call"
+                        },
+                        "at": {
+                          "event": "call",
+                          "schedule": "same-stack"
+                        },
+                        "tracking": "untracked",
+                        "count": {
+                          "min": 0,
+                          "max": "many",
+                          "scope": "call"
+                        },
+                        "output": {
+                          "kind": "undefined"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "effectful-callable",
+                  "call": {
+                    "closed": [
+                      "reads",
+                      "creates",
+                      "callbacks",
+                      "returns"
+                    ],
+                    "reads": [],
+                    "creates": [],
+                    "callbacks": [],
+                    "returns": [
+                      "stop-return"
+                    ],
+                    "operations": [
+                      {
+                        "id": "stop-return",
+                        "kind": "return",
+                        "trigger": {
+                          "event": "call"
+                        },
+                        "at": {
+                          "event": "call",
+                          "schedule": "same-stack"
+                        },
+                        "tracking": "untracked",
+                        "count": {
+                          "min": 0,
+                          "max": "many",
+                          "scope": "call"
+                        },
+                        "output": {
+                          "kind": "undefined"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

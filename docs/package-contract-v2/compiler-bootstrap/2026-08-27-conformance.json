@@ -1,73 +1,53 @@
 {
   "schemaVersion": 1,
   "documentKind": "solid-compiler-semantic-facts-bootstrap-conformance",
-  "capturedAt": "2026-08-27",
+  "capturedAt": "2026-10-05",
   "upstream": {
     "repository": "https://github.com/solidjs/solid",
-    "revision": "a10cf1a147209d8da50697896742d2b1d4afad75",
+    "revision": "5efaf260becb32293f2bcb4d32f8be72be6de674",
     "branch": "next"
   },
   "fork": {
     "repository": "https://github.com/yumemi-thomas/solid",
-    "revision": "1d81e67fd393d12c74b13aa7d3fb492f3d85353b",
-    "branch": "solid-checker/compiler-facts-v2",
-    "upstreamPullRequest": false,
-    "scope": "semantic facts only"
+    "revision": "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d",
+    "implementationRevision": "c04c48779812d3d87166da3741c625748458c62f",
+    "branch": "solid-checker/compiler-facts-rc13",
+    "scope": "semantic facts only",
+    "upstreamPullRequest": false
   },
   "trace": {
-    "version": 2,
-    "baselineEntries": 358,
-    "baselineBytes": 955562,
-    "baselineSha256": "2f7f2b9a9d8a8cf3eb1d60a0cc35ee4a97142a9ff027fdcb2079f741ed00b92b",
+    "version": 3,
+    "baselineEntries": 365,
     "independentlyGeneratedUpstreamBaselineMatched": true,
     "javascriptSourceMapDiagnosticNeutrality": true
   },
   "checker": {
     "dependency": "solidjs-compiler",
-    "compilerFactsProtocol": 1,
-    "findingsBefore": 558,
-    "findingsAfter": 557,
-    "reviewedFindingDelta": "one stale uncertifiable SC1001 removed because current Solid positively reports the source child as tracked",
-    "otherFindingChanges": 0
+    "compilerFactsProtocol": 2,
+    "findingsBefore": 883,
+    "findingsAfter": 883,
+    "reviewedFindingDelta": "none: no fixture finding moved under the rc.13 compiler",
+    "otherFindingChanges": 0,
+    "adoption": "docs/adr/0196-the-compiler-follows-solid-rc13.md"
   },
   "checks": {
-    "compilerRustDefaultFeatures": "passed",
-    "compilerRustNoDefaultFeatures": "passed",
-    "compilerJavaScript": {
-      "testFiles": 28,
-      "tests": 3933,
+    "producerRust": "passed",
+    "producerJavaScript": {
+      "testFiles": 41,
+      "tests": 5938,
       "status": "passed"
     },
-    "adapterSolid2": {
-      "tests": 9,
-      "status": "passed"
-    },
-    "adapterSolid1AndSelection": {
-      "tests": 7,
-      "status": "passed"
-    },
-    "contractProcess": {
-      "tests": 57,
-      "status": "passed"
-    },
-    "dialectProcess": {
-      "tests": 37,
-      "status": "passed"
-    },
-    "coverage": {
-      "projects": 94,
-      "findings": 557,
-      "status": "passed"
-    },
-    "ownershipGate": {
-      "cases": 289,
-      "ledgerRows": 465,
-      "pending": 0,
-      "status": "passed"
-    },
-    "makeVerify": {
-      "elapsedSeconds": 42.83,
-      "status": "passed"
+    "localChecker": {
+      "compilerFactsIdentity": "passed",
+      "coverage": {
+        "projects": 167,
+        "findings": 883,
+        "status": "passed"
+      },
+      "makeVerify": {
+        "status": "passed",
+        "elapsedSeconds": 879.07
+      }
     }
   },
   "knownInheritedGate": {

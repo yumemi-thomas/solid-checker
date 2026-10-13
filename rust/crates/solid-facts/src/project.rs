@@ -41,6 +41,10 @@ pub struct ProjectFacts {
     /// [`crate::resolution`].
     #[serde(skip)]
     pub resolved_imports: Option<AttestedImportIndex>,
+    /// The project bundler's own resolution of each module load, when the
+    /// host asked for it (ADR 0220). See [`crate::runtime_resolution`].
+    #[serde(skip)]
+    pub runtime_resolutions: Option<crate::runtime_resolution::RuntimeResolutionIndex>,
     /// Exact TypeScript-symbol redirects from a declaration-bound import to
     /// the package-local runtime implementation selected for that same static
     /// specifier.
@@ -489,6 +493,7 @@ impl ProjectFacts {
             typescript,
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
         })
     }

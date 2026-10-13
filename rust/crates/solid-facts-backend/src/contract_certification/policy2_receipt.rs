@@ -32,7 +32,13 @@ const TRUST_CONFIGURATION_FORMAT: &str = "solid-checker-policy2-trust-configurat
 const TRUST_CONFIGURATION_VERSION: u16 = 1;
 const MAX_STRING_BYTES: usize = 16 * 1024;
 const MAX_ROOTS: usize = 256;
-const RECEIPT_WITNESS_FAMILIES: [&str; 17] = [
+/// Every witness family a policy-2 receipt must bind, in canonical order.
+///
+/// Public so an out-of-crate test issuer can construct a complete
+/// [`Policy2ReceiptBindings`] without duplicating the list; the roots
+/// themselves carry the authority, and [`Policy2ReceiptBindings::validate`]
+/// still requires exactly these keys.
+pub const RECEIPT_WITNESS_FAMILIES: [&str; 17] = [
     "package-identity",
     "manifest-entrypoint",
     "export-resolution",
@@ -79,6 +85,18 @@ pub struct Policy2ReceiptBindings {
     pub importer: String,
     pub specifier: String,
     pub resolved_import_root: String,
+    /// The importer-free, path-free identity of the artifact this contract was
+    /// proven about. `resolved_import_root` answers "which resolver answer,
+    /// from which file"; this answers "which published artifact", so a consumer
+    /// that resolved the same artifact from its own file can match the
+    /// acceptance. See `policy2_artifact_acceptance_root`.
+    ///
+    /// Empty means the receipt states none -- it was issued before this binding
+    /// existed -- and that acceptance stays importer-only. Stated, it is part
+    /// of a configured issuer's signed payload; a built-in receipt carries it
+    /// under its compiled-in whole-receipt digest instead.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub artifact_acceptance_root: String,
     pub semantic_digest: String,
     pub artifact_provenance_root: String,
     pub snapshot_root: String,
@@ -99,6 +117,409 @@ pub struct Policy2ReceiptBindings {
     pub closed_claims_root: String,
     pub verifier_source_digest: String,
     pub verifier_build_digest: String,
+    /// Which installed packages, besides the certified one, this certification
+    /// read: [`policy2_dependency_environment_root`] over every
+    /// [`DependencyEnvironmentEntry`] the proof relied on.
+    ///
+    /// A contract is proven about one artifact *in one environment*. A closure
+    /// that a dialect axiom discharged is true of `@solidjs/signals@2.0.0-rc.6`
+    /// and says nothing about rc.0, and a claim composed from a dependency's
+    /// receipt is true only where that dependency is the certified one. The
+    /// artifact acceptance root commits to neither, so this root is what lets a
+    /// consumer ask whether its own installed tree is the environment the proof
+    /// was about.
+    ///
+    /// Empty means the receipt states none -- it was issued before this binding
+    /// existed -- and such a receipt can never be applied by environment
+    /// (`artifact_admission` refuses it). It is skipped when empty so an older
+    /// receipt re-encodes to the exact bytes it was signed over.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub dependency_environment_root: String,
+    /// The compiled-in acceptances this certification cited as proof (ADR
+    /// 0151): each dependency whose accepted claim a composition relied on,
+    /// named by the receipt the compiled-in tier carries for it.
+    ///
+    /// Signed with the rest of the payload, so the citation is auditable from
+    /// the receipt alone, and read back by every admission: a receipt citing a
+    /// receipt the running build's tier no longer carries is admitted nowhere,
+    /// which is how a later tier change withdraws what was built on it.
+    ///
+    /// Empty -- every receipt issued before citations existed, and every one
+    /// that cited nothing -- is skipped when encoding, so those receipts keep
+    /// the exact bytes they were signed over.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cited_acceptances: Vec<CitedAcceptance>,
+}
+
+/// One compiled-in acceptance a certification cited (ADR 0151, as amended
+/// by ADR 0155).
+///
+/// The claim is named by its content: the artifact (`artifact_acceptance_root`),
+/// the environment its proof read (`dependency_environment_root`) and the
+/// certified contract (`semantic_digest`), each exactly as the cited receipt
+/// signs it. A tier carries the citation while some bundle states those three
+/// for the same package and version. The receipt digest is recorded too, for
+/// audit, but it is not the identity: a receipt also binds the certification's
+/// own importer path, so every re-certification of the same bytes in the same
+/// environment issues a new digest for the same claim, and a digest identity
+/// withdrew every citing contract at every tier regeneration.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CitedAcceptance {
+    pub package_name: String,
+    pub package_version: String,
+    pub artifact_acceptance_root: String,
+    pub dependency_environment_root: String,
+    pub semantic_digest: String,
+    pub receipt_digest: String,
+}
+
+impl CitedAcceptance {
+    /// Whether `bindings`, the bindings of a bundle's receipt for `package`
+    /// at `version`, state exactly this cited claim.
+    #[must_use]
+    pub fn is_stated_by(
+        &self,
+        package: &str,
+        version: &str,
+        bindings: &Policy2ReceiptBindings,
+    ) -> bool {
+        self.package_name == package
+            && self.package_version == version
+            && self.artifact_acceptance_root == bindings.artifact_acceptance_root
+            && self.dependency_environment_root == bindings.dependency_environment_root
+            && self.semantic_digest == bindings.semantic_digest
+    }
+}
+
+/// One installed package, besides the certified one, whose bytes a
+/// certification read: a semantic dependency whose receipt it composed, or an
+/// authenticated source package (the dialect's own archives among them) whose
+/// declarations or source the Type Facts census could consult.
+///
+/// Exactly the three facts a consumer can recompute about its own installed
+/// copy -- the directory name, the manifest version and the lockfile's
+/// registry integrity -- and nothing else. The integrity fixes every byte; name
+/// and version make a mismatch name itself.
+///
+/// **An entry may also state the resolution edge that reached it**
+/// (`resolvedFrom`): which package looked it up, and by which bare name. An
+/// environment states edges on every entry or on none. Without edges it cannot
+/// say which package read each one, so admission has to demand that every
+/// lookup of each name, from every located package, reaches that one entry
+/// (`artifact_admission::environment_is_installed`) -- which a pnpm tree, whose
+/// `.pnpm/node_modules` hoists other versions into every package's view, never
+/// satisfies. With edges, admission replays exactly the certified lookups from
+/// each importer's own installed location, and one package name may then
+/// appear twice, reached by two importers at two versions.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DependencyEnvironmentEntry {
+    pub name: String,
+    pub version: String,
+    pub integrity: String,
+    /// The lookup that reached this package when the certification ran.
+    /// `None` in an environment stated without edges (the
+    /// `policy2-dependency-environment:v1` root) and in an installed identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_from: Option<DependencyEnvironmentEdge>,
+}
+
+impl DependencyEnvironmentEntry {
+    /// The entry without a resolution edge: the three facts an installed copy
+    /// states about itself.
+    #[must_use]
+    pub fn package(
+        name: impl Into<String>,
+        version: impl Into<String>,
+        integrity: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            version: version.into(),
+            integrity: integrity.into(),
+            resolved_from: None,
+        }
+    }
+
+    /// This entry, reached by `specifier` from `importer`.
+    #[must_use]
+    pub fn resolved_from(
+        mut self,
+        importer: EnvironmentImporter,
+        specifier: impl Into<String>,
+    ) -> Self {
+        self.resolved_from = Some(DependencyEnvironmentEdge {
+            importer,
+            specifier: specifier.into(),
+        });
+        self
+    }
+
+    /// Whether `other` is the same installed package: name, manifest version
+    /// and lockfile integrity, whatever edge either one states.
+    #[must_use]
+    pub fn same_package(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.version == other.version
+            && self.integrity == other.integrity
+    }
+
+    /// This entry without its edge.
+    #[must_use]
+    pub fn without_edge(&self) -> Self {
+        Self::package(&self.name, &self.version, &self.integrity)
+    }
+
+    /// This entry's package identity as the importer of another entry.
+    #[must_use]
+    pub fn as_importer(&self) -> EnvironmentImporter {
+        EnvironmentImporter::Package(EnvironmentPackage {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            integrity: self.integrity.clone(),
+        })
+    }
+}
+
+/// How one environment entry was reached: `specifier`, the bare package name
+/// Node looked up, from the installed location of `importer`.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DependencyEnvironmentEdge {
+    pub importer: EnvironmentImporter,
+    pub specifier: String,
+}
+
+/// The package a resolution edge starts from: the certified package itself,
+/// or another entry of the same environment, named by its package identity.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub enum EnvironmentImporter {
+    Certified,
+    Package(EnvironmentPackage),
+}
+
+/// A package identity inside an environment edge.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EnvironmentPackage {
+    pub name: String,
+    pub version: String,
+    pub integrity: String,
+}
+
+impl EnvironmentPackage {
+    /// Whether `entry` is this package.
+    #[must_use]
+    pub fn is(&self, entry: &DependencyEnvironmentEntry) -> bool {
+        self.name == entry.name
+            && self.version == entry.version
+            && self.integrity == entry.integrity
+    }
+}
+
+/// Whether an environment states its resolution edges. Validation guarantees
+/// that all entries agree, so the first decides.
+#[must_use]
+pub fn dependency_environment_states_edges(entries: &[DependencyEnvironmentEntry]) -> bool {
+    entries
+        .first()
+        .is_some_and(|entry| entry.resolved_from.is_some())
+}
+
+/// The upper bound on one certification's stated environment. Generous: the
+/// environment is the transitive declaration closure of one package, and a
+/// catalog entry carrying more than this is refused rather than hashed.
+pub const MAX_DEPENDENCY_ENVIRONMENT_ENTRIES: usize = 4096;
+
+/// The canonical order and validity of a stated environment: every entry's
+/// fields present and printable, strictly ascending, so one environment has
+/// one spelling and one root.
+pub fn validate_dependency_environment(
+    entries: &[DependencyEnvironmentEntry],
+) -> Result<(), Policy2ReceiptError> {
+    let invalid = || Policy2ReceiptError::InvalidBinding {
+        field: "dependencyEnvironment",
+    };
+    if entries.len() > MAX_DEPENDENCY_ENVIRONMENT_ENTRIES {
+        return Err(invalid());
+    }
+    let printable = |value: &str| {
+        !value.is_empty()
+            && value.len() <= MAX_STRING_BYTES
+            && !value.bytes().any(|byte| byte.is_ascii_control())
+    };
+    for entry in entries {
+        if ![&entry.name, &entry.version, &entry.integrity]
+            .into_iter()
+            .all(|value| printable(value))
+        {
+            return Err(invalid());
+        }
+        if let Some(edge) = &entry.resolved_from {
+            if !printable(&edge.specifier) {
+                return Err(invalid());
+            }
+            if let EnvironmentImporter::Package(importer) = &edge.importer
+                && ![&importer.name, &importer.version, &importer.integrity]
+                    .into_iter()
+                    .all(|value| printable(value))
+            {
+                return Err(invalid());
+            }
+        }
+    }
+    if entries.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(invalid());
+    }
+    // Edges on every entry or on none: one environment is read by one rule.
+    let edged = dependency_environment_states_edges(entries);
+    if entries
+        .iter()
+        .any(|entry| entry.resolved_from.is_some() != edged)
+    {
+        return Err(invalid());
+    }
+    if edged && !environment_edges_are_rooted(entries) {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+/// Whether every entry of an edge-bearing environment is reachable from the
+/// certified package through edges whose importers the environment itself
+/// contains. An importer the environment does not contain has no installed
+/// location a consumer could resolve from, so its edge would be a lookup
+/// nobody can replay.
+///
+/// Linear in the edges (a breadth-first walk over an importer index), because
+/// the entries are read from a catalog before anything about them is trusted.
+pub(crate) fn environment_edges_are_rooted(entries: &[DependencyEnvironmentEntry]) -> bool {
+    let mut by_importer = BTreeMap::<&EnvironmentImporter, Vec<usize>>::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let Some(edge) = &entry.resolved_from else {
+            return false;
+        };
+        by_importer.entry(&edge.importer).or_default().push(index);
+    }
+    let mut reached = vec![false; entries.len()];
+    let mut seen = std::collections::BTreeSet::from([EnvironmentImporter::Certified]);
+    let mut pending = vec![EnvironmentImporter::Certified];
+    while let Some(importer) = pending.pop() {
+        for &index in by_importer.get(&importer).map_or(&[][..], Vec::as_slice) {
+            if std::mem::replace(&mut reached[index], true) {
+                continue;
+            }
+            let next = entries[index].as_importer();
+            if seen.insert(next.clone()) {
+                pending.push(next);
+            }
+        }
+    }
+    reached.into_iter().all(|reached| reached)
+}
+
+/// The root a receipt binds for its stated dependency environment.
+///
+/// Order-independent by construction -- the entries are sorted and deduplicated
+/// first -- so a caller cannot produce two roots for one environment. An empty
+/// environment has its own root: "this proof read no other package" is a
+/// statement, distinct from a receipt that states nothing.
+///
+/// **The empty environment is framed under its own domain**, not as the `v1`
+/// frame with a zero count. Certifiers before 2026-09-26 wrote that `v1` empty
+/// root whenever dependency-source acquisition produced nothing -- including
+/// under an npm lockfile it could not read, and whenever a package the closure
+/// reached could not be identified -- so it never meant "read no other
+/// package". It is retired as ambiguous ([`policy2_ambiguous_empty_dependency_environment_root`]):
+/// a receipt binding it states no environment a consumer can rely on, and is
+/// refused by artifact everywhere. Non-empty environments keep the `v1` frame,
+/// so every receipt that names its entries verifies exactly as before.
+///
+/// **An environment that states its resolution edges is framed under a third
+/// domain, `edges:v3`**, which hashes each entry's edge beside its identity. It
+/// can never collide with a `v1` root, so a receipt binding one is read by the
+/// edge-rooted admission rule and a receipt binding the other by the strict
+/// all-lookups rule, and neither can be re-read as the other.
+#[must_use]
+pub fn policy2_dependency_environment_root(entries: &[DependencyEnvironmentEntry]) -> String {
+    if dependency_environment_states_edges(entries) {
+        return policy2_dependency_environment_root_edges_v3(entries);
+    }
+    if entries.is_empty() {
+        let mut bytes = Vec::new();
+        frame(
+            &mut bytes,
+            b"solid-checker:policy2-dependency-environment:acquired-empty:v2",
+        );
+        return digest_bytes(&bytes);
+    }
+    policy2_dependency_environment_root_v1(entries)
+}
+
+/// The retired `v1` root of the empty environment: what certifiers before
+/// 2026-09-26 bound both for a package that read no other package and for one
+/// whose environment was never acquired. A receipt binding it is read as
+/// stating no environment.
+#[must_use]
+pub fn policy2_ambiguous_empty_dependency_environment_root() -> String {
+    policy2_dependency_environment_root_v1(&[])
+}
+
+/// The `edges:v3` frame: every entry's identity and the lookup that reached
+/// it. The importer is tagged, so "the certified package" can never be spelled
+/// as some entry's identity.
+fn policy2_dependency_environment_root_edges_v3(entries: &[DependencyEnvironmentEntry]) -> String {
+    let mut canonical = entries.to_vec();
+    canonical.sort();
+    canonical.dedup();
+    let mut bytes = Vec::new();
+    frame(
+        &mut bytes,
+        b"solid-checker:policy2-dependency-environment:edges:v3",
+    );
+    number(&mut bytes, canonical.len() as u64);
+    for entry in &canonical {
+        frame(&mut bytes, entry.name.as_bytes());
+        frame(&mut bytes, entry.version.as_bytes());
+        frame(&mut bytes, entry.integrity.as_bytes());
+        match &entry.resolved_from {
+            None => frame(&mut bytes, b"edge:none"),
+            Some(edge) => {
+                frame(&mut bytes, b"edge");
+                frame(&mut bytes, edge.specifier.as_bytes());
+                match &edge.importer {
+                    EnvironmentImporter::Certified => frame(&mut bytes, b"importer:certified"),
+                    EnvironmentImporter::Package(importer) => {
+                        frame(&mut bytes, b"importer:package");
+                        frame(&mut bytes, importer.name.as_bytes());
+                        frame(&mut bytes, importer.version.as_bytes());
+                        frame(&mut bytes, importer.integrity.as_bytes());
+                    }
+                }
+            }
+        }
+    }
+    digest_bytes(&bytes)
+}
+
+fn policy2_dependency_environment_root_v1(entries: &[DependencyEnvironmentEntry]) -> String {
+    let mut canonical = entries.to_vec();
+    canonical.sort();
+    canonical.dedup();
+    let mut bytes = Vec::new();
+    frame(
+        &mut bytes,
+        b"solid-checker:policy2-dependency-environment:v1",
+    );
+    number(&mut bytes, canonical.len() as u64);
+    for entry in &canonical {
+        frame(&mut bytes, entry.name.as_bytes());
+        frame(&mut bytes, entry.version.as_bytes());
+        frame(&mut bytes, entry.integrity.as_bytes());
+    }
+    digest_bytes(&bytes)
 }
 
 impl Policy2ReceiptBindings {
@@ -138,6 +559,43 @@ impl Policy2ReceiptBindings {
         ] {
             validate_digest(value).map_err(|_| Policy2ReceiptError::InvalidBinding { field })?;
         }
+        // Stated or absent, never malformed: an acceptance issued before this
+        // binding existed carries none, and gets importer-only matching.
+        if !self.artifact_acceptance_root.is_empty() {
+            validate_digest(&self.artifact_acceptance_root).map_err(|_| {
+                Policy2ReceiptError::InvalidBinding {
+                    field: "artifactAcceptanceRoot",
+                }
+            })?;
+        }
+        if !self.dependency_environment_root.is_empty() {
+            validate_digest(&self.dependency_environment_root).map_err(|_| {
+                Policy2ReceiptError::InvalidBinding {
+                    field: "dependencyEnvironmentRoot",
+                }
+            })?;
+        }
+        // Canonical: sorted, no two citing one receipt, every digest a digest.
+        // A citation is only ever read as "this receipt must still be in the
+        // tier", so a repeated or unsorted list would give one statement two
+        // encodings.
+        if self
+            .cited_acceptances
+            .windows(2)
+            .any(|pair| pair[0].receipt_digest >= pair[1].receipt_digest)
+            || self.cited_acceptances.iter().any(|citation| {
+                validate_digest(&citation.receipt_digest).is_err()
+                    || validate_digest(&citation.artifact_acceptance_root).is_err()
+                    || validate_digest(&citation.dependency_environment_root).is_err()
+                    || validate_digest(&citation.semantic_digest).is_err()
+                    || citation.package_name.is_empty()
+                    || citation.package_version.is_empty()
+            })
+        {
+            return Err(Policy2ReceiptError::InvalidBinding {
+                field: "citedAcceptances",
+            });
+        }
         if self.witness_roots.len() != RECEIPT_WITNESS_FAMILIES.len()
             || !RECEIPT_WITNESS_FAMILIES
                 .iter()
@@ -172,6 +630,12 @@ pub struct ConfiguredReceiptIssuer {
 }
 
 impl ConfiguredReceiptIssuer {
+    pub(super) fn sign_controlled_execution(&self, payload: &[u8]) -> [u8; 64] {
+        self.signing_key
+            .sign(&super::controlled_execution::signature_message(payload))
+            .to_bytes()
+    }
+
     pub fn persistent_local(
         scope: impl Into<String>,
         seed: [u8; 32],
@@ -472,9 +936,39 @@ pub struct AuthenticatedPolicy2Receipt {
     issuer_scope: String,
     bindings: Policy2ReceiptBindings,
     contract: NormalizedContract,
+    /// The environment behind `bindings.dependency_environment_root`, when
+    /// this process is the one that computed it. A receipt read back from disk
+    /// carries only the root; finalization attaches the entries it hashed, so
+    /// publication can state them beside the receipt for a consumer to check.
+    dependency_environment: Option<Vec<DependencyEnvironmentEntry>>,
 }
 
 impl AuthenticatedPolicy2Receipt {
+    /// The entries this receipt's `dependencyEnvironmentRoot` was computed
+    /// over, when known in this process.
+    #[must_use]
+    pub fn dependency_environment(&self) -> Option<&[DependencyEnvironmentEntry]> {
+        self.dependency_environment.as_deref()
+    }
+
+    /// Attaches the environment this process computed, after checking it is
+    /// the one the receipt binds.
+    pub(crate) fn with_dependency_environment(
+        mut self,
+        entries: Vec<DependencyEnvironmentEntry>,
+    ) -> Result<Self, Policy2ReceiptError> {
+        validate_dependency_environment(&entries)?;
+        if self.bindings.dependency_environment_root
+            != policy2_dependency_environment_root(&entries)
+        {
+            return Err(Policy2ReceiptError::BindingMismatch {
+                field: "dependencyEnvironmentRoot",
+            });
+        }
+        self.dependency_environment = Some(entries);
+        Ok(self)
+    }
+
     #[must_use]
     pub fn receipt_digest(&self) -> &str {
         &self.receipt_digest
@@ -562,6 +1056,13 @@ struct ReceiptPayload {
     importer: String,
     specifier: String,
     resolved_import_root: String,
+    // Added after the first receipts were issued. Absent means "this receipt
+    // states no artifact identity", which keeps it importer-only; it is skipped
+    // when empty so an older receipt re-encodes to the exact bytes it was
+    // signed over. Stated, a configured issuer signs it (see
+    // `signs_artifact_acceptance_root`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    artifact_acceptance_root: String,
     semantic_digest: String,
     artifact_provenance_root: String,
     snapshot_root: String,
@@ -582,6 +1083,15 @@ struct ReceiptPayload {
     closed_claims_root: String,
     verifier_source_digest: String,
     verifier_build_digest: String,
+    // Added after receipts with an artifact acceptance root were issued, on
+    // the same terms: absent means "states no environment", and it is skipped
+    // when empty so every older receipt re-encodes to its signed bytes.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    dependency_environment_root: String,
+    // ADR 0151, on the same terms: absent means "cites nothing", skipped when
+    // empty so every older receipt re-encodes to its signed bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    cited_acceptances: Vec<CitedAcceptance>,
     issuer_kind: ReceiptIssuerKind,
     issuer_scope: String,
     key_id: String,
@@ -652,6 +1162,29 @@ pub fn policy2_main_semantic_digest(canonical_main: &[u8]) -> Result<String, Pol
         .map(|(_, contract)| contract.semantic_digest().as_str().to_owned())
 }
 
+/// Recomputes the closed-claims root from an already canonical policy-2 main.
+///
+/// The consumer rebinds this root when it authenticates a receipt, so an
+/// issuer cannot assert a closure the document does not carry. Exposed
+/// alongside [`policy2_main_semantic_digest`] so an out-of-crate issuer can
+/// bind it without reaching into the semantic model.
+pub fn policy2_main_closed_claims_root(
+    canonical_main: &[u8],
+) -> Result<String, Policy2ReceiptError> {
+    let (_, contract) = validate_canonical_main(canonical_main)?;
+    let selected = contract
+        .artifact_cases()
+        .first()
+        .ok_or(Policy2ReceiptError::InvalidBinding {
+            field: "closedClaimsRoot",
+        })?
+        .id
+        .clone();
+    solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(&contract, &selected)
+        .map(|digest| digest.as_str().to_owned())
+        .map_err(|error| Policy2ReceiptError::MainDocument(error.to_string()))
+}
+
 /// Canonical identity of the complete resolver answer selected for one
 /// importer/specifier pair. The resolved record is already path-normalized by
 /// the host boundary; stable struct order plus BTreeMap export order makes the
@@ -673,6 +1206,87 @@ pub fn policy2_resolved_import_root(
     );
     hash.update(encoded);
     Ok(format!("sha256:{:x}", hash.finalize()))
+}
+
+/// Canonical identity of the *artifact* a contract was proven about, with no
+/// importer and no absolute path in it.
+///
+/// The twin of [`policy2_resolved_import_root`], and deliberately a much
+/// smaller commitment. That root answers "which resolver answer, from which
+/// file"; this one answers "which published artifact, reached how", so an
+/// acceptance can be matched by a consumer that resolved the same artifact from
+/// one of its own files.
+///
+/// What it commits to, and why each is load-bearing:
+///
+/// - **package name, version and integrity** — the integrity is the tarball
+///   hash, so it fixes every byte the contract was proven about. Name and
+///   version are redundant against it and are included so a mismatch names
+///   itself rather than reading as an unrelated digest.
+/// - **requested entrypoint** — `.` and `./immutable` are different artifacts
+///   of the same package with different exports.
+/// - **export conditions** — these *select* the artifact. A contract proven
+///   under `import` must never be applied to a consumer that resolved the same
+///   specifier under `require`, so the condition set is part of the identity
+///   rather than context around it.
+///
+/// Deliberately excluded: the importer, every absolute path, and the resolver
+/// trace. Those are what make `resolvedImportRoot` unmatchable by a consumer,
+/// and none of them is a property of the artifact.
+pub fn policy2_artifact_acceptance_root(
+    resolved: &ResolvedImport,
+    export_conditions: &[String],
+) -> Result<String, Policy2ReceiptError> {
+    resolved
+        .validate()
+        .map_err(|error| Policy2ReceiptError::ResolvedImport(error.to_string()))?;
+    Ok(policy2_artifact_acceptance_root_for_identity(
+        &resolved.package_name,
+        &resolved.package_version,
+        &resolved.package_integrity,
+        &resolved.requested_entrypoint,
+        export_conditions,
+    ))
+}
+
+/// The same root, computed from the five identity fields alone.
+///
+/// A resolved import is how a certifier and an installed-tree consumer state
+/// this identity, and both should keep using
+/// [`policy2_artifact_acceptance_root`] so the resolution is validated. The
+/// compiled-in accepted-contract tier has no resolved import to validate: a
+/// bundle is a published artifact, described by exactly these five fields, and
+/// the absolute paths a `ResolvedImport` carries belong to the machine that
+/// certified it. Sharing the hash rather than restating it is what keeps the
+/// two tiers matchable against each other.
+#[must_use]
+pub fn policy2_artifact_acceptance_root_for_identity(
+    package_name: &str,
+    package_version: &str,
+    package_integrity: &str,
+    requested_entrypoint: &str,
+    export_conditions: &[String],
+) -> String {
+    let mut conditions = export_conditions.to_vec();
+    conditions.sort();
+    conditions.dedup();
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:policy2-artifact-acceptance:v1");
+    // Length-prefix every field: without it "a" + "bc" and "ab" + "c" are the
+    // same preimage, and a package could be renamed into another's identity.
+    let mut field = |value: &str| {
+        hash.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
+        hash.update(value.as_bytes());
+    };
+    field(package_name);
+    field(package_version);
+    field(package_integrity);
+    field(requested_entrypoint);
+    field(&conditions.len().to_string());
+    for condition in &conditions {
+        field(condition);
+    }
+    format!("sha256:{:x}", hash.finalize())
 }
 
 #[must_use]
@@ -797,6 +1411,7 @@ pub fn authenticate_policy2_receipt(
         issuer_scope: document.payload.issuer_scope,
         bindings: expected.clone(),
         contract: normalized,
+        dependency_environment: None,
     })
 }
 
@@ -842,10 +1457,26 @@ fn verify_configured(
     let signature_bytes = decode_canonical_base64(&document.authentication.value)?;
     let signature = Signature::from_slice(&signature_bytes)
         .map_err(|_| Policy2ReceiptError::NonCanonicalSignature)?;
-    VerifyingKey::from_bytes(&entry.public_key)
-        .map_err(|_| Policy2ReceiptError::KeyConfusion)?
-        .verify_strict(signed, &signature)
-        .map_err(|_| Policy2ReceiptError::InvalidSignature)
+    let key = VerifyingKey::from_bytes(&entry.public_key)
+        .map_err(|_| Policy2ReceiptError::KeyConfusion)?;
+    if key.verify_strict(signed, &signature).is_ok() {
+        return Ok(());
+    }
+    // Refused either way. Only the name differs: a receipt whose signature
+    // covers everything except its stated root was issued before the root was
+    // signed, and the remedy is to certify again rather than to suspect an
+    // edit. Nothing here accepts it.
+    if signs_artifact_acceptance_root(&document.payload)
+        && key
+            .verify_strict(
+                &canonical_payload_without_artifact_acceptance_root(&document.payload),
+                &signature,
+            )
+            .is_ok()
+    {
+        return Err(Policy2ReceiptError::UnsignedArtifactAcceptanceRoot);
+    }
+    Err(Policy2ReceiptError::InvalidSignature)
 }
 
 fn validate_payload(
@@ -885,6 +1516,7 @@ fn payload_bindings(payload: &ReceiptPayload) -> Policy2ReceiptBindings {
         importer: payload.importer.clone(),
         specifier: payload.specifier.clone(),
         resolved_import_root: payload.resolved_import_root.clone(),
+        artifact_acceptance_root: payload.artifact_acceptance_root.clone(),
         semantic_digest: payload.semantic_digest.clone(),
         artifact_provenance_root: payload.artifact_provenance_root.clone(),
         snapshot_root: payload.snapshot_root.clone(),
@@ -905,6 +1537,8 @@ fn payload_bindings(payload: &ReceiptPayload) -> Policy2ReceiptBindings {
         closed_claims_root: payload.closed_claims_root.clone(),
         verifier_source_digest: payload.verifier_source_digest.clone(),
         verifier_build_digest: payload.verifier_build_digest.clone(),
+        dependency_environment_root: payload.dependency_environment_root.clone(),
+        cited_acceptances: payload.cited_acceptances.clone(),
     }
 }
 
@@ -918,6 +1552,10 @@ fn binding_mismatch(
         (
             "resolvedImportRoot",
             actual.resolved_import_root == expected.resolved_import_root,
+        ),
+        (
+            "artifactAcceptanceRoot",
+            actual.artifact_acceptance_root == expected.artifact_acceptance_root,
         ),
         (
             "semanticDigest",
@@ -990,6 +1628,14 @@ fn binding_mismatch(
             "verifierBuildDigest",
             actual.verifier_build_digest == expected.verifier_build_digest,
         ),
+        (
+            "dependencyEnvironmentRoot",
+            actual.dependency_environment_root == expected.dependency_environment_root,
+        ),
+        (
+            "citedAcceptances",
+            actual.cited_acceptances == expected.cited_acceptances,
+        ),
     ] {
         if !matches {
             return field;
@@ -1014,6 +1660,7 @@ fn payload(
         main_digest: digest_bytes(main),
         importer: bindings.importer.clone(),
         specifier: bindings.specifier.clone(),
+        artifact_acceptance_root: bindings.artifact_acceptance_root.clone(),
         resolved_import_root: bindings.resolved_import_root.clone(),
         semantic_digest: bindings.semantic_digest.clone(),
         artifact_provenance_root: bindings.artifact_provenance_root.clone(),
@@ -1035,11 +1682,53 @@ fn payload(
         closed_claims_root: bindings.closed_claims_root.clone(),
         verifier_source_digest: bindings.verifier_source_digest.clone(),
         verifier_build_digest: bindings.verifier_build_digest.clone(),
+        dependency_environment_root: bindings.dependency_environment_root.clone(),
+        cited_acceptances: bindings.cited_acceptances.clone(),
         issuer_kind,
         issuer_scope: issuer_scope.into(),
         key_id: key_id.into(),
         signature_algorithm: signature_algorithm.into(),
     }
+}
+
+/// Tags the `artifactAcceptanceRoot` frame, as `dependency-environment-root:v1`
+/// tags the environment's, so the two optional frames cannot be read as each
+/// other.
+const ARTIFACT_ACCEPTANCE_ROOT_FRAME: &[u8] = b"artifact-acceptance-root:v1";
+
+/// Tags the cited-acceptances frame (ADR 0151).
+const CITED_ACCEPTANCES_FRAME: &[u8] = b"cited-acceptances:v2";
+
+/// Whether the signed payload carries `artifactAcceptanceRoot`.
+///
+/// The root decides *which artifact* an acceptance applies to: a consumer
+/// admits a catalog entry for every file that resolves the artifact the root
+/// names, and the conditions a catalog records beside it are authenticated
+/// only through it. Outside the signature, an editor of the project tree could
+/// rewrite it in the receipt and the catalog together and re-point a
+/// configured-issuer acceptance at a condition case it was never proven about,
+/// with the signature still verifying (ADR 0125).
+///
+/// Every configured issuer signs it whenever it is stated. A built-in receipt
+/// does not, and needs no frame: its authority is a compiled-in digest of the
+/// receipt's *whole* bytes (`BuiltInReceiptEntry::entry_digest`), root
+/// included, so no byte of it can change without refusing. Leaving that shape
+/// alone is what keeps every compiled-in receipt byte-identical.
+///
+/// A configured receipt issued before this frame existed and stating a root
+/// therefore no longer verifies; see
+/// [`Policy2ReceiptError::UnsignedArtifactAcceptanceRoot`].
+fn signs_artifact_acceptance_root(payload: &ReceiptPayload) -> bool {
+    !payload.artifact_acceptance_root.is_empty()
+        && payload.issuer_kind != ReceiptIssuerKind::BuiltIn
+}
+
+/// The payload a configured issuer signed before `artifactAcceptanceRoot` was
+/// framed. Used only to *name* a refusal, never to accept one.
+fn canonical_payload_without_artifact_acceptance_root(payload: &ReceiptPayload) -> Vec<u8> {
+    let mut legacy = payload.clone();
+    legacy.artifact_acceptance_root.clear();
+    canonical_payload(&legacy)
 }
 
 fn canonical_payload(payload: &ReceiptPayload) -> Vec<u8> {
@@ -1084,6 +1773,32 @@ fn canonical_payload(payload: &ReceiptPayload) -> Vec<u8> {
         &payload.verifier_build_digest,
     ] {
         frame(&mut bytes, value.as_bytes());
+    }
+    // Signed only when stated, so every receipt issued before this binding
+    // existed keeps the exact payload it was signed over. Unambiguous against
+    // that older shape: a frame starts with its eight-byte length, whose first
+    // byte is zero, and no issuer-kind code is.
+    if !payload.dependency_environment_root.is_empty() {
+        frame(&mut bytes, b"dependency-environment-root:v1");
+        frame(&mut bytes, payload.dependency_environment_root.as_bytes());
+    }
+    // ADR 0151. Signed only when stated, under its own tag, for the same
+    // reason as the environment frame above.
+    if !payload.cited_acceptances.is_empty() {
+        frame(&mut bytes, CITED_ACCEPTANCES_FRAME);
+        number(&mut bytes, payload.cited_acceptances.len() as u64);
+        for citation in &payload.cited_acceptances {
+            frame(&mut bytes, citation.package_name.as_bytes());
+            frame(&mut bytes, citation.package_version.as_bytes());
+            frame(&mut bytes, citation.artifact_acceptance_root.as_bytes());
+            frame(&mut bytes, citation.dependency_environment_root.as_bytes());
+            frame(&mut bytes, citation.semantic_digest.as_bytes());
+            frame(&mut bytes, citation.receipt_digest.as_bytes());
+        }
+    }
+    if signs_artifact_acceptance_root(payload) {
+        frame(&mut bytes, ARTIFACT_ACCEPTANCE_ROOT_FRAME);
+        frame(&mut bytes, payload.artifact_acceptance_root.as_bytes());
     }
     bytes.push(payload.issuer_kind.code());
     frame(&mut bytes, payload.issuer_scope.as_bytes());
@@ -1247,6 +1962,17 @@ pub enum Policy2ReceiptError {
     NonCanonicalSignature,
     #[error("receipt signature is invalid")]
     InvalidSignature,
+    /// A configured receipt that states `artifactAcceptanceRoot` but was
+    /// signed before that root was part of the signed payload. Its signature
+    /// covers every other binding, so it is not evidence of an edit -- and it
+    /// is not evidence against one either, because the root is exactly the
+    /// field it cannot vouch for. Refused; re-running `contract certify`
+    /// issues a receipt that signs it.
+    #[error(
+        "receipt was issued before artifactAcceptanceRoot was signed, so the artifact it applies \
+         to is not authenticated; re-run `solid-checker contract certify` to re-issue it"
+    )]
+    UnsignedArtifactAcceptanceRoot,
     #[error("receipt trust store is empty, duplicate, or invalid")]
     InvalidTrustStore,
 }
@@ -1256,14 +1982,25 @@ pub struct PublishedPolicy2Catalog {
     pub main_path: PathBuf,
     pub receipt_path: PathBuf,
     pub catalog_path: PathBuf,
+    /// Entries of the catalog that was already there, kept unchanged.
+    pub retained_entries: usize,
+    /// Entries of that catalog this publication replaced: the ones for the
+    /// same import or the same artifact identity.
+    pub replaced_entries: usize,
 }
 
+/// The project catalog: every accepted contract the project holds, one entry
+/// per artifact (per import). Version 2 has always been an array; until
+/// 2026-09-26 the writer only ever put one entry in it and replaced the file
+/// on each publication, so a second `contract certify` lost the first
+/// package. Readers never depended on the length, so accumulating entries is
+/// not a format change.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CatalogDocument<'a> {
+struct CatalogDocument {
     format: &'static str,
     catalog_version: u16,
-    contracts: [CatalogEntry<'a>; 1],
+    contracts: Vec<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -1276,6 +2013,22 @@ struct CatalogEntry<'a> {
     bindings: &'a Policy2ReceiptBindings,
     status: CatalogStatus,
     import: &'a ResolvedImport,
+    /// The export conditions `artifactAcceptanceRoot` was computed over.
+    ///
+    /// Recorded because the root is a digest and a consumer cannot invert it.
+    /// Without this a consumer could only *guess* the set — and the guess in
+    /// `default_condition_artifact_identity` was the constant `["import"]`, so
+    /// a project declaring its real conditions (`node, import` for a Node
+    /// target, say) was refused while a project declaring the wrong ones was
+    /// admitted. Declaring honestly broke it; that is why this field exists.
+    export_conditions: &'a [String],
+    /// The entries behind `bindings.dependencyEnvironmentRoot`. The receipt
+    /// carries only the root, and a consumer needs the entries to compare
+    /// against its own installed tree; every reader recomputes the root from
+    /// these and refuses a difference, so this states nothing the receipt does
+    /// not already authenticate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dependency_environment: Option<&'a [DependencyEnvironmentEntry]>,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -1289,12 +2042,24 @@ enum CatalogStatus {
 /// atomic catalog-pointer rename. Existing objects are reused only after an
 /// exact content check; a crash can leave unreachable blobs but never a
 /// pointer to a partial pair.
+///
+/// **A publication merges.** An existing `accepted-contracts.json` under `root`
+/// keeps every entry for another artifact; only an entry for the same import
+/// (`importer`, `specifier`) or the same artifact identity (signed
+/// `artifactAcceptanceRoot` and `dependencyEnvironmentRoot`) is replaced. The
+/// existing entries must all authenticate under `trust` -- the configuration
+/// this publication ships, which is the one a consumer will read the merged
+/// catalog with -- or the merge is refused and names them: dropping one would
+/// lose a contract silently, and keeping it would make the whole catalog
+/// unreadable.
 pub fn publish_policy2_catalog(
     root: &Path,
     canonical_main: &[u8],
     receipt: &[u8],
     authenticated: &AuthenticatedPolicy2Receipt,
     resolved_import: &ResolvedImport,
+    export_conditions: &[String],
+    trust: &Policy2TrustConfiguration,
 ) -> Result<PublishedPolicy2Catalog, ReceiptPublicationError> {
     let (_, normalized) = validate_canonical_main(canonical_main)
         .map_err(|error| ReceiptPublicationError::Unauthenticated(error.to_string()))?;
@@ -1322,6 +2087,18 @@ pub fn publish_policy2_catalog(
             ));
         }
     };
+    // Read before any object is stored, so a refused merge writes nothing.
+    let catalog_path = root.join("accepted-contracts.json");
+    let existing = if catalog_path.is_file() {
+        crate::contract_interface::catalog_entries_for_merge(&catalog_path, trust).map_err(
+            |reason| ReceiptPublicationError::MergeRefused {
+                catalog: catalog_path.display().to_string(),
+                reason,
+            },
+        )?
+    } else {
+        Vec::new()
+    };
     fs::create_dir_all(root).map_err(publication_io)?;
     let objects = root.join("objects");
     fs::create_dir_all(&objects).map_err(publication_io)?;
@@ -1344,22 +2121,47 @@ pub fn publish_policy2_catalog(
     };
     let main_relative = format!("{object_prefix}/{main_name}");
     let receipt_relative = format!("{object_prefix}/{receipt_name}");
+    let entry = serde_json::to_value(CatalogEntry {
+        document: &main_relative,
+        document_digest: &main_digest,
+        receipt: &receipt_relative,
+        receipt_digest: &receipt_digest,
+        bindings: &authenticated.bindings,
+        status,
+        import: resolved_import,
+        export_conditions,
+        dependency_environment: authenticated.dependency_environment(),
+    })
+    .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?;
+    let import_key = (
+        resolved_import.importer.clone(),
+        resolved_import.specifier.clone(),
+    );
+    let artifact_identity =
+        (!authenticated.bindings.artifact_acceptance_root.is_empty()).then(|| {
+            (
+                authenticated.bindings.artifact_acceptance_root.clone(),
+                authenticated.bindings.dependency_environment_root.clone(),
+            )
+        });
+    let existing_count = existing.len();
+    let mut contracts = existing
+        .into_iter()
+        .filter(|kept| {
+            kept.import_key != import_key
+                && (artifact_identity.is_none() || kept.artifact_identity != artifact_identity)
+        })
+        .map(|kept| kept.raw)
+        .collect::<Vec<_>>();
+    let retained_entries = contracts.len();
+    contracts.push(entry);
     let mut pointer = serde_json::to_vec(&CatalogDocument {
         format: "solid-checker-accepted-contract-catalog",
         catalog_version: 2,
-        contracts: [CatalogEntry {
-            document: &main_relative,
-            document_digest: &main_digest,
-            receipt: &receipt_relative,
-            receipt_digest: &receipt_digest,
-            bindings: &authenticated.bindings,
-            status,
-            import: resolved_import,
-        }],
+        contracts,
     })
     .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?;
     pointer.push(b'\n');
-    let catalog_path = root.join("accepted-contracts.json");
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?
@@ -1378,6 +2180,8 @@ pub fn publish_policy2_catalog(
         main_path,
         receipt_path,
         catalog_path,
+        retained_entries,
+        replaced_entries: existing_count - retained_entries,
     })
 }
 
@@ -1428,6 +2232,11 @@ pub enum ReceiptPublicationError {
     ContentAddressCollision,
     #[error("policy-2 publication lacks an authenticated exact receipt: {0}")]
     Unauthenticated(String),
+    #[error(
+        "the existing accepted-contract catalog {catalog} cannot be merged into: {reason}; \
+         re-certify those packages with the same issuer configuration, or move the catalog aside"
+    )]
+    MergeRefused { catalog: String, reason: String },
 }
 
 #[cfg(test)]

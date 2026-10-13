@@ -5,20 +5,26 @@ import { test } from "vitest";
 
 const REPORT = resolve(import.meta.dirname, "../../benchmarks/ecosystem/report.json");
 const FULL_CORPUS_ROWS = 418;
-// 150 s, up from 120 s. The two-minute figure was set when the corpus attempted
-// about a hundred policy-2 certifications; it now attempts 393, and every
-// checked-in run since has measured 180-850 s, most of that sequential registry
-// round trips. With registry bytes cached and acquired in parallel the run is
-// compute-bound at roughly 176-190 s on the 14-core authority host (see
-// docs/ecosystem-benchmark.md, "Where the certified run's time goes"). The
-// budget is the ceiling the project holds itself to, not a description of the
-// current measurement; with pooled CLI workers, the generated proposal handed
-// to certification, and one shared verified execution image instead of a
-// fresh copy per certification, the corpus measures ~73 s there (see the
-// table in docs/ecosystem-benchmark.md).
-const WALL_TIME_BUDGET_MS = 150_000;
+// 1200 s (2026-09-13, second re-pin of the day). The 150 s ceiling belonged to
+// a corpus that censused three domains; admitting `callbacks` (phase21
+// 2026-09-12-callbacks-census-scoping.md § 9) moved the pin to 854 s and the
+// budget to 1000 s. ADR 0099 then scheduled a `typeof` veto for every value
+// export -- about three thousand more worker launches -- and the same run
+// went to 1,205 s; two savings in the ADR 0036 loop (one pass withholds every
+// incomplete gate of a batch; the case-set batch synthesizes before the
+// per-plan loop) and a cores-bounded certification pool brought the pinned
+// run to 981 s with identical certification (docs/precision-backlog.md,
+// "Two producer-session and gate-batch savings"). The wall is the
+// `solid-js@1.9.14` row, 981 s in the pool against 345 s alone, so the next
+// lowering is a decision about that row's contention, not about the budget.
+// 1200 s keeps the rule the previous number set: under 1.25x the measured
+// wall, so a regression of a quarter of the run is caught while ordinary host
+// noise (Low Power Mode, Spotlight indexing leftover temp trees) is not.
+// Raising it is a decision to accept a slower certifier, and must not happen
+// as a side effect of a re-pin.
+const WALL_TIME_BUDGET_MS = 1_200_000;
 
-test("the authoritative full corpus remains below the 150-second wall-time budget", () => {
+test("the authoritative full corpus remains below the 1200-second wall-time budget", () => {
   const report = JSON.parse(readFileSync(REPORT, "utf8"));
 
   assert.equal(report.scope?.kind, "full");

@@ -1,0 +1,427 @@
+{
+  "diagnostic": true,
+  "measurement": "docs/package-contract-v2/phase21/2026-09-08-defined-input-full-measurement.json",
+  "unchangedLocalClosureEntriesHazardsAndPackageIdentities": true,
+  "unchangedDependencySpecifierCensus": true,
+  "transitions": [],
+  "added": [
+    {
+      "probeId": "@corvu-next/popover@0.1.5|solid2|only",
+      "entrypoint": ".",
+      "selection": {
+        "artifact": {
+          "closureSha256": "ad78779a7932863f65fcf1ccc1f5625824b34e52e72e87c7c31f479b78a551bb",
+          "path": "./dist/index.js",
+          "sha256": "f276283cbe52899925711e3b8766e4c9b0137ff580b5b3e6b280dd258e94c6d1"
+        },
+        "declarations": {
+          "path": "./dist/index.d.ts",
+          "sha256": "f6c076ee3b5bbc9c3ac1b02577b8b8f02dec3266536addc70db8cd5fa942f2f5"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/./default",
+          "typesBranch": "/exports/./types"
+        }
+      }
+    },
+    {
+      "probeId": "@corvu-next/popover@0.1.5|solid2|only",
+      "entrypoint": ".",
+      "selection": {
+        "artifact": {
+          "closureSha256": "6050ea37e1f09ad52930408b7f2ea44aa0d7e7486949eb35a75f52997469e851",
+          "path": "./dist/index.jsx",
+          "sha256": "1f7c14fcaa58c6eee35970685176fc4f7b59914e2d3478ec02282f87fd086a11"
+        },
+        "declarations": {
+          "path": "./dist/index.d.ts",
+          "sha256": "f6c076ee3b5bbc9c3ac1b02577b8b8f02dec3266536addc70db8cd5fa942f2f5"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/./solid",
+          "typesBranch": "/exports/./solid"
+        }
+      }
+    },
+    {
+      "probeId": "@corvu/popover@0.2.0|solid1|only",
+      "entrypoint": ".",
+      "selection": {
+        "artifact": {
+          "closureSha256": "0a1e7ce068b7352ac22d614e1595359ecb278106661074f221da61b143f3f6f9",
+          "path": "./dist/index.jsx",
+          "sha256": "afcf2a8229b0da812f56ac8d46a90f56ccb3a0f2589597f86e955ec87452967b"
+        },
+        "declarations": {
+          "path": "./dist/index.d.ts",
+          "sha256": "e2716d6e767679b51be4bea379110078d8edf4f2b270943f2fd658cbfdc72560"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/./solid",
+          "typesBranch": "/exports/./types"
+        }
+      }
+    },
+    {
+      "probeId": "@corvu/popover@0.2.0|solid1|only",
+      "entrypoint": ".",
+      "selection": {
+        "artifact": {
+          "closureSha256": "a72dfbc83df8fb5ce8078e55e1379c4d95594c412881c708c9e3fd38ad9f16b6",
+          "path": "./dist/index.js",
+          "sha256": "8d105a2c0be6e9e5431abd191d0585592ebc2abe78557b74b8abc3bd12a602de"
+        },
+        "declarations": {
+          "path": "./dist/index.d.ts",
+          "sha256": "e2716d6e767679b51be4bea379110078d8edf4f2b270943f2fd658cbfdc72560"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/./default",
+          "typesBranch": "/exports/./types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./accordion",
+      "selection": {
+        "artifact": {
+          "closureSha256": "bf6d94ceb4960c6419a186acd6bfffca6eb3128766eaf6ba71e6cef42e8988b4",
+          "path": "./dist/accordion.jsx",
+          "sha256": "234ac1f4125c1c2a1e24a4a0cc7024f355f74abf4da872ab013fb5e3b6d1039e"
+        },
+        "declarations": {
+          "path": "./dist/accordion.d.ts",
+          "sha256": "d791ca81c08b5f7e0f1f0336fd57ab4f79c93dadbaef7678d65a1b24cc06a54d"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/solid",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./accordion",
+      "selection": {
+        "artifact": {
+          "closureSha256": "111dd230468aa966b2c2f8096ec72c12e10acbe71d5005edd78717f50325aecc",
+          "path": "./dist/accordion.js",
+          "sha256": "7e8f02052ae39a606ab11b0a9052a49406033b6f505d6fbb58447a6d284b7e73"
+        },
+        "declarations": {
+          "path": "./dist/accordion.d.ts",
+          "sha256": "d791ca81c08b5f7e0f1f0336fd57ab4f79c93dadbaef7678d65a1b24cc06a54d"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/default",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./calendar",
+      "selection": {
+        "artifact": {
+          "closureSha256": "96dab9567896d6adb207d3a0974aa96d2187f197d24e518333367ff046440eed",
+          "path": "./dist/calendar.jsx",
+          "sha256": "43e9552a4572266f43413eaca137cb1c4b1a8b40dae689c8a877efed010b8281"
+        },
+        "declarations": {
+          "path": "./dist/calendar.d.ts",
+          "sha256": "a8045ff42ceb54207ccd2714e385cbea7c68c6deac68251b90e9869316d60054"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/solid",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./calendar",
+      "selection": {
+        "artifact": {
+          "closureSha256": "0892c8581fcc5090f8e8a74497b7cf7663be6a0a685a9bbc7f5696c4626d2560",
+          "path": "./dist/calendar.js",
+          "sha256": "a8045ff42ceb54207ccd2714e385cbea7c68c6deac68251b90e9869316d60054"
+        },
+        "declarations": {
+          "path": "./dist/calendar.d.ts",
+          "sha256": "a8045ff42ceb54207ccd2714e385cbea7c68c6deac68251b90e9869316d60054"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/default",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./dialog",
+      "selection": {
+        "artifact": {
+          "closureSha256": "0fe32108bdd1ee95f6c610ce07d5f0319b691a7b462161249207fbcf0e6b7745",
+          "path": "./dist/dialog.js",
+          "sha256": "2f0a91f9158864c9bafa43f4e64cd2a68219429edb42185c47844b206e42c8c0"
+        },
+        "declarations": {
+          "path": "./dist/dialog.d.ts",
+          "sha256": "2f0a91f9158864c9bafa43f4e64cd2a68219429edb42185c47844b206e42c8c0"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/default",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./dialog",
+      "selection": {
+        "artifact": {
+          "closureSha256": "d9bd84705f2222ca7d2eabb1b5c8d5c0fcb3060e2cc2723710dcf0fd47bf4047",
+          "path": "./dist/dialog.jsx",
+          "sha256": "efda6fbea29c73ac4574f226ba769e3fda0565c005f31a9bea6faa19e9c497ab"
+        },
+        "declarations": {
+          "path": "./dist/dialog.d.ts",
+          "sha256": "2f0a91f9158864c9bafa43f4e64cd2a68219429edb42185c47844b206e42c8c0"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/solid",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./disclosure",
+      "selection": {
+        "artifact": {
+          "closureSha256": "5a4118ab2a7168228be24f8aacd9620968f35f97d646639d9119b47e620af7f0",
+          "path": "./dist/disclosure.jsx",
+          "sha256": "d2bb963e8c29994b5de27681c226704534a3c5e92dd370ac3adbc655ee17ce43"
+        },
+        "declarations": {
+          "path": "./dist/disclosure.d.ts",
+          "sha256": "929bb09934f31eb8fc3e8580360bd597b6043fe5c7307994121aac5226b40dec"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/solid",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./disclosure",
+      "selection": {
+        "artifact": {
+          "closureSha256": "bc9010e79ce8f565581bc58d2a6077632cbb99d33b7b10e05b45704d7f1c54ee",
+          "path": "./dist/disclosure.js",
+          "sha256": "929bb09934f31eb8fc3e8580360bd597b6043fe5c7307994121aac5226b40dec"
+        },
+        "declarations": {
+          "path": "./dist/disclosure.d.ts",
+          "sha256": "929bb09934f31eb8fc3e8580360bd597b6043fe5c7307994121aac5226b40dec"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/default",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./drawer",
+      "selection": {
+        "artifact": {
+          "closureSha256": "c9fdee2f58dfd04839ac8c6f84463f2bfa2d739c5fd98cbcf6c6a8d9ee63bcc9",
+          "path": "./dist/drawer.jsx",
+          "sha256": "b5e10596f087f5450189e880e953ead83983f477ed723313db987b9439f1bf35"
+        },
+        "declarations": {
+          "path": "./dist/drawer.d.ts",
+          "sha256": "4f90c5593c9d530aeaf73974768fb133038c769a5b2dc9b3cf4a615b44a7f901"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/solid",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./drawer",
+      "selection": {
+        "artifact": {
+          "closureSha256": "9ad0a7a935073b2f0a4a3550aefb74173bca6e04f38364c73eab5229048e4c3f",
+          "path": "./dist/drawer.js",
+          "sha256": "4f90c5593c9d530aeaf73974768fb133038c769a5b2dc9b3cf4a615b44a7f901"
+        },
+        "declarations": {
+          "path": "./dist/drawer.d.ts",
+          "sha256": "4f90c5593c9d530aeaf73974768fb133038c769a5b2dc9b3cf4a615b44a7f901"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/default",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./otp-field",
+      "selection": {
+        "artifact": {
+          "closureSha256": "55dc9cd04626d4bba15f532fc6e58fbf27cd485f5f4bc197cbcb960e87311c12",
+          "path": "./dist/otp-field.js",
+          "sha256": "0d771a78a42512f51666801851435ca9a56a893cd4dba8ab088d98431c52a42f"
+        },
+        "declarations": {
+          "path": "./dist/otp-field.d.ts",
+          "sha256": "0d771a78a42512f51666801851435ca9a56a893cd4dba8ab088d98431c52a42f"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/default",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./otp-field",
+      "selection": {
+        "artifact": {
+          "closureSha256": "e511cbdc48a0bbc668600f0f0c252edabf41ab2b3535d268bdb78e24eced37e4",
+          "path": "./dist/otp-field.jsx",
+          "sha256": "267e49decf025af5072ac2475b749cb3b309bedba717ed3d2ce276db4cf779c3"
+        },
+        "declarations": {
+          "path": "./dist/otp-field.d.ts",
+          "sha256": "0d771a78a42512f51666801851435ca9a56a893cd4dba8ab088d98431c52a42f"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/solid",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./popover",
+      "selection": {
+        "artifact": {
+          "closureSha256": "0ac24db9863e8a9abd8889458384beb0759f071d48b0c872d7879f4ea1dafed4",
+          "path": "./dist/popover.jsx",
+          "sha256": "835ad95a90aee1ca7463f7e24435211cd7e069ee157b76fbf847aecb8ffc5221"
+        },
+        "declarations": {
+          "path": "./dist/popover.d.ts",
+          "sha256": "20eb4b67cde38f4a6b3b693ed8a90750b5231df560542ca43e4da2d498b775f9"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/solid",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./popover",
+      "selection": {
+        "artifact": {
+          "closureSha256": "cdf78062817ae03792901a0466410cd037665dbaba861c54480b963a9705809b",
+          "path": "./dist/popover.js",
+          "sha256": "20eb4b67cde38f4a6b3b693ed8a90750b5231df560542ca43e4da2d498b775f9"
+        },
+        "declarations": {
+          "path": "./dist/popover.d.ts",
+          "sha256": "20eb4b67cde38f4a6b3b693ed8a90750b5231df560542ca43e4da2d498b775f9"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/default",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./resizable",
+      "selection": {
+        "artifact": {
+          "closureSha256": "78ac19f12ee048b218e8aac90d9603001deb04de8dca5085dd598cc8adfc6297",
+          "path": "./dist/resizable.js",
+          "sha256": "d65022eb3faff7c0d556aaac03de3dcdf88d23c64c7e3bf5887429ebbf6725ab"
+        },
+        "declarations": {
+          "path": "./dist/resizable.d.ts",
+          "sha256": "d65022eb3faff7c0d556aaac03de3dcdf88d23c64c7e3bf5887429ebbf6725ab"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/default",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./resizable",
+      "selection": {
+        "artifact": {
+          "closureSha256": "2a114477713dece5ab3b07155bbff6298e4f0c58f62f12ba2f76481f7e783deb",
+          "path": "./dist/resizable.jsx",
+          "sha256": "9ebc878ac70e59cb61c303a9f2de43a661c63562718445d3c23dfa075043c65d"
+        },
+        "declarations": {
+          "path": "./dist/resizable.d.ts",
+          "sha256": "d65022eb3faff7c0d556aaac03de3dcdf88d23c64c7e3bf5887429ebbf6725ab"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/solid",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./tooltip",
+      "selection": {
+        "artifact": {
+          "closureSha256": "621b3a7e48353a9c2b1c578b1d9fd168ce8c877ab64569e21b260775d6bab836",
+          "path": "./dist/tooltip.jsx",
+          "sha256": "4152f2d7858376040b1e5bd5624685a837f9fc0a3c9bb80c61db3667152ab0f0"
+        },
+        "declarations": {
+          "path": "./dist/tooltip.d.ts",
+          "sha256": "667d4eefa5955156973f53ca9096424b6319a92b2b0a590e5925fa9b997dee83"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/solid",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    },
+    {
+      "probeId": "corvu@0.7.2|solid1|only",
+      "entrypoint": "./tooltip",
+      "selection": {
+        "artifact": {
+          "closureSha256": "32028ed3b9e6392e55fdab2642e1b77c0faa3876555af48b268a8e47c78f19f8",
+          "path": "./dist/tooltip.js",
+          "sha256": "667d4eefa5955156973f53ca9096424b6319a92b2b0a590e5925fa9b997dee83"
+        },
+        "declarations": {
+          "path": "./dist/tooltip.d.ts",
+          "sha256": "667d4eefa5955156973f53ca9096424b6319a92b2b0a590e5925fa9b997dee83"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1*/default",
+          "typesBranch": "/exports/.~1*/types"
+        }
+      }
+    }
+  ]
+}

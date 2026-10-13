@@ -13,13 +13,13 @@
             "sha256": "83464c453cd395ca26c0acac51e8d216918b044c9ec93b2960f9bd1a08e2b0b5"
           },
           "exports": {
-            "AliasedWatcher": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "BaseError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "ChildError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "DirectError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "Watcher": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "plainFunction": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
-            "settings": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+            "AliasedWatcher": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "BaseError": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "ChildError": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "DirectError": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "Watcher": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+            "plainFunction": "summary-4bd0b753ad178a7b8677bbcbc3595369a009233278923f1783cea84cf9180b06",
+            "settings": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -41,7 +41,7 @@
             "sha256": "901a231abce0a9e3c3fc7d6f20ad9f3f9401405a683810f57f6af6eea5671c99"
           },
           "exports": {
-            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "default": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1anonymous-default",
@@ -63,7 +63,7 @@
             "sha256": "0c7105b5a6d0539bbe54b5e329fbf7123f09dffd3ffc1ba8bf9193ca70476baa"
           },
           "exports": {
-            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "default": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1anonymous-extends",
@@ -85,7 +85,7 @@
             "sha256": "22979ff1a21605eee6acaeb3a84aeca80a4bd015051c519f5176643b78f1a642"
           },
           "exports": {
-            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "default": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1class-expression-default",
@@ -107,7 +107,7 @@
             "sha256": "2509c917834def14bacd63bd5fb4f906f123fbaa47d017c68e3093ec0c38c4c3"
           },
           "exports": {
-            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+            "default": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290"
           },
           "resolution": {
             "runtimeBranch": "/exports/.~1named-default",
@@ -131,12 +131,31 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
-      "call": {},
+    "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads"
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads"
+        ],
+        "reads": []
+      },
       "shape": "plain"
     },
-    "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+    "summary-4bd0b753ad178a7b8677bbcbc3595369a009233278923f1783cea84cf9180b06": {
       "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -161,14 +180,29 @@
             }
           }
         ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
         "returns": [
           "return"
         ]
       },
       "shape": "callable"
     },
-    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
-      "call": {},
+    "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290": {
+      "call": {
+        "closed": [
+          "reads"
+        ],
+        "proposedClosures": [
+          "reads"
+        ],
+        "reads": []
+      },
       "shape": "callable"
     }
   }

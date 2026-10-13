@@ -1,0 +1,508 @@
+{
+  "package": "@solid-primitives/audio",
+  "version": "3.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createAudio": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solid-primitives/audio/dist/index.js:98-146 — Browser cleanup is unconditional. Direct signal accessors are reactive; setPlaying/setVolume/seek and pending duration are opaque. Research draft; all Chrome probe results are pending, not shipment evidence.",
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "create-current-time",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "current-time"
+            ]
+          },
+          {
+            "id": "create-playing",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "playing"
+            ]
+          },
+          {
+            "id": "create-volume",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "volume"
+            ]
+          },
+          {
+            "id": "create-raw-duration",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "raw-duration"
+            ]
+          },
+          {
+            "id": "source-initial",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "source-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "source-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "owner": {
+              "source": "created",
+              "resource": "source-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "source-flush",
+            "kind": "invoke",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "owner": {
+              "source": "created",
+              "resource": "source-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "player",
+                  "value": {
+                    "kind": "plain"
+                  }
+                },
+                {
+                  "name": "playing",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "playing"
+                  }
+                },
+                {
+                  "name": "setPlaying",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "volume",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "volume"
+                  }
+                },
+                {
+                  "name": "setVolume",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "currentTime",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "current-time"
+                  }
+                },
+                {
+                  "name": "duration",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "seek",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "creates": [
+          "create-current-time",
+          "create-playing",
+          "create-volume",
+          "create-raw-duration"
+        ],
+        "computations": [
+          "source-effect"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "source-initial"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "source-compute"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "source-flush"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "current-time",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "playing",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "volume",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "raw-duration",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "source-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solid-primitives/audio/dist/index.js:98-146 — No own reactive source is read by construction. The caller source is explicitly invoked; DOM player properties/methods follow P1. rawDuration is read only by the opaque duration member.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solid-primitives/audio/dist/index.js:98-146 — Exactly four value-form signals at 114,116,121,124 plus one possible source effect at 132 and the unconditional cleanup at 113. makeAudioPlayer/makeAudio (30-69) allocate no Solid primitives.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solid-primitives/audio/dist/index.js:98-146 — Source's only direct initial invocation is utils access (resolved utils/dist/index.js:88: typeof function and zero arity); subsequent source compute is createEffect at 132. source-initial and source-effect counts are min:0 because callable alone does not prove arity/instanceof. Later source recomputes are queued. No caller event handlers are passed to makeAudioPlayer. Host object behavior follows P1.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solid-primitives/audio/dist/index.js:136-145 — Every browser normal completion returns precisely the eight named members. The three signal accessors are reactive. All other functions, including duration which can throw NotReadyError, stay callable and their calls remain proof obligations.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/audio-createAudio-module-scope/node_modules/@solid-primitives/audio/dist/index.js:111-113 — Exactly one ambient onCleanup(cleanup) is registered during construction. The source effect's later apply does not return cleanup; native event dispatch remains host behavior."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Unconditional onCleanup rejects a present leaf before signal creation."
+        },
+        {
+          "label": "playing-read",
+          "rule": "strict-read-untracked",
+          "why": "Case-file read of the returned playing signal accessor witnesses its creation/return; no package-constructor read is used."
+        },
+        {
+          "label": "volume-read",
+          "rule": "strict-read-untracked",
+          "why": "Case-file read of the returned volume signal accessor witnesses its creation/return; no package-constructor read is used."
+        },
+        {
+          "label": "currentTime-read",
+          "rule": "strict-read-untracked",
+          "why": "Case-file read of the returned currentTime signal accessor witnesses its creation/return; no package-constructor read is used."
+        },
+        {
+          "label": "duration-source",
+          "rule": "strict-read-untracked",
+          "why": "After a native loadeddata event initializes rawDuration, a nested component reads duration at a value-access site. This witnesses rawDuration creation; duration remains opaque in the contract, so static duration calls stay uncertifiable."
+        },
+        {
+          "label": "source-initial",
+          "rule": "strict-read-untracked",
+          "why": "The zero-arity src callback reads the case-file URL signal during access(src). The correct twin explicitly untracks that read."
+        },
+        {
+          "label": "source-compute",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Skip the initial untracked src invocation; its second invocation is effect compute, and attempts a case-file sink write.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "source-flush",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "After a click invalidates the source, its tracked effect recompute attempts a case-file sink write.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

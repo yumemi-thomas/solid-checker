@@ -1,0 +1,412 @@
+{
+  "package": "@solid-primitives/page-utilities",
+  "version": "3.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createPageVisibility": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageVisibility-top-level-read/node_modules/@solid-primitives/page-utilities/dist/index.js:20-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageVisibility-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageVisibility-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060,1942-1958,2346-2355 \u2014 Source-cited browser creates census; optional settled child production does not assert hydration or a children-capable owner at every call. Research draft, not newly probed admission evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "visibility"
+            }
+          },
+          {
+            "id": "create-visibility",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "visibility"
+            ]
+          },
+          {
+            "id": "listener-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "hydration-settle",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "hydration-settle-owner",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "visibility",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "hydration-settle-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-visibility"
+        ],
+        "cleanups": [
+          "listener-cleanups"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks",
+          "creates"
+        ],
+        "reads": [],
+        "callbacks": [],
+        "computations": [
+          "hydration-settle"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:20-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 \u2014 Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:20-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 \u2014 Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:20-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/event-listener/dist/eventListener.js:6-9; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/utils/dist/index.js:149,209-219 \u2014 Returned eager browser signal, no own reactive read or direct caller callable. Native navigator/document/window APIs follow P1. Listener cleanup tolerates no owner; hydration can schedule internal onSettled without invoking a caller function.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageVisibility-top-level-read/node_modules/@solid-primitives/page-utilities/dist/index.js:20-26; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageVisibility-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageVisibility-top-level-read/node_modules/@solidjs/signals/dist/dev.js:3031-3060,1942-1958,2346-2355 \u2014 One eager value signal. onSettled creates at most one child tracked computation only when a present owner admits children; otherwise it queues an unowned one-shot, creating no owner. The child is a leaf (children/cleanup forbidden). No required missing-owner claim. Hydration additionally gates that 0..1 computation."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        },
+        {
+          "label": "hydration-read",
+          "rule": "strict-read-untracked",
+          "why": "Exercises the hydrating initialization branch and reads its actual returned signal in the component strict-read window versus JSX. The computation production is source-cited; this pair does not independently falsify its child-owner count."
+        }
+      ]
+    },
+    "createPageLeaveBlocker": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60,80-91. Server line 81 returns undefined before reading enabled or registering anything. Browser static/default cleanup and callable effect are unchanged possible operations. enabled-compute and default-cleanup already permit zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [
+          "static-cleanup",
+          "blocker-effect"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks",
+          "creates"
+        ],
+        "closures": {
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60,80-91. Server line 81 returns undefined before reading enabled or registering anything. Browser static/default cleanup and callable effect are unchanged possible operations. enabled-compute and default-cleanup already permit zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain returns: Every normal completion has the same browser-stated output shape/identity; no server replacement accessor, inert control or returned setter is admitted.",
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60,80-91. Server line 81 returns undefined before reading enabled or registering anything. Browser static/default cleanup and callable effect are unchanged possible operations. enabled-compute and default-cleanup already permit zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60,80-91. Server line 81 returns undefined before reading enabled or registering anything. Browser static/default cleanup and callable effect are unchanged possible operations. enabled-compute and default-cleanup already permit zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60,80-91. Server line 81 returns undefined before reading enabled or registering anything. Browser static/default cleanup and callable effect are unchanged possible operations. enabled-compute and default-cleanup already permit zero. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageVisibility-top-level-read/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60,80-91 \u2014 Complete browser owner/source census, including conservative default cleanup. The explicit-true ledger case retains its mandatory cleanup guard. Research draft pending probes. Guard draft audit: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:80-91 \u2014 Retain existing Literal(arg0,true) min:1 static-cleanup and callable min:1 blocker-effect. The optional default-cleanup branch is still necessary for omitted/undefined input; static false alone proves no registration, but that conservative unguarded optional row may leave a checker obligation.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          },
+          {
+            "id": "static-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "literal": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "blocker-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "blocker-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "enabled-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "blocker-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "blocker-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "default-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "static-cleanup",
+          "default-cleanup"
+        ],
+        "computations": [
+          "blocker-effect"
+        ],
+        "resources": [
+          {
+            "id": "blocker-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "enabled-compute"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "callbacks",
+          "creates"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:80-91; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60 \u2014 Static true installs one native listener and direct cleanup; static false exits; a callable creates one effect whose tracked compute invokes it and whose apply may return host teardown. Every completion is undefined; no private reactive source. Guard does not claim static cleanup for an absent/defaulted argument.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:80-91; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60 \u2014 Static true installs one native listener and direct cleanup; static false exits; a callable creates one effect whose tracked compute invokes it and whose apply may return host teardown. Every completion is undefined; no private reactive source. Guard does not claim static cleanup for an absent/defaulted argument.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:80-91; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageLeaveBlocker-module-scope/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60 \u2014 Static true installs one native listener and direct cleanup; static false exits; a callable creates one effect whose tracked compute invokes it and whose apply may return host teardown. Every completion is undefined; no private reactive source. Guard does not claim static cleanup for an absent/defaulted argument.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/page-utilities-createPageVisibility-top-level-read/node_modules/@solid-primitives/page-utilities/dist/index.js:54-60,80-91 \u2014 No private reactive source. The callable path registers the existing blocker-effect; literal true registers static-cleanup, false exits. A separate 0..1 default-cleanup overapproximates omitted/undefined defaulting. No other Solid owner is created. Native listener setup/teardown follows P1."
+      },
+      "rule": "missing-owner",
+      "probes": [
+        {
+          "label": "callable-owner",
+          "rule": "missing-owner",
+          "why": "The direct cleanup or effect runs ownerless versus inside a live root; dispose is queued outside render."
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        },
+        {
+          "label": "enabled-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The enabled callback runs under the created tracked effect owner; correct reads, misuse additionally writes."
+        },
+        {
+          "label": "default-owner",
+          "rule": "missing-owner",
+          "why": "The omitted argument defaults to true and calls direct onCleanup; an ownerless call warns, while a live root supplies its lifecycle."
+        }
+      ]
+    }
+  }
+}

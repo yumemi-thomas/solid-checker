@@ -10,9 +10,12 @@
       "entrypoint": ".",
       "conditions": [],
       "stage": "artifact-case",
+      "class": "published-artifact",
       "applicability": "unsupported-condition-environment",
       "reason": ". selects no active package-export condition"
     }
   ],
-  "inapplicable": []
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": []
 }

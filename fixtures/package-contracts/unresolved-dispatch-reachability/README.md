@@ -35,6 +35,12 @@ is the fixture that makes the sentence true: one entrypoint per escape shape,
 each widening to every export, beside a `./called` control that keeps this
 fixture's exact behavior.
 
+That fixture went with the Solid 1.x retirement (ADR 0110) and was **restored
+against 2.0 on 2026-09-17**, so the arms named below are pinned again. The port
+needed nothing but a new manifest dependency and a 2.0 `solid-js` stub: all 24
+of its entrypoint/export rows came back byte-identical to the 1.x original,
+which is the clearest evidence available that this claim is dialect-neutral.
+
 A rendered tag is *not* on that list, though it was, for a different reason: the
 call graph enumerated only call expressions, so the tag named no call site. It
 does now (`all_function_call_sites`), because rendering a component invokes it —

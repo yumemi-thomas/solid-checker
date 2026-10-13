@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-merged-props-consumer/App.tsx",
+      "start": 394,
+      "end": 403,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-merged-props-consumer/App.tsx",
+      "start": 1158,
+      "end": 1167,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-merged-props-consumer/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

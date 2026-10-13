@@ -1,0 +1,15 @@
+{
+  ".": {
+    "import": {
+      "types": "./dist/types/index.d.ts",
+      "test": "./dist/dev.js",
+      "development": "./dist/dev.js",
+      "default": "./dist/prod/index.js"
+    },
+    "require": {
+      "types": "./dist/types-cjs/index.d.cts",
+      "default": "./dist/node.cjs"
+    }
+  },
+  "./package.json": "./package.json"
+}

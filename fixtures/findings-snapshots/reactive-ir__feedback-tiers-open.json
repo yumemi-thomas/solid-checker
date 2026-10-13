@@ -1,0 +1,35 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/feedback-tiers-open/App.tsx",
+      "start": 345,
+      "end": 348,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/feedback-tiers-open/App.tsx",
+      "start": 622,
+      "end": 630,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/feedback-tiers-open/App.tsx",
+      "start": 622,
+      "end": 630,
+      "fixes": 0
+    }
+  ]
+}

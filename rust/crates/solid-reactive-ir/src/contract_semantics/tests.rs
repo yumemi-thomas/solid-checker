@@ -31,6 +31,7 @@ fn closed_claims() -> CallClaims {
         returns: KnowledgeSet::complete(vec![]),
         cleanups: KnowledgeSet::complete(vec![]),
         disposals: KnowledgeSet::complete(vec![]),
+        computations: KnowledgeSet::Unknown,
     }
 }
 
@@ -43,6 +44,7 @@ fn operation(id: &str, kind: OperationKind) -> Operation {
         at: Some(Event::Call),
         schedule: Some(Schedule::SameStack),
         tracking: Tracking::Untracked,
+        strict_read: None,
         owner: OwnerRelation {
             source: OwnerSource::None,
             requirements: OwnerRequirements {
@@ -65,6 +67,8 @@ fn operation(id: &str, kind: OperationKind) -> Operation {
         inputs: vec![],
         output: None,
         resources: BTreeSet::new(),
+        composed_from: None,
+        protocol: None,
     }
 }
 
@@ -99,6 +103,7 @@ fn call(operations: Vec<Operation>, resources: Vec<Resource>) -> CallSemantics {
             OperationKind::Create => claims.creates = KnowledgeSet::Complete(vec![id]),
             OperationKind::Cleanup => claims.cleanups = KnowledgeSet::Complete(vec![id]),
             OperationKind::Dispose => claims.disposals = KnowledgeSet::Complete(vec![id]),
+            OperationKind::Compute => claims.computations = KnowledgeSet::Partial(vec![id]),
         }
     }
     CallSemantics::new(
@@ -139,6 +144,7 @@ fn export(
 
 fn artifact_case(id: &str) -> ArtifactCase {
     ArtifactCase {
+        initialization: None,
         id: id.into(),
         entrypoint: ".".into(),
         resolution_trace: vec![ResolutionStep {
@@ -151,6 +157,216 @@ fn artifact_case(id: &str) -> ArtifactCase {
         transform: None,
         stability: StabilityKnowledge::Unknown,
         exports: BTreeMap::new(),
+    }
+}
+
+/// Withdrawing an operation the census could not certify has to leave the
+/// export publishable and the domain that listed it *open*: a shorter list
+/// still marked closed would assert an absence nothing established, which is a
+/// stronger claim than the one being withdrawn.
+#[test]
+fn withholding_an_operation_opens_its_domain_and_takes_its_dependents() {
+    let case = artifact_case("server-import");
+    let mut read = operation("read-0", OperationKind::Read);
+    let mut dependent = operation("write-0", OperationKind::Write);
+    dependent.trigger = Some(Trigger::Operation(OperationId("read-0".into())));
+    let mut untouched = operation("create-0", OperationKind::Create);
+    untouched.trigger = Some(Trigger::Event(Event::Call));
+    read.inputs.push(ValueShape::Parameter {
+        index: 0,
+        path: vec!["contains".into()],
+    });
+    let mut semantics = call(vec![read, dependent, untouched], vec![]);
+    semantics.edges.push(OperationEdge {
+        kind: EdgeKind::Orders,
+        from: OperationId("read-0".into()),
+        to: OperationId("create-0".into()),
+    });
+    let mut export = export(&case, "contains", ValueShape::Unknown, semantics);
+    assert!(export.call.claims.reads.is_closed());
+
+    let withdrawn = export.withhold_operations(&BTreeSet::from([OperationId("read-0".into())]));
+
+    assert_eq!(
+        withdrawn,
+        BTreeSet::from([OperationId("read-0".into()), OperationId("write-0".into())]),
+        "an operation triggered by a withdrawn one describes nothing either"
+    );
+    let ids = export
+        .call
+        .operations
+        .iter()
+        .map(|operation| operation.id.0.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        vec!["create-0"],
+        "only the unrelated operation survives"
+    );
+    assert!(
+        export.call.edges.is_empty(),
+        "an edge touching a withdrawn operation is removed"
+    );
+    assert!(
+        !export.call.claims.reads.is_closed(),
+        "the domain that listed the withdrawn operation is opened"
+    );
+    assert!(
+        export.call.claims.reads.items().is_empty(),
+        "and no longer lists it"
+    );
+    assert!(
+        !export.call.claims.writes.is_closed(),
+        "so is the domain that listed the cascade"
+    );
+    assert!(
+        export.call.claims.creates.is_closed(),
+        "a domain that listed nothing withdrawn keeps its closure"
+    );
+
+    // An id this export does not carry is not a withdrawal, and changes
+    // nothing: the caller learns that from the empty return rather than from a
+    // document that quietly lost a closure.
+    let mut untouched_export = export.clone();
+    let none =
+        untouched_export.withhold_operations(&BTreeSet::from([OperationId("absent".into())]));
+    assert!(none.is_empty());
+    assert_eq!(untouched_export.call.operations.len(), 1);
+    assert!(untouched_export.call.claims.creates.is_closed());
+}
+
+/// A `compute` operation in the shape the generator publishes an `Effect`
+/// owner requirement (ADR 0114): it requires the caller's ambient owner and
+/// child owners of it, and what it produces is left unknown.
+fn compute(id: &str) -> Operation {
+    let mut compute = operation(id, OperationKind::Compute);
+    compute.owner = OwnerRelation {
+        source: OwnerSource::AmbientAtCall,
+        requirements: OwnerRequirements {
+            owner: Requirement::Required,
+            child_owners: Requirement::Required,
+            cleanup: Requirement::Unconstrained,
+        },
+        capabilities: OwnerCapabilities::default(),
+        lifetime: None,
+        productions: KnowledgeSet::Unknown,
+    };
+    compute
+}
+
+/// ADR 0114's domain: stated by item only, by `compute` operations only, and
+/// never an unresolved claim, since nothing in version 1 could resolve it.
+#[test]
+fn computations_are_stated_by_item_only_and_by_compute_operations() {
+    let id = || OperationId("compute-0".into());
+    let semantics = call(vec![compute("compute-0")], vec![]);
+    assert_eq!(
+        semantics.claims.computations,
+        KnowledgeSet::Partial(vec![id()])
+    );
+    let export = normalized_export(proposal_with(ValueShape::Callable, semantics.clone()));
+    assert_eq!(
+        export.claim_state(ClaimDomain::Computations),
+        KnowledgeState::PartialPositive
+    );
+    assert!(
+        !export
+            .unresolved_claims()
+            .contains(&ClaimPath::Call(ClaimDomain::Computations)),
+        "a domain no document may close is not a claim anything could resolve"
+    );
+    let silent = normalized_export(proposal_with(ValueShape::Callable, call(vec![], vec![])));
+    assert_eq!(
+        silent.claim_state(ClaimDomain::Computations),
+        KnowledgeState::Unknown
+    );
+    assert!(
+        !silent
+            .unresolved_claims()
+            .contains(&ClaimPath::Call(ClaimDomain::Computations)),
+        "and silence about it is not one either"
+    );
+
+    let refused = |semantics: CallSemantics, why: &str| {
+        assert!(
+            matches!(
+                proposal_with(ValueShape::Callable, semantics).normalize(),
+                Err(ModelError::Contradiction { .. })
+            ),
+            "{why}"
+        );
+    };
+    let mut closed = semantics.clone();
+    closed.claims.computations = KnowledgeSet::Complete(vec![id()]);
+    refused(
+        closed,
+        "no census decides computations, so no document closes it",
+    );
+    let mut unlisted = semantics.clone();
+    unlisted.claims.computations = KnowledgeSet::Unknown;
+    refused(unlisted, "a compute operation outside computations");
+    let mut misfiled = call(vec![operation("cleanup-0", OperationKind::Cleanup)], vec![]);
+    misfiled.claims.computations = KnowledgeSet::Partial(vec![OperationId("cleanup-0".into())]);
+    refused(
+        misfiled,
+        "a computations item that is not a compute operation",
+    );
+    let mut childless = compute("compute-0");
+    childless.owner.requirements.child_owners = Requirement::Unconstrained;
+    refused(
+        call(vec![childless], vec![]),
+        "a compute that does not require child owners states no registration",
+    );
+    // ADR 0227: rc.13's computed nodes run unowned, so a compute may tolerate
+    // a missing owner while still requiring a present one to accept children.
+    let mut ownerless = compute("compute-0");
+    ownerless.owner.source = OwnerSource::Unknown;
+    ownerless.owner.requirements.owner = Requirement::Unconstrained;
+    assert!(
+        proposal_with(ValueShape::Callable, call(vec![ownerless], vec![]))
+            .normalize()
+            .is_ok(),
+        "a compute that tolerates no owner still registers on a present one"
+    );
+    let mut forbidding = compute("compute-0");
+    forbidding.owner.requirements.owner = Requirement::Forbidden;
+    refused(
+        call(vec![forbidding], vec![]),
+        "a compute that forbids an owner states no registration",
+    );
+}
+
+/// A consumer reads a closed `creates` as "no owner requirement beyond the
+/// published items", so withdrawing an operation that imposes one opens
+/// `creates` too; an operation that imposes none leaves it closed, which is
+/// what `withholding_an_operation_opens_its_domain_and_takes_its_dependents`
+/// already pins.
+#[test]
+fn withdrawing_an_owner_requirement_opens_creates_with_it() {
+    let case = artifact_case("server-import");
+    let mut cleanup = operation("cleanup-0", OperationKind::Cleanup);
+    cleanup.owner = compute("unused").owner;
+    cleanup.owner.requirements.child_owners = Requirement::Unconstrained;
+    cleanup.owner.requirements.cleanup = Requirement::Required;
+    for (seed, requirement) in [("compute-0", compute("compute-0")), ("cleanup-0", cleanup)] {
+        let mut export = export(
+            &case,
+            "track",
+            ValueShape::Callable,
+            call(vec![requirement], vec![]),
+        );
+        assert!(export.call.claims.creates.is_closed());
+        let withdrawn = export.withhold_operations(&BTreeSet::from([OperationId(seed.into())]));
+        assert_eq!(withdrawn.len(), 1, "{seed}");
+        assert!(
+            export.call.claims.computations.items().is_empty()
+                && export.call.claims.cleanups.items().is_empty(),
+            "{seed} is no longer listed"
+        );
+        assert!(
+            !export.call.claims.creates.is_closed(),
+            "{seed}: creates is the consumer's completeness signal, so it opens with the requirement"
+        );
     }
 }
 
@@ -1015,6 +1231,480 @@ fn semantic_model_v1_digest_algorithm_and_golden_vector_are_frozen() {
     );
 }
 
+/// The provenance digest family is separate, frozen, and disjoint from the
+/// legacy one.
+///
+/// The vector above is what pins the half that matters most: a contract with
+/// no composed operation hashes exactly the bytes it hashed before
+/// `composed_from` existed, so every policy-2 receipt already issued for such
+/// a contract keeps authenticating. This pins the other half — that a contract
+/// which *does* state provenance lands in its own family, under its own
+/// domain, with its own frozen vector.
+#[test]
+fn strict_read_clearing_is_explicit_and_validated() {
+    let read = |tracking, kind| {
+        let mut operation = operation("read", kind);
+        operation.tracking = tracking;
+        operation.strict_read = Some(StrictRead::Cleared);
+        operation
+    };
+    let kept = proposal_with(
+        ValueShape::Callable,
+        call(vec![read(Tracking::Untracked, OperationKind::Read)], vec![]),
+    )
+    .normalize()
+    .unwrap();
+    assert_eq!(
+        kept.artifact_cases()[0].exports["createResource"]
+            .call
+            .operations[0]
+            .strict_read,
+        Some(StrictRead::Cleared)
+    );
+    for tracking in [
+        Tracking::Tracked,
+        Tracking::AmbientAtExecution,
+        Tracking::Unknown,
+    ] {
+        let refused = proposal_with(
+            ValueShape::Callable,
+            call(vec![read(tracking, OperationKind::Read)], vec![]),
+        )
+        .normalize()
+        .unwrap_err();
+        assert!(refused.to_string().contains("strictRead"), "{refused}");
+    }
+    for kind in [
+        OperationKind::Invoke,
+        OperationKind::Return,
+        OperationKind::Write,
+        OperationKind::Invalidate,
+        OperationKind::Create,
+        OperationKind::Cleanup,
+        OperationKind::Dispose,
+        OperationKind::Compute,
+    ] {
+        let refused = proposal_with(
+            ValueShape::Callable,
+            call(vec![read(Tracking::Untracked, kind)], vec![]),
+        )
+        .normalize()
+        .unwrap_err();
+        assert!(refused.to_string().contains("strictRead"), "{refused}");
+    }
+    let Err(refused) = certification::proof_policy_2().inspect_candidates(&kept) else {
+        panic!("certification must refuse a strict-read clearing");
+    };
+    assert!(refused.to_string().contains("not certifiable"));
+}
+
+#[test]
+fn strict_read_clearing_binds_digest_and_recipe_value() {
+    let contract = |cleared: bool| {
+        let mut read = operation("read", OperationKind::Read);
+        read.strict_read = cleared.then_some(StrictRead::Cleared);
+        proposal_with(ValueShape::Plain, call(vec![read], vec![]))
+            .normalize()
+            .unwrap()
+    };
+    let plain = contract(false);
+    let cleared = contract(true);
+    assert_ne!(plain.semantic_digest(), cleared.semantic_digest());
+    for path in [
+        READS,
+        SemanticClaimPath::Operation(OperationId("read".into())),
+    ] {
+        assert_ne!(
+            address_of(&plain, "server-import", path.clone(), "closure"),
+            address_of(&cleared, "server-import", path, "closure")
+        );
+    }
+    // The existing legacy/provenance/protocol golden vectors in this module
+    // remain unchanged and exercise the strict_read: None encoding.
+}
+
+#[test]
+fn composed_provenance_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN_COMPOSED,
+        "solid-checker:normalized-package-contract:composed-provenance"
+    );
+
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let plain = |composed: Option<ComposedFrom>| {
+        let mut read = read.clone();
+        read.composed_from = composed;
+        let mut behavior = call(
+            vec![read.clone(), write.clone()],
+            vec![owner.clone(), cleanup.clone()],
+        );
+        behavior.edges = vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: read.id.clone(),
+            to: write.id.clone(),
+        }];
+        proposal_with(ValueShape::Plain, behavior)
+            .normalize()
+            .unwrap()
+    };
+    // The same contract, with and without provenance on one row. The two
+    // digests are in different families and neither is the other's.
+    assert_eq!(
+        plain(None).semantic_digest().as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a provenance-free contract must keep the legacy vector byte for byte"
+    );
+    assert_eq!(
+        plain(Some(ComposedFrom {
+            export: "createPolled".into(),
+            operation: OperationId("case:createPolled:operation:read-0".into()),
+        }))
+        .semantic_digest()
+        .as_str(),
+        "sha256:6d2c93ab74d0543599ce2729ae2d705a197bc70242eeee1d7ff69d08a2563700"
+    );
+}
+
+/// The proposed-closure families are separate, frozen, and disjoint from both
+/// families above.
+///
+/// A proposed closure states no knowledge — the domain it names stays open —
+/// but it is what `inspect_candidates` derives the planner's candidate
+/// universe from, so two documents that differ only in what they propose plan
+/// different demand graphs and must not share the identity a receipt binds.
+/// The features are independent, so the four combinations are four domains.
+#[test]
+fn proposed_closure_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN_PROPOSED_CLOSURE,
+        "solid-checker:normalized-package-contract:proposed-closure"
+    );
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN_COMPOSED_PROPOSED_CLOSURE,
+        "solid-checker:normalized-package-contract:composed-provenance:proposed-closure"
+    );
+
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let contract = |propose: bool, composed: bool| {
+        let mut read = read.clone();
+        if composed {
+            read.composed_from = Some(ComposedFrom {
+                export: "createPolled".into(),
+                operation: OperationId("case:createPolled:operation:read-0".into()),
+            });
+        }
+        let mut behavior = call(
+            vec![read.clone(), write.clone()],
+            vec![owner.clone(), cleanup.clone()],
+        );
+        behavior.edges = vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: read.id.clone(),
+            to: write.id.clone(),
+        }];
+        // The label is over a closure the document states, which the helper
+        // already closes empty, so the two variants differ in the label alone.
+        let behavior = if propose {
+            behavior.with_proposed_closures([ClaimDomain::Creates])
+        } else {
+            behavior
+        };
+        proposal_with(ValueShape::Plain, behavior)
+            .normalize()
+            .unwrap()
+    };
+    assert_eq!(
+        contract(false, false).semantic_digest().as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a contract that proposes nothing keeps the legacy vector byte for byte"
+    );
+    assert_eq!(
+        contract(true, false).semantic_digest().as_str(),
+        "sha256:46711b6a1ccebc437a1beb44d90854c7a53c8f5bf45fac89421ee6e935732a05"
+    );
+    assert_eq!(
+        contract(true, true).semantic_digest().as_str(),
+        "sha256:c2906640684350d1053c1b3409c2b69db35822fb3d7ffd4055a394cdd7395249"
+    );
+}
+
+/// ADR 0114's family: a contract stating a `computations` item hashes under a
+/// marker of its own, written before anything else, so every contract stating
+/// none keeps the stream it had -- the golden vector, again, is that half.
+#[test]
+fn computations_digest_family_is_separate_and_frozen() {
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let contract = |computes: bool| {
+        let mut operations = vec![read.clone(), write.clone()];
+        if computes {
+            operations.push(compute("compute"));
+        }
+        let mut behavior = call(operations, vec![owner.clone(), cleanup.clone()]);
+        behavior.edges = vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: read.id.clone(),
+            to: write.id.clone(),
+        }];
+        proposal_with(ValueShape::Plain, behavior)
+            .normalize()
+            .unwrap()
+    };
+    assert_eq!(
+        contract(false).semantic_digest().as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a contract stating no computation keeps the legacy vector byte for byte"
+    );
+    assert_eq!(
+        contract(true).semantic_digest().as_str(),
+        "sha256:9ae7a327fbb8ab15d31649a1e0c34acbee00f35698cb2d53627c4ceab014be67"
+    );
+}
+
+/// Item B round 2 of ways-to-improve § 3.3: `undefined` is appended to the
+/// canonical value encoding as tag 20, and a member of the caller's argument
+/// is the `parameter` shape's existing path. No document before it carries the
+/// tag, so it needs no digest family of its own: every other document keeps
+/// the bytes it had (the legacy vector, asserted again here), and one that
+/// states the new shape hashes to this frozen vector.
+#[test]
+fn an_undefined_output_is_an_appended_tag_with_a_frozen_vector() {
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let mut legacy = call(vec![read.clone(), write.clone()], vec![owner, cleanup]);
+    legacy.edges = vec![OperationEdge {
+        kind: EdgeKind::Data,
+        from: read.id,
+        to: write.id,
+    }];
+    assert_eq!(
+        proposal_with(ValueShape::Plain, legacy)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+            .as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a contract stating no undefined output keeps the legacy vector byte for byte"
+    );
+
+    let mut member = operation("return-0", OperationKind::Return);
+    member.output = Some(ValueShape::Parameter {
+        index: 0,
+        path: vec!["defaultPrevented".into()],
+    });
+    let mut undefined = operation("return-1", OperationKind::Return);
+    undefined.output = Some(ValueShape::Undefined);
+    let mut behavior = call(vec![member.clone(), undefined.clone()], vec![]);
+    behavior.claims.returns = KnowledgeSet::Complete(vec![member.id, undefined.id]);
+    let stated = proposal_with(ValueShape::Callable, behavior)
+        .normalize()
+        .unwrap();
+    assert_eq!(
+        stated.semantic_digest().as_str(),
+        "sha256:9f1c2830a0b0d90a16f7bf375001f527b4c6a979cfeb7839b1564cd5494378e1"
+    );
+}
+
+/// The label is over a closure this document states, so it is well-formed only
+/// where the domain really is closed and only where a certifier can decide it.
+#[test]
+fn a_proposed_closure_is_refused_over_an_open_domain_and_over_an_undecidable_one() {
+    let mut behavior = call(vec![], vec![]);
+    behavior.claims.creates = KnowledgeSet::Unknown;
+    let open = proposal_with(
+        ValueShape::Plain,
+        behavior.with_proposed_closures([ClaimDomain::Creates]),
+    )
+    .normalize()
+    .expect_err("an open domain states no closure to propose");
+    assert!(
+        matches!(&open, ModelError::Contradiction { reason, .. } if reason.contains("creates")),
+        "{open}"
+    );
+
+    // `writes`, not `reads`: `reads` gained a closure proof mode on
+    // 2026-09-10 and this row needs a domain that still has none.
+    let undecidable = proposal_with(
+        ValueShape::Plain,
+        call(vec![], vec![]).with_proposed_closures([ClaimDomain::Writes]),
+    )
+    .normalize()
+    .expect_err("a domain with no closure proof mode cannot be proposed");
+    assert!(
+        matches!(
+            &undecidable,
+            ModelError::InvalidKnowledge { reason, .. }
+                if reason.contains("writes") && reason.contains("no closure proof mode")
+        ),
+        "{undecidable}"
+    );
+    assert!(ClaimDomain::Creates.is_proposable());
+    assert!(ClaimDomain::Returns.is_proposable());
+    assert!(ClaimDomain::Reads.is_proposable());
+    assert!(ClaimDomain::Callbacks.is_proposable());
+    assert!(!ClaimDomain::Writes.is_proposable());
+    assert_eq!(
+        ClaimDomain::PROPOSABLE,
+        [
+            ClaimDomain::Creates,
+            ClaimDomain::Returns,
+            ClaimDomain::Reads,
+            ClaimDomain::Callbacks
+        ]
+    );
+}
+
+/// Opening a domain withdraws its proposal.
+///
+/// This is what keeps an opaque closure frontier and a recipe-gated
+/// withholding effective: both reopen the domain, and a marker that survived
+/// would let the certifier rediscover the candidate it had just withdrawn.
+#[test]
+fn opening_a_call_domain_withdraws_its_proposed_closure() {
+    let mut export = normalized_export(proposal_with(
+        ValueShape::Plain,
+        call(vec![], vec![]).with_proposed_closures([ClaimDomain::Creates]),
+    ));
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([ClaimDomain::Creates])
+    );
+    let mut weakened = export.clone();
+    assert!(
+        weakened
+            .open_proposed_closure()
+            .contains(&ClaimPath::Call(ClaimDomain::Creates))
+    );
+    assert!(weakened.call.proposed_closures().is_empty());
+
+    export.open_call_domains([ClaimDomain::Creates]);
+    assert!(export.call.proposed_closures().is_empty());
+    assert!(export.claim_state(ClaimDomain::Creates).is_open());
+    // And back again: the generator republishes exactly this pair.
+    export.propose_closures([ClaimDomain::Creates]);
+    assert!(!export.claim_state(ClaimDomain::Creates).is_open());
+    assert_eq!(
+        export.call.proposed_closures(),
+        &BTreeSet::from([ClaimDomain::Creates])
+    );
+}
+
+/// Provenance is part of the operation's identity, so it is part of the
+/// digest.
+///
+/// The two proposals state the same rows and differ only in where one of them
+/// says the read happens. A digest that could not tell them apart would let an
+/// acceptance receipt for the plain row authenticate the composed one, whose
+/// evidence is an entirely different premise.
+#[test]
+fn composed_provenance_moves_the_semantic_digest() {
+    let plain = operation("read", OperationKind::Read);
+    let mut composed = plain.clone();
+    composed.composed_from = Some(ComposedFrom {
+        export: "createPolled".into(),
+        operation: OperationId("case:createPolled:operation:read-0".into()),
+    });
+    let digest = |operation| {
+        proposal_with(ValueShape::Plain, call(vec![operation], vec![]))
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+            .as_str()
+            .to_owned()
+    };
+    assert_ne!(digest(plain), digest(composed));
+}
+
+/// Only a `read` operation may state provenance, and never its own export's
+/// operation.
+///
+/// Both refusals are the model's, not the certifier's: a published
+/// `composedFrom` on an `invoke` row would be a fact whose premise was never
+/// reviewed, and one naming this export's own operation is a cycle wearing a
+/// proof's clothes.
+#[test]
+fn composed_provenance_is_refused_on_a_non_read_and_on_its_own_export() {
+    let mut invoke = operation("invoke", OperationKind::Invoke);
+    // The control: the same row without provenance normalizes, so the refusal
+    // below is the guard's and not the proposal's shape.
+    assert!(
+        proposal_with(
+            ValueShape::Plain,
+            call(vec![operation("invoke", OperationKind::Invoke)], vec![]),
+        )
+        .normalize()
+        .is_ok()
+    );
+    invoke.composed_from = Some(ComposedFrom {
+        export: "other".into(),
+        operation: OperationId("case:other:operation:read-0".into()),
+    });
+    let error = proposal_with(ValueShape::Plain, call(vec![invoke], vec![]))
+        .normalize()
+        .expect_err("provenance on an invoke operation");
+    assert!(
+        format!("{error:?}").contains("only a read operation may state composed provenance"),
+        "{error:?}"
+    );
+
+    // Two well-formed reads, both in the closed `reads` claim, so validation
+    // reaches the provenance guard instead of stopping at a node with no
+    // positive claim behind it. The `call` helper cannot build this: it
+    // *overwrites* `claims.reads` per operation, so a two-read proposal built
+    // with it is malformed and every assertion about it passes for the wrong
+    // reason.
+    let mut read = operation("read", OperationKind::Read);
+    let sibling = operation("sibling", OperationKind::Read);
+    read.composed_from = Some(ComposedFrom {
+        export: "self".into(),
+        operation: sibling.id.clone(),
+    });
+    let two_reads = |operations: Vec<Operation>| {
+        let mut claims = closed_claims();
+        claims.reads =
+            KnowledgeSet::Complete(operations.iter().map(|row| row.id.clone()).collect());
+        CallSemantics::new(
+            claims,
+            operations,
+            vec![],
+            vec![],
+            GuardPartition {
+                cases: KnowledgeSet::complete(vec![]),
+            },
+        )
+    };
+    // The control: the same two rows, with no provenance, normalize.
+    assert!(
+        proposal_with(
+            ValueShape::Plain,
+            two_reads(vec![
+                operation("read", OperationKind::Read),
+                sibling.clone(),
+            ]),
+        )
+        .normalize()
+        .is_ok(),
+        "the two-read proposal itself must be well formed, or the guard below is untested"
+    );
+    let error = proposal_with(ValueShape::Plain, two_reads(vec![read, sibling]))
+        .normalize()
+        .expect_err("a provenance naming this export's own operation");
+    assert!(
+        format!("{error:?}").contains("composed provenance names an operation of the composing"),
+        "{error:?}"
+    );
+}
+
 #[test]
 fn property_equivalent_numeric_guards_normalize_to_one_digest() {
     let with_number = |number: &str| {
@@ -1317,4 +2007,1567 @@ fn solid_two_conformance_matrix_rows_have_normalized_representations() {
             .normalize()
             .unwrap_or_else(|error| panic!("{row} was not representable: {error}"));
     }
+}
+
+/// One export whose `reads` lists `reads` operations, each id carrying the
+/// artifact-case prefix a generated document gives it.
+fn addressed_contract(
+    case_id: &str,
+    closure: char,
+    tracking: Tracking,
+    reads: usize,
+) -> NormalizedContract {
+    let mut case = artifact_case(case_id);
+    case.dependency_closure = digest(closure);
+    let operations = (0..reads)
+        .map(|index| {
+            let mut read = operation(
+                &format!("{case_id}:createResource:operation:read-{index}"),
+                OperationKind::Read,
+            );
+            read.tracking = tracking;
+            read
+        })
+        .collect::<Vec<_>>();
+    let mut call = call(vec![], vec![]);
+    call.claims.reads = KnowledgeSet::complete(operations.iter().map(|op| op.id.clone()).collect());
+    call.operations = operations;
+    let export = export(&case, "createResource", ValueShape::Callable, call);
+    case.exports.insert("createResource".into(), export);
+    ContractProposal::new(package(), vec![case])
+        .normalize()
+        .unwrap()
+}
+
+fn addressed_subject(case_id: &str, path: SemanticClaimPath) -> SemanticClaimSubject {
+    SemanticClaimSubject {
+        artifact_case: case_id.into(),
+        export: "createResource".into(),
+        path,
+    }
+}
+
+fn address_of(
+    contract: &NormalizedContract,
+    case_id: &str,
+    path: SemanticClaimPath,
+    closure_bytes: &str,
+) -> RecipeAddress {
+    let bytes = contract
+        .artifact_case_byte_identity(case_id, closure_bytes)
+        .unwrap();
+    contract
+        .recipe_address(&addressed_subject(case_id, path), &bytes)
+        .unwrap()
+}
+
+const READS: SemanticClaimPath = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Reads));
+
+/// Ways-to-improve § 3.2: a dependency whose accepted contract moved changes
+/// the dependent's artifact case id and dependency-closure digest, and with
+/// them every claim id. The recipe address is the same claim stated over bytes
+/// and value alone, so it does not move.
+#[test]
+fn a_recipe_address_ignores_the_case_id_and_the_dependency_closure_digest() {
+    let before = addressed_contract("case-a", 'd', Tracking::Untracked, 1);
+    let after = addressed_contract("case-b", 'e', Tracking::Untracked, 1);
+    assert_eq!(
+        before
+            .artifact_case_byte_identity("case-a", "closure")
+            .unwrap(),
+        after
+            .artifact_case_byte_identity("case-b", "closure")
+            .unwrap(),
+    );
+    assert_ne!(
+        before
+            .claim_id(&addressed_subject("case-a", READS))
+            .unwrap(),
+        after.claim_id(&addressed_subject("case-b", READS)).unwrap(),
+    );
+    let address = address_of(&before, "case-a", READS, "closure");
+    assert_eq!(address, address_of(&after, "case-b", READS, "closure"));
+    assert_eq!(RecipeAddress::parse(address.as_str()).unwrap(), address);
+    assert!(address.as_str().starts_with("recipe-address:v1:sha256:"));
+
+    let operation = |case: &str| {
+        SemanticClaimPath::Operation(OperationId(format!(
+            "{case}:createResource:operation:read-0"
+        )))
+    };
+    let operation_address = address_of(&before, "case-a", operation("case-a"), "closure");
+    assert_eq!(
+        operation_address,
+        address_of(&after, "case-b", operation("case-b"), "closure")
+    );
+    assert_ne!(operation_address, address);
+}
+
+#[test]
+fn a_recipe_address_binds_the_claim_value() {
+    let one_read = addressed_contract("case-a", 'd', Tracking::Untracked, 1);
+    let address = address_of(&one_read, "case-a", READS, "closure");
+    // `reads` closed over nothing versus closed over `read-0`.
+    let no_read = addressed_contract("case-a", 'd', Tracking::Untracked, 0);
+    assert_ne!(address, address_of(&no_read, "case-a", READS, "closure"));
+    // The same list, but the operation it names is tracked.
+    let tracked = addressed_contract("case-a", 'd', Tracking::Tracked, 1);
+    assert_ne!(address, address_of(&tracked, "case-a", READS, "closure"));
+    // A different call domain of the same export is a different subject.
+    let writes = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Writes));
+    assert_ne!(address, address_of(&one_read, "case-a", writes, "closure"));
+}
+
+#[test]
+fn a_recipe_address_binds_the_closure_bytes_and_refuses_unaddressable_subjects() {
+    let contract = addressed_contract("case-a", 'd', Tracking::Untracked, 1);
+    assert_ne!(
+        address_of(&contract, "case-a", READS, "closure-one"),
+        address_of(&contract, "case-a", READS, "closure-two"),
+    );
+    let bytes = contract
+        .artifact_case_byte_identity("case-a", "closure")
+        .unwrap();
+    assert!(matches!(
+        contract.recipe_address(
+            &addressed_subject(
+                "case-a",
+                SemanticClaimPath::Domain(ClaimPath::GuardPartition)
+            ),
+            &bytes
+        ),
+        Err(ModelError::Unaddressable { .. })
+    ));
+    assert!(matches!(
+        contract.recipe_address(
+            &addressed_subject(
+                "case-a",
+                SemanticClaimPath::Operation(OperationId(
+                    "case-a:createResource:operation:gone".into()
+                ))
+            ),
+            &bytes
+        ),
+        Err(ModelError::Unaddressable { .. })
+    ));
+    assert!(
+        contract
+            .artifact_case_byte_identity("missing", "closure")
+            .is_err()
+    );
+    let claim = contract
+        .claim_id(&addressed_subject("case-a", READS))
+        .unwrap();
+    assert_eq!(
+        RecipeAddress::parse(claim.as_str()),
+        Err(ModelError::RecipeAddressFormat)
+    );
+}
+
+/// One export whose `callbacks` closes over one bare-parameter `invoke`
+/// operation, with the artifact-case prefix a generated document gives it.
+fn invoking_contract(case_id: &str) -> NormalizedContract {
+    let mut case = artifact_case(case_id);
+    case.dependency_closure = digest('d');
+    let mut invoke = operation(
+        &format!("{case_id}:createResource:operation:callback-0"),
+        OperationKind::Invoke,
+    );
+    invoke.tracking = Tracking::AmbientAtExecution;
+    let call = call(vec![invoke], vec![]);
+    let export = export(&case, "createResource", ValueShape::Callable, call);
+    case.exports.insert("createResource".into(), export);
+    ContractProposal::new(package(), vec![case])
+        .normalize()
+        .unwrap()
+}
+
+const CALLBACKS: SemanticClaimPath =
+    SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks));
+
+/// ADR 0117's addresses and the semantic digest of a contract stating no
+/// non-call protocol, frozen before the invoke-protocol family existed: the
+/// 95 addresses migrated into the recipe corpus stay valid only if the stream
+/// a call-only claim writes never moves.
+#[test]
+fn call_only_recipe_addresses_and_digests_are_frozen() {
+    let reads = addressed_contract("case-a", 'd', Tracking::Untracked, 1);
+    assert_eq!(
+        address_of(&reads, "case-a", READS, "closure").as_str(),
+        "recipe-address:v1:sha256:c1a7b40c824ccff08c8e393eaa5996846847cca99ebac44fec4a7252f8d9b148"
+    );
+    let invoking = invoking_contract("case-a");
+    assert_eq!(
+        address_of(&invoking, "case-a", CALLBACKS, "closure").as_str(),
+        "recipe-address:v1:sha256:f0cb2480183d4f915cf277d21a8eb6efa14d5ec3e021688275171b9333c14428"
+    );
+    assert_eq!(
+        invoking.semantic_digest().as_str(),
+        "sha256:2e2e4199fc90e25040d2a2f45950a871cef1cd551b83b0c508b994c8d437120f"
+    );
+}
+
+/// `invoking_contract` with the one `invoke` restated as a non-call protocol.
+fn protocol_contract(
+    case_id: &str,
+    protocol: Option<InvokeProtocol>,
+) -> Result<NormalizedContract, ModelError> {
+    let mut case = artifact_case(case_id);
+    case.dependency_closure = digest('d');
+    let mut invoke = operation(
+        &format!("{case_id}:createResource:operation:callback-0"),
+        OperationKind::Invoke,
+    );
+    invoke.tracking = Tracking::AmbientAtExecution;
+    invoke.cardinality = Cardinality {
+        scope: Some(CardinalityScope::Call),
+        min: Some(0),
+        max: Some(UpperBound::Many),
+    };
+    invoke.protocol = protocol;
+    let call = call(vec![invoke], vec![]);
+    let export = export(&case, "createResource", ValueShape::Callable, call);
+    case.exports.insert("createResource".into(), export);
+    ContractProposal::new(package(), vec![case]).normalize()
+}
+
+/// Item A of ways-to-improve § 3.3: a non-call protocol is its own digest
+/// family. A stated `call` is the absent protocol, so it hashes as a
+/// call-only contract does; a `get` writes the marker first and the protocol
+/// of every operation, under a frozen vector of its own; each protocol is a
+/// distinct claim.
+#[test]
+fn invoke_protocol_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_INVOKE_PROTOCOL_MARKER,
+        "solid-checker:semantic-invoke-protocol:v1"
+    );
+    let call = protocol_contract("case-a", None).unwrap();
+    let stated_call = protocol_contract("case-a", Some(InvokeProtocol::Call)).unwrap();
+    assert_eq!(
+        stated_call.artifact_cases()[0].exports["createResource"]
+            .call
+            .operations[0]
+            .protocol,
+        None,
+        "a decoded `call` normalizes to the absent protocol"
+    );
+    assert_eq!(call.semantic_digest(), stated_call.semantic_digest());
+    let get = protocol_contract("case-a", Some(InvokeProtocol::Get)).unwrap();
+    assert_ne!(call.semantic_digest(), get.semantic_digest());
+    assert_eq!(
+        get.semantic_digest().as_str(),
+        "sha256:3d793b66c3a616cee35f786386d1ffb8eb6ac0fba98e278a51b1dae05976c375"
+    );
+    let digests = [
+        InvokeProtocol::Get,
+        InvokeProtocol::Iterate,
+        InvokeProtocol::Coerce,
+        InvokeProtocol::HasInstance,
+    ]
+    .map(|protocol| {
+        protocol_contract("case-a", Some(protocol))
+            .unwrap()
+            .semantic_digest()
+            .clone()
+    });
+    for (index, digest) in digests.iter().enumerate() {
+        assert!(
+            digests[index + 1..].iter().all(|other| other != digest),
+            "each protocol is a distinct claim"
+        );
+    }
+}
+
+/// ADR 0117's address, per claim: a call-only callbacks claim keeps the
+/// frozen address above, and a claim naming a non-call protocol is addressed
+/// in the invoke-protocol family, differently per protocol.
+#[test]
+fn a_recipe_address_binds_the_invoke_protocol() {
+    let call = address_of(
+        &protocol_contract("case-a", None).unwrap(),
+        "case-a",
+        CALLBACKS,
+        "closure",
+    );
+    let get = address_of(
+        &protocol_contract("case-a", Some(InvokeProtocol::Get)).unwrap(),
+        "case-a",
+        CALLBACKS,
+        "closure",
+    );
+    let coerce = address_of(
+        &protocol_contract("case-a", Some(InvokeProtocol::Coerce)).unwrap(),
+        "case-a",
+        CALLBACKS,
+        "closure",
+    );
+    assert_ne!(call, get);
+    assert_ne!(get, coerce);
+    assert_eq!(
+        get.as_str(),
+        "recipe-address:v1:sha256:8e315333ad3d92c5e421d0baad2fac181723605f9860ded22a9b972638143cdb"
+    );
+}
+
+/// A non-call invocation states one shape: an `invoke`, at the call event on
+/// the same stack, `ambient-at-execution` (never `untracked`), counted per
+/// call from zero to many, unguarded, named by exactly one `callbacks` item
+/// from a bare parameter.
+#[test]
+fn a_non_call_invocation_is_validated_to_its_one_shape() {
+    let refused = |mutate: &dyn Fn(&mut CallSemantics), needle: &str| {
+        let mut invoke = operation("callback-0", OperationKind::Invoke);
+        invoke.tracking = Tracking::AmbientAtExecution;
+        invoke.cardinality = Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        };
+        invoke.protocol = Some(InvokeProtocol::Get);
+        let mut behavior = call(vec![invoke], vec![]);
+        mutate(&mut behavior);
+        let error = proposal_with(ValueShape::Callable, behavior)
+            .normalize()
+            .expect_err("the shape is refused");
+        assert!(error.to_string().contains(needle), "{needle:?} in {error}");
+    };
+    refused(
+        &|call| call.operations[0].tracking = Tracking::Untracked,
+        "ambient-at-execution",
+    );
+    refused(
+        &|call| call.operations[0].tracking = Tracking::Tracked,
+        "ambient-at-execution",
+    );
+    refused(
+        &|call| call.operations[0].tracking = Tracking::Unknown,
+        "ambient-at-execution",
+    );
+    refused(
+        &|call| call.operations[0].schedule = Some(Schedule::Queued),
+        "at the call event on the same stack",
+    );
+    refused(
+        &|call| call.operations[0].cardinality.min = Some(1),
+        "from zero to many",
+    );
+    refused(
+        &|call| {
+            call.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 0,
+                    path: vec!["length".into()],
+                },
+                operation: OperationId("callback-0".into()),
+            }]);
+        },
+        "exactly one callbacks item from a bare parameter",
+    );
+    refused(
+        &|call| {
+            let item = call.claims.callbacks.items()[0].clone();
+            let second = CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 1,
+                    path: vec![],
+                },
+                ..item.clone()
+            };
+            call.claims.callbacks = KnowledgeSet::Complete(vec![item, second]);
+        },
+        "exactly one callbacks item from a bare parameter",
+    );
+    // Only an invoke may state a protocol.
+    let mut read = operation("read", OperationKind::Read);
+    read.protocol = Some(InvokeProtocol::Coerce);
+    let error = proposal_with(ValueShape::Callable, call(vec![read], vec![]))
+        .normalize()
+        .expect_err("a read states no protocol");
+    assert!(
+        error
+            .to_string()
+            .contains("only an invoke operation may state a protocol"),
+        "{error}"
+    );
+}
+
+/// A non-call item withdrawn by narrowing leaves `callbacks` closed and its
+/// proposal standing, down to the empty enumeration; a call item, or a non-call
+/// item not marked as narrowing, opens the domain exactly as before.
+#[test]
+fn a_narrowed_non_call_item_keeps_its_callbacks_closure() {
+    let invoke = |id: &str, protocol: Option<InvokeProtocol>| {
+        let mut invoke = operation(id, OperationKind::Invoke);
+        invoke.tracking = Tracking::AmbientAtExecution;
+        invoke.cardinality = Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(0),
+            max: Some(UpperBound::Many),
+        };
+        invoke.protocol = protocol;
+        invoke
+    };
+    let item = |index: u16, id: &str| CallbackInvocation {
+        from: ValueSource::Parameter {
+            index,
+            path: vec![],
+        },
+        operation: OperationId(id.into()),
+    };
+    let mixed = || {
+        let mut call = call(
+            vec![
+                invoke("callback-0", None),
+                invoke("callback-1", Some(InvokeProtocol::Coerce)),
+            ],
+            vec![],
+        );
+        call.claims.callbacks =
+            KnowledgeSet::Complete(vec![item(0, "callback-0"), item(1, "callback-1")]);
+        normalized_export(proposal_with(
+            ValueShape::Callable,
+            call.with_proposed_closures([ClaimDomain::Callbacks]),
+        ))
+    };
+    let ids = |ids: &[&str]| {
+        ids.iter()
+            .map(|id| OperationId((*id).into()))
+            .collect::<BTreeSet<_>>()
+    };
+    let case_id = |export: &ExportSemantics, id: &str| {
+        export
+            .call
+            .operations
+            .iter()
+            .find(|operation| operation.id.0.ends_with(id))
+            .unwrap()
+            .id
+            .0
+            .clone()
+    };
+
+    // The coerce narrows: closed, proposed, and only the call is left.
+    let mut narrowed = mixed();
+    let coerce = case_id(&narrowed, "callback-1");
+    narrowed.withhold_operations_narrowing(&ids(&[&coerce]), &ids(&[&coerce]));
+    assert!(narrowed.callbacks().is_closed());
+    assert_eq!(narrowed.callbacks().items().len(), 1);
+    assert!(
+        narrowed
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Callbacks)
+    );
+
+    // The same withdrawal without the narrowing mark opens the domain.
+    let mut opened = mixed();
+    opened.withhold_operations_narrowing(&ids(&[&coerce]), &BTreeSet::new());
+    assert!(!opened.callbacks().is_closed());
+
+    // A call item is never narrowed, whatever the caller asks.
+    let mut call_item = mixed();
+    let call = case_id(&call_item, "callback-0");
+    call_item.withhold_operations_narrowing(&ids(&[&call]), &ids(&[&call]));
+    assert!(!call_item.callbacks().is_closed());
+
+    // Narrowed to nothing is the closed empty enumeration, not unknown.
+    let mut empty = mixed();
+    empty.withhold_operations_narrowing(&ids(&[&call, &coerce]), &ids(&[&coerce]));
+    assert!(
+        !empty.callbacks().is_closed(),
+        "the call's withdrawal opens it"
+    );
+    let mut only_protocols = {
+        let mut call = call_semantics_with_one_coerce();
+        call.claims.callbacks = KnowledgeSet::Complete(vec![item(0, "callback-0")]);
+        normalized_export(proposal_with(
+            ValueShape::Callable,
+            call.with_proposed_closures([ClaimDomain::Callbacks]),
+        ))
+    };
+    let only = case_id(&only_protocols, "callback-0");
+    only_protocols.withhold_operations_narrowing(&ids(&[&only]), &ids(&[&only]));
+    assert_eq!(only_protocols.callbacks(), &KnowledgeSet::Complete(vec![]));
+    assert!(
+        only_protocols
+            .call
+            .proposed_closures()
+            .contains(&ClaimDomain::Callbacks)
+    );
+}
+
+fn call_semantics_with_one_coerce() -> CallSemantics {
+    let mut invoke = operation("callback-0", OperationKind::Invoke);
+    invoke.tracking = Tracking::AmbientAtExecution;
+    invoke.cardinality = Cardinality {
+        scope: Some(CardinalityScope::Call),
+        min: Some(0),
+        max: Some(UpperBound::Many),
+    };
+    invoke.protocol = Some(InvokeProtocol::Coerce);
+    call(vec![invoke], vec![])
+}
+
+/// ADR 0139's one shape: an `invoke` triggered by and at `result-access`, on
+/// an external schedule, ambient for tracking and owner, counted per trigger
+/// from zero to many, unguarded.
+fn result_access_operation(id: &str) -> Operation {
+    let mut invoke = operation(id, OperationKind::Invoke);
+    invoke.trigger = Some(Trigger::Event(Event::ResultAccess));
+    invoke.at = Some(Event::ResultAccess);
+    invoke.schedule = Some(Schedule::External);
+    invoke.tracking = Tracking::AmbientAtExecution;
+    invoke.owner = OwnerRelation {
+        source: OwnerSource::AmbientAtExecution,
+        productions: KnowledgeSet::complete(vec![]),
+        ..OwnerRelation::default()
+    };
+    invoke.cardinality = Cardinality {
+        scope: Some(CardinalityScope::Trigger),
+        min: Some(0),
+        max: Some(UpperBound::Many),
+    };
+    invoke
+}
+
+/// `invoking_contract`'s shape with its one `invoke` a `result-access` item.
+fn result_access_contract(case_id: &str) -> Result<NormalizedContract, ModelError> {
+    let mut case = artifact_case(case_id);
+    case.dependency_closure = digest('d');
+    let invoke = result_access_operation(&format!("{case_id}:createResource:operation:callback-0"));
+    let call = call(vec![invoke], vec![]);
+    let export = export(&case, "createResource", ValueShape::Callable, call);
+    case.exports.insert("createResource".into(), export);
+    ContractProposal::new(package(), vec![case]).normalize()
+}
+
+/// ADR 0139: a contract that states a `result-access` operation is its own
+/// digest family, under a frozen vector, and distinct from the same item at
+/// any other event; a claim naming one is addressed in that family.
+#[test]
+fn result_access_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_RESULT_ACCESS_MARKER,
+        "solid-checker:semantic-result-access:v1"
+    );
+    let kept = result_access_contract("case-a").unwrap();
+    assert_eq!(
+        kept.semantic_digest().as_str(),
+        "sha256:382b278d9347bc91f55fa1d8ac1185e1ec9ae622bab42b121ba8212b18cb63c7"
+    );
+    let call = protocol_contract("case-a", None).unwrap();
+    assert_ne!(kept.semantic_digest(), call.semantic_digest());
+    let kept_address = address_of(&kept, "case-a", CALLBACKS, "closure");
+    assert_ne!(
+        kept_address,
+        address_of(&call, "case-a", CALLBACKS, "closure")
+    );
+    assert_eq!(
+        kept_address.as_str(),
+        "recipe-address:v1:sha256:334480c0c7d4ef149f0e4291a93b0d72d909338ce61c0a2af53e0e2331001497"
+    );
+}
+
+/// ADR 0153 part 3: a context premise is its own digest family under a frozen
+/// vector. The premise conditions the export's claims without naming one, so a
+/// claim id and a recipe address stay where they were: a corpus recipe keyed
+/// by either still binds after the transaction states the premise.
+#[test]
+fn context_premise_digest_family_is_separate_frozen_and_moves_no_claim() {
+    assert_eq!(
+        SEMANTIC_CONTEXT_PREMISES_MARKER,
+        "solid-checker:semantic-context-premises:v1"
+    );
+    let plain = result_access_contract("case-a").unwrap();
+    let premised = |names: &[&str]| {
+        let mut cases = plain.artifact_cases().to_vec();
+        cases[0]
+            .exports
+            .get_mut("createResource")
+            .unwrap()
+            .add_context_premises(names.iter().map(|name| ContextPremise {
+                export: (*name).into(),
+            }));
+        ContractProposal::new(plain.package().clone(), cases)
+            .normalize()
+            .unwrap()
+    };
+    let one = premised(&["RouterContext"]);
+    let two = premised(&["RouterContext", "OtherContext"]);
+    assert_ne!(one.semantic_digest(), plain.semantic_digest());
+    assert_ne!(one.semantic_digest(), two.semantic_digest());
+    assert_eq!(
+        one.semantic_digest().as_str(),
+        "sha256:f2cbb8d12d8786923dcc8fac6b0b4714e6efc9983128c46f4f88fbe0140224f6"
+    );
+    assert_eq!(
+        address_of(&one, "case-a", CALLBACKS, "closure"),
+        address_of(&plain, "case-a", CALLBACKS, "closure")
+    );
+    let subject = addressed_subject("case-a", CALLBACKS);
+    assert_eq!(
+        one.claim_id(&subject).unwrap(),
+        plain.claim_id(&subject).unwrap()
+    );
+}
+
+/// ADR 0153 item C: an accessor-installation bound is its own digest family
+/// under a frozen vector, moves no claim id or recipe address, survives the
+/// candidate weakening's knowledge-level round trip, and is cleared by every
+/// opening that withdraws `reads`.
+#[test]
+fn accessor_bound_digest_family_is_separate_frozen_and_cleared_with_reads() {
+    assert_eq!(
+        SEMANTIC_ACCESSOR_BOUNDS_MARKER,
+        "solid-checker:semantic-accessor-bounds:v1"
+    );
+    let plain = result_access_contract("case-a").unwrap();
+    let bounded = |sources: &[&str]| {
+        let mut cases = plain.artifact_cases().to_vec();
+        cases[0]
+            .exports
+            .get_mut("createResource")
+            .unwrap()
+            .add_accessor_bounds(sources.iter().map(|source| (*source).to_owned()));
+        ContractProposal::new(plain.package().clone(), cases)
+            .normalize()
+            .unwrap()
+    };
+    let one = bounded(&["./index.js:10-15"]);
+    let two = bounded(&["./index.js:10-15", "./other.js:1-6"]);
+    assert_ne!(one.semantic_digest(), plain.semantic_digest());
+    assert_ne!(one.semantic_digest(), two.semantic_digest());
+    assert_eq!(
+        one.semantic_digest().as_str(),
+        "sha256:098092b7feb71eaed5260bc30e9c64142ca598c74862789b1cee588ce24de478"
+    );
+    assert_eq!(
+        address_of(&one, "case-a", CALLBACKS, "closure"),
+        address_of(&plain, "case-a", CALLBACKS, "closure")
+    );
+    let subject = addressed_subject("case-a", CALLBACKS);
+    assert_eq!(
+        one.claim_id(&subject).unwrap(),
+        plain.claim_id(&subject).unwrap()
+    );
+    // Withdrawing `reads` withdraws what bounded it; any other domain keeps
+    // it.
+    let mut export = one.artifact_cases()[0].exports["createResource"].clone();
+    export.open_call_domains([ClaimDomain::Creates]);
+    assert_eq!(export.call.accessor_bounds().len(), 1);
+    export.open_call_domains([ClaimDomain::Reads]);
+    assert!(export.call.accessor_bounds().is_empty());
+    // An empty source bounds nothing and is refused.
+    let mut cases = plain.artifact_cases().to_vec();
+    cases[0]
+        .exports
+        .get_mut("createResource")
+        .unwrap()
+        .add_accessor_bounds([String::new()]);
+    assert!(
+        ContractProposal::new(plain.package().clone(), cases)
+            .normalize()
+            .is_err()
+    );
+}
+
+/// A `result-access` operation states exactly one shape, and exactly one
+/// `callbacks` item names it, from a bare parameter.
+#[test]
+fn a_result_access_operation_is_validated_to_its_one_shape() {
+    let refused = |mutate: &dyn Fn(&mut CallSemantics), needle: &str| {
+        let mut behavior = call(vec![result_access_operation("callback-0")], vec![]);
+        mutate(&mut behavior);
+        let error = proposal_with(ValueShape::Callable, behavior)
+            .normalize()
+            .expect_err("the shape is refused");
+        assert!(error.to_string().contains(needle), "{needle:?} in {error}");
+    };
+    normalized_export(proposal_with(
+        ValueShape::Callable,
+        call(vec![result_access_operation("callback-0")], vec![]),
+    ));
+    let at_event = "is triggered by and happens at the result-access event";
+    refused(
+        &|call| call.operations[0].trigger = Some(Trigger::Event(Event::Call)),
+        at_event,
+    );
+    refused(&|call| call.operations[0].at = Some(Event::Call), at_event);
+    refused(
+        &|call| call.operations[0].schedule = Some(Schedule::Queued),
+        at_event,
+    );
+    let ambient = "ambient-at-execution and unconstrained";
+    refused(
+        &|call| call.operations[0].tracking = Tracking::Untracked,
+        ambient,
+    );
+    refused(
+        &|call| call.operations[0].owner.source = OwnerSource::AmbientAtCall,
+        ambient,
+    );
+    refused(
+        &|call| call.operations[0].owner.requirements.owner = Requirement::Required,
+        ambient,
+    );
+    refused(
+        &|call| call.operations[0].cardinality.scope = Some(CardinalityScope::Call),
+        "per trigger, from zero to many",
+    );
+    refused(
+        &|call| call.operations[0].protocol = Some(InvokeProtocol::Get),
+        "at the call event on the same stack",
+    );
+    refused(
+        &|call| call.operations[0].inputs = vec![ValueShape::Plain],
+        "states no inputs, output or resources",
+    );
+    let one_item = "exactly one callbacks item from a bare parameter";
+    refused(
+        &|call| {
+            call.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 0,
+                    path: vec!["handler".into()],
+                },
+                operation: OperationId("callback-0".into()),
+            }]);
+        },
+        one_item,
+    );
+    refused(
+        &|call| {
+            let item = call.claims.callbacks.items()[0].clone();
+            let second = CallbackInvocation {
+                from: ValueSource::Parameter {
+                    index: 1,
+                    path: vec![],
+                },
+                ..item.clone()
+            };
+            call.claims.callbacks = KnowledgeSet::Complete(vec![item, second]);
+        },
+        one_item,
+    );
+    // Only an invoke happens at the event.
+    let mut read = result_access_operation("read");
+    read.kind = OperationKind::Read;
+    let error = proposal_with(ValueShape::Callable, call(vec![read], vec![]))
+        .normalize()
+        .expect_err("a read is not kept for later invocation");
+    assert!(
+        error
+            .to_string()
+            .contains("a result-access operation is an invoke"),
+        "{error}"
+    );
+}
+
+/// ADR 0145: a described callable is appended to the canonical value encoding
+/// as tag 21, both of its lists written in canonical order. No document before
+/// it carries the tag, so it needs no digest family: every other document keeps
+/// its bytes (the legacy vector, asserted again here), and one that states it
+/// hashes to this frozen vector.
+#[test]
+fn a_described_callable_output_is_an_appended_tag_with_a_frozen_vector() {
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let mut legacy = call(vec![read.clone(), write.clone()], vec![owner, cleanup]);
+    legacy.edges = vec![OperationEdge {
+        kind: EdgeKind::Data,
+        from: read.id,
+        to: write.id,
+    }];
+    assert_eq!(
+        proposal_with(ValueShape::Plain, legacy)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+            .as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a contract stating no described callable keeps the legacy vector byte for byte"
+    );
+
+    let described = |returns: Vec<ValueShape>| {
+        let mut returned = operation("return", OperationKind::Return);
+        returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
+            reads: Vec::new(),
+            returns,
+            callbacks: Vec::new(),
+        })));
+        let mut behavior = call(vec![returned.clone()], vec![]);
+        behavior.claims.returns = KnowledgeSet::Complete(vec![returned.id]);
+        proposal_with(ValueShape::Callable, behavior).normalize()
+    };
+    let plain = described(vec![ValueShape::Plain]).unwrap();
+    assert_eq!(
+        plain.semantic_digest().as_str(),
+        "sha256:76ff18f124569912553ecc6480fe2cf494923280c61dee04db4dcfa15dd8bc97"
+    );
+    let valueless = described(Vec::new()).unwrap();
+    assert_ne!(
+        valueless.semantic_digest(),
+        plain.semantic_digest(),
+        "what the returned callable hands back is part of the claim"
+    );
+}
+
+/// ADR 0145: a described callable is valid only as the whole output of a
+/// `return`, its returns are drawn from `plain` alone and neither list repeats.
+#[test]
+fn a_described_callable_is_validated_to_its_one_position_and_vocabulary() {
+    let callable = |reads: Vec<DescribedRead>, returns: Vec<ValueShape>| {
+        ValueShape::DescribedCallable(Box::new(DescribedCall {
+            reads,
+            returns,
+            callbacks: Vec::new(),
+        }))
+    };
+    let with_output = |kind: OperationKind, output: ValueShape| {
+        let mut operation = operation("subject", kind);
+        operation.output = Some(output);
+        let mut behavior = call(vec![operation.clone()], vec![]);
+        match kind {
+            OperationKind::Return => {
+                behavior.claims.returns = KnowledgeSet::Complete(vec![operation.id]);
+            }
+            OperationKind::Invoke => {
+                behavior.claims.callbacks = KnowledgeSet::Unknown;
+            }
+            _ => {}
+        }
+        proposal_with(ValueShape::Callable, behavior).normalize()
+    };
+    assert!(with_output(OperationKind::Return, callable(Vec::new(), Vec::new())).is_ok());
+    assert!(
+        with_output(
+            OperationKind::Return,
+            callable(vec![DescribedRead::OwnedSignal], vec![ValueShape::Plain])
+        )
+        .is_ok()
+    );
+    // ADR 0162: a memo read is a described read, and a read value may be
+    // returned beside it.
+    assert!(
+        with_output(
+            OperationKind::Return,
+            callable(vec![DescribedRead::OwnedMemo], vec![ValueShape::ReadValue])
+        )
+        .is_ok()
+    );
+    for (kind, output, needle) in [
+        (
+            OperationKind::Return,
+            callable(
+                vec![DescribedRead::OwnedMemo, DescribedRead::OwnedMemo],
+                Vec::new(),
+            ),
+            "a described read is repeated",
+        ),
+        (
+            OperationKind::Return,
+            callable(Vec::new(), vec![ValueShape::Undefined]),
+            "may return only `plain`",
+        ),
+        (
+            OperationKind::Return,
+            callable(Vec::new(), vec![ValueShape::Plain, ValueShape::Plain]),
+            "a described return is repeated",
+        ),
+        (
+            OperationKind::Return,
+            callable(
+                vec![DescribedRead::OwnedSignal, DescribedRead::OwnedSignal],
+                Vec::new(),
+            ),
+            "a described read is repeated",
+        ),
+        (
+            OperationKind::Return,
+            ValueShape::Tuple(KnowledgeSet::Complete(vec![callable(
+                Vec::new(),
+                Vec::new(),
+            )])),
+            "whole output of a return",
+        ),
+    ] {
+        let error = with_output(kind, output).unwrap_err().to_string();
+        assert!(error.contains(needle), "{error}");
+    }
+    let error = proposal_with(
+        callable(Vec::new(), Vec::new()),
+        call(Vec::new(), Vec::new()),
+    )
+    .normalize()
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("whole output of a return"), "{error}");
+}
+
+/// ADR 0152: a described callable's callback items are the one invocation the
+/// census proves, of a bare export argument, one item per argument; its
+/// returns may name what such an argument returned; and only a described
+/// callable that states an item moves off ADR 0145's encoding.
+#[test]
+fn a_described_callables_callback_items_are_validated_and_hashed_apart() {
+    use crate::contract_semantics::DescribedCallback;
+    let normalized = |callbacks: Vec<DescribedCallback>, returns: Vec<ValueShape>| {
+        let mut returned = operation("return", OperationKind::Return);
+        returned.output = Some(ValueShape::DescribedCallable(Box::new(DescribedCall {
+            reads: Vec::new(),
+            returns,
+            callbacks,
+        })));
+        let mut behavior = call(vec![returned.clone()], vec![]);
+        behavior.claims.returns = KnowledgeSet::Complete(vec![returned.id]);
+        proposal_with(ValueShape::Callable, behavior).normalize()
+    };
+    let pipe = normalized(
+        vec![
+            DescribedCallback::same_stack_once(1),
+            DescribedCallback::same_stack_once(0),
+        ],
+        vec![ValueShape::InvocationResult { parameter: 1 }],
+    )
+    .expect("pipe's claim is the admitted shape");
+    let without = normalized(Vec::new(), vec![ValueShape::Plain]).unwrap();
+    assert_eq!(
+        without.semantic_digest().as_str(),
+        "sha256:76ff18f124569912553ecc6480fe2cf494923280c61dee04db4dcfa15dd8bc97",
+        "a described callable with no item keeps ADR 0145's vector byte for byte"
+    );
+    assert_ne!(pipe.semantic_digest(), without.semantic_digest());
+    let reordered = normalized(
+        vec![
+            DescribedCallback::same_stack_once(0),
+            DescribedCallback::same_stack_once(1),
+        ],
+        vec![ValueShape::InvocationResult { parameter: 1 }],
+    )
+    .unwrap();
+    assert_eq!(
+        pipe.semantic_digest(),
+        reordered.semantic_digest(),
+        "items are canonically sorted"
+    );
+
+    let mut deferred = DescribedCallback::same_stack_once(0);
+    deferred.schedule = Some(Schedule::Queued);
+    let mut possible = DescribedCallback::same_stack_once(0);
+    possible.cardinality.min = Some(0);
+    let mut untracked = DescribedCallback::same_stack_once(0);
+    untracked.tracking = Tracking::Untracked;
+    let mut member = DescribedCallback::same_stack_once(0);
+    member.from = ValueSource::Parameter {
+        index: 0,
+        path: vec!["run".into()],
+    };
+    for (callbacks, returns, needle) in [
+        (vec![deferred], Vec::new(), "on the same stack"),
+        (vec![possible], Vec::new(), "exactly once per call"),
+        (vec![untracked], Vec::new(), "tracking context"),
+        (vec![member], Vec::new(), "bare argument of its export"),
+        (
+            vec![
+                DescribedCallback::same_stack_once(0),
+                DescribedCallback::same_stack_once(0),
+            ],
+            Vec::new(),
+            "at most one callback item",
+        ),
+        (
+            vec![DescribedCallback::same_stack_once(0)],
+            vec![ValueShape::InvocationResult { parameter: 1 }],
+            "may return only `plain`",
+        ),
+        (
+            Vec::new(),
+            vec![ValueShape::InvocationResult { parameter: 0 }],
+            "may return only `plain`",
+        ),
+    ] {
+        let error = normalized(callbacks, returns).unwrap_err().to_string();
+        assert!(error.contains(needle), "{needle}: {error}");
+    }
+}
+
+/// ADR 0177: weakening names members of a bare return's literal output and
+/// leaves exactly those undescribed; anything else changes nothing.
+#[test]
+fn a_structural_return_member_is_weakened_in_place() {
+    let accessor = || ValueShape::Reactive {
+        role: ReactiveRole::Accessor,
+        resource: None,
+        capabilities: KnowledgeSet::Unknown,
+    };
+    let mut returned = operation("return", OperationKind::Return);
+    returned.owner = OwnerRelation::default();
+    returned.cardinality = Cardinality {
+        scope: Some(CardinalityScope::Call),
+        min: Some(0),
+        max: Some(UpperBound::Many),
+    };
+    returned.output = Some(ValueShape::Tuple(KnowledgeSet::Complete(vec![
+        accessor(),
+        accessor(),
+        ValueShape::Unknown,
+    ])));
+    let mut export = normalized_export(proposal_with(
+        ValueShape::Callable,
+        call(vec![returned], vec![]),
+    ));
+    let id = export.call.operations[0].id.clone();
+    assert!(export.call.operations[0].is_bare_return());
+    let member = |index| ValuePath(vec![ValuePathSegment::TupleItem(index)]);
+
+    assert!(
+        !export.weaken_return_members(&id, &[member(3)]),
+        "no fourth member"
+    );
+    assert!(
+        !export.weaken_return_members(&id, &[ValuePath(vec![])]),
+        "the root is no member"
+    );
+    assert!(
+        !export.weaken_return_members(&OperationId("absent".into()), &[member(1)]),
+        "no such operation"
+    );
+    assert_eq!(
+        export.call.operations[0].output,
+        Some(ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            accessor(),
+            accessor(),
+            ValueShape::Unknown,
+        ]))),
+        "a refused weakening changes nothing"
+    );
+
+    assert!(export.weaken_return_members(&id, &[member(1)]));
+    assert_eq!(
+        export.call.operations[0].output,
+        Some(ValueShape::Tuple(KnowledgeSet::Complete(vec![
+            accessor(),
+            ValueShape::Unknown,
+            ValueShape::Unknown,
+        ])))
+    );
+    assert!(
+        export
+            .operation_claim(ClaimDomain::Returns)
+            .is_some_and(|claim| claim.items().len() == 1),
+        "the return itself is kept"
+    );
+}
+
+// ADR 0183: withdrawing a created owner keeps the invoke, resets its owner and
+// lower bound, and drops the owner resource only when nothing else names it.
+#[test]
+fn weakening_a_created_owner_keeps_the_invoke_and_drops_an_unnamed_resource() {
+    let case = artifact_case("case");
+    let created = |id: &str, owner: &str| {
+        let mut invoke = operation(id, OperationKind::Invoke);
+        invoke.owner.source = OwnerSource::Created(ResourceId(owner.into()));
+        invoke.cardinality.min = Some(1);
+        invoke
+    };
+    let mut lone = export(
+        &case,
+        "lone",
+        ValueShape::Plain,
+        call(
+            vec![created("invoke", "owner")],
+            vec![resource("owner", ResourceKind::Owner)],
+        ),
+    );
+    assert!(lone.weaken_created_owner(&OperationId("invoke".into())));
+    let invoke = &lone.call.operations[0];
+    assert_eq!(invoke.owner, OwnerRelation::default());
+    assert_eq!(invoke.cardinality.min, Some(0));
+    assert!(lone.call.resources.is_empty());
+
+    let mut lifetime = operation("read", OperationKind::Read);
+    lifetime.cardinality.scope = Some(CardinalityScope::Resource(ResourceId("owner".into())));
+    let mut shared = export(
+        &case,
+        "shared",
+        ValueShape::Plain,
+        call(
+            vec![created("invoke", "owner"), lifetime],
+            vec![resource("owner", ResourceKind::Owner)],
+        ),
+    );
+    assert!(shared.weaken_created_owner(&OperationId("invoke".into())));
+    assert_eq!(shared.call.resources.len(), 1, "a named resource is kept");
+
+    let mut plain = export(
+        &case,
+        "plain",
+        ValueShape::Plain,
+        call(vec![operation("invoke", OperationKind::Invoke)], vec![]),
+    );
+    assert!(!plain.weaken_created_owner(&OperationId("invoke".into())));
+}
+
+/// ADR 0207: `event-handler-props` is exactly the keys the Solid runtime's
+/// spread attaches as event listeners.
+#[test]
+fn the_event_handler_member_class_is_every_unnamespaced_on_key() {
+    let class = MemberClass::EventHandlerProps;
+    assert_eq!(class.wire(), "event-handler-props");
+    for key in ["onClick", "onkeydown", "on", "onPointerDown"] {
+        assert!(class.contains(key), "{key}");
+    }
+    for key in [
+        "on:click",
+        "oncapture:click",
+        "ref",
+        "as",
+        "children",
+        "render",
+        "Onclick",
+    ] {
+        assert!(!class.contains(key), "{key}");
+    }
+}
+
+#[test]
+fn returned_callable_keeps_the_old_digest_and_hashes_its_graph_axes() {
+    // Frozen old document, independent of the new vocabulary.
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let mut old = call(
+        vec![read.clone(), write.clone()],
+        vec![
+            resource("owner", ResourceKind::Owner),
+            resource("cleanup", ResourceKind::Cleanup),
+        ],
+    );
+    old.edges = vec![OperationEdge {
+        kind: EdgeKind::Data,
+        from: read.id,
+        to: write.id,
+    }];
+    assert_eq!(
+        proposal_with(ValueShape::Plain, old)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+            .as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9"
+    );
+
+    let ret = operation("return", OperationKind::Return);
+    let mut read = operation("nested-read", OperationKind::Read);
+    read.tracking = Tracking::AmbientAtExecution;
+    read.inputs = vec![ValueShape::Reactive {
+        role: ReactiveRole::Accessor,
+        resource: Some(ResourceId("running".into())),
+        capabilities: KnowledgeSet::Unknown,
+    }];
+    let graph = call(vec![read], vec![]);
+    // Use an ordinary Operation literal already made by the test helper;
+    // no extra helper method is required on the production model.
+    let normalize = |graph: CallSemantics| {
+        let mut ret = ret.clone();
+        ret.output = Some(ValueShape::ReturnedCallable {
+            call: Some(Box::new(graph)),
+            members: vec![],
+        });
+        proposal_with(
+            ValueShape::Callable,
+            call(
+                vec![ret],
+                vec![resource("running", ResourceKind::ReactiveSource)],
+            ),
+        )
+        .normalize()
+        .unwrap()
+    };
+    let baseline = normalize(graph.clone());
+    let mut cleared = graph.clone();
+    cleared.operations[0].tracking = Tracking::Untracked;
+    cleared.operations[0].strict_read = Some(StrictRead::Cleared);
+    assert_ne!(
+        baseline.semantic_digest(),
+        normalize(cleared).semantic_digest()
+    );
+    let mut queued = graph;
+    queued.operations[0].schedule = Some(Schedule::Queued);
+    assert_ne!(
+        baseline.semantic_digest(),
+        normalize(queued).semantic_digest()
+    );
+}
+
+fn captured_graph(from: ValueSource) -> CallSemantics {
+    let mut graph = call(
+        vec![operation("captured-invoke", OperationKind::Invoke)],
+        vec![],
+    );
+    graph.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+        from: ValueSource::Capture {
+            capture: "callback".into(),
+            path: vec![],
+        },
+        operation: OperationId("captured-invoke".into()),
+    }]);
+    graph.with_captures(vec![CapturedValue {
+        id: "callback".into(),
+        from,
+    }])
+}
+
+fn capture_proposal(graph: CallSemantics) -> ContractProposal {
+    let mut returned = operation("factory-return", OperationKind::Return);
+    returned.output = Some(ValueShape::ReturnedCallable {
+        call: Some(Box::new(graph)),
+        members: vec![],
+    });
+    proposal_with(ValueShape::Callable, call(vec![returned], vec![]))
+}
+
+#[test]
+fn captures_hash_factory_identity_and_refuse_certification() {
+    let graph = captured_graph(ValueSource::Parameter {
+        index: 0,
+        path: vec![],
+    });
+    let normalized = capture_proposal(graph.clone()).normalize().unwrap();
+    let changed = capture_proposal(captured_graph(ValueSource::Parameter {
+        index: 1,
+        path: vec![],
+    }))
+    .normalize()
+    .unwrap();
+    assert_ne!(normalized.semantic_digest(), changed.semantic_digest());
+    let returns = SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Returns));
+    assert_ne!(
+        address_of(&normalized, "server-import", returns.clone(), "closure"),
+        address_of(&changed, "server-import", returns, "closure"),
+        "an unchanged return id cannot reuse a probe for another factory capture"
+    );
+    let mut queued = graph.clone();
+    queued.operations[0].schedule = Some(Schedule::Queued);
+    assert_ne!(
+        normalized.semantic_digest(),
+        capture_proposal(queued)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+    );
+    let mut tracked = graph;
+    tracked.operations[0].tracking = Tracking::AmbientAtExecution;
+    assert_ne!(
+        normalized.semantic_digest(),
+        capture_proposal(tracked)
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+    );
+    let Err(refused) = certification::proof_policy_2().inspect_candidates(&normalized) else {
+        panic!("captures are authored-only");
+    };
+    assert!(
+        refused
+            .to_string()
+            .contains("captures and captured lookups are authored-only")
+    );
+    let plain = call(vec![], vec![]);
+    assert_eq!(
+        capture_proposal(plain.clone())
+            .normalize()
+            .unwrap()
+            .semantic_digest(),
+        capture_proposal(plain.with_captures(vec![]))
+            .normalize()
+            .unwrap()
+            .semantic_digest(),
+        "an empty capture catalogue retains the absent-field digest family"
+    );
+    // The existing returned-callable golden test still pins the exact stream
+    // of a pre-extension document, including an absent capture catalogue.
+}
+
+#[test]
+fn captures_refuse_dangling_recursive_wildcard_and_wrong_scope_sources() {
+    let graph = captured_graph(ValueSource::Parameter {
+        index: 0,
+        path: vec![],
+    });
+    let mut duplicate = graph.clone();
+    duplicate.captures.push(duplicate.captures[0].clone());
+    assert!(capture_proposal(duplicate).normalize().is_err());
+    let mut dangling = graph.clone();
+    dangling.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+        from: ValueSource::Capture {
+            capture: "missing".into(),
+            path: vec![],
+        },
+        operation: OperationId("captured-invoke".into()),
+    }]);
+    assert!(capture_proposal(dangling).normalize().is_err());
+    for from in [
+        ValueSource::Resource {
+            resource: ResourceId("missing".into()),
+            path: vec![],
+        },
+        ValueSource::OperationOutput {
+            operation: OperationId("captured-invoke".into()),
+            path: vec![],
+        },
+        ValueSource::Parameter {
+            index: 0,
+            path: vec!["*".into()],
+        },
+        ValueSource::Capture {
+            capture: "callback".into(),
+            path: vec![],
+        },
+    ] {
+        assert!(capture_proposal(captured_graph(from)).normalize().is_err());
+    }
+    assert!(
+        proposal_with(ValueShape::Callable, graph)
+            .normalize()
+            .is_err()
+    );
+    let mut member = operation("return-member", OperationKind::Return);
+    member.output = Some(ValueShape::Tuple(KnowledgeSet::Complete(vec![
+        ValueShape::EffectfulCallable(Box::new(captured_graph(ValueSource::Parameter {
+            index: 0,
+            path: vec![],
+        }))),
+    ])));
+    assert!(
+        proposal_with(ValueShape::Callable, call(vec![member], vec![]))
+            .normalize()
+            .is_err()
+    );
+}
+
+#[test]
+fn factory_resource_and_result_captures_keep_exact_outer_identities() {
+    let mut graph = captured_graph(ValueSource::Resource {
+        resource: ResourceId("resource".into()),
+        path: vec![],
+    });
+    let mut proposal = capture_proposal(graph.clone());
+    proposal.artifact_cases[0]
+        .exports
+        .get_mut("createResource")
+        .unwrap()
+        .call
+        .resources
+        .push(resource("resource", ResourceKind::ReactiveSource));
+    assert!(proposal.normalize().is_ok());
+    graph.captures[0].from = ValueSource::OperationOutput {
+        operation: OperationId("factory-invoke".into()),
+        path: vec![],
+    };
+    let mut proposal = capture_proposal(graph);
+    let factory = &mut proposal.artifact_cases[0]
+        .exports
+        .get_mut("createResource")
+        .unwrap()
+        .call;
+    let producer = operation("factory-invoke", OperationKind::Invoke);
+    factory.claims.callbacks = KnowledgeSet::Complete(vec![CallbackInvocation {
+        from: ValueSource::Parameter {
+            index: 0,
+            path: vec![],
+        },
+        operation: producer.id.clone(),
+    }]);
+    factory.operations.push(producer);
+    assert!(proposal.normalize().is_ok());
+}
+
+fn callback_result_graph(protocol: InvokeProtocol, complete: bool) -> CallSemantics {
+    let producer = operation("produce", OperationKind::Invoke);
+    let mut use_ = operation("use-result", OperationKind::Invoke);
+    use_.protocol = (protocol != InvokeProtocol::Call).then_some(protocol);
+    use_.tracking = Tracking::AmbientAtExecution;
+    use_.owner = OwnerRelation {
+        source: OwnerSource::AmbientAtExecution,
+        ..OwnerRelation::default()
+    };
+    use_.cardinality.min = Some(0);
+    let mut claims = closed_claims();
+    claims.callbacks = KnowledgeSet::Complete(vec![
+        CallbackInvocation {
+            from: ValueSource::Parameter {
+                index: 0,
+                path: vec![],
+            },
+            operation: producer.id.clone(),
+        },
+        CallbackInvocation {
+            from: ValueSource::OperationOutput {
+                operation: producer.id.clone(),
+                path: vec![],
+            },
+            operation: use_.id.clone(),
+        },
+    ]);
+    let result = CallbackResult {
+        producer: producer.id.clone(),
+        shape: ValueShape::Unknown,
+        uses: if complete {
+            KnowledgeSet::Complete(vec![use_.id.clone()])
+        } else {
+            KnowledgeSet::Partial(vec![use_.id.clone()])
+        },
+        callable_only: if protocol == InvokeProtocol::Call {
+            BTreeSet::from([use_.id.clone()])
+        } else {
+            BTreeSet::new()
+        },
+    };
+    CallSemantics::new(
+        claims,
+        vec![producer.clone(), use_.clone()],
+        vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: producer.id,
+            to: use_.id,
+        }],
+        vec![],
+        GuardPartition::default(),
+    )
+    .with_callback_results(vec![result])
+}
+
+#[test]
+fn callback_results_preserve_every_context_and_refuse_missing_provenance() {
+    for protocol in [
+        InvokeProtocol::Call,
+        InvokeProtocol::Get,
+        InvokeProtocol::Iterate,
+        InvokeProtocol::Coerce,
+        InvokeProtocol::GetEnumerableStringValues,
+        InvokeProtocol::GetOwnEnumerableValues,
+    ] {
+        let graph = callback_result_graph(protocol, true);
+        let kept = proposal_with(ValueShape::Callable, graph.clone())
+            .normalize()
+            .unwrap();
+        let export = &kept.artifact_cases()[0].exports["createResource"];
+        assert_eq!(export.call.callback_results().len(), 1);
+        assert_eq!(
+            export.operation("use-result").unwrap().invoke_protocol(),
+            protocol
+        );
+        assert!(
+            crate::contract_semantics::certification::proof_policy_2()
+                .inspect_candidates(&kept)
+                .is_err()
+        );
+        let mut missing_edge = graph.clone();
+        missing_edge.edges.clear();
+        assert!(
+            proposal_with(ValueShape::Callable, missing_edge)
+                .normalize()
+                .is_err()
+        );
+        let mut no_timing = graph.clone();
+        no_timing.operations[1].schedule = None;
+        assert!(
+            proposal_with(ValueShape::Callable, no_timing)
+                .normalize()
+                .is_err()
+        );
+        let mut unknown_owner = graph;
+        unknown_owner.operations[1].owner.source = OwnerSource::Unknown;
+        assert!(
+            proposal_with(ValueShape::Callable, unknown_owner)
+                .normalize()
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn callback_result_closure_shape_and_callable_test_bind_digest_and_recipe() {
+    let contract = |graph| {
+        proposal_with(ValueShape::Callable, graph)
+            .normalize()
+            .unwrap()
+    };
+    let closed = contract(callback_result_graph(InvokeProtocol::Call, true));
+    let open = contract(callback_result_graph(InvokeProtocol::Call, false));
+    assert_ne!(closed.semantic_digest(), open.semantic_digest());
+    let graph = callback_result_graph(InvokeProtocol::Call, true);
+    let mut results = graph.callback_results().to_vec();
+    results[0].callable_only.clear();
+    let ungated = contract(graph.clone().with_callback_results(results.clone()));
+    assert_ne!(closed.semantic_digest(), ungated.semantic_digest());
+    results[0].shape = ValueShape::Callable;
+    let shaped = contract(graph.with_callback_results(results));
+    assert_ne!(ungated.semantic_digest(), shaped.semantic_digest());
+    for path in [
+        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Callbacks)),
+        SemanticClaimPath::Operation(OperationId("produce".into())),
+        SemanticClaimPath::Operation(OperationId("use-result".into())),
+    ] {
+        assert_ne!(
+            address_of(&closed, "server-import", path.clone(), "closure"),
+            address_of(&open, "server-import", path, "closure")
+        );
+    }
+    let mut context = callback_result_graph(InvokeProtocol::Call, true);
+    context.operations[1].tracking = Tracking::Untracked;
+    let changed_context = contract(context);
+    assert_ne!(closed.semantic_digest(), changed_context.semantic_digest());
+    assert_ne!(
+        address_of(
+            &closed,
+            "server-import",
+            SemanticClaimPath::Operation(OperationId("produce".into())),
+            "closure"
+        ),
+        address_of(
+            &changed_context,
+            "server-import",
+            SemanticClaimPath::Operation(OperationId("produce".into())),
+            "closure"
+        )
+    );
+    // Existing frozen golden vectors above must keep passing byte-for-byte.
+}
+
+#[test]
+fn callback_results_refuse_recursive_producers_and_wildcard_paths() {
+    let graph = callback_result_graph(InvokeProtocol::Call, true);
+    let mut results = graph.callback_results().to_vec();
+    results[0].producer = OperationId("use-result".into());
+    assert!(
+        proposal_with(
+            ValueShape::Callable,
+            graph.clone().with_callback_results(results)
+        )
+        .normalize()
+        .is_err()
+    );
+    let mut claims = graph.claims().clone();
+    if let KnowledgeSet::Complete(rows) = &mut claims.callbacks
+        && let ValueSource::OperationOutput { path, .. } = &mut rows[1].from
+    {
+        path.push("*".into());
+    }
+    let wildcard = CallSemantics::new(
+        claims,
+        graph.operations.clone(),
+        graph.edges.clone(),
+        graph.resources.clone(),
+        graph.guards.clone(),
+    )
+    .with_callback_results(graph.callback_results().to_vec());
+    assert!(
+        proposal_with(ValueShape::Callable, wildcard)
+            .normalize()
+            .is_err()
+    );
 }

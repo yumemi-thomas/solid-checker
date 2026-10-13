@@ -24,6 +24,35 @@ still silently dropped at runtime and stays a finding, as does any write
 outside a setter. 1.x setters never unlock the proxy, so the `v1/` twin has no
 such exemption.
 
+A write to a store **root record's own property** is TypeScript's on the
+releases whose typings make it `readonly`, and this rule's where they do not.
+The runtime drops the write outside a setter either way. The difference is the
+declared type:
+
+- On `@solidjs/signals` `2.0.0-rc.0` through `rc.6`, `Store<T> = Readonly<T>`,
+  so `store.name = "b"` is
+  `TS2540: Cannot assign to 'name' because it is a read-only property`.
+  This rule stays silent there, because it never reports what TypeScript
+  already reports.
+- From `rc.7` (`rc.7`, `rc.8`, `rc.9`), `Store<T> = T`, so the same write
+  type-checks and nothing else would report it. This rule reports it there.
+
+The declaration is `@solidjs/signals`'s, which `solid-js` re-exports, and a
+fresh install of `solid-js@2.0.0-rc.3` resolves signals rc.9 today. So the
+answer follows the `@solidjs/signals` the installed `solid-js` resolves, not
+the `solid-js` version. The rule does not decide this itself: the dialect's
+vocabulary for the detected installation answers it
+(`rust/crates/solid-dialect/src/solid_2/releases.rs`). On a signals release
+nobody compared, or none resolved, the rule stays silent on a root write,
+because an older signals would make it TS2540, and the
+[unaudited-solid-release](unaudited-solid-release.md) notice says root writes
+went unchecked. Nested records, props objects and cast-away roots are writable
+to TypeScript on every release, so they stay this rule's everywhere. The
+fixtures `fixtures/reactive-ir/store-root-write-rc3`, `store-root-write-rc9`,
+`release-triple-store-rc7` and `release-triple-store-fresh-rc3` (`solid-js`
+rc.3 over signals rc.9) pin each side against byte-faithful copies of the
+published declarations.
+
 Read-modify-write spellings are writes in both dialects: `store.count += 1` and
 `store.count++` reach the proxy with a value that is dropped, and both also read
 the old value, so [strict-read-untracked](strict-read-untracked.md) reports the
@@ -48,9 +77,9 @@ the value.
 Examples of **incorrect** code for this rule:
 
 ```tsx
-const [user, setUser] = createSignal({ name: "Ada" });
-// Mutates the held object without notifying anyone.
-user().name = "Grace";
+const [count, setCount] = createSignal(0);
+// Reassigns the accessor binding itself.
+count = 2;
 
 function Title(props) {
   // Writes through the readonly props proxy; the write is dropped.
@@ -71,6 +100,10 @@ Examples of **correct** code for this rule:
 ```tsx
 const [user, setUser] = createSignal({ name: "Ada" });
 setUser({ ...user(), name: "Grace" });
+
+// A write through a *called* accessor is not this rule's claim: the call hands
+// back the value, so nothing is dropped. `el()!.style.color = "red"` is the
+// same shape and is how imperative DOM work is written in Solid.
 
 // Or use a store and mutate the draft in its own setter:
 const [profile, setProfile] = createStore({ name: "Ada" });

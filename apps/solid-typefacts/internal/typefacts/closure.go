@@ -415,6 +415,17 @@ func (p *DemandClosure) ModuleGraph(
 	return provider.ModuleGraph(ctx, demand)
 }
 
+// SetHostConstants forwards a request's host constants (ADR 0166) to a backend
+// that reads them. A backend that does not is left alone: it decides no
+// condition by them, which only leaves both arms live.
+func (p *DemandClosure) SetHostConstants(constants []HostConstant) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if scoped, ok := p.backend.(HostConstantScoped); ok {
+		scoped.SetHostConstants(constants)
+	}
+}
+
 // InvocationTranscripts answers from the retained compiler program without
 // materializing or mutating the retained entity demand table.
 func (p *DemandClosure) InvocationTranscripts(

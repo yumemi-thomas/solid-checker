@@ -1,0 +1,24 @@
+{
+  "name": "@solidjs/web",
+  "version": "2.0.0-rc.13",
+  "tarball": "https://registry.npmjs.org/@solidjs/web/-/web-2.0.0-rc.13.tgz",
+  "gitHead": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+  "registryIntegrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ==",
+  "registryShasum": "2859d797294d7ca1ab09e82157f567699be37e58",
+  "registryFileCount": 75,
+  "registryUnpackedSize": 2217402,
+  "downloaded": {
+    "date": "2026-10-05",
+    "by": "npm pack @solidjs/web@2.0.0-rc.13",
+    "bytes": 533611,
+    "sha512": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ==",
+    "sha1": "2859d797294d7ca1ab09e82157f567699be37e58",
+    "sha256": "8649bf3ba01fa90b126dd5642ee7ec4c4d43654a6e5e0525d7501538b6732139",
+    "extractedFileCount": 75,
+    "extractedTreeEqualsLockfileInstall": true
+  },
+  "lockfileIntegrity": {
+    "source": "rust/target/audit-rc13 npm install, node_modules/.package-lock.json",
+    "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+  }
+}

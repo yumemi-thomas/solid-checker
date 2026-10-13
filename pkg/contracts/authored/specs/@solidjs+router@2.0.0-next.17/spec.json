@@ -1,0 +1,148 @@
+{
+  "package": "@solidjs/router",
+  "version": "2.0.0-next.17",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "pairs": "../_pairs/@solidjs+router",
+  "identity": "identity.json",
+  "exports": {
+    "useLocation": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/compass-ui/apps/ui/node_modules/@solidjs/router/dist/routing.js:464-502 — Location is a plain object with reactive pathname/search/hash/state getters, an inert key getter and a plain query property holding a memo-backed proxy. Existing vocabulary cannot express these Get semantics exactly; the whole-object store positive is removed and returns remains open (ADR 0271). Runtime pairs are regression controls, not a return proof.",
+      "rule": "strict-read-untracked",
+      "call": {},
+      "probes": [
+        {
+          "label": "search",
+          "rule": "strict-read-untracked",
+          "why": "The search getter is reactive; the correct twin reads it in JSX."
+        },
+        {
+          "label": "key",
+          "rule": "strict-read-untracked",
+          "why": "The pathname misuse opens a strict-read window; the correct twin reads only the inert key in the component body."
+        },
+        {
+          "label": "query",
+          "rule": "strict-read-untracked",
+          "why": "The pathname misuse opens a strict-read window; retrieving query is inert, and query.q is read only in JSX."
+        },
+        {
+          "label": "keys",
+          "rule": "strict-read-untracked",
+          "why": "The pathname misuse opens a strict-read window; enumerating the plain location object with Object.keys is inert."
+        }
+      ]
+    },
+    "useMatch": {
+      "why": "Returns a memo of the match.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      }
+    },
+    "useHref": {
+      "why": "Returns a memo of the rendered path.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      }
+    },
+    "useResolvedPath": {
+      "why": "Returns a memo of the resolved path.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      }
+    }
+  }
+}

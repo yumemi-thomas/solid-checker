@@ -1,0 +1,80 @@
+{
+  "package": "@tanstack/virtual-core",
+  "version": "3.17.8",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "pairs": "../_pairs/@tanstack+virtual-core",
+  "identity": "identity.json",
+  "exports": {
+    "Virtualizer": {
+      "why": "Source: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/ai-memory-ui/node_modules/@tanstack/virtual-core/dist/esm/index.js:282-284,1124. The constructor enters exactly one for-in option VALUE enumeration on its own stack, preserving ambient tracking and owner. Includes inherited enumerable string keys; does not invoke function-valued data properties. The count bounds enumeration entry, not each getter after a throwing/mutating earlier getter. Base probe pair: Virtualizer.misuse.tsx / Virtualizer.correct.tsx; estimateSize GETTER before a returned callback. New protocol proposal; requires fresh per-version probes and the consumer patch. No domain closure.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "options-get"
+          }
+        ],
+        "operations": [
+          {
+            "id": "options-get",
+            "kind": "invoke",
+            "protocol": "get-enumerable-string-values",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "scope": "call",
+              "min": 1,
+              "max": 1
+            }
+          }
+        ]
+      },
+      "probes": [
+        {
+          "label": "count",
+          "rule": "strict-read-untracked",
+          "why": "Source: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/ai-memory-ui/node_modules/@tanstack/virtual-core/dist/esm/index.js:282-284,1124. Exercises the same for-in value enumeration with count as a getter. Pair: Virtualizer.count.misuse.tsx / Virtualizer.count.correct.tsx. Fresh probe required on 3.17.8; no passing result is inferred from another version."
+        },
+        {
+          "label": "getScrollElement",
+          "rule": "strict-read-untracked",
+          "why": "Source: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/ai-memory-ui/node_modules/@tanstack/virtual-core/dist/esm/index.js:282-284,1124. Exercises the same for-in value enumeration with getScrollElement as a getter. Pair: Virtualizer.getScrollElement.misuse.tsx / Virtualizer.getScrollElement.correct.tsx. Reading the getter obtains a plain function; invoking that returned function is a different operation. Fresh probe required on 3.17.8; no passing result is inferred from another version."
+        },
+        {
+          "label": "scrollMargin",
+          "rule": "strict-read-untracked",
+          "why": "Source: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/ai-memory-ui/node_modules/@tanstack/virtual-core/dist/esm/index.js:282-284,1124. Exercises the same for-in value enumeration with scrollMargin as a getter. Pair: Virtualizer.scrollMargin.misuse.tsx / Virtualizer.scrollMargin.correct.tsx. Fresh probe required on 3.17.8; no passing result is inferred from another version."
+        }
+      ]
+    }
+  }
+}

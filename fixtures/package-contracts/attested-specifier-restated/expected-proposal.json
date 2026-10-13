@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-plan",
   "planVersion": 1,
   "semanticModelVersion": 1,
-  "semanticDigest": "sha256:996b02f424359ed16cc62a9b57a26361754fbc588d359a445d61b4a5c56b55c0",
+  "semanticDigest": "sha256:a01e73ab9bd475ade7caac03ba1875883e518aceb755bfc993076c421844252d",
   "closureCandidates": [
     {
       "claimId": "claim:v1:sha256:38b02fa9f618372abe6616563a78e14a9cdd2fcda2a150840c2b9ac83f15e1e3",
@@ -24,25 +24,6 @@
       }
     },
     {
-      "claimId": "claim:v1:sha256:3f1b43ce4b55c1164d94496cdfbcac6bf8cf19aa64e84263e0de8b00d1d690e6",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8",
-        "declarationsPath": "./index.js",
-        "declarationsDigest": "sha256:00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8",
-        "closureDigest": "sha256:9e8f2292d17f5467c6793c82883e1057fa501070a7c0a689ce7974c7c78fdb9d"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:84d46a51eb6ee37597cb0b0427e15921a4ca9ca13b5bc330bc9551a8fde77469",
-        "export": "thing",
-        "path": {
-          "kind": "call",
-          "domain": "returns"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:47e9c8597ad86a0481670149bc20a1061a7eb6fcde14c5048c1e09c68ecb8995",
       "artifact": {
         "entrypoint": ".",
@@ -58,25 +39,6 @@
         "path": {
           "kind": "call",
           "domain": "callbacks"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:b2e0b1aa783a96bf302160419f7b88f7ea98319954e1f693d0e34d7e4b01704a",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8",
-        "declarationsPath": "./index.js",
-        "declarationsDigest": "sha256:00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8",
-        "closureDigest": "sha256:9e8f2292d17f5467c6793c82883e1057fa501070a7c0a689ce7974c7c78fdb9d"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:84d46a51eb6ee37597cb0b0427e15921a4ca9ca13b5bc330bc9551a8fde77469",
-        "export": "thing",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     }
@@ -97,6 +59,25 @@
         "export": "thing",
         "path": {
           "kind": "guard-partition"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:3f1b43ce4b55c1164d94496cdfbcac6bf8cf19aa64e84263e0de8b00d1d690e6",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8",
+        "declarationsPath": "./index.js",
+        "declarationsDigest": "sha256:00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8",
+        "closureDigest": "sha256:9e8f2292d17f5467c6793c82883e1057fa501070a7c0a689ce7974c7c78fdb9d"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:84d46a51eb6ee37597cb0b0427e15921a4ca9ca13b5bc330bc9551a8fde77469",
+        "export": "thing",
+        "path": {
+          "kind": "call",
+          "domain": "returns"
         }
       }
     },
@@ -135,6 +116,25 @@
         "path": {
           "kind": "call",
           "domain": "invalidates"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:b2e0b1aa783a96bf302160419f7b88f7ea98319954e1f693d0e34d7e4b01704a",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8",
+        "declarationsPath": "./index.js",
+        "declarationsDigest": "sha256:00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8",
+        "closureDigest": "sha256:9e8f2292d17f5467c6793c82883e1057fa501070a7c0a689ce7974c7c78fdb9d"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:84d46a51eb6ee37597cb0b0427e15921a4ca9ca13b5bc330bc9551a8fde77469",
+        "export": "thing",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
         }
       }
     },

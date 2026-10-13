@@ -1,0 +1,14 @@
+{
+  "solid": "2.0.0-rc.9",
+  "probe": {
+    "value": false
+  },
+  "direct": {
+    "error": "Error",
+    "message": "[PENDING_ASYNC_UNTRACKED_READ] Reading a pending async value directly in <Anonymous>. Async values must be read within a tracking scope (JSX, a memo, or an effect's compute function)."
+  },
+  "events": [
+    "STRICT_READ_UNTRACKED",
+    "PENDING_ASYNC_UNTRACKED_READ"
+  ]
+}

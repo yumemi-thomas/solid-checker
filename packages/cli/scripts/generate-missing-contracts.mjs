@@ -70,7 +70,56 @@ function coverageReport(project) {
   } catch (error) {
     throw new Error(`could not read the contract report: ${error.message}`);
   }
-  return Array.isArray(report?.packages) ? report.packages : [];
+  return contractReportPackages(report);
+}
+
+// The packages a contract report names, refusing anything that is not one.
+//
+// `Array.isArray(report?.packages) ? … : []` used to stand here, and it is a
+// silent false negative on the one document that reaches this code without
+// being a report: when the installed runtime is one this build has no dialect
+// for, `--check-contracts` emits the ordinary findings snapshot carrying
+// `SC9013` and exits 0. That snapshot has no `packages` key, so the sweep read
+// it as "no package needs a contract" and reported nothing to generate -- for
+// a project it had never analyzed at all.
+//
+// Refusing here rather than teaching the native side to emit a report-shaped
+// refusal is deliberate: `{ packages: [] }` with a flag beside it is the same
+// false negative one layer down, for every consumer that does not read the
+// flag. A document that is not a report must not be answerable as an empty
+// one.
+export function contractReportPackages(report) {
+  if (Array.isArray(report?.packages)) return report.packages;
+  const findings = Array.isArray(report?.findings) ? report.findings : [];
+  const refusal = findings.find(finding => finding?.kind === "uncertifiable");
+  if (refusal) {
+    throw new Error(
+      `the checker did not produce a contract report: ${refusal.id ?? "an uncertifiable result"}: ` +
+        `${refusal.message ?? "the project was not analyzed"}` +
+        (refusal.hint ? `\n${refusal.hint}` : "")
+    );
+  }
+  throw new Error(
+    "the checker did not produce a contract report: its output names no `packages`, " +
+      "so the sweep cannot tell an empty project from an unanalyzed one"
+  );
+}
+
+// Why the sweep will not generate for a report row, or `undefined` when it
+// will. The sweep writes one name-keyed contract per package under the project
+// directory, from the install that directory's own lookup finds. A row that
+// names its `importers` is one whose artifact that lookup does not identify:
+// the package is installed as more than one artifact across the analysed files,
+// or only where a sub-package's `node_modules` holds it (a monorepo analysed
+// from its root). Generating from the project directory's install there would
+// describe a different artifact than the one those files import, or none.
+export function sweepRefusal(entry) {
+  if (!Array.isArray(entry?.importers) || entry.importers.length === 0) return undefined;
+  return (
+    `${entry.name}: the name does not identify this row's installed artifact from the project ` +
+    `directory (imported by ${entry.importers.join(", ")}); a name-keyed contract here would not describe it. ` +
+    "Run the sweep from the project that owns those files"
+  );
 }
 
 function installedPackageRoot(directory, name) {
@@ -125,6 +174,8 @@ export async function generateMissingContracts(arguments_) {
   const failed = [];
   for (const entry of missing) {
     try {
+      const refusal = sweepRefusal(entry);
+      if (refusal) throw new Error(refusal);
       const packageRoot = installedPackageRoot(directory, entry.name);
       if (!packageRoot) throw new Error(`no installed package at node_modules/${entry.name}`);
       if (!entry.installedIntegrity) {

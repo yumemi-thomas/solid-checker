@@ -1,0 +1,9 @@
+{
+  "name": "inferred-host-library",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "exports": "./src/App.tsx"
+}

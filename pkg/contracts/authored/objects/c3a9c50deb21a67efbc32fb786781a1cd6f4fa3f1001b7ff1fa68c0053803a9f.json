@@ -1,0 +1,475 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "7c04487a052f819345969c4b750658beb79dd526b274133efc1ea642509e1a29",
+            "path": "./dist/index.js",
+            "sha256": "15ffa8042705aada967e8ed8a1c6b3f57e1b57c14092888be8d3edefe0b50837"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "801119eca2ac2578d3086ff775b098bc6380540996bebdb828bf956f7f1bb47c"
+          },
+          "exports": {
+            "DocumentEventListener": "open-callable",
+            "WindowEventListener": "open-callable",
+            "createEventListener": "authored-createEventListener",
+            "createEventListenerMap": "authored-createEventListenerMap",
+            "createEventSignal": "open-callable",
+            "eventListener": "open-callable",
+            "makeEventListener": "open-callable",
+            "makeEventListenerStack": "open-callable",
+            "preventDefault": "open-callable",
+            "stopImmediatePropagation": "open-callable",
+            "stopPropagation": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-P8GdbTwt422PHkWeKIEQVMB3Yz2agE49bfN8ChXVNQBD0fzKQF8FfmAh8y33la5k+Ap7oshNJ0Db001dJhCqTw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "8540757aee3405db74e4a6717c3cd49f0a96e629eab369dac04b740495811b13"
+    },
+    "name": "@solid-primitives/event-listener",
+    "version": "3.0.0-next.5"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createEventListener": {
+      "call": {
+        "operations": [
+          {
+            "id": "listener-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "targets-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "type-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 1,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "targets-compute"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "type-compute"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "handler"
+          }
+        ],
+        "computations": [
+          "listener-effect"
+        ],
+        "resources": [
+          {
+            "id": "listener-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads",
+          "callbacks"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "shape": "callable"
+    },
+    "authored-createEventListenerMap": {
+      "call": {
+        "operations": [
+          {
+            "id": "resize-listener-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "property": "resize",
+                  "callable": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "other-listener-effects",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "targets-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "listener-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "listener-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "resize-handler",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "property": "resize",
+                  "callable": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "targets-compute"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": [
+                "resize"
+              ]
+            },
+            "operation": "resize-handler"
+          }
+        ],
+        "computations": [
+          "resize-listener-effect",
+          "other-listener-effects"
+        ],
+        "resources": [
+          {
+            "id": "listener-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "reads"
+        ],
+        "creates": [],
+        "reads": []
+      },
+      "shape": "callable"
+    }
+  }
+}

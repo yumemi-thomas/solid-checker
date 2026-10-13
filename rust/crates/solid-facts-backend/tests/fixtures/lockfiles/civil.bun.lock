@@ -1,0 +1,37 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "with-tanstack-router",
+      "dependencies": {
+        "@solidjs/meta": "1.0.0-next.2",
+        "@stacksjs/ts-cache": "^0.1.5",
+        "@tanstack/solid-router": "^2.0.0-beta.28",
+      },
+      "devDependencies": {
+      },
+    },
+  },
+  "trustedDependencies": [
+    "esbuild",
+  ],
+  "patchedDependencies": {
+    "@stacksjs/ts-cache@0.1.5": "patches/@stacksjs%2Fts-cache@0.1.5.patch",
+    "untun@0.2.2": "patches/untun@0.2.2.patch",
+    "@terbiumos/tfs@1.1.0-dev.1": "patches/@terbiumos%2Ftfs@1.1.0-dev.1.patch",
+    "chii@1.15.5": "patches/chii@1.15.5.patch",
+  },
+  "overrides": {
+    "@tanstack/router-core": "1.171.15",
+  },
+  "packages": {
+    "@solidjs/meta": ["@solidjs/meta@1.0.0-next.2", "", { "peerDependencies": { "@solidjs/web": "^2.0.0-rc.0", "solid-js": "^2.0.0-rc.0" } }, "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA=="],
+
+    "@stacksjs/ts-cache": ["@stacksjs/ts-cache@0.1.5", "", { "dependencies": { "@stacksjs/clapp": "^0.2.5", "bunfig": "^0.15.11", "clone": "^2.1.2" }, "bin": { "cache": "./dist/bin/cli.js" } }, "sha512-bsVFd2IM26rl8obhIqTaLE97lz0mAynb+AAMPhMIld53ZKC20GFiRdPny0xsZeypkZDzZVAoafcnyn7HEzk41g=="],
+
+    "@tanstack/solid-router": ["@tanstack/solid-router@2.0.0-beta.29", "", { "dependencies": { "@solid-devtools/logger": "^0.9.4", "@solid-primitives/refs": "^1.0.8", "@solidjs/meta": "^0.29.4", "@solidjs/web": "2.0.0-beta.29", "@tanstack/history": "1.162.0", "@tanstack/router-core": "1.171.14", "isbot": "^5.1.22" }, "peerDependencies": { "solid-js": ">=2.0.0-0 <3.0.0" } }, "sha512-UAZhtkZkIRb+lH98FHIrVBBMFJN4vf89NRUYNoq0FYnJQywUQ0c9GlZL6yqhMF5Vzs8AnQ2hDGiLgYZUGu38gg=="],
+
+    "@tanstack/solid-router/@solidjs/meta": ["@solidjs/meta@0.29.4", "", { "peerDependencies": { "solid-js": ">=1.8.4" } }, "sha512-zdIWBGpR9zGx1p1bzIPqF5Gs+Ks/BH8R6fWhmUa/dcK1L2rUC8BAcZJzNRYBQv74kScf1TSOs0EY//Vd/I0V8g=="],
+  }
+}

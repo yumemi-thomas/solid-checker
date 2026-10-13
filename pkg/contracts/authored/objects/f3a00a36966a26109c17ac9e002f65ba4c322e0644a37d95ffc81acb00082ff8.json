@@ -1,0 +1,194 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "2a35920be329a8949874028ea4ddf87df3dbd11d014f6a03eaeadc1d835fb97b",
+            "path": "./dist/index.js",
+            "sha256": "5a801a538f707d6aa0892a6b4a6f8426b3ee7f8a84fda50da022918ea547cb51"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "635a830c1f576b2de127b79410ff8b9eb41d38adb035ab73f4f51ae4c8a0787b"
+          },
+          "exports": {
+            "createScriptLoader": "authored-createScriptLoader"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-1kGnz61K0hARjbrhhr5eZuYIXQ7qQs+dWFIjGyfCC8s+7qVPt9vf+OYtGhyQNHpq4zMODxEY+JQJTN2aRG+wpA==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "18fa891cc48225f47f4d0b6695a8cea6113ce74521e8475f52014768287e5f1c"
+    },
+    "name": "@solid-primitives/script-loader",
+    "version": "3.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createScriptLoader": {
+      "call": {
+        "operations": [
+          {
+            "id": "src-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "script-src-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "src-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "script-src-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "script-src-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [
+                    "src"
+                  ],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "script-src-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "computations": [
+          "src-effect"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "src"
+              ]
+            },
+            "operation": "src-compute"
+          }
+        ],
+        "reads": [],
+        "creates": [],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "returns",
+          "cleanups"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

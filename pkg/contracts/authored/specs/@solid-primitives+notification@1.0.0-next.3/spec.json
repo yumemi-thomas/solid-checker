@@ -1,0 +1,309 @@
+{
+  "package": "@solid-primitives/notification",
+  "version": "1.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createNotification": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "call": {
+        "operations": [
+          {
+            "id": "create-notification",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "notification"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "show",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "close",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "notification",
+                  "value": {
+                    "kind": "effectful-callable",
+                    "call": {
+                      "operations": [
+                        {
+                          "id": "notification-read",
+                          "kind": "read",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "ambient-at-execution",
+                          "count": {
+                            "min": 0,
+                            "max": 1,
+                            "scope": "call"
+                          },
+                          "inputs": [
+                            {
+                              "kind": "reactive",
+                              "role": "accessor",
+                              "resource": "notification"
+                            }
+                          ],
+                          "owner": {
+                            "source": "ambient-at-execution"
+                          }
+                        },
+                        {
+                          "id": "notification-return",
+                          "kind": "return",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "untracked",
+                          "count": {
+                            "min": 1,
+                            "max": 1,
+                            "scope": "call"
+                          },
+                          "output": {
+                            "kind": "plain"
+                          }
+                        }
+                      ],
+                      "reads": [
+                        "notification-read"
+                      ],
+                      "returns": [
+                        "notification-return"
+                      ],
+                      "creates": [],
+                      "callbacks": [],
+                      "closed": [
+                        "reads",
+                        "returns",
+                        "creates",
+                        "callbacks"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "supported",
+                  "value": {
+                    "kind": "plain"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-notification"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "notification",
+            "kind": "reactive-source"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification has a stated effectful-callable graph with read count 0..1: unsupported path has no signal, while the supported path returns the exact getter. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks. The notification member now states its own optional getter graph, citing the supported signal return and inert unsupported return separately. show and close remain opaque; this factory closure does not discharge their uses.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification has a stated effectful-callable graph with read count 0..1: unsupported path has no signal, while the supported path returns the exact getter. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks. The notification member now states its own optional getter graph, citing the supported signal return and inert unsupported return separately. show and close remain opaque; this factory closure does not discharge their uses.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification has a stated effectful-callable graph with read count 0..1: unsupported path has no signal, while the supported path returns the exact getter. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks. The notification member now states its own optional getter graph, citing the supported signal return and inert unsupported return separately. show and close remain opaque; this factory closure does not discharge their uses.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:86-146; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Both supported and unsupported paths return exactly show/close/notification/supported. notification has a stated effectful-callable graph with read count 0..1: unsupported path has no signal, while the supported path returns the exact getter. Zero-or-one signal/cleanup; no own reactive read (close uses current). Captured title/options/handlers are left open in callbacks. The notification member now states its own optional getter graph, citing the supported signal return and inert unsupported return separately. show and close remain opaque; this factory closure does not discharge their uses."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        },
+        {
+          "label": "notification-read",
+          "rule": "strict-read-untracked",
+          "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:86-94,139-145 - On a browser with Notification support, notification() in the component body warns; in tracked JSX it is clean. The graph deliberately keeps min:0 because the unsupported browser/server path is inert. This pair does not prove support on every host. Chrome observation and digest rebinding are pending."
+        }
+      ],
+      "memberClosures": {
+        "return.notification": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:86-94,139-145 - The unsupported branch returns () => null and reads nothing. The supported branch returns the exact signal getter allocated at line 94; each invocation reads it on the caller stack in ambient tracking. Count 0..1 preserves the support uncertainty; neither capability nor permission is assumed.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:90,94,139-145 - The inert branch returns null; the signal branch returns a native Notification or null. These are non-reactive return values under P1, not another accessor or caller callable.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:90,94,139-145 - Calling this getter allocates no signal, owner or computation. Allocation at line 94 belongs to the factory, not the getter.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-top-level-read-browser/node_modules/@solid-primitives/notification/dist/index.js:90,94,139-145 - Calling this getter invokes no caller callback. show/close/native handlers are separate opaque members and are not invoked by notification()."
+        }
+      }
+    },
+    "isNotificationSupported": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11. Server isServer=true short-circuits to boolean false; browser checks the native window Notification field. Both return plain booleans with no reactive source, owner or caller callback; P1 covers the platform property. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11. Server isServer=true short-circuits to boolean false; browser checks the native window Notification field. Both return plain booleans with no reactive source, owner or caller callback; P1 covers the platform property. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain returns: Every normal completion has the same browser-stated output shape/identity; no server replacement accessor, inert control or returned setter is admitted.",
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11. Server isServer=true short-circuits to boolean false; browser checks the native window Notification field. Both return plain booleans with no reactive source, owner or caller callback; P1 covers the platform property. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11. Server isServer=true short-circuits to boolean false; browser checks the native window Notification field. Both return plain booleans with no reactive source, owner or caller callback; P1 covers the platform property. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11. Server isServer=true short-circuits to boolean false; browser checks the native window Notification field. Both return plain booleans with no reactive source, owner or caller callback; P1 covers the platform property. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 Source-reviewed draft only; Chrome probes and identity generation are pending.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [],
+        "reads": [],
+        "callbacks": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Native window membership and isServer are non-reactive under P1; one synchronous boolean return, no reactive allocation or callable invocation.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Native window membership and isServer are non-reactive under P1; one synchronous boolean return, no reactive allocation or callable invocation.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Native window membership and isServer are non-reactive under P1; one synchronous boolean return, no reactive allocation or callable invocation.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/notification-createNotification-module-scope/node_modules/@solid-primitives/notification/dist/index.js:11 \u2014 Native window membership and isServer are non-reactive under P1; one synchronous boolean return, no reactive allocation or callable invocation."
+      }
+    }
+  }
+}

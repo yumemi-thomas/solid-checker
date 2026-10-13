@@ -1,0 +1,164 @@
+{
+  "authority": false,
+  "certification": false,
+  "capturedAt": "2026-10-03T04:49:54.677789+00:00",
+  "checkerBase": "c6d973abb2910340ed72322a95fd055cf13d7860",
+  "compiler": {
+    "upstream": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+    "implementation": "c04c48779812d3d87166da3741c625748458c62f",
+    "distribution": "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d",
+    "productionMainDistribution": "9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4",
+    "runtimeAudit": "2.0.0-rc.9",
+    "publicationRequired": false
+  },
+  "patch": {
+    "path": "checker-integration.patch",
+    "sha256": "sha256:e1a10567090bcd4151b13724451b4119d0a9aedb4bb517f4118bdebfa45d7d2b",
+    "compilerUriParameter": "@COMPILER_REPOSITORY_URI@",
+    "validation": "rendered Git reverse apply --check matches the complete local overlay"
+  },
+  "implementationInputs": [
+    {
+      "path": "packages/cli/bin/solid-checker.mjs",
+      "sha256": "sha256:d48baf069e9d25b84ab2906f59b2da15167186fb3dec91ec957f3912ce267acf"
+    },
+    {
+      "path": "packages/cli/scripts/development-feedback.mjs",
+      "sha256": "sha256:e9881eb405a3b94cb1917fa602a4ad19cb5496b71114f667f58431470650e8dd"
+    },
+    {
+      "path": "packages/cli/test/development-feedback.test.mjs",
+      "sha256": "sha256:4630455fd1e5928c22becfac604e308e0de36b405a5859528cb006e834648501"
+    },
+    {
+      "path": "rust/crates/solid-dialect/src/lib.rs",
+      "sha256": "sha256:a587b93613dc9d53e00f17b0f2a1418405769ebaae76704c2fd61899c569e255"
+    },
+    {
+      "path": "rust/crates/solid-dialect/src/solid_2.rs",
+      "sha256": "sha256:bc0c1a839be057d64169b28e310158906218c8fab69f531d8825ca6bcebaffc0"
+    },
+    {
+      "path": "rust/crates/solid-reactive-ir/src/lib.rs",
+      "sha256": "sha256:da07cc486277332db0ffb8268eac1813957d700b976c1dafc8d1b23554f6207b"
+    },
+    {
+      "path": "rust/crates/solid-reactive-ir/src/local_access.rs",
+      "sha256": "sha256:6e898bbf18a9e9de50f8ac833bb88bacbd662d3e73d26395fa6f6a7c7597709f"
+    },
+    {
+      "path": "rust/crates/solid-reactive-ir/src/execution_role.rs",
+      "sha256": "sha256:2963db96deb63de368bb1526ba49c76ef1c0a08ce872568ed4ba42049b5ad490"
+    },
+    {
+      "path": "rust/crates/solid-reactive-ir/src/projection.rs",
+      "sha256": "sha256:da6c9b49195ba05718b47a73be532f4abb39a7ba7e408f8f16355502df74eafa"
+    },
+    {
+      "path": "rust/dialects/solid-v2/rules/src/lib.rs",
+      "sha256": "sha256:5cc429dc5f39acdf781ba2ae355e7fcb2cc602630f35e0c9d96d5f3411921748"
+    },
+    {
+      "path": "rust/crates/solid-facts-backend/tests/diagnostics_process.rs",
+      "sha256": "sha256:2525a4c8d773de8b3cb93a8d66a61c608db851c121daa770491cdd2bfae8ff6b"
+    },
+    {
+      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+      "sha256": "sha256:d5d383d3739b00a862d2b24f1e54290a4d5320cd216c85c644cf4c059c50f77b"
+    }
+  ],
+  "checks": [
+    {
+      "path": "implementation-checks/verify-rc13.log",
+      "sha256": "sha256:82dcc91b9406babd870662b73ae4098708a038bbbf040f1afe2d6597f7118dd1"
+    },
+    {
+      "path": "implementation-checks/main-build-clippy.log",
+      "sha256": "sha256:50d4a7afa4f76e24401bcb887bff4088f5a181d89345a9f6d8a122049535093b"
+    },
+    {
+      "path": "implementation-checks/main-coverage.log",
+      "sha256": "sha256:ee5a99822acbd4c30c66f2397543783c2c2c1a17fddf19ce9a5bb3715800c3b4"
+    },
+    {
+      "path": "implementation-checks/main-ownership.log",
+      "sha256": "sha256:06e2875d71e4172437342549dfed337192bbbb4c6ed20e4ce9dfbd642ac5220f"
+    },
+    {
+      "path": "implementation-checks/cli-tests.log",
+      "sha256": "sha256:8cd6b115beb0b41a01bfa35fff37059367697b8dfcc775f1f1d9eb4cae9540c1"
+    },
+    {
+      "path": "implementation-checks/feedback-tests.log",
+      "sha256": "sha256:9cbb78ee1e3a2cbda3ff1f972369aa76638182b586222a6b771a42f73d3d28e3"
+    },
+    {
+      "path": "implementation-checks/published-typing-check.json",
+      "sha256": "sha256:3955ef9c75acda2ddbdd9f239c090734718517d0d456debe0f8b27c7fe5a3d44"
+    },
+    {
+      "path": "implementation-checks/pending-runtime-contrast.json",
+      "sha256": "sha256:647290fc25f60c400d9a2813f65ac49a930da0e134aa56d06b91797f81b15f01"
+    },
+    {
+      "path": "implementation-checks/application-comparison.json",
+      "sha256": "sha256:091e2fc07663e4ed17a7d19e48438111f0926ce91fa89af4193a8037d9344801"
+    },
+    {
+      "path": "implementation-checks/compiler-html-refusal.json",
+      "sha256": "sha256:cacdda6bec7dbbcfb5d79132b63994df8d7be9842013508894c6e27af64ebb2b"
+    }
+  ],
+  "summary": {
+    "rc13FullVerify": "passed",
+    "rc13FullVerifySeconds": 704.25,
+    "rustTests": 1565,
+    "rustIgnored": 0,
+    "rustTestBinaries": 32,
+    "fixtureProjects": 142,
+    "fixtureFindings": 745,
+    "fullVerifyCliTests": 292,
+    "finalCliTests": 294,
+    "finalFeedbackTests": 18,
+    "tscOracleCases": 102,
+    "ownershipCases": 41,
+    "mainBuildAndClippy": "passed",
+    "mainCoverage": "passed",
+    "mainOwnership": "passed",
+    "publishedTypingErrors": 0,
+    "applications": 8,
+    "provenViolationsBeforeFix": 8,
+    "provenViolationsAfterFix": 0,
+    "recordedInformationalReads": 8
+  },
+  "attempts": [
+    {
+      "stage": "initial integration",
+      "result": "private-child test expected old compiler identities; corrected in local overlay"
+    },
+    {
+      "stage": "initial full integration",
+      "result": "passed before precision change",
+      "seconds": 821.27
+    },
+    {
+      "stage": "precision full verification",
+      "result": "Rust passed; coverage caught the new snapshot inserted in the wrong order; exact snapshot reordered"
+    },
+    {
+      "stage": "final full verification",
+      "result": "passed",
+      "seconds": 704.25
+    }
+  ],
+  "remaining": [
+    "automatic browser collector",
+    "research package source model and warning selector port",
+    "unknown callback invocation and pending handling",
+    "package contract gaps",
+    "runtime event occurrence authentication",
+    "browser condition binding and atomic shared native/runtime sessions",
+    "unsupported compiler fact modes and partial generated operations"
+  ],
+  "scope": "Original source reanalyzed with RC.13; supplied browser observations retain RC.9. Raw read information does not prove intent or improve the historical selector accuracy."
+}

@@ -64,6 +64,10 @@ fn resolved() -> ResolvedImport {
             },
         )]),
         declaration_exports: std::collections::BTreeSet::new(),
+        unbound_declaration_exports: std::collections::BTreeSet::new(),
+        foreign_declaration_exports: std::collections::BTreeSet::new(),
+        forwarded_foreign_exports: std::collections::BTreeSet::new(),
+        runtime_withheld_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }
@@ -80,13 +84,50 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
     let exports = BTreeMap::from([(
         "version".into(),
         ContractExport {
+            callback_results: Vec::new(),
+            captured_lookup: None,
+            capture_sources: Default::default(),
+            captured_arguments: Default::default(),
+            captured_resource_slots: Default::default(),
+            capture_context_supported: false,
             kind: "value".into(),
             reactive_reads: ContractClaim::Known(Vec::new()),
             returns: ContractClaim::Known(None),
             callbacks: ContractClaim::Known(Vec::new()),
+            inline_accessor_invocations: Default::default(),
             owner_requirements: ContractClaim::Known(Vec::new()),
+            open_owner_requirements: Vec::new(),
+            open_return: None,
+            leaf_forbidden_operations: Vec::new(),
+            event_handler_props: Vec::new(),
             async_behavior: ContractClaim::Known(String::new()),
             open_claims: Default::default(),
+            creates_closed_empty: false,
+            returns_closed_empty: false,
+            returns_restated: Vec::new(),
+            creates_walk_clean: false,
+            creates_walk_declines: Vec::new(),
+            returns_walk_clean: false,
+            returns_value_completion: false,
+            returns_described_callables: Vec::new(),
+            returns_literal_structures: Vec::new(),
+            returns_reading_callables: Vec::new(),
+            member_alias_initializer: false,
+            member_alias_spelling: None,
+            returns_argument_containers: Vec::new(),
+            direct_callback_parameters: Default::default(),
+            guaranteed_callback_parameters: Default::default(),
+            direct_accessor_parameters: Default::default(),
+            direct_coerced_parameters: Default::default(),
+            direct_member_callback_parameters: Default::default(),
+            iterated_parameters: Default::default(),
+            result_access_parameters: Default::default(),
+            returned_invocations: Default::default(),
+            returned_member_effects: std::collections::BTreeMap::new(),
+            returned_callable_effects: None,
+            inherited_from: None,
+            context_premises: Vec::new(),
+            merged_props_return: None,
         },
     )]);
 
@@ -121,21 +162,66 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
     let exports = BTreeMap::from([(
         "version".into(),
         ContractExport {
+            callback_results: Vec::new(),
+            captured_lookup: None,
+            capture_sources: Default::default(),
+            captured_arguments: Default::default(),
+            captured_resource_slots: Default::default(),
+            capture_context_supported: false,
             kind: "function".into(),
             reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+                execution: None,
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(0),
                 path: None,
+                composed_owner: None,
+                composed_from: None,
             }]),
             returns: ContractClaim::Known(None),
             callbacks: ContractClaim::Known(Vec::new()),
+            inline_accessor_invocations: Default::default(),
             owner_requirements: ContractClaim::Known(Vec::new()),
+            open_owner_requirements: Vec::new(),
+            open_return: None,
+            leaf_forbidden_operations: Vec::new(),
+            event_handler_props: Vec::new(),
             async_behavior: ContractClaim::Known(String::new()),
             open_claims: Default::default(),
+            creates_closed_empty: false,
+            returns_closed_empty: false,
+            returns_restated: Vec::new(),
+            creates_walk_clean: false,
+            creates_walk_declines: Vec::new(),
+            // ADR 0035: the closure this test rebinds is the `returns: []`
+            // proposal, which only a consuming package's walk-clean function
+            // export publishes — so the package below is not a dialect one.
+            returns_walk_clean: true,
+            returns_value_completion: false,
+            returns_described_callables: Vec::new(),
+            returns_literal_structures: Vec::new(),
+            returns_reading_callables: Vec::new(),
+            member_alias_initializer: false,
+            member_alias_spelling: None,
+            returns_argument_containers: Vec::new(),
+            direct_callback_parameters: Default::default(),
+            guaranteed_callback_parameters: Default::default(),
+            direct_accessor_parameters: Default::default(),
+            direct_coerced_parameters: Default::default(),
+            direct_member_callback_parameters: Default::default(),
+            iterated_parameters: Default::default(),
+            result_access_parameters: Default::default(),
+            returned_invocations: Default::default(),
+            returned_member_effects: std::collections::BTreeMap::new(),
+            returned_callable_effects: None,
+            inherited_from: None,
+            context_premises: Vec::new(),
+            merged_props_return: None,
         },
     )]);
     let mut primary = resolved();
+    primary.package_name = "fixture-package".into();
+    primary.specifier = "fixture-package".into();
     primary.runtime_trace = ResolutionTrace {
         branch: "/exports/./node".into(),
         steps: vec![ResolutionTraceStep {
@@ -151,7 +237,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
         }],
     };
     let first = encode_inferred_entrypoint_workflow(
-        "solid-js",
+        "fixture-package",
         "2.0.0-rc.3",
         ".",
         exports.clone(),
@@ -160,6 +246,8 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
     )
     .unwrap();
     let mut alternate = resolved();
+    alternate.package_name = "fixture-package".into();
+    alternate.specifier = "fixture-package".into();
     alternate.runtime_trace = ResolutionTrace {
         branch: "/exports/./browser".into(),
         steps: vec![ResolutionTraceStep {
@@ -169,7 +257,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
     };
     alternate.declaration_trace = primary.declaration_trace.clone();
     let second = encode_inferred_entrypoint_workflow(
-        "solid-js",
+        "fixture-package",
         "2.0.0-rc.3",
         ".",
         exports,
@@ -244,11 +332,11 @@ fn compiler_certification_child_binds_the_live_pid_request_and_materialized_outp
         assert_eq!(response["nonce"], nonce);
         assert_eq!(
             response["compilerIdentity"],
-            "solid-v2:trace3:7f4e1135943c1fb01231d1bda707b4a1856a5607"
+            "solid-v2:trace3:c04c48779812d3d87166da3741c625748458c62f"
         );
         assert_eq!(
             response["compilerSourceManifestSha256"],
-            "sha256:613049ba60fa514c662bd9350adb4b0ed9c3031e4f80f2bd1ecb23d56846fde0"
+            "sha256:35f4874f646f9482d0549fdf052f0d37bd02ec47b5c024d5732b6d9796423a9a"
         );
         let map: ExecutionMap = serde_json::from_value(response["executionMap"].clone()).unwrap();
         assert!(map.semantic_model.source_operations_complete);

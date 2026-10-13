@@ -693,6 +693,59 @@ pub fn accept_authenticated_policy2(
     })
 }
 
+/// The verifier policy an authored contract carries (ADR 0198). Distinct from
+/// every certification policy, so an authored contract's semantic identity
+/// never equals a certified one's in any cache.
+pub const AUTHORED_POLICY: u32 = 3;
+
+/// Constructs analyzer typestate for an authored contract (ADR 0198): a
+/// one-case contract document the repository ships and reviews, with no
+/// certification receipt. Every contract-derived identity is recomputed here,
+/// as [`accept_authenticated_policy2`] does; the document's own digest stands
+/// where a receipt's would. The closed-claims root counts a positive-export
+/// claim, so a document that closes no domain but states positive semantics
+/// still binds, and one that states nothing is refused.
+#[doc(hidden)]
+pub fn accept_authored(
+    contract: NormalizedContract,
+    selected_artifact_case: &str,
+    document_digest: Digest,
+    verifier_build: &str,
+) -> Result<AcceptedContract, ReceiptValidationError> {
+    let selected_case = contract
+        .artifact_case(selected_artifact_case)
+        .ok_or_else(|| ReceiptValidationError::MissingArtifactCase {
+            artifact_case: selected_artifact_case.into(),
+        })?
+        .clone();
+    if contract.artifact_cases().len() != 1 {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "selectedArtifactCase",
+        });
+    }
+    let closed_claims_root = derive_closed_claims_root(&contract, &selected_case)?;
+    let receipt = AcceptanceReceipt {
+        receipt_version: 2,
+        wire_digest: document_digest.clone(),
+        semantic_model_version: contract.semantic_model_version(),
+        semantic_digest: contract.semantic_digest().clone(),
+        artifacts_digest: artifacts_digest(contract.package(), &selected_case),
+        closure_digest: selected_case.dependency_closure.clone(),
+        proof_root: document_digest,
+        closed_claims_root,
+        verifier: VerifierIdentity {
+            build: verifier_build.into(),
+            policy: AUTHORED_POLICY,
+        },
+        authentication: None,
+    };
+    Ok(AcceptedContract {
+        package: contract.package().clone(),
+        selected_case,
+        receipt,
+    })
+}
+
 /// Projects one normalized proposal into the semantic query shape used only
 /// while generating another open proposal in the same native graph
 /// transaction. This is deliberately not receipt authority: the synthetic
@@ -771,6 +824,18 @@ fn derive_closed_claims_root(
     selected_case: &super::ArtifactCase,
 ) -> Result<Digest, ReceiptValidationError> {
     let mut closed = BTreeSet::new();
+    if let Some(super::ModuleInitializationClaim::Inert) = selected_case.initialization {
+        // Like positive export claims below, this is an explicit semantic
+        // claim, not an inferred closure of an empty export census. Issuance
+        // must first discharge its authenticated module-initialization proof.
+        let mut hash = CanonicalHash::new(b"solid-checker-inert-module-claim-v1");
+        hash.text(contract.semantic_digest().as_str());
+        hash.text(&selected_case.id);
+        closed.insert(
+            SemanticClaimId::parse(format!("claim:v1:{}", hash.finish().as_str()))
+                .expect("canonical initialization claim digest is valid"),
+        );
+    }
     for (export_name, export) in &selected_case.exports {
         for path in super::validate::closed_claims(export) {
             let subject = SemanticClaimSubject {

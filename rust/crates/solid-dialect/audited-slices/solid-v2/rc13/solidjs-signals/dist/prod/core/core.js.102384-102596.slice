@@ -1,0 +1,12 @@
+function runWithOwner(e, n) {
+    const t = context;
+    const i = tracking;
+    context = e;
+    tracking = false;
+    try {
+        return n();
+    } finally {
+        context = t;
+        tracking = i;
+    }
+}

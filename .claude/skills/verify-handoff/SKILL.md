@@ -69,9 +69,10 @@ and rerun the same check — do not fan out into unrelated full-suite commands.
 
 Every commit must be individually green on the gates. Two proven traps: the
 dialect seam moves as one piece (solid-dialect vocabulary, solid-reactive-ir
-engine, and both rules catalogs cannot land in separate commits when the seam
-changes), and snapshot updates belong in the commit whose code moved the
-findings.
+engine, and every carried rules catalog cannot land in separate commits when
+the seam changes -- one catalog ships today, so this bites when a shared
+question and its Solid 2.0 answer are split), and snapshot updates belong in
+the commit whose code moved the findings.
 
 ## Report format
 

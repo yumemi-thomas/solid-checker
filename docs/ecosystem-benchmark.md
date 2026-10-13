@@ -65,12 +65,13 @@ repository audits its bundled 1.x contract against (see
 there is no floor/head split because there is only one pinned version to
 probe.
 
-Solid 2.x is audited at the exact RC.3 runtime tuple: `solid-js@2.0.0-rc.3`,
-`@solidjs/web@2.0.0-rc.3`, and `@solidjs/signals@2.0.0-rc.3`. That pin is the
-authority ceiling, so a later registry refresh cannot silently advance the
-benchmark to RC.4. For each compatible package version, selection still keeps
+Solid 2.x is audited at the exact RC.9 runtime tuple: `solid-js@2.0.0-rc.9`,
+`@solidjs/web@2.0.0-rc.9`, and `@solidjs/signals@2.0.0-rc.9` (since
+2026-09-27; it was RC.3 before, see the 2026-09-27 entry below). That pin is
+the authority ceiling, so a later registry refresh cannot silently advance the
+benchmark to RC.10. For each compatible package version, selection still keeps
 the oldest supported compatibility floor and the newest accepted release at
-or below RC.3, across all three runtime packages together.
+or below RC.9, across all three runtime packages together.
 When floor and head land on the same release for every runtime package, that
 is a single `kind: "only"` probe rather than two identical ones — this is how
 a beta-only package's exact compatibility window is preserved rather than
@@ -131,7 +132,124 @@ run; an entrypoint is what generation reports on inside one probe; an
 invocation is the one process execution that produces a result. Conflating
 any two of these misdescribes what a benchmark number is counting.
 
+Three more, about what a *certified* row covered and how it got there
+(2026-09-03):
+
+- **verified-complete** — a certified row whose published catalog carries an
+  accepted contract for every entrypoint its manifest declares, the root (`.`)
+  among them. `scripts/ecosystem-benchmark/lib/certified-coverage.mjs` is the
+  reader: it walks the published catalog for the documents whose package name
+  *and version* are the row's own, and every judgement below
+  (`isCompleteCoverage`, `hasUsableDenominator`, `isMeasuredCoverage`) lives
+  there.
+- **verified-partial** — a certified row covering fewer than that, reported as
+  `k of n` with the root's presence stated. `k of n` alone is not enough
+  information: `1 of 4` covering `./refresh` and `1 of 4` covering `.` are very
+  different answers to a consumer, so the root is always named.
+- **proposal lane** — which proposal a certification verified.
+  `reused-proposal` is the one `contract generate` already emitted for these
+  exact bytes and handed over; `generated-proposal` is one certification
+  produced itself, in its own scratch; `published-graph` is the
+  published-dependency-graph lane, which acquires, generates and certifies each
+  dependency and then certifies the artifact cases the plain lane refused for
+  want of them. Each row records the lane the certification audit reports
+  (`certificationAttempt.lane`) beside the lane the runner asked for
+  (`laneRequested`) — a graph preparation that cannot complete falls back to the
+  ordinary proposal, and the pair is what makes that visible.
+
+`verified` remains the sum of the two halves everywhere it appears, so a figure
+compared against an older report still means what it meant. What it stops
+meaning is "this package is described": a corpus-wide verified rate can rise
+while the surface actually under receipt shrinks, which is exactly what the
+split exists to expose. A certified row whose catalog could not be read is
+counted in neither half and reported as `coverage unmeasured` — an absent
+measurement is not a partial one — and so is a row whose manifest could not be
+read, which leaves `declaredEntrypoints: null` and therefore no denominator to
+be complete or short against. The checked-in report was measured with
+`certificationAttempt.coverage` in place, so its verified rows carry real
+complete/partial counts; the recorded split, and whatever remainder stayed
+unmeasured, is in `docs/precision-backlog.md`.
+
+One denominator caveat, because it is visible in the report: a wildcard subpath
+(`"./src/*": "./src/*"`) is *one* declared entry that expands to as many real
+entrypoints as the package ships, so a row can certify more entrypoints than it
+declares — `@kobalte/utils@0.9.2` declares 2 and certifies 20. There is then no
+ratio to state, the report says `20 certified, 2 declared via wildcard` instead
+of a nonsense `20 of 2`, and the row is never counted `verified-complete`: with
+no usable denominator, refusing completeness is the conservative direction. The
+wildcard is recorded where it can be seen — `countDeclaredEntrypoints` sets
+`declaredWildcard` when any `exports` key contains `*` — rather than inferred
+from `certified > declared`, because an expansion that happens to certify
+exactly as many entrypoints as the manifest declares is the same non-ratio and
+would otherwise have read as complete.
+
+### Choosing the lane
+
+A *partial* proposal whose refusal census names an exact dependency-composition
+case is routed to **entrypoint recovery** by default. Those cases refused for
+want of an accepted contract for a dependency, which is precisely what a
+composing lane supplies, and a row that needs one is a row that needs one
+wherever it appears in the corpus — so the request is a policy over the row's
+own census rather than a reviewed list of probe ids
+(`docs/adr/0072-composition-lane-by-refusal-census.md`). `--recover-probe <ID>`
+and `--recover-entrypoints` remain, and keep the job only they can do: forcing
+recovery for a row with *no* dependency frontier, where the lane answers a proof
+refusal instead.
+
+Recovery prepares the union — the cases the proposal generated *and* the refused
+frontier — and publishes what proves, so it is the lane to want. What it must
+not do is publish less than the proposal would have: a retained case the graph
+cannot prepare abandons the graph outright, and the row publishes its proposal
+exactly as it would have without the lane
+(`docs/adr/0071-independent-graph-case-preparation.md`). Recovery also refuses a
+prepared set above 32 artifact cases before doing any work. That is a measured
+resource deadline, not a semantic ceiling: 24 cases over 113 nodes prepares and
+certifies, while `@kobalte/core@2.0.0-alpha.0`'s 59 exceeded the runner's
+4096 MiB process-tree ceiling and cost the row all 59 of its certified
+entrypoints.
+
+`--dependency-graph-lane` (on both `contract certify` and the runner) still
+selects the **frontier-only** published-graph lane by name, and the policy never
+chooses it. The two lanes cover **different** artifact-case sets: the graph lane
+certifies exactly the cases the plain lane refused, the reused proposal exactly
+the ones it generated. Neither is a superset, so switching between them trades
+one population of receipts for another, and that trade was measured as a net
+loss on the 21 partial rows of the 2026-09-03 corpus — six rows that certify
+with a reused proposal (`@tanstack/solid-router` ×3, `@tanstack/solid-table`,
+`motion-solidjs` ×2) refused outright through the graph lane, against two
+(`@solid-primitives/sse@1.0.0-next.2` floor and head) that gained a certified
+root. Certifying both case sets into one catalog is what recovery now does, and
+it is why it, rather than the frontier-only lane, is the default.
+
+It now also routes a second shape, which has nothing to do with refused cases.
+A row can want an accepted dependency contract while every one of its artifact
+cases *generated*: the want is then recorded as `unaccepted-external-dependency`
+closure declines, which `partialProposalHasDependencyFrontier` cannot see
+because it reads artifact-case refusals. Those decline records carry exact
+`entrypoint`/`conditions` coordinates too, and `preparePublishedGraphCases` has
+always accepted coordinates rather than refusals, so the flag composes them the
+same way: acquire, generate and certify the named dependency, then regenerate
+the root behind it. Measured on `@solid-primitives/memo@2.0.0-next.2`, which
+has one case, none refused, and 21 declines naming `@solid-primitives/utils` —
+zero closure candidates become nine (seven `reads` withheld for `noRecipe`,
+two `creates` for `censusRefused`), at a cost of 291 ms → 17.3 s for the row
+and a seven-node graph. Nothing closes yet, and the row's own
+`contractContent` is byte-identical either way, because the benchmark reads
+that census from the generation pass that runs before the lane is chosen —
+read the lane's effect off `certificationAttempt.withheldClosureDetails`
+instead, which is where those nine candidates appear.
+
 ## Discovery and execution
+
+An opt-in recovery request also handles a single generated artifact case whose
+ordinary certification refuses an exact callback-flow demand. It tries the
+ordinary proposal first and retries through graph preparation only in a fresh
+catalog, for `argument-binding` or `callable-path` refusals carrying a demand
+identity. Successful proposals, existing publications and multi-case proposals
+retain their previous behavior. The audit records the original unproved claim
+and the graph's actual demand plans. A graph certificate may leave that
+behavior open; entrypoint coverage does not imply every proposed operation was
+proved. See [ADR 0082](adr/0082-single-case-callback-graph-retry.md).
 
 Discovery is the only network-enabled step. It reads the live npm registry,
 selects rows and probes, and writes the manifest:
@@ -175,7 +293,49 @@ Bun install invocations it needs per probe:
 ```sh
 make ecosystem-sentinel     # the pinned regression subset
 make ecosystem-benchmark    # every row's every probe
+make ecosystem-regression   # every row, compared against the pinned report; fails on a lost receipt
 ```
+
+`ecosystem-regression` is the certification regression gate. It runs the same
+full corpus as `ecosystem-benchmark`, writes its reports under
+`rust/target/ecosystem-regression/` so the pinned `benchmarks/ecosystem/report.json`
+is never moved by a gate run, and evaluates
+`scripts/ecosystem-benchmark/certification-regression-thresholds.json`, whose one
+rule is `maxCertificationRegressions: 0`: no row the pin certified may come back
+uncertified (refused, infrastructure failure, or not attempted at all). The
+comparison is the report's `combined.baseline.certificationRegressions`, which
+is separate from the generation-outcome `regressions` because the two move
+independently -- a row keeps emitting a complete contract while its receipt is
+refused. It exists because twelve receipts were lost between the 2026-09-04 pin
+and commit `01b84ada` with every other gate green: `make verify` does not run
+the corpus (registry access, several minutes of compute), and the three-row
+contract corpus cannot see a receipt lost in a row it does not contain. Run it
+before landing a change to the certifier, the Type Facts producer, the
+generator, or this runner; repinning remains a deliberate
+`make ecosystem-benchmark`. The threshold refuses a run that supplied no
+`--baseline` rather than passing it, since a ceiling on lost receipts means
+nothing without the pin.
+
+Both certifying targets pass `--probe-recipe-corpus
+scripts/ecosystem-benchmark/probe-recipes` (`ECOSYSTEM_PROBE_RECIPES` in the
+Makefile), so a `creates` candidate whose claim a checked-in recipe names is
+vetoed and closed, and one no recipe names is served by a synthesized veto or
+withheld by name (ADR 0036). Until 2026-09-05 neither target passed it: every
+candidate in the corpus was withheld as `noRecipe` (1664 on the run that
+measured it), rows certified with the domain open, and the pinned report
+described no closure at all. The pin taken with the corpus is the first that
+does; `withheldClosureReasons` on each row says what the corpus still cannot
+decide: `noRecipe` (no recipe and no stated call signature to synthesize one
+from), `censusRefused` (the implementation census declined the candidate),
+`vetoUnreproducible` (a synthesized veto the pinned interpreter cannot run for
+the artifact case even with ADR 0037's reproduction condition added — before
+that ADR, chiefly a graph dependency such as `solid-js` whose `.` Node's own
+`node` condition resolves to `dist/server.js` where the witness read
+`dist/solid.js`; now a closure the added `browser` condition does not
+reproduce or is not neutral for), `vetoThrew` / `vetoTimedOut` / `vetoRunRefused` (the worker's
+own failure, budget, or refusal, with the account in the record's reason),
+`vetoIncomplete` (a record with no account), and `dependencyWithheld` (a parent
+composing over a dependency's withheld claim).
 
 Reports are named for the scope that produced them. Only an unfiltered run
 writes the canonical `benchmarks/ecosystem/report.json` and `report.md`;
@@ -196,6 +356,26 @@ measure against the possibly-stale checked-in `bin/solid-checker-rust`. The
 sentinel uses a fresh debug build to preserve its deliberate timeout-class
 probe; the full corpus uses a fresh release build so its duration represents
 shipped package generation. See `scripts/ecosystem-benchmark/README.md`.
+
+A Solid 2 probe's install is completed with `@solidjs/web` at the same version
+as its pinned `solid-js` when the manifest row pinned `solid-js` alone and the
+manifest's release catalog lists that `@solidjs/web` version
+(`solidRuntimeCompletion` in `run.mjs`). A Solid 2 application always installs
+the two together -- the DOM half left `solid-js/web` for its own package -- and
+a package whose runtime imports `@solidjs/web` routinely declares only
+`solid-js` as a peer: `@tanstack/solid-query@6.0.0-rc.0` and
+`@tanstack/solid-query-persist-client@6.0.0-rc.0` did, and installing their
+declared peers alone left the import unresolved, so the checker refused all
+four of their rows with "`@solidjs/web` is not installed above …", a statement
+about the benchmark's environment rather than the package. The result records
+what was added under `runtimeCompletion` (`{}` when the pin was installed as
+is) and `installedVersions` shows it; `solid` stays the manifest's own pin.
+Solid 1 probes are never completed, since `solid-js/web` ships inside
+`solid-js` there, and a `solid-js` version whose `@solidjs/web` twin the
+discovery never saw is not substituted. The refusals this does *not* touch are
+the genuine ones: `@solid-primitives/favicon` and `drag-drop` import
+`solid-js/web`, which `solid-js@2` no longer exports, and stay refused as
+`dependency-target-not-exported`.
 
 The runner uses up to eight workers, bounded by the host's available CPU count,
 and accepts `--concurrency N` for an explicit comparison. Reports retain
@@ -270,6 +450,35 @@ Two other engine-side experiments were measured and not kept: writing the
 private project from eight threads raised system time from 3 s to 11 s per
 certification on APFS with no wall gain, and deferring its removal to a thread
 joined at process exit moved nothing off the slot.
+
+Two later facts about these numbers (2026-09-06). First, they depend on the
+host's power state: the binary that pinned 85 s on 2026-09-05 measured 172 s
+and 1,755 CPU-seconds the next day on the same host on battery in Low Power
+Mode, and the current binary 197 s there against 104 s on mains an hour later,
+so a wall time is only comparable to the pin when `pmset -g` shows the same
+`powermode`. Second, with the recipe corpus the graph lanes run one
+probe-gate batch per node, and a batch's cost is its sessions (about 0.1 s of
+launch each) plus a census between sessions that hashes the pinned Node
+executable, the verifier image and the Type Facts image (263 MB); the batches
+of a pass now run side by side and each census hashes its labels side by side
+(`docs/adr/0036-…`, 2026-09-06 amendment), which took `motion-solidjs@0.6.0`
+from 88 s to 31 s alone. Corpus-wide the gates are about 400 thread-seconds of
+a roughly 2,000 CPU-second run; the census is a policy choice, not a tuning
+knob, and is discussed in docs/precision-backlog.md.
+
+A third fact (2026-09-14): the pinned 1,316 s run was four rows' serial
+recovery chains, not the drain. The growing-prefix case selection and the
+per-session re-hash of the pinned images are gone (ADR 0059 amended, ADR
+0102); `phase21/2026-09-14-corpus-wall-levers.md` under
+docs/package-contract-v2/ has the decomposition and the single-row
+before/after. The runner hands certification children
+`SOLID_CHECKER_RECOVERY_TRIAL_CONCURRENCY` (recovery trials of one row side by
+side, set to 4). `SOLID_CHECKER_CERTIFICATION_PARALLELISM` caps the verifier's
+own fan-out and exists for hosts that want it; the runner deliberately leaves
+it unset, because a cap sized to a child's core share serialized the tail row
+(see the phase note's second pass). Note that `--timeout`
+bounds certification as well as generation, so a single-row measurement of a
+recovery row needs the Makefile's 1800.
 
 `contract certify` no longer regenerates the proposal inside the benchmark:
 generation runs under the probe's certification importer and its emission
@@ -2543,6 +2752,36 @@ three prior install failures for two additional generation failures and produced
 one more contract overall; no no-contention substitution was made. The reports
 therefore preserve 297/97/17/3/2 rather than presenting a corrected composite.
 
+## 2026-09-27 rediscovery: the audited Solid 2 ceiling is RC.9
+
+`AUDITED_SOLID_2` moved from `2.0.0-rc.3` to `2.0.0-rc.9` (owner decision:
+rc.9 is the audited release, rc.0-rc.8 are analyzed under SC9014), and the
+manifest was rediscovered against the live registry. That run is also a month
+of ordinary registry drift, so not every change is the ceiling's:
+
+- the ceiling's own: the three official runtime rows are `2.0.0-rc.9`; 118
+  Solid 2 head and `only` probes install `solid-js@2.0.0-rc.9` where 117
+  installed rc.3 (`@kobalte/core@2.0.0-alpha.2` peers exactly rc.3, so its one
+  probe stays there);
+  the official `@solidjs/*` companions (`diagnostics`, `element`, `h`, `html`,
+  `universal`) are rc.9; `@solidjs/testing-library@1.0.0-beta.3` and
+  `@solidjs/prerender@0.2.0` gained a `solid2` row; and the tanstack router and
+  query floors moved to rc.6/rc.8 where their new releases no longer accept
+  rc.0/rc.2;
+- drift: 307 -> 309 rows and 418 -> 421 probes (Solid 2: 250 -> 253); 213
+  rows changed in all (including `@solidjs/router` next.18 ->
+  next.30, `@kobalte/core` alpha.0 -> alpha.2, the tanstack Solid 2 rows rc.2
+  -> rc.6/rc.8, and three primitives), with 32 exclusions added.
+  `@tanstack/charts` was re-reviewed at 0.18.0: `./solid` is unchanged and its
+  one new subpath, `./renderer/rect`, falls in the excluded set.
+
+Every non-floor Solid 2 probe now pins `@solidjs/signals@2.0.0-rc.9` rather than
+rc.6: rc.9's and rc.8's `solid-js` declare `^2.0.0-rc.9` and `^2.0.0-rc.8`, which
+rc.6 no longer satisfies (`lib/runtime-pins.mjs`). The rc.0 floors keep rc.0.
+This is a re-pin, so the install-lockfile cache re-resolves those probes on the
+first corpus run. The pinned `benchmarks/ecosystem/report.json` still describes
+the rc.3 manifest until it is re-pinned.
+
 ## 2026-08-26 authority run: audited Solid 2 RC.3 tuple and framework scopes
 
 Discovery now caps the Solid 2 release catalog at `2.0.0-rc.3`. The three
@@ -2614,6 +2853,104 @@ the registry from the install phase entirely on a warm cache while every
 expected package is still verified by version and lock integrity against the
 manifest. Total CPU is the stable figure to compare between changes; wall time
 alone says as much about the host's other load as about the checker.
+
+## The accepted-contract lane, and why the runner cannot consume a sibling row's receipt
+
+First, a correction to
+`docs/package-contract-v2/phase21/2026-09-01-dependency-composition-scoping.md`
+§3.1, which lists `--accepted-contracts` as `contract certify`'s accepted-lane
+flag: **`contract certify` has no such flag.** Its whole argument surface is
+`--package-root --integrity --catalog --entrypoint --conditions
+--certification-importer --issuer-configuration --trust-configuration-output
+--audit-output --proposal --proposal-refusal-audit --registry-origin
+--output --plan-contract-certification --certification-plan-output
+--execute-contract-certification`. `--accepted-contracts` is an argument of the
+*native analyzer*, forwarded by `generate-package-contract.mjs:876-877,975-976`
+when a caller passes the `acceptedContractCatalog` /
+`receiptTrustConfiguration` options — and no certify code path passes them.
+
+So the dependency evidence `contract certify` can actually produce today comes
+from one place: the **published-graph lane**, which certifies the dependency
+graph *inside the same install, under one issuer, in one native transaction*,
+dependency-first (`preparePublishedGraph`, `certify-contract.mjs:1666-1745`).
+Authenticated dependency composition exists only there —
+`authenticate_dependency_receipts` is a method on `PublishedContractGraphPlan`
+(`contract_certification/dependencies.rs:404-427`), so every receipt it
+authenticates was issued for a node of that same graph.
+
+That lane is engaged only as a **fallback**, when root proposal generation
+throws outright (`certify-contract.mjs:2302-2333`). A root generation that
+succeeds while refusing individual artifact cases — the common shape — keeps the
+private graph out of the run entirely, and `--proposal` reuse short-circuits
+ahead of the fallback. The runner's `attemptCertification`
+(`scripts/ecosystem-benchmark/run.mjs:1585-1629`) passes `--catalog` (the
+catalog each probe *publishes*, not one it reads) plus the issuer, trust and
+audit paths, and always `--proposal`, so in practice no benchmark row consults
+any dependency's proof unless its root generation failed.
+
+**Adding a host-supplied accepted lane that routes one row's published receipt
+into a later row cannot authenticate, and would only turn a silent absence into
+a refusal.** A receipt binds five install-specific identities, and each probe
+gets a fresh temporary install *and* a fresh issuer:
+
+1. **Issuer scope and seed.** `run.mjs:1599-1606` writes
+   `scope: ecosystem-benchmark:<sha256 of this probe's catalog path>` with a
+   fresh `randomBytes(32)` seed. `authenticate_dependency_receipt`
+   (`rust/crates/solid-facts-backend/src/contract_certification/dependencies.rs:2080-2085`)
+   requires `receipt.issuer_kind()`, `issuer_scope()` and `revocation_epoch()` to
+   equal the *parent's* configured issuer, so a sibling probe's receipt is
+   `TrustMismatch`.
+2. **`bindings.importer`.** An absolute path to the certification importer
+   written beside the producing probe's package root
+   (`.solid-checker-certification-<hash>.mjs`, where the hash is over that
+   package root and that catalog path). The consumer's dependency edge names an
+   importer inside the consumer's own install, so the check at `:2040-2044`
+   fails with `ReceiptMismatch { field: "importer" }`.
+3. **`bindings.resolvedImportRoot`.** `policy2_resolved_import_root`
+   (`contract_certification/policy2_receipt.rs:659-676`) hashes the whole
+   `ResolvedImport`, which carries `importer`, `package_root` and
+   `package_real_root` (`artifact_resolution.rs:468-495`). Correcting (2) by hand
+   therefore breaks (3), which is the point.
+4. **`import.exports[*].runtime.module.path`** — the resolver-side binding the
+   JS half consumes as `acceptedDependencies[specifier].exports[name].runtime`
+   (`artifact-resolution.mjs:1937-1954`) — is an absolute path inside the
+   producing install, which does not exist in the consumer's.
+5. **`lockfileDigest` / `lockLocator`** participate in
+   `CanonicalDependencyNodeIdentity` (`dependencies.rs:300-324`), so even a
+   byte-identical package copied between installs is a different graph node.
+
+None of these is incidental: they are what stops a receipt for one resolution
+from laundering a different one. The reachable form of "consume a dependency's
+proof" in this harness is therefore **not** a shared catalog across rows. It is
+to engage the existing published-graph lane for the artifact cases that need it —
+today it is skipped whenever root generation succeeds, so a case refused with an
+exact dependency-composition refusal
+(`accepted dependency <specifier> has no exact runtime binding for export <name>`)
+never gets a graph node for that specifier.
+
+**Fail-closed rules the composition path already enforces**, and that a future
+change must not weaken (see `docs/package-contract-v2/phase21/2026-09-01-dependency-composition-scoping.md`
+§4): a refused or absent dependency contributes nothing and its absence is loud
+(`SemanticQueryError::MissingImport`, never silence); a version, integrity or
+closure mismatch refuses fatally rather than falling back; a project may not
+nominate its own issuer; claims are never inherited transitively — each edge
+needs its own receipt, one verifier build across the graph; witness coverage is
+total-or-refuse, with no `inapplicable` variant, so a composition that cannot
+prove a claim must leave the demand open.
+
+**What an unaccepted dependency costs, exactly.** Every
+`unaccepted-external-dependency` hazard is recorded with
+`affectedDomains = all nine` and `affectedExports = []`
+(`artifact-resolution.mjs`, `module_closure.rs:300-306`), and
+`ClosureManifest::open_domains` (`artifact_resolution.rs:416-427`) feeds them to
+`ExportSemantics::open_call_domains` (`contract_semantics.rs:685-689`). One
+unaccepted external therefore opens all nine claim domains of *every* export in
+that artifact case. Opening a domain does not erase the operations already
+derived — `@solid-primitives/until@0.1.1` publishes its `callbacks[{from:{arg:0}}]`
+invoke operation with all nine domains open — but it does make `closed` for that
+domain unreachable. Since every `@solid-primitives/*` package imports `solid-js`,
+and `solid-js@1.9.14` cannot itself be an accepted dependency, **no row in this
+corpus can publish a closed `callbacks` claim.**
 
 ## Exit-code contract
 

@@ -27,6 +27,16 @@ Unproved (no accessor is in scope at the shorthand, so no claim may be made):
 - `importedShorthand` -- resolves to an import specifier declaring no accessor;
 - `namespaceShorthand` -- a namespace object.
 
+Since ADR 0181 the generator also proposes each shorthand object as a
+structural return, its members resolved through the binder's own reference
+table. The proved exports carry their accessor as before. `shadowedShorthand`
+proposes its member as the caller's parameter 0, which is what the shorthand
+names. `unprovenShorthand`, `importedShorthand` and `namespaceShorthand`
+propose a `plain` member, which is the generator's optimistic default; the
+certifier's census proves a plain member only from primitive evidence, so a
+function or a namespace there is left `unknown` and the return withdrawn.
+None of the four makes an accessor claim.
+
 `ambiguous.ts` / `ambiguous/index.ts` (a name two relative targets could
 answer), `cycle-a.ts` / `cycle-b.ts` (a re-export cycle) and
 `node_modules/bare-package` are *not* reached from `./index.ts` and so are not

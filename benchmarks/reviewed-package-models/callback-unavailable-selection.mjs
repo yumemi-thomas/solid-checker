@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { existsSync,readFileSync,writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { hash,read } from './catalog.mjs';
+const [selectionArg,outputArg,...reports]=process.argv.slice(2),selectionPath=resolve(selectionArg),output=resolve(outputArg),selection=read(selectionPath);
+assert(!existsSync(output)); const missing=new Set();
+for(const path of reports) for(const row of read(resolve(path)).results) if(!row.excludedBeforeExecution&&!row.attributionEnabled) missing.add(row.packagePins[0].package+'\0'+row.provenance.export);
+const rows=selection.rows.filter(row=>missing.has(row.package+'\0'+row.export)); assert(rows.length,'No unavailable observation to retry');
+writeFileSync(output,JSON.stringify({...selection,rows,parentSelectionPath:selectionPath,parentSelectionSha256:hash(readFileSync(selectionPath))},null,2)+'\n');
+console.log(JSON.stringify({selectedExports:rows.length}));

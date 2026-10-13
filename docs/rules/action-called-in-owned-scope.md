@@ -2,21 +2,31 @@
 
 `SC2002` · **error** · violation
 
-An `action` is invoked inside an owned scope — a component body or a
-children-capable computation.
+An `action` is invoked inside an owned scope — a component body, a
+`createRoot` body, or a children-capable computation.
 
 ## What it does
 
 Flags calls to functions created with `action()` when they execute under a live
-children-capable owner: a component body, a memo, or an effect's compute
-function. Actions may be invoked from event handlers, effect apply callbacks,
+children-capable owner: a component body, a `createRoot` body, a memo, or an
+effect's compute function. Actions may be invoked from event handlers, effect apply callbacks,
 and the children-forbidden leaf scopes `onSettled` and `createTrackedEffect` —
 the runtime's action guard uses the same owner test as the write guard and
 explicitly exempts leaf imperative scopes.
 
-`untrack` is **not** an escape hatch: it clears tracking but keeps the owner
-context, so an action invoked inside `untrack(...)` within a memo or component
-body still throws `ACTION_CALLED_IN_OWNED_SCOPE` at runtime.
+A `createRoot` body runs during the call with the new root as the ambient
+owner, and the action guard has no root exemption on any release: an action
+called directly in the body, or in a memo compute nested in it, throws
+`ACTION_CALLED_IN_OWNED_SCOPE` (probed on every published `2.0.0-rc.0` to
+`rc.9` triple, dev client builds). A function passed to `createRoot` by name
+is the root body too, resolved by symbol to its same-file declaration. An
+effect apply, `onSettled` or an event listener inside the root keeps its own,
+legal, answer.
+
+`untrack` and `flush(fn)` are **not** escape hatches: each runs its callback
+inline and keeps the owner context, so an action invoked inside `untrack(...)`
+or `flush(() => ...)` within a memo, component body or root body still throws
+`ACTION_CALLED_IN_OWNED_SCOPE` at runtime.
 
 ## Why is this bad?
 
@@ -44,6 +54,9 @@ function TodoList() {
   save(defaultTodo); // Called during component setup — starts a transaction under a live owner.
   return <For each={todos()}>{(todo) => <Row todo={todo} />}</For>;
 }
+
+// A root body runs under the root, a children-capable owner.
+createRoot(() => save(defaultTodo));
 ```
 
 Examples of **correct** code for this rule:

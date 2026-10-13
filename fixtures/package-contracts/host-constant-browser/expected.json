@@ -1,0 +1,270 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "e369057f8cadb67c70bd2ece558d790ef3dc4f602c7affcd578b56732e6e41bf",
+            "path": "./index.js",
+            "sha256": "0bff285d4952e758594fbbd00f5fcebe7a061618e03e2ed45bd1f583e33992bd"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "1d978d1e62263b6556055134b36f87f6dfe1a14557d3c96359afeb80b5509796"
+          },
+          "exports": {
+            "guardedCleanup": "summary-736b6c20a4d84c2b484d97a3cbe62e665ec5e670d87fe242dfd75719ef2914c9",
+            "namespaceGuard": "summary-274dd8fc62d08cd7731db5187608988ec84b627dd8bd0511fcfb130fcb93eb62",
+            "onElementConnect": "summary-274dd8fc62d08cd7731db5187608988ec84b627dd8bd0511fcfb130fcb93eb62",
+            "shadowedGuard": "summary-809f8f5b1d4894e116f72e921b34cb946de9d93d0ee9560fad9f4769d1fffff2"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:fe03b60f71540c53869d8c8e5a72a50eed98cf7d2a9272ee274e639a045fd878",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "fe03b60f71540c53869d8c8e5a72a50eed98cf7d2a9272ee274e639a045fd878"
+    },
+    "name": "host-constant-guard-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-274dd8fc62d08cd7731db5187608988ec84b627dd8bd0511fcfb130fcb93eb62": {
+      "call": {
+        "cleanups": [
+          "owner-requirement-0"
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "cleanup",
+            "owner": {
+              "requires": "required",
+              "requiresCleanup": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return-0",
+            "kind": "return",
+            "output": {
+              "kind": "invocation-result",
+              "parameter": 1
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-736b6c20a4d84c2b484d97a3cbe62e665ec5e670d87fe242dfd75719ef2914c9": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "cleanups": [
+          "owner-requirement-0"
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "cleanup",
+            "owner": {
+              "requires": "required",
+              "requiresCleanup": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-809f8f5b1d4894e116f72e921b34cb946de9d93d0ee9560fad9f4769d1fffff2": {
+      "call": {
+        "cleanups": [
+          "owner-requirement-0"
+        ],
+        "closed": [
+          "reads",
+          "returns"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "cleanup",
+            "owner": {
+              "requires": "required",
+              "requiresCleanup": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "isSameNode"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return-0",
+            "kind": "return",
+            "output": {
+              "kind": "invocation-result",
+              "parameter": 1
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "reads",
+          "returns"
+        ],
+        "reads": [
+          "read-0"
+        ],
+        "returns": [
+          "return-0"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

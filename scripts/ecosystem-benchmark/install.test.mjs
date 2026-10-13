@@ -14,9 +14,15 @@ import {
   createProject,
   installLockfileCacheEntry,
   installPackages,
+  lockAgreesWithOverrides,
+  lockCopies,
+  lockTextWithOverrides,
+  parseBunLock,
   readInstalledVersions,
   readLockIntegrity,
+  readPinnedInstallation,
   verifyInstall,
+  verifyPins,
   withTemporaryProject
 } from "./lib/install.mjs";
 
@@ -539,4 +545,216 @@ test("without a lockfile cache installs resolve exactly as before", async () => 
   const result = await installPackages({ projectDir: "/tmp/does-not-need-to-exist-for-this-fake", specs: ["solid-js@1.9.14"], spawnImpl: async request => { calls.push(request); return { status: 0, stdout: "", stderr: "", timedOut: false }; } });
   assert.equal(result.lockfileReuse, null);
   assert.deepEqual(calls[0].args, ["install", "--ignore-scripts", "--no-progress", "solid-js@1.9.14"]);
+});
+
+// ---------------------------------------------------------------------------
+// Overrides: the `@solidjs/signals` pin (and a consumer environment's closure
+// pins) travel as package.json overrides. The lockfile cache must key on them,
+// a spec-only entry that already agrees with them is inherited rather than
+// re-resolved, and verifyInstall holds every installed copy to the pin.
+// ---------------------------------------------------------------------------
+
+// Shaped exactly like Bun 1.4 writes one (trailing commas included).
+const BUN_LOCK = signals => `{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "solid-checker-ecosystem-probe",
+      "dependencies": {
+        "solid-js": "2.0.0-rc.0",
+      },
+    },
+  },
+  "packages": {
+    "@solidjs/signals": ["@solidjs/signals@${signals}", "", {}, "sha512-signals-${signals}"],
+
+    "solid-js": ["solid-js@2.0.0-rc.0", "", { "dependencies": { "@solidjs/signals": "^2.0.0-rc.0" } }, "sha512-solid"],
+  }
+}
+`;
+
+test("the cache key covers overrides, and an install without them keeps the spec-only key", () => {
+  const specs = ["solid-js@2.0.0-rc.0", "@x/y@1.0.0"];
+  const legacy = installLockfileCacheEntry("/cache", specs);
+  assert.equal(installLockfileCacheEntry("/cache", specs, {}), legacy, "no overrides is the key every existing entry has");
+  const pinned = installLockfileCacheEntry("/cache", specs, { "@solidjs/signals": "2.0.0-rc.0" });
+  assert.notEqual(pinned, legacy, "a pinned install never hits an entry resolved without the pin");
+  assert.notEqual(pinned, installLockfileCacheEntry("/cache", specs, { "@solidjs/signals": "2.0.0-rc.6" }));
+  assert.equal(
+    installLockfileCacheEntry("/cache", [...specs].reverse(), { b: "1", a: "2" }),
+    installLockfileCacheEntry("/cache", specs, { a: "2", b: "1" }),
+    "neither spec nor override order matters"
+  );
+});
+
+test("createProject writes the overrides, and nothing when there are none", async () => {
+  await withTemporaryProject(async dir => {
+    await createProject({ root: dir, specs: [], overrides: { "@solidjs/signals": "2.0.0-rc.6" } });
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).overrides, { "@solidjs/signals": "2.0.0-rc.6" });
+    await createProject({ root: dir, specs: [] });
+    assert.equal(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).overrides, undefined);
+  });
+});
+
+test("an overrides block is inserted where Bun writes one, and only into a lock that already agrees", () => {
+  const text = BUN_LOCK("2.0.0-rc.0");
+  const lock = parseBunLock(text);
+  assert.deepEqual(lockCopies(lock, ["@solidjs/signals"])["@solidjs/signals"], [
+    { locator: "@solidjs/signals", version: "2.0.0-rc.0", integrity: "sha512-signals-2.0.0-rc.0" }
+  ]);
+  assert.equal(lockAgreesWithOverrides(lock, { "@solidjs/signals": "2.0.0-rc.0" }), true);
+  assert.equal(lockAgreesWithOverrides(lock, { "@solidjs/signals": "2.0.0-rc.6" }), false, "a different release is a re-resolution");
+  const pinned = lockTextWithOverrides(text, { "@solidjs/signals": "2.0.0-rc.0" });
+  // Byte-for-byte what `bun install` rewrote this block to on Bun 1.4.0.
+  assert.ok(pinned.includes('  },\n  "overrides": {\n    "@solidjs/signals": "2.0.0-rc.0",\n  },\n  "packages": {'));
+  assert.deepEqual(parseBunLock(pinned).overrides, { "@solidjs/signals": "2.0.0-rc.0" });
+  assert.equal(lockAgreesWithOverrides(parseBunLock(pinned), { "@solidjs/signals": "2.0.0-rc.0" }), false, "a lock that already has overrides is not re-derived");
+});
+
+function pinnedFakeSpawn(calls, { frozenFails = false } = {}) {
+  return async ({ cwd, args }) => {
+    calls.push({ args, packageJson: JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")) });
+    if (args.includes("--frozen-lockfile")) {
+      return frozenFails
+        ? { status: 1, stdout: "", stderr: "lockfile had changes", timedOut: false }
+        : { status: 0, stdout: "frozen", stderr: "", timedOut: false };
+    }
+    writeFileSync(join(cwd, "bun.lock"), BUN_LOCK("2.0.0-rc.0"));
+    return { status: 0, stdout: "resolved", stderr: "", timedOut: false };
+  };
+}
+
+function seedLegacyEntry(cache, specs, signals) {
+  const entry = installLockfileCacheEntry(cache, specs);
+  mkdirSync(entry, { recursive: true });
+  writeFileSync(join(entry, "package.json"), JSON.stringify({ name: "probe", private: true, dependencies: { "solid-js": "2.0.0-rc.0" } }));
+  writeFileSync(join(entry, "bun.lock"), BUN_LOCK(signals));
+  return entry;
+}
+
+test("a pinned install inherits the spec-only entry that already resolves the pin, and stores it under its own key", async () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-install-locks-"));
+  const cache = join(root, "locks");
+  const specs = ["solid-js@2.0.0-rc.0"];
+  const overrides = { "@solidjs/signals": "2.0.0-rc.0" };
+  try {
+    seedLegacyEntry(cache, specs, "2.0.0-rc.0");
+    const project = join(root, "project");
+    mkdirSync(project);
+    await createProject({ root: project, specs, overrides });
+    const calls = [];
+    const result = await installPackages({ projectDir: project, specs, overrides, spawnImpl: pinnedFakeSpawn(calls), lockfileCache: cache });
+    assert.equal(result.lockfileReuse, "inherited");
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].args.includes("--frozen-lockfile"), "the inherited lock is installed frozen, never re-resolved");
+    assert.deepEqual(calls[0].packageJson.overrides, overrides);
+    assert.deepEqual(calls[0].packageJson.dependencies, { "solid-js": "2.0.0-rc.0" }, "the cached dependency set is kept");
+    const own = installLockfileCacheEntry(cache, specs, overrides);
+    assert.deepEqual(parseBunLock(readFileSync(join(own, "bun.lock"), "utf8")).overrides, overrides);
+
+    const again = join(root, "again");
+    mkdirSync(again);
+    await createProject({ root: again, specs, overrides });
+    const hit = await installPackages({ projectDir: again, specs, overrides, spawnImpl: pinnedFakeSpawn([]), lockfileCache: cache });
+    assert.equal(hit.lockfileReuse, "hit");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a spec-only entry that resolves another release is not inherited, and a failed frozen install re-resolves with the pin", async () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-install-locks-"));
+  const cache = join(root, "locks");
+  const specs = ["solid-js@2.0.0-rc.0"];
+  const overrides = { "@solidjs/signals": "2.0.0-rc.0" };
+  try {
+    const legacy = seedLegacyEntry(cache, specs, "2.0.0-rc.6");
+    const project = join(root, "project");
+    mkdirSync(project);
+    await createProject({ root: project, specs, overrides });
+    const calls = [];
+    const result = await installPackages({ projectDir: project, specs, overrides, spawnImpl: pinnedFakeSpawn(calls), lockfileCache: cache });
+    assert.equal(result.lockfileReuse, "miss");
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].args.includes("solid-js@2.0.0-rc.0"), "an ordinary install");
+    assert.deepEqual(calls[0].packageJson.overrides, overrides, "which carries the pin");
+    assert.match(readFileSync(join(legacy, "bun.lock"), "utf8"), /rc\.6/, "the spec-only entry is left alone");
+
+    rmSync(cache, { recursive: true, force: true });
+    seedLegacyEntry(cache, specs, "2.0.0-rc.0");
+    const second = join(root, "second");
+    mkdirSync(second);
+    await createProject({ root: second, specs, overrides });
+    const fallbackCalls = [];
+    const fallback = await installPackages({ projectDir: second, specs, overrides, spawnImpl: pinnedFakeSpawn(fallbackCalls, { frozenFails: true }), lockfileCache: cache });
+    assert.equal(fallback.lockfileReuse, "miss");
+    assert.equal(fallbackCalls.length, 2);
+    assert.deepEqual(fallbackCalls[1].packageJson.overrides, overrides, "the restart keeps the pin");
+    assert.equal(fallbackCalls[1].packageJson.dependencies, undefined, "and starts from a fresh project");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+const SIGNALS_PIN = {
+  "@solidjs/signals": { version: "2.0.0-rc.6", integrity: "sha512-rc6", required: true, resolvedFrom: "solid-js" }
+};
+const facts = (copies, resolution = { from: "solid-js", fromInstalled: true, path: "/p/node_modules/@solidjs/signals", hoistedPath: "/p/node_modules/@solidjs/signals", version: "2.0.0-rc.6" }) => ({
+  lockRead: true,
+  copies: { "@solidjs/signals": copies },
+  resolutions: { "@solidjs/signals": resolution }
+});
+const copy = (version, integrity = `sha512-${version === "2.0.0-rc.6" ? "rc6" : version}`, locator = "@solidjs/signals") => ({ locator, version, integrity });
+
+test("exactly one pinned copy at the pinned bytes, resolved by solid-js, verifies", () => {
+  assert.deepEqual(verifyPins(SIGNALS_PIN, facts([copy("2.0.0-rc.6")])), []);
+  const { ok } = verifyInstall({ expected: {}, versions: {}, integrity: {}, pins: SIGNALS_PIN, pinned: facts([copy("2.0.0-rc.6")]) });
+  assert.equal(ok, true);
+});
+
+test("a pinned probe is refused for a second copy, another release, other bytes, or no copy at all", () => {
+  const kinds = problems => problems.map(problem => problem.kind);
+  assert.deepEqual(
+    kinds(verifyPins(SIGNALS_PIN, facts([copy("2.0.0-rc.6"), copy("2.0.0-rc.9", "sha512-rc9", "solid-js/@solidjs/signals")]))),
+    ["duplicate-copies", "version-mismatch"]
+  );
+  assert.deepEqual(kinds(verifyPins(SIGNALS_PIN, facts([copy("2.0.0-rc.9")]))), ["version-mismatch"]);
+  assert.deepEqual(kinds(verifyPins(SIGNALS_PIN, facts([copy("2.0.0-rc.6", "sha512-republished")]))), ["integrity-mismatch"]);
+  assert.deepEqual(kinds(verifyPins(SIGNALS_PIN, facts([]))), ["missing"]);
+  // A closure pin a row never reaches is simply not installed.
+  assert.deepEqual(verifyPins({ seroval: { version: "1.5.4", integrity: "sha512-s", required: false } }, { lockRead: true, copies: { seroval: [] }, resolutions: {} }), []);
+});
+
+test("solid-js must resolve the pinned copy, and missing facts fail closed", () => {
+  const nested = { from: "solid-js", fromInstalled: true, path: "/p/node_modules/solid-js/node_modules/@solidjs/signals", hoistedPath: "/p/node_modules/@solidjs/signals", version: "2.0.0-rc.6" };
+  assert.deepEqual(verifyPins(SIGNALS_PIN, facts([copy("2.0.0-rc.6")], nested)).map(problem => problem.kind), ["unresolved-pin"]);
+  // A probe that installs no solid-js of its own (`@solidjs/diagnostics`) has nothing to resolve from.
+  assert.deepEqual(verifyPins(SIGNALS_PIN, facts([copy("2.0.0-rc.6")], { from: "solid-js", fromInstalled: false })), []);
+  assert.deepEqual(verifyPins(SIGNALS_PIN, null).map(problem => problem.kind), ["pin-unverified"]);
+  assert.deepEqual(verifyPins(SIGNALS_PIN, { lockRead: false, copies: {}, resolutions: {} }).map(problem => problem.kind), ["pin-unverified"]);
+  const { ok, problems } = verifyInstall({ expected: {}, versions: {}, integrity: {}, pins: SIGNALS_PIN });
+  assert.equal(ok, false, "an install hook that reports no pin facts is unverified, not verified");
+  assert.equal(problems[0].kind, "pin-unverified");
+});
+
+test("readPinnedInstallation reads every lock copy and what solid-js actually resolves", async () => {
+  await withTemporaryProject(async dir => {
+    writeInstalledPackage(dir, "node_modules/solid-js", "solid-js", "2.0.0-rc.3");
+    writeInstalledPackage(dir, "node_modules/@solidjs/signals", "@solidjs/signals", "2.0.0-rc.6");
+    writeFileSync(join(dir, "bun.lock"), `{"packages":{"@solidjs/signals":["@solidjs/signals@2.0.0-rc.6","",{},"sha512-rc6"],"solid-js":["solid-js@2.0.0-rc.3","",{},"sha512-s"],},}`);
+    const hoisted = readPinnedInstallation(dir, SIGNALS_PIN);
+    assert.deepEqual(verifyPins(SIGNALS_PIN, hoisted), []);
+    assert.equal(hoisted.resolutions["@solidjs/signals"].version, "2.0.0-rc.6");
+
+    // A nested copy under solid-js is what solid-js reads, whatever is hoisted.
+    writeInstalledPackage(dir, "node_modules/solid-js/node_modules/@solidjs/signals", "@solidjs/signals", "2.0.0-rc.9");
+    writeFileSync(join(dir, "bun.lock"), `{"packages":{"@solidjs/signals":["@solidjs/signals@2.0.0-rc.6","",{},"sha512-rc6"],"solid-js/@solidjs/signals":["@solidjs/signals@2.0.0-rc.9","",{},"sha512-rc9"],"solid-js":["solid-js@2.0.0-rc.3","",{},"sha512-s"],},}`);
+    const nested = readPinnedInstallation(dir, SIGNALS_PIN);
+    assert.equal(nested.resolutions["@solidjs/signals"].version, "2.0.0-rc.9");
+    assert.deepEqual(
+      verifyPins(SIGNALS_PIN, nested).map(problem => problem.kind),
+      ["duplicate-copies", "version-mismatch", "unresolved-pin"]
+    );
+  });
 });

@@ -10,10 +10,11 @@ use std::{
 use sha2::{Digest as _, Sha256};
 use typefacts::{
     AnalysisDemand, ArgumentBindingDisposition, ArrayShape, CallKind, Callability,
-    CertificationInvocationContext, ConstantValue, ConstantValueKind, Constructability,
-    ConstructionWitness, DemandGroup, FinitePartitionAxis, InvocationDemand, InvocationDomain,
-    Location, ModuleGraphDemand, ModuleResolution, PrimitiveValueDomain, Producer, ReferenceSpace,
-    ResolvedCallValidity, RuntimeValueDomain, Session, SessionError, SourceHash,
+    CertificationInvocationContext, CloseOutcome, ConstantValue, ConstantValueKind,
+    Constructability, ConstructionWitness, DemandGroup, FinitePartitionAxis, InvocationDemand,
+    InvocationDomain, Location, ModuleGraphDemand, ModuleResolution, PrimitiveValueDomain,
+    Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain, Session, SessionError,
+    SourceHash,
     v3::{EntityDemand, FileChange},
 };
 
@@ -161,7 +162,19 @@ fn close_is_bounded_when_the_producer_exits_between_requests() {
     thread::sleep(Duration::from_millis(100));
 
     let started = Instant::now();
-    assert!(session.close().is_err());
+    // Two claims, and the first is what keeps the second honest. `close` still
+    // sends its goodbye and waits for it, so reaching
+    // `ProducerAlreadyGone` proves it went through the send/wait path and
+    // *observed* the dead producer rather than short-circuiting somewhere
+    // earlier -- without which the timing bound below could pass on a `close`
+    // that never attempted the exchange at all.
+    //
+    // This assertion used to be `is_err()`. The outcome is the same
+    // observation; what changed is that a producer which is already gone is no
+    // longer reported as a failure to close it, because the session is closed
+    // and the child terminated on every path out of `close`. See
+    // `CloseOutcome`.
+    assert_eq!(session.close().unwrap(), CloseOutcome::ProducerAlreadyGone);
     assert!(
         started.elapsed() < Duration::from_secs(1),
         "close waited {:?} after the producer had already exited",
@@ -1739,6 +1752,28 @@ fn public_session_owns_the_retained_process_lifecycle() {
     session.close().unwrap();
 }
 
+/// A producer killed before `analyze` is restarted, replayed, and re-asked.
+///
+/// **Which crash this catches depends on the machine, which is worth knowing
+/// before trusting a green run.** `kill -9` returns as soon as the signal is
+/// queued, so where the teardown lands inside `analyze` is a scheduling
+/// outcome:
+///
+/// - Idle: the producer is gone before the analyze exchange, so `exchange`'s
+///   own restart-and-replay covers it. That is the path this test takes
+///   essentially always on an unloaded host.
+/// - Loaded: the analyze exchange completes first and the producer dies during
+///   the `Operation::Symbols` phase that follows. Those exchanges cannot
+///   re-send themselves -- they carry the analysis's `state_token` -- so
+///   recovery is the transport-failure arm of `analyze_groups`, which restarts
+///   and redoes the analysis.
+///
+/// The second path had no recovery at all until 2026-09-17, and this test went
+/// green on every idle run while missing it. Reproducing it needs real
+/// contention: six concurrent copies of this target on a 14-core host failed
+/// **28 of 84 runs** before the fix and 0 of 180 after. A single idle run
+/// proves only the first path, so exercise the target under load before
+/// concluding the recovery works.
 #[cfg(unix)]
 #[test]
 fn analyze_restarts_the_producer_and_replays_updates_after_a_crash() {
@@ -2167,5 +2202,269 @@ fn cancellation_cannot_strand_a_sent_update() {
     );
     let facts = session.analyze(&AnalysisDemand::default()).unwrap();
     assert_eq!(facts.generation(), 2);
+    session.close().unwrap();
+}
+
+fn uncensused_forms_project() -> PathBuf {
+    repository_root()
+        .join("apps/solid-typefacts/internal/typefacts/testdata/uncensused-invoking-forms/tsconfig.json")
+        .canonicalize()
+        .unwrap()
+}
+
+fn identifier_location(path: &std::path::Path, source: &str, needle: &str) -> Location {
+    let start = source.find(needle).unwrap();
+    Location {
+        path: path.to_string_lossy().into_owned().into(),
+        start_byte: start as u64,
+        end_byte: (start + needle.len()) as u64,
+    }
+}
+
+/// The uncensused-invoking-form census over the real wire.
+///
+/// The Go producer tests classify every kind in process; what they cannot show
+/// is that the rows survive CBOR, the closed kind enum, and the client's own
+/// validation. Both halves of the field's meaning are pinned here: a tagged
+/// template arrives as a `tagged-template` row, and an export whose body holds
+/// only a plain call arrives with the field *present and empty* — which is the
+/// producer's positive claim, and is only distinguishable from an older
+/// producer's silence by the handshake protocol the session already refuses on.
+#[test]
+fn export_value_transcripts_carry_the_uncensused_invoking_form_census() {
+    let project = uncensused_forms_project();
+    let source_path = project.parent().unwrap().join("forms.ts");
+    let source = fs::read_to_string(&source_path).unwrap();
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let tagged = identifier_location(&source_path, &source, "taggedForm");
+    let plain = identifier_location(&source_path, &source, "plainCallForm");
+    let answer = session
+        .export_values(&[
+            typefacts::ExportValueDemand {
+                location: tagged.clone(),
+                implementation_location: Some(tagged),
+                local_declaration_location: None,
+                callable_depth: 0,
+                parameter_premises: Vec::new(),
+            },
+            typefacts::ExportValueDemand {
+                location: plain.clone(),
+                implementation_location: Some(plain),
+                local_declaration_location: None,
+                callable_depth: 0,
+                parameter_premises: Vec::new(),
+            },
+        ])
+        .unwrap();
+
+    let tagged_implementation = answer.transcripts[0].implementation.as_ref().unwrap();
+    assert_eq!(
+        tagged_implementation
+            .uncensused_invoking_forms
+            .iter()
+            .map(|form| form.kind)
+            .collect::<Vec<_>>(),
+        vec![typefacts::UncensusedInvokingFormKind::TaggedTemplate]
+    );
+    let form = &tagged_implementation.uncensused_invoking_forms[0];
+    assert_eq!(&*form.node_kind, "TaggedTemplateExpression");
+    assert!(!form.captured && form.enclosing_callable.is_none());
+    assert_eq!(form.reach, typefacts::Reachability::Reachable);
+    // The tagged template is not in `calls`, which is the whole reason the
+    // marker exists: a census reading `calls` alone would see an export that
+    // invokes nothing.
+    assert!(tagged_implementation.calls.is_empty());
+
+    let plain_implementation = answer.transcripts[1].implementation.as_ref().unwrap();
+    assert!(plain_implementation.uncensused_invoking_forms.is_empty());
+    assert_eq!(plain_implementation.calls.len(), 1);
+
+    session.close().unwrap();
+}
+
+/// The classified control-flow incompleteness over the real wire, and the call
+/// row a jump region used to remove from it.
+///
+/// Two exports, one per class. A `switch` whose `break` it owns is
+/// `reachability-lower-bound`: the construct is walked in full, and the
+/// `callback()` inside it arrives with `reach: unknown` — it used to be
+/// **dropped**, which is what made a consumer proving the absence of behavior
+/// unable to see it at all. A `break` out of a plain labelled block is
+/// `flow-unaccounted`: no enclosing construct of the frame owns the target, and
+/// the producer does not claim to know where control goes.
+///
+/// The Go tests classify both in process; what they cannot show is that the
+/// rows survive CBOR, the closed class enum, and the client's own check that
+/// the two lists name the same markers.
+#[test]
+fn export_value_transcripts_classify_control_flow_incompleteness() {
+    let project = uncensused_forms_project();
+    let source_path = project.parent().unwrap().join("forms.ts");
+    let source = fs::read_to_string(&source_path).unwrap();
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let lower_bound = identifier_location(&source_path, &source, "jumpRegionForm");
+    let unaccounted = identifier_location(&source_path, &source, "unaccountedJumpForm");
+    let answer = session
+        .export_values(&[
+            typefacts::ExportValueDemand {
+                location: lower_bound.clone(),
+                implementation_location: Some(lower_bound),
+                local_declaration_location: None,
+                callable_depth: 0,
+                parameter_premises: Vec::new(),
+            },
+            typefacts::ExportValueDemand {
+                location: unaccounted.clone(),
+                implementation_location: Some(unaccounted),
+                local_declaration_location: None,
+                callable_depth: 0,
+                parameter_premises: Vec::new(),
+            },
+        ])
+        .unwrap();
+
+    let owned_break = answer.transcripts[0].implementation.as_ref().unwrap();
+    let flow = owned_break.control_flow.as_ref().unwrap();
+    assert_eq!(
+        flow.unsupported
+            .iter()
+            .map(AsRef::as_ref)
+            .collect::<Vec<_>>(),
+        vec!["switchReachability"]
+    );
+    assert_eq!(flow.incompleteness.len(), 1);
+    assert_eq!(&*flow.incompleteness[0].marker, "switchReachability");
+    assert_eq!(
+        flow.incompleteness[0].class,
+        typefacts::ControlFlowIncompletenessClass::ReachabilityLowerBound
+    );
+    // The `callback()` the region covers is on the wire, at the weakest
+    // non-negative reach. Its absence was ADR 0008 item 0.
+    let callback = source.find("      callback();").unwrap() + 6;
+    let row = owned_break
+        .calls
+        .iter()
+        .find(|call| call.location.start_byte == callback as u64)
+        .expect("the call inside the jump region is stated");
+    assert_eq!(row.reach, typefacts::Reachability::Unknown);
+    assert!(owned_break.uncensused_invoking_forms.is_empty());
+
+    let labelled = answer.transcripts[1].implementation.as_ref().unwrap();
+    let flow = labelled.control_flow.as_ref().unwrap();
+    assert_eq!(
+        flow.unsupported
+            .iter()
+            .map(AsRef::as_ref)
+            .collect::<Vec<_>>(),
+        vec!["jumpReachability"]
+    );
+    assert_eq!(flow.incompleteness.len(), 1);
+    assert_eq!(&*flow.incompleteness[0].marker, "jumpReachability");
+    assert_eq!(
+        flow.incompleteness[0].class,
+        typefacts::ControlFlowIncompletenessClass::FlowUnaccounted
+    );
+
+    session.close().unwrap();
+}
+
+/// A transcript for a module-local declaration, and the identity binding that
+/// stops one helper's transcript from answering a demand about another.
+///
+/// The client compares the answer's location against the demanded one, so the
+/// second half of this test — a demand for a location that is *not* a
+/// function-like declaration — must come back as a refusing transcript at the
+/// demanded location rather than as a transcript about something else.
+#[test]
+fn export_value_demand_reaches_a_module_local_declaration_by_exact_location() {
+    let project = uncensused_forms_project();
+    let source_path = project.parent().unwrap().join("forms.ts");
+    let source = fs::read_to_string(&source_path).unwrap();
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let entry = identifier_location(&source_path, &source, "export function entry");
+    let entry = Location {
+        path: entry.path.clone(),
+        start_byte: entry.start_byte + "export function ".len() as u64,
+        end_byte: entry.end_byte,
+    };
+    let helper_start = source.find("function localHelper").unwrap();
+    let helper_end = source[helper_start..].find("\n}\n").unwrap() + helper_start + 2;
+    let helper = Location {
+        path: source_path.to_string_lossy().into_owned().into(),
+        start_byte: helper_start as u64,
+        end_byte: helper_end as u64,
+    };
+
+    let answer = session
+        .export_values(&[typefacts::ExportValueDemand {
+            location: entry.clone(),
+            implementation_location: None,
+            local_declaration_location: Some(helper.clone()),
+            callable_depth: 0,
+            parameter_premises: Vec::new(),
+        }])
+        .unwrap();
+    let local = answer.transcripts[0].local_declaration.as_ref().unwrap();
+    assert_eq!(local.location, helper);
+    assert_eq!(&*local.query_name, "localHelper");
+    assert!(local.complete, "local declaration transcript: {local:#?}");
+    assert!(local.open_reasons.is_empty());
+    assert_eq!(local.calls.len(), 1);
+    assert_eq!(
+        local.calls[0]
+            .callee_parameter
+            .as_ref()
+            .map(|source| source.parameter_index),
+        Some(0)
+    );
+    assert!(local.uncensused_invoking_forms.is_empty());
+
+    // The helper's *name*, which is inside the declaration but is not the
+    // declaration. Containment is not a match.
+    let name_start = source.find("localHelper").unwrap();
+    let name = Location {
+        path: source_path.to_string_lossy().into_owned().into(),
+        start_byte: name_start as u64,
+        end_byte: (name_start + "localHelper".len()) as u64,
+    };
+    let refused = session
+        .export_values(&[typefacts::ExportValueDemand {
+            location: entry,
+            implementation_location: None,
+            local_declaration_location: Some(name.clone()),
+            callable_depth: 0,
+            parameter_premises: Vec::new(),
+        }])
+        .unwrap();
+    let refusal = refused.transcripts[0].local_declaration.as_ref().unwrap();
+    assert_eq!(refusal.location, name);
+    assert!(!refusal.complete);
+    assert!(
+        refusal
+            .open_reasons
+            .iter()
+            .any(|reason| &**reason == "declarationNotExact"),
+        "open reasons: {:?}",
+        refusal.open_reasons
+    );
+
     session.close().unwrap();
 }

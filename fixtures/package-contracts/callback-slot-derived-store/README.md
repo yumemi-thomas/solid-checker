@@ -1,12 +1,25 @@
 # 2.0's store and signal families carry a compute only in their derived form
 
-The Solid 2.0 half of the pair whose 1.x twin is
-`callback-slot-props-forwarding`; read that fixture's README first — it states
-the defect and the rule. The dialects deliberately disagree here: 1.x has no
-compute form for `createStore` or `createSignal` at all, so its slot table
-publishes no row and every case below would be withdrawn for a different reason.
-2.0 *does* have one, which is why the premise has to be finer than "the dialect
-owns the slot".
+The Solid 2.0 half of a pair whose 1.x twin, `callback-slot-props-forwarding`,
+went with the Solid 1.x retirement (ADR 0110). That README stated the defect, so
+it is restated here rather than pointed at:
+
+> `primitive_callback_execution` answers *how* a callback at some primitive
+> argument would run relative to the exported call. The contract inventory read
+> a row there as permission to publish an `invoke` claim rooted at whatever
+> parameter was forwarded into that slot — and the row says nothing about
+> whether there is a callback in it. Two shapes in the measured ecosystem
+> published `invoke` claims about values the shipped code never invokes. A
+> demand like that is not merely imprecise: the certification census refuses it,
+> correctly, and no evidence can ever discharge it.
+
+The rule that follows is the one this fixture pins, and the pin survives the
+retirement intact: the defect and its guard are both about 2.0's own slot table.
+What was lost with the twin is only the *contrast* — 1.x had no compute form for
+`createStore` or `createSignal` at all, so its slot table published no row and
+every case below would have been withdrawn for a different reason. 2.0 *does*
+have one, which is why the premise has to be finer than "the dialect owns the
+slot".
 
 `createStore`, `createOptimisticStore`, `createSignal` and `createOptimistic`
 each have two forms:
@@ -46,7 +59,8 @@ that `callback-slot-derived-store-server` now pins.
   plus one field, so the compute runs during the creating call.
 - `derive` is the positive control. `createMemo`'s argument 0 is the compute in
   every 2.0 overload, unconditionally, so it needs no callability proof and keeps
-  its row.
+  its row. Since ADR 0183 the row also states the memo's created owner and
+  `min: 1`, because the call covers every completion.
 
 ## Dialect selection
 

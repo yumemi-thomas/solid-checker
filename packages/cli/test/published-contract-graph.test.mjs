@@ -1,16 +1,25 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "vitest";
 
 import {
   bunLockLocatorForInstalledPackage,
   createBunLockSelectionIndex,
+  createLockSelectionIndex,
+  createNpmLockSelectionIndex,
+  createPnpmLockSelectionIndex,
   PublishedGraphAcquisitionRefusal,
   discoverInstalledPublishedGraph,
+  bunIsolatedStoreInstall,
   exactBunLockSelection,
+  exactLockSelection,
+  lockLocatorForInstalledPackage,
+  parsePnpmLockPackages,
   publishedGraphRequestKey
 } from "../scripts/published-contract-graph.mjs";
 
 const lock = `{
+  "lockfileVersion": 1,
   "packages": {
     "root@1.0.0": ["root@1.0.0", "", {}, "sha512-root"],
     "leaf@2.0.0": ["leaf@2.0.0", "", {}, "sha512-leaf"],
@@ -30,6 +39,7 @@ test("exact Bun selection binds the record locator and rejects absence", () => {
 
 test("one parsed Bun lock index preserves exact locator and integrity selection", () => {
   const indexedLock = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
     "packages": {
       "parent/leaf": ["leaf@2.0.0", "", {}, "sha512-nested"],
       "other/leaf": ["leaf@2.0.0", "", {}, "sha512-other"],
@@ -56,6 +66,7 @@ test("one parsed Bun lock index preserves exact locator and integrity selection"
 
 test("raw and indexed Bun selection agree for top-level and nested copies", () => {
   const sameVersionLock = `{
+    "lockfileVersion": 1,
     "packages": {
       "leaf": ["leaf@2.0.0", "", {}, "sha512-top-level"],
       "parent/leaf": ["leaf@2.0.0", "", {}, "sha512-nested"],
@@ -87,6 +98,7 @@ test("raw and indexed Bun selection agree for top-level and nested copies", () =
 
 test("exact Bun selection preserves integrity and cardinality refusal precedence", () => {
   const missingIntegrityLock = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
     "packages": {
       "parent/leaf": ["leaf@2.0.0", "", {}],
       "leaf": ["leaf@2.0.0", "", {}, "sha512-top-level"],
@@ -110,6 +122,7 @@ test("exact Bun selection preserves integrity and cardinality refusal precedence
   );
 
   const ambiguousLock = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
     "packages": {
       "leaf": ["leaf@2.0.0", "", {}, "sha512-top-level"],
       "parent/leaf": ["leaf@2.0.0", "", {}, "sha512-nested"],
@@ -136,6 +149,61 @@ test("installed Bun locator distinguishes nested copies at the same version", ()
       "/project/node_modules/@corvu/popover/node_modules/@corvu/utils"
     ),
     "@corvu/popover/@corvu/utils"
+  );
+});
+
+// ADR 0185: Bun's isolated linker installs each package once under
+// `node_modules/.bun/<name>@<version>[+<peers>]/node_modules/<name>`. That path
+// names the package and version, not a lock key, so the record is the one all
+// records at that name and version agree on.
+test("an isolated Bun store install selects the record its name and version agree on", () => {
+  const store = "/project/node_modules/.bun/@scope+leaf@2.0.0+8dd5f48cc8d92621/node_modules/@scope/leaf";
+  assert.equal(bunIsolatedStoreInstall("/project/bun.lock", store, "@scope/leaf", "2.0.0"), true);
+  assert.equal(
+    bunIsolatedStoreInstall(
+      "/project/bun.lock",
+      "/project/node_modules/.bun/leaf@2.0.0/node_modules/leaf",
+      "leaf",
+      "2.0.0"
+    ),
+    true
+  );
+  for (const [root, name, version] of [
+    [store, "@scope/leaf", "2.0.1"],
+    [store, "@scope/other", "2.0.0"],
+    ["/project/node_modules/@scope/leaf", "@scope/leaf", "2.0.0"],
+    ["/elsewhere/node_modules/.bun/@scope+leaf@2.0.0/node_modules/@scope/leaf", "@scope/leaf", "2.0.0"]
+  ]) {
+    assert.equal(bunIsolatedStoreInstall("/project/bun.lock", root, name, version), false, root);
+  }
+  const agreeing = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
+    "packages": {
+      "app/@scope/leaf": ["@scope/leaf@2.0.0", "", {}, "sha512-leaf"],
+      "@scope/leaf": ["@scope/leaf@2.0.0", "", {}, "sha512-leaf"],
+    },
+  }`);
+  const select = index => exactLockSelection({
+    index,
+    packageManager: "bun",
+    lockfilePath: "/project/bun.lock",
+    packageRoot: store,
+    packageName: "@scope/leaf",
+    packageVersion: "2.0.0"
+  });
+  assert.deepEqual(select(agreeing), { locator: "@scope/leaf", integrity: "sha512-leaf" });
+  const disagreeing = createBunLockSelectionIndex(`{
+    "lockfileVersion": 1,
+    "packages": {
+      "app/@scope/leaf": ["@scope/leaf@2.0.0", "", {}, "sha512-other"],
+      "@scope/leaf": ["@scope/leaf@2.0.0", "", {}, "sha512-leaf"],
+    },
+  }`);
+  assert.throws(
+    () => select(disagreeing),
+    error =>
+      error instanceof PublishedGraphAcquisitionRefusal &&
+      error.kind === "ambiguous-lock-selection"
   );
 });
 
@@ -279,4 +347,361 @@ test("installed acquisition refuses cycles and builtins", () => {
       error instanceof PublishedGraphAcquisitionRefusal &&
       error.kind === "unsupported-external-specifier"
   );
+});
+
+
+// The pnpm reader is the acquisition half of a pair: Rust re-reads the same
+// bytes in `dependencies.rs` before any receipt, and these cases mirror the
+// `pnpm_selection_*` tests there. A subset either side reads and the other
+// refuses is the failure mode worth pinning, so the two rosters match.
+
+const PNPM_INTEGRITY =
+  "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+
+const pnpmEntry = `  '@corvu/utils@0.3.2':\n    resolution: {integrity: ${PNPM_INTEGRITY}}\n`;
+
+const pnpmLock = body =>
+  `lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n\npackages:\n\n${body}`;
+
+const refusal = kind => error =>
+  error instanceof PublishedGraphAcquisitionRefusal && error.kind === kind;
+
+test("exact pnpm selection reads the packages key as the locator", () => {
+  const index = createPnpmLockSelectionIndex(
+    pnpmLock(`${pnpmEntry}    engines: {node: '>=10'}\n`)
+  );
+  assert.deepEqual(
+    exactLockSelection({
+      index,
+      packageManager: "pnpm",
+      lockfilePath: "/w/pnpm-lock.yaml",
+      packageRoot: "/w/node_modules/.pnpm/@corvu+utils@0.3.2_solid-js@1.9.14/node_modules/@corvu/utils",
+      packageName: "@corvu/utils",
+      packageVersion: "0.3.2"
+    }),
+    { locator: "@corvu/utils@0.3.2", integrity: PNPM_INTEGRITY }
+  );
+  assert.throws(
+    () =>
+      exactLockSelection({
+        index,
+        packageManager: "pnpm",
+        lockfilePath: "/w/pnpm-lock.yaml",
+        packageRoot: "/w/node_modules/missing",
+        packageName: "missing",
+        packageVersion: "1.0.0"
+      }),
+    refusal("missing-lock-selection")
+  );
+});
+
+test("the pnpm locator is the lock key, not the install path", () => {
+  // pnpm stores a package under `.pnpm/<name>@<version>_<peers>/node_modules/`,
+  // which names no key the lockfile wrote. Deriving a locator from that path --
+  // as Bun's tree requires -- would invent a string nothing can select.
+  assert.equal(
+    lockLocatorForInstalledPackage({
+      lockfilePath: "/w/pnpm-lock.yaml",
+      packageManager: "pnpm",
+      packageRoot: "/w/node_modules/.pnpm/@corvu+utils@0.3.2_solid-js@1.9.14/node_modules/@corvu/utils",
+      packageName: "@corvu/utils",
+      packageVersion: "0.3.2"
+    }),
+    "@corvu/utils@0.3.2"
+  );
+  assert.throws(
+    () =>
+      lockLocatorForInstalledPackage({
+        lockfilePath: "/w/yarn.lock",
+        packageManager: "yarn",
+        packageRoot: "/w/node_modules/@corvu/utils",
+        packageName: "@corvu/utils",
+        packageVersion: "0.3.2"
+      }),
+    refusal("unsupported-package-manager")
+  );
+});
+
+test("the pnpm reader reads a formatter-rewritten lockfile", () => {
+  // A real lockfile in the consumer corpus had been through Prettier: keys
+  // double-quoted, `resolution` wrapped across lines with a trailing comma. A
+  // reader that assumed pnpm's own layout answers "no packages" for it.
+  const selections = parsePnpmLockPackages(
+    `lockfileVersion: "9.0"\n\npackages:\n  "@corvu/utils@0.3.2":\n    resolution:\n      {\n        integrity: ${PNPM_INTEGRITY},\n      }\n    engines: { node: ">=10" }\n`
+  );
+  assert.deepEqual([...selections], [["@corvu/utils@0.3.2", PNPM_INTEGRITY]]);
+});
+
+test("the pnpm reader reads a workspace specifier as a scalar", () => {
+  // `workspace:*` is a plain scalar, not an alias: in YAML `*` opens a node only
+  // at a token boundary, and a bare `:` is not one. Every lockfile in the demand
+  // corpus carries this line, so treating it as an alias refuses all of them --
+  // which is exactly what both readers did until this case was written.
+  const selections = parsePnpmLockPackages(
+    `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '@corvu/utils':\n        specifier: workspace:*\n        version: link:packages/utils\n\npackages:\n\n${pnpmEntry}`
+  );
+  assert.deepEqual([...selections], [["@corvu/utils@0.3.2", PNPM_INTEGRITY]]);
+});
+
+test("the pnpm reader refuses a lockfile major before 9", () => {
+  // Major 6 wrote peer suffixes into `packages:` keys, so one name@version
+  // could appear under several keys with no installed path to separate them.
+  assert.throws(
+    () =>
+      parsePnpmLockPackages(
+        `lockfileVersion: '6.0'\n\npackages:\n\n  /@corvu/utils@0.3.2:\n    resolution: {integrity: ${PNPM_INTEGRITY}}\n`
+      ),
+    refusal("unsupported-lock-version")
+  );
+});
+
+test("the pnpm reader refuses a repeated packages key", () => {
+  assert.throws(
+    () =>
+      parsePnpmLockPackages(
+        pnpmLock(`${pnpmEntry}  '@corvu/utils@0.3.2':\n    resolution: {integrity: sha512-BBBB==}\n`)
+      ),
+    refusal("ambiguous-lock-selection")
+  );
+});
+
+test("the pnpm reader refuses YAML beyond the subset it reads", () => {
+  // Each of these can move a value from one entry to another, or redefine
+  // `packages:` wholesale; skipping what it did not understand would answer
+  // confidently from the wrong bytes.
+  for (const [name, source] of [
+    ["anchor", pnpmLock(`  base: &shared\n${pnpmEntry}`)],
+    ["alias", pnpmLock(`${pnpmEntry}    extra: *shared\n`)],
+    ["merge key", pnpmLock(`${pnpmEntry}    <<: *shared\n`)],
+    ["second document", `${pnpmLock(pnpmEntry)}---\npackages:\n${pnpmEntry}`],
+    ["tab", pnpmLock(pnpmEntry).replace("  '@corvu", "\t'@corvu")]
+  ]) {
+    assert.throws(
+      () => parsePnpmLockPackages(source),
+      refusal("unsupported-lock-syntax"),
+      `${name} was read instead of refused`
+    );
+  }
+});
+
+test("the pnpm reader selects no package without a registry integrity", () => {
+  // A tarball, git or link dependency cannot be authenticated against a
+  // registry, so leaving it unselected refuses the graph rather than naming it.
+  assert.throws(
+    () =>
+      parsePnpmLockPackages(
+        pnpmLock("  '@corvu/utils@0.3.2':\n    resolution: {tarball: https://example.invalid/utils.tgz}\n")
+      ),
+    refusal("missing-lock-selection")
+  );
+});
+
+// Real pnpm 11+ lockfiles, trimmed, shared with the Rust twin's tests (see the
+// fixture directory's README for their sources).
+const realLockfile = name =>
+  readFileSync(
+    new URL(`../../../rust/crates/solid-facts-backend/tests/fixtures/lockfiles/${name}`, import.meta.url),
+    "utf8"
+  );
+
+const ROUTER_INTEGRITY =
+  "sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==";
+const DETECT_LIBC_INTEGRITY =
+  "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==";
+
+test("every Bun reader refuses a lockfileVersion admission refuses", () => {
+  // The acquisition half of `every_bun_reader_refuses_the_versions_admission_refuses`
+  // in `diagnostics.rs`, over the same real bytes (Civil's bun.lock v1): the
+  // Bun index accepts exactly admission's {1, 2}, with the Rust wording.
+  const source = realLockfile("civil.bun.lock");
+  const select = lock =>
+    exactLockSelection({
+      index: createLockSelectionIndex(lock, "bun"),
+      packageManager: "bun",
+      lockfilePath: "/w/bun.lock",
+      packageRoot: "/w/node_modules/@solidjs/meta",
+      packageName: "@solidjs/meta",
+      packageVersion: "1.0.0-next.2"
+    });
+  for (const accepted of ["1", "2"]) {
+    const lock = source.replace('"lockfileVersion": 1,', `"lockfileVersion": ${accepted},`);
+    assert.equal(
+      select(lock).integrity,
+      "sha512-4aqPczFqDdep4JTAUXfh4nyfq7InbTgimd7NuN6ZWWE29UPv0uR5dyr53yFcf2YgVXjFdX+JGhXtsE0njGL+fA==",
+      `v${accepted}`
+    );
+  }
+  for (const [name, lock, reason] of [
+    [
+      "version 0",
+      source.replace('"lockfileVersion": 1,', '"lockfileVersion": 0,'),
+      "Bun lockfileVersion 0 is not 1 or 2; only those versions' package records are read"
+    ],
+    [
+      "version 3",
+      source.replace('"lockfileVersion": 1,', '"lockfileVersion": 3,'),
+      "Bun lockfileVersion 3 is not 1 or 2; only those versions' package records are read"
+    ],
+    [
+      "a missing version",
+      source.replace('  "lockfileVersion": 1,\n', ""),
+      "Bun lockfile does not declare a lockfileVersion"
+    ]
+  ]) {
+    assert.notEqual(lock, source, name);
+    for (const read of [() => select(lock), () => createBunLockSelectionIndex(lock), () => exactBunLockSelection(lock, "@solidjs/meta", "1.0.0-next.2")]) {
+      assert.throws(
+        read,
+        error =>
+          error instanceof PublishedGraphAcquisitionRefusal &&
+          error.kind === "unsupported-lock-version" &&
+          error.message.includes(reason),
+        `${name} was read instead of refused`
+      );
+    }
+  }
+});
+
+test("the pnpm reader reads the project document behind a pnpm 11 env document", () => {
+  // pnpm 11+ writes `---\n<env>\n---\n<project>` when the project pins its
+  // package manager. The env document's packages (pnpm itself) are installed
+  // outside the project and select nothing.
+  const source = realLockfile("finds-team.pnpm-lock.yaml");
+  const selections = parsePnpmLockPackages(source);
+  assert.equal(selections.get("@tanstack/solid-router@2.0.0-rc.8"), ROUTER_INTEGRITY);
+  assert.equal(selections.has("pnpm@12.5.1"), false);
+  assert.equal(
+    parsePnpmLockPackages(source.replace(/\n/g, "\r\n")).get("@tanstack/solid-router@2.0.0-rc.8"),
+    ROUTER_INTEGRITY
+  );
+  // A key both documents record alike is one answer (Readingroom's
+  // `detect-libc@2.1.2`).
+  const shared = parsePnpmLockPackages(realLockfile("readingroom.pnpm-lock.yaml"));
+  assert.equal(shared.get("detect-libc@2.1.2"), DETECT_LIBC_INTEGRITY);
+});
+
+test("the pnpm reader refuses a key the two documents resolve differently", () => {
+  const source = realLockfile("readingroom.pnpm-lock.yaml");
+  const separator = source.indexOf("\n---\n");
+  const env = source.slice(0, separator);
+  const main = source.slice(separator);
+  for (const [name, conflicting] of [
+    ["another integrity", env.replace(DETECT_LIBC_INTEGRITY, PNPM_INTEGRITY)],
+    [
+      "no registry integrity",
+      env.replace(`{integrity: ${DETECT_LIBC_INTEGRITY}}`, "{tarball: https://example.invalid/detect-libc.tgz}")
+    ]
+  ]) {
+    assert.notEqual(conflicting, env, name);
+    assert.throws(
+      () => parsePnpmLockPackages(`${conflicting}${main}`),
+      refusal("ambiguous-lock-selection"),
+      `${name} was read instead of refused`
+    );
+  }
+});
+
+test("the pnpm reader refuses every other document arrangement", () => {
+  const source = realLockfile("finds-team.pnpm-lock.yaml");
+  const separator = source.indexOf("\n---\n");
+  const env = source.slice("---\n".length, separator);
+  const main = source.slice(separator + "\n---\n".length);
+  for (const [name, lock] of [
+    ["a third document", `${source}---\n${main}`],
+    ["no start marker", source.slice("---\n".length)],
+    ["an end marker", `${source}...\n`],
+    ["a marker carrying content", source.replace("\n---\n", "\n--- {}\n")],
+    ["a separator with trailing space", source.replace("\n---\n", "\n--- \n")],
+    ["only an env document", `---\n${env}\n`],
+    ["only an env document and a separator", `---\n${env}\n---\n`],
+    ["the project document first", `---\n${main}\n---\n${env}\n`],
+    [
+      "an env document naming a project importer",
+      source.replace(
+        "        version: 12.5.1\n",
+        "        version: 12.5.1\n\n  frontend:\n    dependencies:\n      '@tanstack/solid-router':\n        specifier: 2.0.0-rc.8\n        version: 2.0.0-rc.8\n"
+      )
+    ],
+    [
+      "an env importer with project dependencies",
+      source.replace(
+        "    configDependencies: {}\n",
+        "    configDependencies: {}\n    dependencies:\n      '@tanstack/solid-router':\n        specifier: 2.0.0-rc.8\n        version: 2.0.0-rc.8\n"
+      )
+    ],
+    [
+      "an env document with settings",
+      source.replace("lockfileVersion: '9.0'\n", "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n")
+    ],
+    ["an env document of another major", source.replace("lockfileVersion: '9.0'", "lockfileVersion: '6.0'")],
+    ["an env document with no lockfileVersion", source.replace("lockfileVersion: '9.0'\n", "")]
+  ]) {
+    assert.throws(
+      () => parsePnpmLockPackages(lock),
+      error => error instanceof PublishedGraphAcquisitionRefusal,
+      `${name} was read instead of refused`
+    );
+  }
+});
+
+// npm lockfile v2/v3, mirroring `npm_selection_*` in `dependencies.rs`: the
+// locator is the install-path key, and only an entry that installs this exact
+// name and version from a registry tarball with an integrity is selectable.
+const npmLock = (version, packages) =>
+  JSON.stringify({ name: "consumer", lockfileVersion: version, requires: true, packages });
+
+const npmEntry = (version, extra = {}) => ({
+  version,
+  resolved: `https://registry.npmjs.org/@corvu/utils/-/utils-${version}.tgz`,
+  integrity: PNPM_INTEGRITY,
+  ...extra
+});
+
+test("exact npm selection reads the install-path key as the locator", () => {
+  const index = createNpmLockSelectionIndex(npmLock(3, {
+    "": { name: "consumer" },
+    "node_modules/@corvu/utils": npmEntry("0.3.2"),
+    "node_modules/other/node_modules/@corvu/utils": npmEntry("0.4.0"),
+    "node_modules/linked": { resolved: "packages/linked", link: true },
+    "node_modules/aliased": npmEntry("0.3.2", { name: "@corvu/utils" }),
+    "node_modules/local": npmEntry("1.0.0", { resolved: "file:../local" })
+  }));
+  const select = (packageRoot, packageName, packageVersion) => exactLockSelection({
+    index,
+    packageManager: "npm",
+    lockfilePath: "/w/package-lock.json",
+    packageRoot,
+    packageName,
+    packageVersion
+  });
+  assert.deepEqual(
+    select("/w/node_modules/@corvu/utils", "@corvu/utils", "0.3.2"),
+    { locator: "node_modules/@corvu/utils", integrity: PNPM_INTEGRITY }
+  );
+  assert.deepEqual(
+    select("/w/node_modules/other/node_modules/@corvu/utils", "@corvu/utils", "0.4.0"),
+    { locator: "node_modules/other/node_modules/@corvu/utils", integrity: PNPM_INTEGRITY }
+  );
+  assert.throws(
+    () => select("/w/node_modules/@corvu/utils", "@corvu/utils", "0.4.0"),
+    refusal("missing-lock-selection")
+  );
+  for (const [root, name, version] of [
+    ["/w/node_modules/aliased", "@corvu/utils", "0.3.2"],
+    ["/w/node_modules/local", "local", "1.0.0"]
+  ]) {
+    assert.throws(() => select(root, name, version), refusal("missing-lock-selection"), root);
+  }
+  assert.throws(
+    () => select("/w/packages/linked", "linked", "1.0.0"),
+    refusal("installed-lock-layout")
+  );
+});
+
+test("npm lockfile version 1 and non-JSON bytes are refused, not read", () => {
+  assert.throws(
+    () => createNpmLockSelectionIndex(npmLock(1, {})),
+    refusal("unsupported-lock-version")
+  );
+  assert.throws(() => createNpmLockSelectionIndex("{"), refusal("unsupported-lock-syntax"));
 });

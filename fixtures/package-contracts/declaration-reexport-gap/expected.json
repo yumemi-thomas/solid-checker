@@ -1,0 +1,84 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "fa18c83014b3164716af9499e583b04afa09a986a15568f69bcdd56d65780ef1",
+            "path": "./dist/index.js",
+            "sha256": "7b3113cf521e72e47b76f0ffa70882235ab675020398f87d25288ae8c9daff61"
+          },
+          "declarations": {
+            "path": "./types/index.d.ts",
+            "sha256": "b36cd8f30dac89100849bb132b1eabdd4538b2040696d77112b38cd6b0f6db17"
+          },
+          "exports": {
+            "own": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:a1adc17f046ffa5e5450c2f5e2d9a8df7a81475551f995ba088a2d83cfc11bd6",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "a1adc17f046ffa5e5450c2f5e2d9a8df7a81475551f995ba088a2d83cfc11bd6"
+    },
+    "name": "declaration-reexport-gap-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

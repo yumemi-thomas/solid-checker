@@ -9,6 +9,11 @@
 //! resolves.
 
 /// Names exported in value position.
+///
+/// `solid-js@2.0.0-rc.13` declares `createErrorBoundary`,
+/// `createLoadingBoundary` and `createRevealOrder` only in `solid-js/internal`
+/// (`types/internal.d.ts`), while rc.0-rc.9 declare them at the root; both
+/// specifiers are listed (ADR 0194).
 #[rustfmt::skip]
 pub static VALUES: &[(&str, &[&str])] = &[
     ("$$component", &["solid-js/refresh"]),
@@ -39,8 +44,8 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("createComponent", &["solid-js"]),
     ("createContext", &["solid-js"]),
     ("createEffect", &["solid-js"]),
-    ("createErrorBoundary", &["solid-js"]),
-    ("createLoadingBoundary", &["solid-js"]),
+    ("createErrorBoundary", &["solid-js", "solid-js/internal"]),
+    ("createLoadingBoundary", &["solid-js", "solid-js/internal"]),
     ("createMemo", &["solid-js"]),
     ("createOptimistic", &["solid-js"]),
     ("createOptimisticStore", &["solid-js"]),
@@ -48,7 +53,7 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("createProjection", &["solid-js"]),
     ("createReaction", &["solid-js"]),
     ("createRenderEffect", &["solid-js"]),
-    ("createRevealOrder", &["solid-js"]),
+    ("createRevealOrder", &["solid-js", "solid-js/internal"]),
     ("createRoot", &["solid-js"]),
     ("createSignal", &["solid-js"]),
     ("createStore", &["solid-js"]),
@@ -89,6 +94,10 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("ssrHandleError", &["solid-js"]),
     ("ssrScope", &["solid-js"]),
     ("storePath", &["solid-js"]),
+    // Added in `solid-js@2.0.0-rc.9` (`types/index.d.ts:1` re-exports it from
+    // `@solidjs/signals`); absent from the rc.3 surface this table was
+    // otherwise audited against.
+    ("until", &["solid-js"]),
     ("untrack", &["solid-js"]),
     ("useContext", &["solid-js"]),
 ];

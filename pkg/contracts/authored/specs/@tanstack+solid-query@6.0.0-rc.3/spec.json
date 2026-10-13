@@ -1,0 +1,224 @@
+{
+  "package": "@tanstack/solid-query",
+  "version": "6.0.0-rc.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "pairs": "../_pairs/@tanstack+solid-query",
+  "identity": "identity.json",
+  "exports": {
+    "useQuery": {
+      "why": "Invokes the options function on every call, on the same stack, as the tracked compute of a createMemo it creates.",
+      "rule": "reactive-write-in-owned-scope",
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "callback-0-owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "callback-0-owner"
+                  },
+                  "resource": "callback-0-owner"
+                }
+              ],
+              "resource": "callback-0-owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "callback-0-owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "callback-0-owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "probes": [
+        {
+          "label": "returns",
+          "rule": "strict-read-untracked",
+          "why": "Returns an object of getters over the query's projections and memos; reading a property untracked is a strict read."
+        }
+      ]
+    },
+    "useInfiniteQuery": {
+      "why": "Invokes the options function on every call, on the same stack, as the tracked compute of a createMemo it creates.",
+      "rule": "reactive-write-in-owned-scope",
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "callback-0-owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "callback-0-owner"
+                  },
+                  "resource": "callback-0-owner"
+                }
+              ],
+              "resource": "callback-0-owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "callback-0-owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "callback-0-owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ]
+      }
+    },
+    "useMutation": {
+      "why": "Returns a store of the mutation's state; reading a property untracked is a strict read.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      }
+    }
+  }
+}

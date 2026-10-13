@@ -1,0 +1,519 @@
+{
+  "package": "@solid-primitives/pagination",
+  "version": "1.0.0-next.8",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createSegment": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:20-31 \u2014 No module-scope missing-owner claim; optional-parent memo rejects a present leaf. Browser draft; Chrome probes pending, not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "segment-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "segment-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            }
+          },
+          {
+            "id": "input-0",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "segment-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "segment-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "input-1",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "segment-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "segment-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "input-2",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "segment-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "segment-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          }
+        ],
+        "computations": [
+          "segment-memo"
+        ],
+        "resources": [
+          {
+            "id": "segment-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "input-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "input-1"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "input-2"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:20-31; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88 \u2014 One optional-parent memo returns its reactive array accessor. The complete caller callable set is items, limit and page, under memo tracking; limit may execute twice. No private signal is read outside that memo. P2: input array data and primitive arithmetic.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:20-31; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88 \u2014 One optional-parent memo returns its reactive array accessor. The complete caller callable set is items, limit and page, under memo tracking; limit may execute twice. No private signal is read outside that memo. P2: input array data and primitive arithmetic.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:20-31; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88 \u2014 One optional-parent memo returns its reactive array accessor. The complete caller callable set is items, limit and page, under memo tracking; limit may execute twice. No private signal is read outside that memo. P2: input array data and primitive arithmetic.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:20-31; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88 \u2014 One optional-parent memo returns its reactive array accessor. The complete caller callable set is items, limit and page, under memo tracking; limit may execute twice. No private signal is read outside that memo. P2: input array data and primitive arithmetic."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        },
+        {
+          "label": "input-0",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "This exact parameter callable executes under the created memo owner and reads the same input in both twins; only misuse writes."
+        },
+        {
+          "label": "input-1",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "This exact parameter callable executes under the created memo owner and reads the same input in both twins; only misuse writes."
+        },
+        {
+          "label": "input-2",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "This exact parameter callable executes under the created memo owner and reads the same input in both twins; only misuse writes."
+        }
+      ]
+    },
+    "createPagination": {
+      "why": "rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:70-79,98-99,248-267 \u2014 Factory read and ownership census, under ADR 0226 P2. One private opts() read occurs in the caller's context; the remaining factory/registered-memo reads run under the memos' own tracking. Ten optional-parent memos require children only when an owner is present. Returned setters, handlers and property getters keep their own behavior opaque; closure does not extend into those returned callable bodies (docs/package-contract-v2/semantic-model.md:494-500). Browser draft; fresh Chrome rc.13 probes required.",
+      "call": {
+        "operations": [
+          {
+            "id": "pagination-memos",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 10,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "pagination-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "pagination-raw-page-create",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "pagination-raw-page"
+            ]
+          },
+          {
+            "id": "pagination-initial-options-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "pagination-options"
+              }
+            ]
+          },
+          {
+            "id": "pagination-options-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "pagination-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "pagination-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "pagination-memo-reads",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "pagination-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "pagination-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ]
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor"
+                },
+                {
+                  "kind": "reactive",
+                  "role": "accessor"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates"
+        ],
+        "resources": [
+          {
+            "id": "pagination-memo-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "pagination-options",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "pagination-raw-page",
+            "kind": "reactive-source"
+          }
+        ],
+        "reads": [
+          "pagination-initial-options-read",
+          "pagination-memo-reads"
+        ],
+        "creates": [
+          "pagination-raw-page-create"
+        ],
+        "computations": [
+          "pagination-memos"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "pagination-options-source"
+          }
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:70-267 \u2014 Exactly [props memo accessor, page memo accessor, wrapped setPage callable], on every normal completion. Returned PaginationProps contain nested getters and handler functions; setter call effects are deliberately opaque.",
+        "reads": "rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:71-79,98-99,248-264; rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:88,351-357; rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:4874-4897,5009-5028 \u2014 The sole caller-context private read is opts() at 72; a throwing memo setup can prevent it. Every other factory or registered-memo private accessor read is inside one of the ten tracked memo bodies: opts, rawPage, page, maxPages, pages, start and the four show* accessors. access(options), Object.assign getters and normalizeOption callbacks are caller-authored behavior (callbacks stays open; P2). The returned setter/handler/getter bodies are not called by construction and are separate, opaque result behavior; see docs/package-contract-v2/semantic-model.md:494-500.",
+        "creates": "rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/pagination/dist/index.js:71-79,98-99,248-264; rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:351-357; rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solidjs/signals/dist/dev.js:2346-2357; rust/target/primitives-checkpoint/misuse/pagination-createPagination-top-level-read/node_modules/@solidjs/signals/dist/dev-shared.js:5633-5651 \u2014 Ten package-authored createMemo registrations, all optional-parent and requiring a present owner to accept children, plus at most one plain ownedWrite rawPage signal after opts() succeeds. pagination-memo-owner denotes the repeated family of memo owners, not one owner shared by ten memos (aggregate precedent: @solid-primitives/static-store createDerivedStaticStore). wrapSetter only replaces a tuple entry; the constructor registers no effect, cleanup or other owner. Caller callback registrations and returned callable bodies are not package factory registrations. A memo error may stop after the first registration; normal completion registers all ten."
+      },
+      "rule": "strict-read-untracked",
+      "probes": [
+        {
+          "label": "props",
+          "rule": "strict-read-untracked",
+          "why": "The exact returned reactive leaf is read under a component strict-read window versus JSX tracking. OwnedWrite affects writes, never this read check."
+        },
+        {
+          "label": "options-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The package's first memo invokes a zero-arity options accessor under owned tracking. Both twins read the same caller signal there; only misuse writes to it. Function-valued options whose length is nonzero are not invoked by access, so the positive row has minimum zero and callbacks remains open."
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The first memo at line 71 rejects an owner-backed onSettled leaf, although an absent owner is permitted. Ordinary construction under a children-capable owner succeeds; untrack only clears the unrelated private-read warning."
+        }
+      ]
+    }
+  }
+}

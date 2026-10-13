@@ -1,0 +1,130 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@kobalte/core/button",
+      "requestedEntrypoint": "./button",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "runtimeTarget": "dist/button/index.jsx",
+      "declarationTarget": "dist/button/index.d.ts",
+      "packageIntegrity": "sha512-6l5wJRkk/CRXWzbzwYeNfv38XHWKoL3Bj9ykJQexGcmyM2TQV4IpR1E/wDbhygT9TsI3LYP5qgdLj/l2xx+qiw==",
+      "snapshotRoot": "sha256:9cfcf7100f14efe10fd4b270e89f6d94309d1220b3bb71bc4b03f22bd5330336",
+      "identityDocument": {
+        "entrypoints": {
+          "./button": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "6be404b837ef6d201756bea934c56abc2ac39ae6f3f60b193c060ac13bdaa3d2",
+                  "path": "./dist/button/index.jsx",
+                  "sha256": "0a280e66f28b2f80ea19a1952e525f0674576bdf7418bc68de59db36a2a18b23"
+                },
+                "declarations": {
+                  "path": "./dist/button/index.d.ts",
+                  "sha256": "a3812bc6d455f94611ba884d51544d6ecaec90e7e3fa4a04c77e66aceaa8647f"
+                },
+                "exports": {
+                  "Button": "summary-f30c0fcac08b7809f0fadaeb09dff675736873638091f36d196b73728d7b0a09",
+                  "Root": "summary-86ce2a59f04d727e06ad0d2180ec8ccbbdbb84752a0a5c9ad2ba5eb368235876"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1*/solid",
+                  "typesBranch": "/exports/.~1*/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-6l5wJRkk/CRXWzbzwYeNfv38XHWKoL3Bj9ykJQexGcmyM2TQV4IpR1E/wDbhygT9TsI3LYP5qgdLj/l2xx+qiw==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "15417622f5d59088663b1dd498fcbeba26bb5cb7ad4d8e199fc890aa1a3fd77a"
+          },
+          "name": "@kobalte/core",
+          "version": "2.0.0-alpha.0"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-f30c0fcac08b7809f0fadaeb09dff675736873638091f36d196b73728d7b0a09": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-86ce2a59f04d727e06ad0d2180ec8ccbbdbb84752a0a5c9ad2ba5eb368235876": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "specifier": "@kobalte/core/button",
+      "requestedEntrypoint": "./button",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/button/index.js",
+      "declarationTarget": "dist/button/index.d.ts",
+      "packageIntegrity": "sha512-6l5wJRkk/CRXWzbzwYeNfv38XHWKoL3Bj9ykJQexGcmyM2TQV4IpR1E/wDbhygT9TsI3LYP5qgdLj/l2xx+qiw==",
+      "snapshotRoot": "sha256:9cfcf7100f14efe10fd4b270e89f6d94309d1220b3bb71bc4b03f22bd5330336",
+      "identityDocument": {
+        "entrypoints": {
+          "./button": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "c9a893b937d85e396bee7be853a19137e3c95c4fa5c14d7a4ef2aa39f9fc6460",
+                  "path": "./dist/button/index.js",
+                  "sha256": "19887ef3200137e232d5e91e917adb194dc4954832860433e93ed0416f48f9be"
+                },
+                "declarations": {
+                  "path": "./dist/button/index.d.ts",
+                  "sha256": "a3812bc6d455f94611ba884d51544d6ecaec90e7e3fa4a04c77e66aceaa8647f"
+                },
+                "exports": {
+                  "Button": "summary-27f1733ec8396ff88ea82e31ee8b0b330608d03fc2bd9b786a9e898558f229b6",
+                  "Root": "summary-ff59473869fcae30dd37dac231ab3108743146d0a655aff176fd52c93883f61e"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1*/default",
+                  "typesBranch": "/exports/.~1*/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-6l5wJRkk/CRXWzbzwYeNfv38XHWKoL3Bj9ykJQexGcmyM2TQV4IpR1E/wDbhygT9TsI3LYP5qgdLj/l2xx+qiw==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "15417622f5d59088663b1dd498fcbeba26bb5cb7ad4d8e199fc890aa1a3fd77a"
+          },
+          "name": "@kobalte/core",
+          "version": "2.0.0-alpha.0"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-27f1733ec8396ff88ea82e31ee8b0b330608d03fc2bd9b786a9e898558f229b6": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ff59473869fcae30dd37dac231ab3108743146d0a655aff176fd52c93883f61e": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

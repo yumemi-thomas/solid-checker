@@ -4,7 +4,7 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "d273a3d05ba0febd16d190b4055a08baabb8f318c557799864656b342a72db8e",
+            "closureSha256": "aa2f7a04f597b3e7e3785e7e8233d63ccda799795389ce21dc8a22735d820ac9",
             "path": "./index.js",
             "sha256": "5a53427f064bae1f4fd98de896d0b8f84c22c7b45a3d0e917671d9e80be4f182"
           },
@@ -13,8 +13,8 @@
             "sha256": "87a566d89b8834846ea929f314e585aecb286fd1c2fed7207d14cfc3cc99115d"
           },
           "exports": {
-            "Direct": "summary-31edfd83199d80e5090b421bbf909bb77ef24428b2966c8585ba090875a3fa9e",
-            "inert": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+            "Direct": "summary-1f6cd68e1ece6283cb22f3c0f710d2156df074ee0c17d134eb3041d0bb209da9",
+            "inert": "summary-a92036a905be73d15099362eafaa5fec79503e721807be33524d979de89f07d7"
           },
           "resolution": {
             "runtimeBranch": "/exports/./default",
@@ -26,10 +26,10 @@
   },
   "format": "solid-reactivity-contract",
   "package": {
-    "integrity": "fixture:sha256:a4a1052d65c132a9d406f4f48c51f40f1098e6d24dbd2528ab8eec06e32543a0",
+    "integrity": "fixture:sha256:36ff641587acbd0075b10a95ac5aac7bae0702523a45bf3a460021368a8f4a72",
     "manifest": {
       "path": "./package.json",
-      "sha256": "a4a1052d65c132a9d406f4f48c51f40f1098e6d24dbd2528ab8eec06e32543a0"
+      "sha256": "36ff641587acbd0075b10a95ac5aac7bae0702523a45bf3a460021368a8f4a72"
     },
     "name": "unresolved-dispatch-domains-control",
     "version": "1.0.0"
@@ -38,9 +38,16 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-31edfd83199d80e5090b421bbf909bb77ef24428b2966c8585ba090875a3fa9e": {
+    "summary-1f6cd68e1ece6283cb22f3c0f710d2156df074ee0c17d134eb3041d0bb209da9": {
       "call": {
         "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-1"
+          },
           {
             "from": {
               "arg": 1,
@@ -48,6 +55,11 @@
             },
             "operation": "callback-0"
           }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "returns"
         ],
         "operations": [
           {
@@ -62,7 +74,25 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-1",
+            "kind": "invoke",
+            "protocol": "get",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }
@@ -80,6 +110,9 @@
             "id": "return",
             "kind": "return",
             "output": {
+              "closed": [
+                "properties"
+              ],
               "kind": "object",
               "properties": [
                 {
@@ -97,13 +130,19 @@
             }
           }
         ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "returns"
+        ],
+        "reads": [],
         "returns": [
           "return"
         ]
       },
       "shape": "callable"
     },
-    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+    "summary-a92036a905be73d15099362eafaa5fec79503e721807be33524d979de89f07d7": {
       "call": {
         "callbacks": [
           {
@@ -114,6 +153,13 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -127,11 +173,39 @@
             },
             "id": "callback-0",
             "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "plain",
             "tracking": "untracked",
             "trigger": {
               "event": "call"
             }
           }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
         ]
       },
       "shape": "callable"

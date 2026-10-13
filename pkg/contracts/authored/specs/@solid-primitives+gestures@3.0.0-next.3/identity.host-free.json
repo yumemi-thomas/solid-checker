@@ -1,0 +1,87 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/gestures",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-Q7tOcowDI5E0WdSdUlixGB19XiSN7WHB3IitlepLbLMDrulsW3fZW+GbMEjWrJBTxxB65mUVFnUs/P/w6SeVeA==",
+      "snapshotRoot": "sha256:01058ba0ae61927fbaca5d7e6e5e943f92e5a6960efaa8591b153807c6200aff",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "3431aed69a01b58873e26fbecd5c82ec87031c5aa64543651a83b54b83b928fc",
+                  "path": "./dist/index.js",
+                  "sha256": "f3753c3756aff270b2db7ec8298b5c88e956f412790f785c056cf73dd79ab32e"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "c030185b689dd18b4354343e3441ca84ce330c726ab5188fa197d73ec27feee9"
+                },
+                "exports": {
+                  "DEFAULT_DELAY": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+                  "DEFAULT_MIN_SWIPE_DISTANCE": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+                  "doubleTap": "summary-b44ffea47a92c31014a9d4dc35ca16e75e6371eb6719e5b775d29d58018e7cde",
+                  "getCenterOfTwoPoints": "summary-81608a5722a69750ec99090aaa5076214d7f565c160b5b3a4ecdcfd37ab485a8",
+                  "longPress": "summary-b44ffea47a92c31014a9d4dc35ca16e75e6371eb6719e5b775d29d58018e7cde",
+                  "pan": "summary-b44ffea47a92c31014a9d4dc35ca16e75e6371eb6719e5b775d29d58018e7cde",
+                  "pinch": "summary-91bd85df614174a1b4741996876dfbde51813bbaaef751791b650ce1cd7cf305",
+                  "registerPointerListener": "summary-a5a49afe8b032843fa52cb1cee5d37449419bd9a1739401d2e36b8093c49b0fc",
+                  "rotate": "summary-b44ffea47a92c31014a9d4dc35ca16e75e6371eb6719e5b775d29d58018e7cde",
+                  "swipe": "summary-91bd85df614174a1b4741996876dfbde51813bbaaef751791b650ce1cd7cf305",
+                  "tap": "summary-b44ffea47a92c31014a9d4dc35ca16e75e6371eb6719e5b775d29d58018e7cde"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-Q7tOcowDI5E0WdSdUlixGB19XiSN7WHB3IitlepLbLMDrulsW3fZW+GbMEjWrJBTxxB65mUVFnUs/P/w6SeVeA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "a6b847d857c7f6cf187020f0db51bf9ce6c0a879ed6c6dc2e8854d2f50654aee"
+          },
+          "name": "@solid-primitives/gestures",
+          "version": "3.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-b44ffea47a92c31014a9d4dc35ca16e75e6371eb6719e5b775d29d58018e7cde": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-81608a5722a69750ec99090aaa5076214d7f565c160b5b3a4ecdcfd37ab485a8": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-91bd85df614174a1b4741996876dfbde51813bbaaef751791b650ce1cd7cf305": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-a5a49afe8b032843fa52cb1cee5d37449419bd9a1739401d2e36b8093c49b0fc": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

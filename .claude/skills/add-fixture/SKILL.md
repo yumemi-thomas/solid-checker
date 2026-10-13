@@ -38,12 +38,16 @@ The checker resolves the dialect from the nearest
 `node_modules/solid-js/package.json` above the project, walked like a bundler
 (`rust/crates/solid-facts-backend/src/dialect.rs`):
 
-- version resolves to 1.x (e.g. `{"name":"solid-js","version":"1.9.14"}`) →
-  the v1 rule catalog runs;
-- stub missing, unparsable, or version unclassifiable (`workspace:*`) → silent
-  fallback to the v2 default.
+- version resolves to a major this build carries (today only 2.x, e.g.
+  `{"name":"solid-js","version":"2.0.0-rc.3"}`) → that dialect's catalog runs;
+- version resolves to a major with no dialect here (`1.9.14`, or a future
+  `3.0.0`) → the project is **refused** with `SC9013` and nothing else is
+  reported (ADR 0110 § 1). A fixture pinned this way asserts a refusal, not
+  its own subject;
+- stub missing, unparsable, or the version field is not a version
+  (`workspace:*`) → silent fallback to the v2 default.
 
-So a v1 fixture without its stub is a **no-op that still passes**. And because
+So a fixture without its stub is a **no-op that still passes**. And because
 `.gitignore` blocks `**/node_modules/` globally, every fixture stub needs its
 own exception lines:
 
@@ -56,9 +60,12 @@ Without them the stub exists locally but is silently excluded from `git add`,
 and the fixture un-dialects only in CI. Verify with
 `git status --short fixtures/<group>/<name>/` that the stub shows up.
 
-Where 1.x and 2.0 intentionally differ, the behavior is pinned by the
-`fixtures/reactive-ir/dialect-solid-1x` / `dialect-solid-2` pair — read those
-fixtures' comments before mirroring behavior across dialects.
+`scripts/coverage.mjs` checks all four shapes on every run — presence,
+parseability, the major, and whether git tracks the file —  through
+`scripts/lib/dialect-stubs.mjs`. It cannot see a stub added to an
+*already-tracked* fixture without running, though, so run coverage after
+touching any fixture's `node_modules` rather than trusting a `verify-delta`
+plan (AGENTS.md, "Fails closed for paths git reports").
 
 ## Snapshot flow
 
@@ -84,6 +91,46 @@ per fixture project, holding rule, code, kind, severity, path, and span
    path), record it in `docs/precision-backlog.md`.
 5. Commit the snapshot update in the same commit as the code that moved the
    findings, not a thematically nearby one.
+
+## A fixture that consumes an *accepted* contract
+
+A contract-consumer fixture that ships `.solid-checker/accepted-contracts.json`
+pins the **rejection** path: every catalog in the tree is `obsolete-policy1`,
+which is refused before a claim is read, so every component in the fixture
+reports the same `SC9005` no matter what the contract says. That is legitimate
+for a fixture whose claim *is* the refusal, and useless for one whose claim is
+downstream of an accepted contract.
+
+For the second kind, ship `.solid-checker/authorize-contract.json` and **no**
+catalog:
+
+~~~json
+{ "document": "node_modules/<pkg>/solid-reactivity.json", "import": { … } }
+~~~
+
+The `import` block is an ordinary resolved-import record with project-relative
+paths — copy a neighbouring fixture's and change the export names. Coverage then
+copies the tree to `rust/target/fixture-authorization/`, runs
+`solid-contract-authorize` over it, and analyzes the copy with the trust
+configuration supplied out of band; the snapshot still names paths inside the
+fixture directory.
+
+Three things to get right:
+
+- **Ship `node_modules/solid-js/package.json`.** An authorized fixture is
+  analyzed from a copy at a different depth, so it cannot inherit a dialect from
+  its ancestors. Coverage refuses one that does not, by name.
+- **Keep the package manifest byte-identical to the fixture you copied the
+  import block from**, or recompute the closure digest, integrity and file
+  hashes. The names in `exports` are not digested; the bytes of `package.json`
+  are.
+- **Check what the fixture reports un-authorized** (`solid-checker-rust
+  --project …` with no trust flag). If that is the same as the snapshot, the
+  authorization is buying nothing and the fixture is not testing what you think.
+
+`fixtures/reactive-ir/package-merged-props-consumer` is the worked example, and
+`rust/crates/solid-facts-backend/src/fixture_authorization.rs` explains why a
+checked-in signing seed is not a forgery.
 
 Package-contract fixtures (`fixtures/package-contracts/`) additionally pin the
 exact package artifact; keep unknown external behavior fail-closed rather than

@@ -1,0 +1,172 @@
+[
+  {
+    "path": "CHEATSHEET.md",
+    "sha256": "ba27ce3a7a49098b509f3f654f262bc7ee9606b32a4f5155f7a00cf8e29fafcc",
+    "bytes": 27471
+  },
+  {
+    "path": "README.md",
+    "sha256": "5c428a2c5bf90123ad93243fbbabfdd4ae148ee9d0cd6e4d066c00e435da6f26",
+    "bytes": 4439
+  },
+  {
+    "path": "dist/attribution.js",
+    "sha256": "3e9a2c2384c8407dc0a7dcbe5f8e10ae9210943a634f7055158d00b82ee4c46a",
+    "bytes": 46
+  },
+  {
+    "path": "dist/internal.js",
+    "sha256": "e04f9e241a8cee5b4a270e8820a26c0c970f1117725e573ce40818f562587657",
+    "bytes": 1417
+  },
+  {
+    "path": "dist/refresh.dev.js",
+    "sha256": "7254d29c9325c754caf5df9d39c4da4e0581447d964d40794ae70667a24b5466",
+    "bytes": 7510
+  },
+  {
+    "path": "dist/refresh.js",
+    "sha256": "a527721e18607ec8656307f82779b3c1d7f0409dad48e92f8645c63dc6a487f3",
+    "bytes": 864
+  },
+  {
+    "path": "dist/server.dev.js",
+    "sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+    "bytes": 94291
+  },
+  {
+    "path": "dist/server.js",
+    "sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+    "bytes": 82108
+  },
+  {
+    "path": "dist/server.observe.js",
+    "sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+    "bytes": 87463
+  },
+  {
+    "path": "dist/solid.dev.js",
+    "sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+    "bytes": 52305
+  },
+  {
+    "path": "dist/solid.js",
+    "sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+    "bytes": 47821
+  },
+  {
+    "path": "dist/solid.observe.js",
+    "sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+    "bytes": 48884
+  },
+  {
+    "path": "package.json",
+    "sha256": "ce43a022f763e5995d1ac8a5f78f135804edd01b627a2bcbee8ff9530e79d284",
+    "bytes": 3685
+  },
+  {
+    "path": "skills/reactivity-diagnostics/SKILL.md",
+    "sha256": "4a6de90d21b7a1930609f362725fac899eb9d2e0f88173464b956d3a3cfb11aa",
+    "bytes": 46571
+  },
+  {
+    "path": "types/attribution.d.ts",
+    "sha256": "2fa947cbae1c0e0d32cbe42b2d1a14d93b86cb2ab56f725c34a30776924b9a4f",
+    "bytes": 540
+  },
+  {
+    "path": "types/client/component.d.ts",
+    "sha256": "b003f0a2822ea86ab61c3e65209bfc75b0680e0703a0e62f3f587dcd32228790",
+    "bytes": 5791
+  },
+  {
+    "path": "types/client/core.d.ts",
+    "sha256": "912aa89bd17094eadcb49f2e6d6201bf5dc9f54668947cdc15af82ef4bf430cb",
+    "bytes": 6961
+  },
+  {
+    "path": "types/client/flow.d.ts",
+    "sha256": "963ee0984c76c0d3273d69f67f14a681f4375e53edb694216ca0ece8555180f5",
+    "bytes": 12936
+  },
+  {
+    "path": "types/client/hydration.d.ts",
+    "sha256": "e504a057edd7615fc7eb2fdb54368457aabb9655a6eb89c0338599496f443d72",
+    "bytes": 23967
+  },
+  {
+    "path": "types/console-footer.d.ts",
+    "sha256": "b2722a256692789d498343d1d61cf9e55c58660afd0c19a50c41851bbb4c5b84",
+    "bytes": 142
+  },
+  {
+    "path": "types/index.d.ts",
+    "sha256": "fd95a479c639be02984a661fb9071eb261a99175412afed520330e0199925ddf",
+    "bytes": 3224
+  },
+  {
+    "path": "types/internal.d.ts",
+    "sha256": "6d7660a029ecbbb229cdfcc93a1761e3a1963728a7cc65e57548b9e391b3fff8",
+    "bytes": 7740
+  },
+  {
+    "path": "types/recovery.d.ts",
+    "sha256": "a6e1cfddf1a479eb371949828fd97227f7b656120e50cdf240f8badd6b44ce75",
+    "bytes": 1459
+  },
+  {
+    "path": "types/refresh/index.d.ts",
+    "sha256": "42b5664ae20e1f47c9370e9756c129b2586851172e68c7269e3a3a8919947778",
+    "bytes": 3141
+  },
+  {
+    "path": "types/server/component.d.ts",
+    "sha256": "bd02b2fd7cb187160e8cab5bae4bb33894c8f3c552bc4cc52121ef84eb49028b",
+    "bytes": 4223
+  },
+  {
+    "path": "types/server/core.d.ts",
+    "sha256": "6093d11f741209e54b37bea4a89e6f39bc5da1ac72271ad3bc2648ea29370a32",
+    "bytes": 2268
+  },
+  {
+    "path": "types/server/diagnostics.d.ts",
+    "sha256": "3f640ce2632f57d76e5c05c6bbd9d2e4aec35f95fefd5205d50af1698a755756",
+    "bytes": 1992
+  },
+  {
+    "path": "types/server/flow.d.ts",
+    "sha256": "10bf4419b5f10d504c857ef22ce4aad9f96fdcf6bcbc9f3adae73eb1f0891993",
+    "bytes": 7274
+  },
+  {
+    "path": "types/server/hydration.d.ts",
+    "sha256": "3b6ba2032fb2219b295a71c3d2b96b39a5a04626ce441f0af14414c9118ca905",
+    "bytes": 2073
+  },
+  {
+    "path": "types/server/index.d.ts",
+    "sha256": "fc46b6f102caf41387d5cb3692dc37f6e26e0902dfeb8afccb627e08f92404da",
+    "bytes": 2164
+  },
+  {
+    "path": "types/server/observe.d.ts",
+    "sha256": "2c8cac4c3db3855b3ce7d4957f14eed98daa1dbca547d3800f6474373655838a",
+    "bytes": 4136
+  },
+  {
+    "path": "types/server/shared.d.ts",
+    "sha256": "6e025247de30e65e91f1e8f142d07af430a1730fa47d99bed0ba5690ee784395",
+    "bytes": 5505
+  },
+  {
+    "path": "types/server/signals.d.ts",
+    "sha256": "86e11201a9c379ed91debac0ea55051497ef44e5a3e7f3e74aca9d24cf4080a4",
+    "bytes": 18268
+  },
+  {
+    "path": "types/types.d.ts",
+    "sha256": "f089b3993cd5a7a6ad626cb06eb9b5cdc3b8540d652fc9431c61e398f33354ec",
+    "bytes": 577
+  }
+]

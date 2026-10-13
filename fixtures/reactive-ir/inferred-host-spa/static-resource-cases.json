@@ -1,0 +1,23 @@
+[
+  {"name":"compiled Tailwind import", "file":"theme.css", "contents":"@import 'tailwindcss';", "statement":"import './theme.css';", "live":true},
+  {"name":"compiled PostCSS import", "file":"theme.pcss", "contents":"@import './nested.css';", "statement":"import './theme.pcss';", "live":true},
+  {"name":"compiled preprocessor import", "file":"theme.scss", "contents":"$color: red; .x{color:$color}", "statement":"import './theme.scss';", "live":true},
+  {"name":"compiled CSS module import", "file":"theme.module.css", "contents":".x{color:red}", "statement":"import classes from './theme.module.css';", "live":true},
+  {"name":"resource re-export", "file":"theme.module.css", "contents":".x{color:red}", "statement":"export {default as classes} from './theme.module.css';", "live":true},
+  {"name":"resource export-star", "file":"theme.module.css", "contents":".x{color:red}", "statement":"export * from './theme.module.css';", "live":true},
+  {"name":"JSON import", "file":"theme.json", "contents":"{\"color\":\"red\"}", "statement":"import theme from './theme.json';", "live":true},
+  {"name":"asset URL import", "file":"theme.svg", "contents":"<svg/>", "statement":"import url from './theme.svg?url';", "live":true},
+  {"name":"raw import", "file":"theme.css", "contents":"@config './executable.ts';", "statement":"import text from './theme.css?raw';", "live":true},
+  {"name":"missing CSS target", "statement":"import './absent.css';", "live":false},
+  {"name":"divergent CSS alias", "file":"theme.css", "contents":".x{}", "statement":"import '~/theme.css';", "config":"export default {plugins:[],resolve:{alias:{'~':'./other'}}};", "live":false},
+  {"name":"executable stylesheet plugin", "file":"theme.css", "contents":"@plugin './executable.ts';", "statement":"import './theme.css';", "live":false},
+  {"name":"escaped executable stylesheet plugin", "file":"theme.css", "contents":"@\\70lugin './executable.ts';", "statement":"import './theme.css';", "live":false},
+  {"name":"executable stylesheet configuration", "file":"theme.css", "contents":"@config './executable.ts';", "statement":"import './theme.css';", "live":false},
+  {"name":"clean installed CSS style condition", "file":"theme.css", "contents":"@import 'css-provider';", "statement":"import './theme.css';", "live":true},
+  {"name":"nested installed executable plugin", "file":"theme.css", "contents":"@import 'css-provider';", "dependencies":{"../node_modules/css-provider/index.css":"@plugin './executable.js';"}, "statement":"import './theme.css';", "live":false},
+  {"name":"nested outside executable config", "file":"theme.css", "contents":"@reference '../../outside.css';", "dependencies":{"../../outside.css":"@config './executable.js';"}, "statement":"import './theme.css';", "live":false},
+  {"name":"nested preprocessor executable plugin", "file":"theme.pcss", "contents":"@import './nested.pcss';", "dependencies":{"nested.pcss":"@plugin './executable.js';"}, "statement":"import './theme.pcss';", "live":false},
+  {"name":"nested module composition executable plugin", "file":"theme.module.css", "contents":".x{composes: x from './nested.pcss';}", "dependencies":{"nested.pcss":"@plugin './executable.js';"}, "statement":"import './theme.module.css';", "live":false},
+  {"name":"whitespace composition executable plugin", "file":"theme.module.css", "contents":".x{composes : x from\t/*comment*/ './nested.pcss';}", "dependencies":{"nested.pcss":"@plugin './executable.js';"}, "statement":"import './theme.module.css';", "live":false},
+  {"name":"preprocessor extensionless executable closure refused", "file":"theme.less", "contents":"@import './nested';", "dependencies":{"nested.less":"@plugin './executable.js';"}, "statement":"import './theme.less';", "live":false}
+]

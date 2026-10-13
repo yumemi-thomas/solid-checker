@@ -1,0 +1,14 @@
+{
+  "name": "synthesized-reads-veto-package",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@solidjs/signals": "2.0.0-rc.9"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+function createStore(first, second, third) {
+  if (typeof first === "function") return createStoreDerivedNext(first, second, third);
+  {
+    const store = createStoreNext(first, !!second?.shallow);
+    if (second?.name) nameStore(store[0], second.name);
+    return store;
+  }
+}

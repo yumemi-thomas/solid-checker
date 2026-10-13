@@ -1,29 +1,28 @@
 {
   "schemaVersion": 1,
-  "note": "Exact published package versions the tsc oracle compiles against. The Solid runtime pins match the repository audits: `v1` matches pkg/contracts/bundled/solid-v1/solid-js.json's `package.version`, `v2` matches pkg/contracts/bundled/runtime-lock.json. The v1 project also installs the exact @solidjs/signals helper used to exercise an unknown external-package contract while Solid 1.9.14 still selects the dialect. A newer release must be reviewed, never silently substituted -- the oracle verifies every installed version against `expect` and refuses to run on a mismatch.",
+  "note": "Exact published package versions the tsc oracle compiles against: the audited release, the triple the checker's AUDITED_INSTALLATION (rust/crates/solid-dialect/src/solid_2/releases.rs) names, so the checker half of every case runs with no SC9014 notice and the gate refuses one if they drift apart. `integrity` pins each tarball to the SRI digest recorded under `audit`; provisioning refuses a lockfile that installed anything else. A newer release must be reviewed, never silently substituted -- the oracle verifies every installed version against `expect`, and every locked integrity against `integrity`, and refuses to run on a mismatch. The archives the negative rows quote are a separate install (scripts/audited-archives.mjs), so this pin can move without moving them.",
   "dialects": {
-    "v1": {
-      "install": ["solid-js@1.9.14", "@solidjs/signals@2.0.0-rc.0"],
-      "expect": {
-        "solid-js": "1.9.14",
-        "@solidjs/signals": "2.0.0-rc.0"
-      },
-      "jsxImportSource": "solid-js",
-      "audit": "pkg/contracts/bundled/solid-v1/bundle-index.json"
-    },
     "v2": {
       "install": [
-        "solid-js@2.0.0-rc.3",
-        "@solidjs/signals@2.0.0-rc.3",
-        "@solidjs/web@2.0.0-rc.3"
+        "solid-js@2.0.0-rc.13",
+        "@solidjs/signals@2.0.0-rc.13",
+        "@solidjs/web@2.0.0-rc.13"
       ],
       "expect": {
-        "solid-js": "2.0.0-rc.3",
-        "@solidjs/signals": "2.0.0-rc.3",
-        "@solidjs/web": "2.0.0-rc.3"
+        "solid-js": "2.0.0-rc.13",
+        "@solidjs/signals": "2.0.0-rc.13",
+        "@solidjs/web": "2.0.0-rc.13"
+      },
+      "integrity": {
+        "solid-js": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ==",
+        "@solidjs/signals": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ==",
+        "@solidjs/web": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
       },
       "jsxImportSource": "@solidjs/web",
-      "audit": "pkg/contracts/bundled/runtime-lock.json"
+      "audit": [
+        "benchmarks/package-contract-v2/phase0/rc13",
+        "docs/package-contract-v2/audits/2026-10-05-solid-2-rc13-vocabulary-review.md"
+      ]
     }
   }
 }

@@ -1,0 +1,132 @@
+{
+  "entrypoints": {
+    "./button": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "c9a893b937d85e396bee7be853a19137e3c95c4fa5c14d7a4ef2aa39f9fc6460",
+            "path": "./dist/button/index.js",
+            "sha256": "19887ef3200137e232d5e91e917adb194dc4954832860433e93ed0416f48f9be"
+          },
+          "declarations": {
+            "path": "./dist/button/index.d.ts",
+            "sha256": "a3812bc6d455f94611ba884d51544d6ecaec90e7e3fa4a04c77e66aceaa8647f"
+          },
+          "exports": {
+            "Button": "authored-Button",
+            "Root": "authored-Root"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1*/default",
+            "typesBranch": "/exports/.~1*/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-6l5wJRkk/CRXWzbzwYeNfv38XHWKoL3Bj9ykJQexGcmyM2TQV4IpR1E/wDbhygT9TsI3LYP5qgdLj/l2xx+qiw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "15417622f5d59088663b1dd498fcbeba26bb5cb7ad4d8e199fc890aa1a3fd77a"
+    },
+    "name": "@kobalte/core",
+    "version": "2.0.0-alpha.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-Button": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": [],
+              "members": "event-handler-props"
+            },
+            "operation": "event-handlers"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "kind": "plain",
+                  "path": [
+                    "as"
+                  ]
+                }
+              ]
+            },
+            "id": "event-handlers",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "external-event"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-Root": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": [],
+              "members": "event-handler-props"
+            },
+            "operation": "event-handlers"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "kind": "plain",
+                  "path": [
+                    "as"
+                  ]
+                }
+              ]
+            },
+            "id": "event-handlers",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "external-event"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

@@ -13,7 +13,7 @@
             "sha256": "8c158374f6e577dd153bfde1a4dbab49d475cca83badfa7753c9cf7a0c1222e2"
           },
           "exports": {
-            "observe": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+            "observe": "summary-091b1d9c2b5cda13367902440e8f50e3789630c614638926e6136ca3e4c0861c"
           },
           "resolution": {
             "runtimeBranch": "legacy:main",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+    "summary-091b1d9c2b5cda13367902440e8f50e3789630c614638926e6136ca3e4c0861c": {
       "call": {
         "callbacks": [
           {
@@ -48,6 +48,13 @@
             "operation": "callback-0"
           }
         ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
         "operations": [
           {
             "at": {
@@ -61,12 +68,20 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
+            "tracking": "ambient-at-execution",
             "trigger": {
               "event": "call"
             }
           }
-        ]
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [],
+        "returns": []
       },
       "shape": "callable"
     }

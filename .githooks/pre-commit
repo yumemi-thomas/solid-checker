@@ -1,0 +1,61 @@
+#!/bin/sh
+# Refuse a commit that stages a file too large to belong in git history.
+#
+# This exists because a `git add -A` on 2026-09-10 swept ~950 MB of
+# machine-readable ecosystem-run transcripts into history in one commit. The
+# `.gitignore` rules added alongside cover every oversized file that existed
+# then, but they match by *name*, and the next bulk artifact will be named
+# something else. Size is the property that actually matters, and only a hook
+# can check it.
+#
+# Deliberately a refusal rather than a warning: the failure mode being
+# prevented is silent, and by the time it is visible the blobs are in shared
+# history and cost a rewrite to remove.
+set -eu
+
+limit_mb=5
+limit=$((limit_mb * 1024 * 1024))
+
+# Files this repository knowingly tracks above the limit. Each one is a
+# checked-in benchmark artifact whose history is intentional; adding to this
+# list is a decision, which is why it is a list and not a bigger threshold.
+allowed() {
+    case "$1" in
+        benchmarks/ecosystem/report.json) return 0 ;;
+        benchmarks/ecosystem/report-sentinel.json) return 0 ;;
+        benchmarks/package-contract-v2/phase20/row-ledger.json) return 0 ;;
+        benchmarks/package-contract-v2/phase21/row-ledger.json) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+offenders=""
+# Staged blobs only: `--cached` compares the index, so this measures exactly
+# what the commit would record, not what happens to be in the worktree.
+while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    allowed "$path" && continue
+    size=$(git cat-file -s "$(git rev-parse ":$path" 2>/dev/null)" 2>/dev/null || echo 0)
+    [ "$size" -gt "$limit" ] || continue
+    offenders="$offenders  $((size / 1048576)) MB  $path
+"
+done <<STAGED
+$(git diff --cached --name-only --diff-filter=ACMR)
+STAGED
+
+[ -n "$offenders" ] || exit 0
+
+cat >&2 <<MESSAGE
+pre-commit: refusing files over ${limit_mb} MB
+
+$offenders
+A file this size is almost never meant for git history, and once pushed it
+costs a history rewrite to remove. Options, in order of preference:
+
+  * keep it out of the repository and cite it as a local artifact;
+  * add a .gitignore rule if this shape recurs;
+  * add the path to the allowlist in .githooks/pre-commit, if the repository
+    really should track it forever;
+  * git commit --no-verify, if you have decided and want it anyway.
+MESSAGE
+exit 1

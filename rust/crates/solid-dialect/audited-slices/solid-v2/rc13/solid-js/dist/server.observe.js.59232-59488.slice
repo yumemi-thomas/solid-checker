@@ -1,0 +1,11 @@
+function useContext(context) {
+  try {
+    return getContext(context);
+  } catch (err) {
+    if (err instanceof ContextNotFoundError) {
+      const barrier = serverComponentContextError(context);
+      if (barrier) throw barrier;
+    }
+    throw err;
+  }
+}

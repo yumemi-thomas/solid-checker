@@ -1,0 +1,27 @@
+function untrack(fn, strictReadLabel) {
+  if (
+    GlobalQueue._externalUntrack === null &&
+    !tracking &&
+    !strictRead &&
+    !strictReadLabel &&
+    asyncTailFlights === 0
+  )
+    return fn();
+  const prevTracking = tracking;
+  const prevStrictRead = strictRead;
+  tracking = false;
+  {
+    strictRead = strictReadLabel || false;
+    untrackDepth++;
+  }
+  try {
+    if (GlobalQueue._externalUntrack !== null) return GlobalQueue._externalUntrack(fn);
+    return fn();
+  } finally {
+    tracking = prevTracking;
+    {
+      strictRead = prevStrictRead;
+      untrackDepth--;
+    }
+  }
+}

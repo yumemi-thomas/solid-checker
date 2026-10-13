@@ -1,0 +1,8 @@
+{
+  "diagnostic": true,
+  "measurement": "docs/package-contract-v2/phase21/2026-09-08-unique-read-origin-full-measurement.json",
+  "unchangedLocalClosureEntriesHazardsAndPackageIdentities": true,
+  "unchangedDependencySpecifierCensus": true,
+  "transitions": [],
+  "added": []
+}

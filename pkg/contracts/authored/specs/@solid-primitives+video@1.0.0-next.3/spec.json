@@ -1,0 +1,391 @@
+{
+  "package": "@solid-primitives/video",
+  "version": "1.0.0-next.3",
+  "identity": "identity.json",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "createVideoFrameCallback": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:77-120 \u2014 Browser rc.13 construction and return; signal ownedWrite exempts writes, never reads.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [
+          "create-running"
+        ],
+        "resources": [
+          {
+            "id": "running",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "video-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "computations": [
+          "video-effect"
+        ],
+        "cleanups": [
+          "video-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "initial-el"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "tracked-el"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "frame"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create-running",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "running"
+            ]
+          },
+          {
+            "id": "initial-el",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call"
+            }
+          },
+          {
+            "id": "video-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "video-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "tracked-el",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "video-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "video-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "frame",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "video-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "running"
+                },
+                {
+                  "kind": "effectful-callable",
+                  "call": {
+                    "closed": [
+                      "reads",
+                      "creates",
+                      "callbacks",
+                      "returns"
+                    ],
+                    "reads": [],
+                    "creates": [],
+                    "callbacks": [],
+                    "returns": [
+                      "start-return"
+                    ],
+                    "operations": [
+                      {
+                        "id": "start-return",
+                        "kind": "return",
+                        "trigger": {
+                          "event": "call"
+                        },
+                        "at": {
+                          "event": "call",
+                          "schedule": "same-stack"
+                        },
+                        "tracking": "untracked",
+                        "count": {
+                          "min": 0,
+                          "max": "many",
+                          "scope": "call"
+                        },
+                        "output": {
+                          "kind": "undefined"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "effectful-callable",
+                  "call": {
+                    "closed": [
+                      "reads",
+                      "creates",
+                      "callbacks",
+                      "returns"
+                    ],
+                    "reads": [],
+                    "creates": [],
+                    "callbacks": [],
+                    "returns": [
+                      "stop-return"
+                    ],
+                    "operations": [
+                      {
+                        "id": "stop-return",
+                        "kind": "return",
+                        "trigger": {
+                          "event": "call"
+                        },
+                        "at": {
+                          "event": "call",
+                          "schedule": "same-stack"
+                        },
+                        "tracking": "untracked",
+                        "count": {
+                          "min": 0,
+                          "max": "many",
+                          "scope": "call"
+                        },
+                        "output": {
+                          "kind": "undefined"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:77-120 \u2014 No own reactive read during construction or start/stop. untrack(el) and createEffect(el, apply) are the enumerated caller invocations. P1 video host methods are non-reactive.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:83-115 \u2014 One running signal, one effect computation and one direct cleanup. attach and makeVideoFrameCallback (30-57,87-96) add only host callbacks. INTERNAL_OPTIONS is utils/dist/index.js:33 (ownedWrite=true).",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:97-104 \u2014 Exactly two initial untracked el() invocations, then el as tracked effect compute. The frame callback only runs externally: 30-57,87-96. No other caller callable on typed inputs/P1.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:116-120 \u2014 Only normal browser return is [running,start,stop]; members are individually described and their writes remain open."
+      },
+      "memberClosures": {
+        "return.1": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:105-109 \u2014 No read, creation or immediate caller invocation; completion returns undefined. Writes to running (ownedWrite=true) stay OPEN. Native request/cancel frame callback follows P1; the later caller callback is the export frame operation. Helpers: createVideoFrameCallback.js:30-57,87-96.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:105-109 \u2014 No read, creation or immediate caller invocation; completion returns undefined. Writes to running (ownedWrite=true) stay OPEN. Native request/cancel frame callback follows P1; the later caller callback is the export frame operation. Helpers: createVideoFrameCallback.js:30-57,87-96.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:105-109 \u2014 No read, creation or immediate caller invocation; completion returns undefined. Writes to running (ownedWrite=true) stay OPEN. Native request/cancel frame callback follows P1; the later caller callback is the export frame operation. Helpers: createVideoFrameCallback.js:30-57,87-96.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:105-109 \u2014 No read, creation or immediate caller invocation; completion returns undefined. Writes to running (ownedWrite=true) stay OPEN. Native request/cancel frame callback follows P1; the later caller callback is the export frame operation. Helpers: createVideoFrameCallback.js:30-57,87-96."
+        },
+        "return.2": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:110-114 \u2014 No read, creation or immediate caller invocation; completion returns undefined. Writes to running (ownedWrite=true) stay OPEN. Native request/cancel frame callback follows P1; the later caller callback is the export frame operation. Helpers: createVideoFrameCallback.js:30-57,87-96.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:110-114 \u2014 No read, creation or immediate caller invocation; completion returns undefined. Writes to running (ownedWrite=true) stay OPEN. Native request/cancel frame callback follows P1; the later caller callback is the export frame operation. Helpers: createVideoFrameCallback.js:30-57,87-96.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:110-114 \u2014 No read, creation or immediate caller invocation; completion returns undefined. Writes to running (ownedWrite=true) stay OPEN. Native request/cancel frame callback follows P1; the later caller callback is the export frame operation. Helpers: createVideoFrameCallback.js:30-57,87-96.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/video-createVideoFrameCallback-module-scope/node_modules/@solid-primitives/video/dist/createVideoFrameCallback.js:110-114 \u2014 No read, creation or immediate caller invocation; completion returns undefined. Writes to running (ownedWrite=true) stay OPEN. Native request/cancel frame callback follows P1; the later caller callback is the export frame operation. Helpers: createVideoFrameCallback.js:30-57,87-96."
+        }
+      },
+      "probes": [
+        {
+          "label": "owner",
+          "rule": "missing-owner",
+          "why": "The same registration runs with no owner versus inside a live root."
+        },
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "An owner-backed onSettled is a leaf; construct in the component owner in the correct twin."
+        },
+        {
+          "label": "el-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The third el invocation is the effect compute; first two are untracked. Only misuse writes a non-exempt caller signal there."
+        },
+        {
+          "label": "el-owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The first untracked el() preserves the invoking owner and runs before effect construction; the leaf rejects its cleanup."
+        },
+        {
+          "label": "frame",
+          "rule": "missing-owner",
+          "why": "Actual canvas MediaStream video frame dispatch invokes the caller callback on a host stack; correct restores its captured owner.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

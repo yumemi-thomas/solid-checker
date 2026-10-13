@@ -1,0 +1,17 @@
+import { createMemo, createSignal } from "solid-js";
+import { access } from "@solid-primitives/utils";
+export default function App() {
+  const [source] = createSignal(1);
+  const [sink, setSink] = createSignal(0);
+  const [done, setDone] = createSignal("");
+  createMemo(() => access(() => {
+    const value = source();
+    try { setSink(1); } catch { /* Keep the emitted write diagnostic; allow mount to settle. */ }
+    return value;
+  }));
+  const finish = () => {
+    // The write belongs to the misuse's owned callback above.
+    setDone("done");
+  };
+  return <><button id="target" onClick={finish}>finish</button><p>{sink()}</p><p id="done">{done()}</p></>;
+}

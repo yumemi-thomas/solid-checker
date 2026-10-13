@@ -1,0 +1,25 @@
+function runWithOwner(owner, fn) {
+  if (owner && owner._flags & REACTIVE_DISPOSED) {
+    const message =
+      "[RUN_WITH_DISPOSED_OWNER] runWithOwner called with a disposed owner. Children created inside will never be disposed.";
+    emitDiagnostic({
+      code: "RUN_WITH_DISPOSED_OWNER",
+      kind: "owner",
+      severity: "warn",
+      message,
+      ownerId: owner.id,
+      ownerName: owner._name
+    });
+    console.warn(message);
+  }
+  const oldContext = context;
+  const prevTracking = tracking;
+  context = owner;
+  tracking = false;
+  try {
+    return fn();
+  } finally {
+    context = oldContext;
+    tracking = prevTracking;
+  }
+}

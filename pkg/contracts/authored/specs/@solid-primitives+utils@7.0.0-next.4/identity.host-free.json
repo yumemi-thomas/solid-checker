@@ -1,0 +1,481 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/utils",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==",
+      "snapshotRoot": "sha256:0522b7459da352f5f89a65c231b6c9ce1c92f369b9447f9a248ea6b6cf5122df",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "b17b8bd9bc815268299aa0edb6bdd602ed084548009ee2768666306130e6c09c",
+                  "path": "./dist/index.js",
+                  "sha256": "59dd297c1ff4a90620cd3f27aa9b0a650404e8178513d6501af5ec1c3f8370f8"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "c464f6ae1e837bbfc3103b2c59cc920de983e147e676329893308bc962165193"
+                },
+                "exports": {
+                  "EQUALS_FALSE_OPTIONS": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+                  "INTERNAL_OPTIONS": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+                  "access": "summary-2ef6fe34785d5da7b447f5646b2d1e497707f78182a634a8d5d001652787781a",
+                  "accessArray": "summary-dcda20c1f89cbb0ae302efc49448ce26a0af834093c9c052d9eefb12a554a5c7",
+                  "accessWith": "summary-fa35852cc55c233d5dd9cd52469edd327890bffe7a6474e96a2e5c0f737f1cc5",
+                  "afterPaint": "summary-717a197e69ca5c6079c66ef9dad3b108ec84225c12020c56a465cc88de548079",
+                  "arrayEquals": "summary-dca19fca75033217f813bda6872ccc42054d5c3c0abae8b5fcd4c6482b22f7a7",
+                  "asAccessor": "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb",
+                  "asArray": "summary-6c15693bdd22501fd896f622a086b9a413d2826be48a32759973960873c6471c",
+                  "chain": "summary-31d08e9dc7510918890f0df5e92129584230a64ac4ca67b03ff3a33d46f4c3fd",
+                  "clamp": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "compare": "summary-18032274883a3f864eba6dce257ab47c61fe4827c5e22bcfabb7e1ab69323ccb",
+                  "contains": "summary-16e3c74a35fd3250f183de2ccd2167ef48e6af1b6510dd01fca16044b8b82b2c",
+                  "createCallbackStack": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+                  "createHydratableSignal": "summary-36536dad508e5254357135dea9c9301b45073947cb0d3dc91f20ebd94e0153d2",
+                  "createHydrateSignal": "summary-36536dad508e5254357135dea9c9301b45073947cb0d3dc91f20ebd94e0153d2",
+                  "createIdGenerator": "summary-8ad7845f607926d10c901a4e2cf089a91c81b18fe9fea8e99482b53215a9e9c2",
+                  "createMicrotask": "summary-780f4ac7bb579a848aa29c7563600cb00c8997cb85b4afce1d55bebd7c79ecdb",
+                  "defaultEquals": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+                  "defer": "summary-2681276a97cc924e1dae94fd036a43874d6531e114e1a5e93d386f03ea1a64c5",
+                  "entries": "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece",
+                  "falseFn": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "filterNonNullable": "summary-284c53ce9e281d42250a648e3949447edc11fe25052b3fa80fcd01db2c23ae1b",
+                  "globalRegistry": "summary-c987733942d726e032bf334c484303340a051130637995de7d429139dfd24c56",
+                  "handleDiffArray": "summary-f771539ef4e01ce4c9213dfd5d1f0a3c421bebff646a30977a14ec9556e19f99",
+                  "isClient": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+                  "isDev": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+                  "isNonNullable": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "isObject": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "isProd": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+                  "isServer": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+                  "json": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "keys": "summary-8b88980abf0b58c8e4603c1da643db4fd1d3eb11332610a01a459167c0e73ccd",
+                  "lines": "summary-16f53fad0e0a01a2555f27f34196c799fdcc5e328510b872684f3c8e768d4623",
+                  "ndjson": "summary-16f53fad0e0a01a2555f27f34196c799fdcc5e328510b872684f3c8e768d4623",
+                  "noop": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "number": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "ofClass": "summary-92de433420893cde068ed89e6f418ba0c7f8001c27f5fc33fc92b561c744ce38",
+                  "pipe": "summary-7e43d7879f2f0d0a2e055be62b7339ac0414d2164732e4137b5e785ae298aa51",
+                  "reverseChain": "summary-31d08e9dc7510918890f0df5e92129584230a64ac4ca67b03ff3a33d46f4c3fd",
+                  "safe": "summary-02404d6493c8e4c7ea72065740a14967b82e9aeb2aab72fbba18eb09f4e9a1b7",
+                  "trueFn": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "tryOnCleanup": "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290",
+                  "withAccess": "summary-f16ac60a7b08410854ebc188f2678568fa7d37cfe89f9605708eeb6c4e6be03c",
+                  "wrapSetter": "summary-16594a988df00c47b285cfcf4d0ff71795df6776e9873c5607c69523f4c882f7"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "f72b16817e60816623cea5d22869fd641ec3bdb07728bb4b0cc4a511ecc8af0b"
+          },
+          "name": "@solid-primitives/utils",
+          "version": "7.0.0-next.4"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-2ef6fe34785d5da7b447f5646b2d1e497707f78182a634a8d5d001652787781a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-dcda20c1f89cbb0ae302efc49448ce26a0af834093c9c052d9eefb12a554a5c7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-fa35852cc55c233d5dd9cd52469edd327890bffe7a6474e96a2e5c0f737f1cc5": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-717a197e69ca5c6079c66ef9dad3b108ec84225c12020c56a465cc88de548079": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-dca19fca75033217f813bda6872ccc42054d5c3c0abae8b5fcd4c6482b22f7a7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-6c15693bdd22501fd896f622a086b9a413d2826be48a32759973960873c6471c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-31d08e9dc7510918890f0df5e92129584230a64ac4ca67b03ff3a33d46f4c3fd": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-18032274883a3f864eba6dce257ab47c61fe4827c5e22bcfabb7e1ab69323ccb": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-16e3c74a35fd3250f183de2ccd2167ef48e6af1b6510dd01fca16044b8b82b2c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-76afb07a38ac34d0baf9a85ba8a8af18668779047b3383f5db79e74c99ca1ece": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-36536dad508e5254357135dea9c9301b45073947cb0d3dc91f20ebd94e0153d2": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-8ad7845f607926d10c901a4e2cf089a91c81b18fe9fea8e99482b53215a9e9c2": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-780f4ac7bb579a848aa29c7563600cb00c8997cb85b4afce1d55bebd7c79ecdb": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-f46af5d4ea2181676e1299ccb5b9ee55e5e2f44b62d818bbbc82eb3cf45cd290": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2681276a97cc924e1dae94fd036a43874d6531e114e1a5e93d386f03ea1a64c5": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-284c53ce9e281d42250a648e3949447edc11fe25052b3fa80fcd01db2c23ae1b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c987733942d726e032bf334c484303340a051130637995de7d429139dfd24c56": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-f771539ef4e01ce4c9213dfd5d1f0a3c421bebff646a30977a14ec9556e19f99": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-8b88980abf0b58c8e4603c1da643db4fd1d3eb11332610a01a459167c0e73ccd": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-16f53fad0e0a01a2555f27f34196c799fdcc5e328510b872684f3c8e768d4623": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-92de433420893cde068ed89e6f418ba0c7f8001c27f5fc33fc92b561c744ce38": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7e43d7879f2f0d0a2e055be62b7339ac0414d2164732e4137b5e785ae298aa51": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-02404d6493c8e4c7ea72065740a14967b82e9aeb2aab72fbba18eb09f4e9a1b7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-f16ac60a7b08410854ebc188f2678568fa7d37cfe89f9605708eeb6c4e6be03c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-16594a988df00c47b285cfcf4d0ff71795df6776e9873c5607c69523f4c882f7": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "specifier": "@solid-primitives/utils/colors",
+      "requestedEntrypoint": "./colors",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/colors/index.js",
+      "declarationTarget": "dist/colors/index.d.ts",
+      "packageIntegrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==",
+      "snapshotRoot": "sha256:0522b7459da352f5f89a65c231b6c9ce1c92f369b9447f9a248ea6b6cf5122df",
+      "identityDocument": {
+        "entrypoints": {
+          "./colors": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "6e40fa0fdad5e7d4f778e60abde0ccecacfb0961173187e6ef777b2e4a97ef87",
+                  "path": "./dist/colors/index.js",
+                  "sha256": "592e0bdc1fd5f92addec4da4449cbcf6d41a17ac29d0cca70705bb1f9342ff96"
+                },
+                "declarations": {
+                  "path": "./dist/colors/index.d.ts",
+                  "sha256": "d666c88bcebf131c265843e6622c6e86d4b56ca35e37b8e5cb485570c924631c"
+                },
+                "exports": {
+                  "COLOR_INTL_TRANSLATIONS": "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5",
+                  "colorScale": "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa",
+                  "colorToOKLCH": "summary-879dd4761bdfc40a43f4ef49cdc1419ee32836074ad3c120696a27e040d9da65",
+                  "complement": "summary-879dd4761bdfc40a43f4ef49cdc1419ee32836074ad3c120696a27e040d9da65",
+                  "contrastRatio": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+                  "darken": "summary-dc63420781dbf332cfde6311021876537e8ed384144bb9ed17db21c3d3e037f7",
+                  "desaturate": "summary-dc63420781dbf332cfde6311021876537e8ed384144bb9ed17db21c3d3e037f7",
+                  "detectColorFormat": "summary-9838d030dd54bb4927e96b92980bcdb97982f017a15f215935aa8d50be629b66",
+                  "getColorChannels": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "isReadable": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+                  "isValidColor": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+                  "lighten": "summary-4a69ca03608216c58130e6d8ada34996b6bdfe50de2b353095fc2d79194ae2b2",
+                  "mix": "summary-0069572c92df0860a73e95fbfcd5c475a018cc45dd3c5be402a020e9f3abc865",
+                  "normalizeColor": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+                  "normalizeHue": "summary-6460fca012a4977602bcbc73e8b056678ac4ac1997275168f988a54b569fe108",
+                  "parseColor": "summary-a713b475b112ce66ca701f017a8941f13b260c9cca8cdc61f6c13e039b0ed7d7",
+                  "perceptualColorScale": "summary-2f14f89d5004b9a47f8de1702ada115f4a0d4b81c3609fdff2001c59157da552",
+                  "saturate": "summary-4a69ca03608216c58130e6d8ada34996b6bdfe50de2b353095fc2d79194ae2b2",
+                  "tryParseColor": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1colors/import/default",
+                  "typesBranch": "/exports/.~1colors/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "f72b16817e60816623cea5d22869fd641ec3bdb07728bb4b0cc4a511ecc8af0b"
+          },
+          "name": "@solid-primitives/utils",
+          "version": "7.0.0-next.4"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-2680d1f491ed560276a0f3228de306bacfc9f3b0500c1a47b2683d05c2ae45f5": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-879dd4761bdfc40a43f4ef49cdc1419ee32836074ad3c120696a27e040d9da65": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-dc63420781dbf332cfde6311021876537e8ed384144bb9ed17db21c3d3e037f7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9838d030dd54bb4927e96b92980bcdb97982f017a15f215935aa8d50be629b66": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-4a69ca03608216c58130e6d8ada34996b6bdfe50de2b353095fc2d79194ae2b2": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-0069572c92df0860a73e95fbfcd5c475a018cc45dd3c5be402a020e9f3abc865": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-6460fca012a4977602bcbc73e8b056678ac4ac1997275168f988a54b569fe108": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-a713b475b112ce66ca701f017a8941f13b260c9cca8cdc61f6c13e039b0ed7d7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2f14f89d5004b9a47f8de1702ada115f4a0d4b81c3609fdff2001c59157da552": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "specifier": "@solid-primitives/utils/immutable",
+      "requestedEntrypoint": "./immutable",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/immutable/index.js",
+      "declarationTarget": "dist/immutable/index.d.ts",
+      "packageIntegrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==",
+      "snapshotRoot": "sha256:0522b7459da352f5f89a65c231b6c9ce1c92f369b9447f9a248ea6b6cf5122df",
+      "identityDocument": {
+        "entrypoints": {
+          "./immutable": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "880d191076feb4f8f3e64e862a2a4d1fd5fbb722a2f23013eac6d4ce886516b7",
+                  "path": "./dist/immutable/index.js",
+                  "sha256": "17770f2b1915ea7a883edffeddf79ebd7ab7fefe316cfa56634eeeea79b06d97"
+                },
+                "declarations": {
+                  "path": "./dist/immutable/index.d.ts",
+                  "sha256": "8990edbcc23030578ca0993437831ff39f2fdc0f6d75bab29a886d91803b7a8d"
+                },
+                "exports": {
+                  "add": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "clamp": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "concat": "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb",
+                  "divide": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "drop": "summary-666dd9fa7d3c08f5b4720b4cb5e123fac91ce9a7254a98a54d1d7d636f0d8e2e",
+                  "dropRight": "summary-4baccd497e521881b80b465e37ea9ac5ed449235e4cabb78553928bc0962451e",
+                  "fill": "summary-38a85f6f7946297c6254d35db6b037ae766ec3011c125594eb0fcfb3ac477924",
+                  "filter": "summary-4b284adf7ff443f06e5787af3f72b94725ad9f95dc5b3fb6c982362b2a3bd6af",
+                  "filterInstance": "summary-f6e649d9f2fc8f9ee4f4f5f714440e5cd09107574ab71deb8ef09250bb559a98",
+                  "filterOut": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "filterOutInstance": "summary-f6e649d9f2fc8f9ee4f4f5f714440e5cd09107574ab71deb8ef09250bb559a98",
+                  "flatten": "summary-66d17c2e707b12ee4fce0358548a3d7acccde543c6cf2a0e885fa69ee7590f84",
+                  "get": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "map": "summary-dcda20c1f89cbb0ae302efc49448ce26a0af834093c9c052d9eefb12a554a5c7",
+                  "merge": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "multiply": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "omit": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "pick": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "power": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "push": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "remove": "summary-08f111555ef9394dcbd54a9be91b3cf91648da7c18ae5258b9bbf00bc75f3e01",
+                  "removeItems": "summary-92de433420893cde068ed89e6f418ba0c7f8001c27f5fc33fc92b561c744ce38",
+                  "shallowArrayCopy": "summary-666dd9fa7d3c08f5b4720b4cb5e123fac91ce9a7254a98a54d1d7d636f0d8e2e",
+                  "shallowCopy": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "shallowObjectCopy": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "slice": "summary-666dd9fa7d3c08f5b4720b4cb5e123fac91ce9a7254a98a54d1d7d636f0d8e2e",
+                  "sort": "summary-38a85f6f7946297c6254d35db6b037ae766ec3011c125594eb0fcfb3ac477924",
+                  "sortBy": "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217",
+                  "splice": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "split": "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668",
+                  "substract": "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749",
+                  "update": "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa",
+                  "withArrayCopy": "summary-c987733942d726e032bf334c484303340a051130637995de7d429139dfd24c56",
+                  "withCopy": "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1",
+                  "withObjectCopy": "summary-c987733942d726e032bf334c484303340a051130637995de7d429139dfd24c56"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/.~1immutable/import/default",
+                  "typesBranch": "/exports/.~1immutable/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "f72b16817e60816623cea5d22869fd641ec3bdb07728bb4b0cc4a511ecc8af0b"
+          },
+          "name": "@solid-primitives/utils",
+          "version": "7.0.0-next.4"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-b58c8f849e7a1f26937f7b2956b12fdde39db0ccf33eaf25c8dcac24852f7749": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-02471e768a026bc855692aa20e7485ead8a2241ff320853ac46667a2d5bcefbb": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-666dd9fa7d3c08f5b4720b4cb5e123fac91ce9a7254a98a54d1d7d636f0d8e2e": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-4baccd497e521881b80b465e37ea9ac5ed449235e4cabb78553928bc0962451e": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-38a85f6f7946297c6254d35db6b037ae766ec3011c125594eb0fcfb3ac477924": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-4b284adf7ff443f06e5787af3f72b94725ad9f95dc5b3fb6c982362b2a3bd6af": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-f6e649d9f2fc8f9ee4f4f5f714440e5cd09107574ab71deb8ef09250bb559a98": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-66d17c2e707b12ee4fce0358548a3d7acccde543c6cf2a0e885fa69ee7590f84": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-dcda20c1f89cbb0ae302efc49448ce26a0af834093c9c052d9eefb12a554a5c7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-08f111555ef9394dcbd54a9be91b3cf91648da7c18ae5258b9bbf00bc75f3e01": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-92de433420893cde068ed89e6f418ba0c7f8001c27f5fc33fc92b561c744ce38": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b5f3e369144d048ef97889c084a511683c02c704c188bc92120bb20abfb19217": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-d3c94c4c7cd210fe1bac5231360fc29298c378abb526348091f2b7cb8e7c0668": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7e3edf80dbc6dd5addeed9d111476a59b620e7599583564165173372609d50aa": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c987733942d726e032bf334c484303340a051130637995de7d429139dfd24c56": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-cdc0eb01ff0411b70e5601e278cb0f47c5ec0449e2c94e24f07122d1294fcfc1": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

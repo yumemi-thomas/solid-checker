@@ -7,8 +7,8 @@ declare const element: Element;
 const readDoubled = () => doubled();
 
 // This ambient-only fixture has no exact installed artifact and therefore
-// cannot bind the receipt-issued first-party bundle. The nested accessor read
-// is still proven locally; the package call itself receives no name-only claim.
+// cannot bind the receipt-issued first-party bundle. The package call receives
+// no name-only claim, so the nested accessor read's timing is not proven.
 export function Untracked() {
   const value = flatten(() => doubled());
   return <div>{value}</div>;

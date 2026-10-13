@@ -1,14 +1,14 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/bundled-contract-callback-consumer/App.tsx",
-      "start": 563,
-      "end": 572,
+      "start": 558,
+      "end": 567,
       "fixes": 0
     }
   ]

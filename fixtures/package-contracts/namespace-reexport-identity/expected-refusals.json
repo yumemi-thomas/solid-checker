@@ -1,0 +1,21 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "namespace-reexport-identity",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": "./unresolved",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "dependency-composition",
+      "applicability": "runtime-module",
+      "reason": "accepted dependency ./missing has no exact runtime binding for export *"
+    }
+  ],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": []
+}

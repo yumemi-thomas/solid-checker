@@ -383,6 +383,30 @@ test("an entirely inapplicable census is not claimed by the publish-defect marke
   );
 });
 
+// The inapplicable vocabulary is data in the message, never a class the
+// benchmark enumerates: a new disposition class must land in the census and the
+// counters without a classifier change.
+test("a non-emitting-module-target census classifies exactly like every other disposition", () => {
+  const stderr =
+    "solid-checker: no certifiable artifact case; 0 case(s) refused and 2 case(s) recorded inapplicable; " +
+    "first inapplicable: ./types/index.d.ts: non-emitting-module-target: runtime target emits no JavaScript: " +
+    "all 1 module-level statement(s) are erasable";
+  assert.equal(
+    classifyResult({ status: 2, stdout: "", stderr, phase: "generate" }).class,
+    "all-cases-inapplicable"
+  );
+  const partial = classifyResult({
+    status: 0,
+    stdout:
+      "generated unaccepted stable contract proposal for pkg@1.0.0 at out.json; " +
+      "1 artifact case(s) recorded inapplicable; proof verification must issue its receipt",
+    stderr: "",
+    phase: "generate"
+  });
+  assert.equal(partial.class, "success");
+  assert.equal(partial.detail.inapplicableCases, 1);
+});
+
 test("an exact accepted-binding frontier remains a dependency-contract obligation", () => {
   const result = classifyResult({
     status: 2,

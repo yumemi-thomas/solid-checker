@@ -12,7 +12,7 @@ import {
   realpathSync,
   statSync
 } from "node:fs";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import tsNamespace from "typescript";
 
 export function selectTypeScriptApi(namespace) {
@@ -146,6 +146,618 @@ export function nonModuleTargetExtension(path) {
   return NON_MODULE_EXTENSIONS.includes(extension.toLowerCase()) ? extension : undefined;
 }
 
+/**
+ * The module-emission premises, mirrored from `solid_facts::ast::module_emission`.
+ *
+ * `MODULE` is decided by the bytes alone: parsed as a TypeScript module, is
+ * every module-level statement erasable? It never reads the filename — a member
+ * called `index.js` whose content is `export declare function f(): void;` gets
+ * the same answer as the identical bytes called `index.d.ts`, because a suffix
+ * is a publisher's claim about a file while the statement list is evidence
+ * about it.
+ *
+ * `DECLARATION_FILE` is the narrower premise that admits the suffix, and only
+ * ever conjoined with an ambient-only parse: TypeScript decides declaration-file
+ * semantics by suffix and emits no JavaScript for such a file at all, including
+ * for the re-export forms a plain module would emit. The caller owes the suffix
+ * check on an authenticated member; this owes the proof that the bytes are
+ * really ambient, which is what the gate below is for.
+ *
+ * Exactly one premise runs for a member, chosen by its suffix, so their answers
+ * never race. Every verdict is re-proved in Rust against authenticated archive
+ * bytes, and a disagreement refuses the whole proposal — so the two statement
+ * tables are held to the same shared corpus,
+ * `fixtures/module-emission/cases.json`, read by the tests on both sides.
+ */
+export const MODULE_EMISSION_FLAVOR = Object.freeze({
+  Module: "module",
+  DeclarationFile: "declaration-file"
+});
+
+// Identical to Rust's `MODULE_LADDER`, and identical in order. The order is not
+// load-bearing — every configuration that parses cleanly is answered from the
+// same statement table — and the Rust suite pins that over the whole corpus by
+// running all six permutations.
+const MODULE_EMISSION_LADDER = Object.freeze([".ts", ".d.ts", ".tsx"]);
+
+// The member suffixes TypeScript itself reads as declaration-file semantics.
+const DECLARATION_FILE_EXTENSIONS = Object.freeze([".d.ts", ".d.mts", ".d.cts"]);
+
+// A candidate this large is never a hand-written type module; it is a bundle.
+// The bound keeps one pathological member from paying for up to three parses,
+// and it can only ever *lose* a disposition, never invent one.
+//
+// That loss is a real yield cap, not a free win: a genuinely non-emitting
+// bundled `.d.ts` above the bound — a rolled-up types file, which is a shape
+// real packages ship — never becomes inapplicable, and its artifact case keeps
+// certify-or-refuse semantics instead. The verifier deliberately has **no**
+// bound: it only ever re-proves claims this side makes, so the asymmetry can
+// only mean fewer claims, never a claim the archive is not asked about.
+const MODULE_EMISSION_BYTE_LIMIT = 512 * 1024;
+
+/**
+ * The declaration-suffix arm this member's path selects, or `undefined` for the
+ * bytes-only arm. Exactly one arm ever runs.
+ */
+export function declarationFileFlavor(path) {
+  const lowered = path.toLowerCase();
+  return DECLARATION_FILE_EXTENSIONS.some(extension => lowered.endsWith(extension))
+    ? MODULE_EMISSION_FLAVOR.DeclarationFile
+    : MODULE_EMISSION_FLAVOR.Module;
+}
+
+/**
+ * Whether TypeScript reads this path as a declaration file, by name alone.
+ *
+ * Mirrors `tspath.GetDeclarationFileExtension` and Rust's
+ * `is_typescript_declaration_file_name` — including its third case, a `.ts`
+ * whose *base name* also carries `.d.` (`x.d.web.ts`), and its base-name-only
+ * scope, so a directory called `x.d.ts` on the path is not one. Wider than
+ * `declarationFileFlavor`'s suffix list deliberately: that one selects a parse
+ * grammar, this one answers "does a runtime module exist under this name".
+ */
+function isDeclarationFileName(path) {
+  // Case-sensitive, like `strings.HasSuffix` in tsgo. A differently-cased
+  // spelling is unreachable anyway: `localModuleTarget` builds its candidates
+  // from lowercase literals, so a `.D.TS` member is only ever selected as an
+  // explicit specifier, where its extension is not a runtime one and it is an
+  // asset. Keeping all three mirrors of this predicate byte-identical matters
+  // more than covering a shape none of them can produce.
+  const base = basename(path);
+  if (DECLARATION_FILE_EXTENSIONS.some(extension => base.endsWith(extension))) return true;
+  return base.endsWith(".ts") && base.includes(".d.");
+}
+
+/**
+ * Whether an import or export declaration is erased whole, so the module it
+ * names is read for types and never loaded at runtime.
+ *
+ * Fail-closed in both directions that matter. `import "./x"` and
+ * `import {} from "./x"` are **not** type-only: the first is a side-effect
+ * import and the second is a shape TypeScript's own elision rules treat
+ * inconsistently, so both keep the runtime role and stay subject to the
+ * declaration-only refusal. A namespace or default binding is a value binding
+ * unless the whole clause is marked `type`.
+ */
+function specifierIsTypeOnly(statement) {
+  if (ts.isImportDeclaration(statement)) {
+    const clause = statement.importClause;
+    if (!clause) return false;
+    if (clause.isTypeOnly) return true;
+    if (clause.name) return false;
+    const bindings = clause.namedBindings;
+    return Boolean(
+      bindings &&
+        ts.isNamedImports(bindings) &&
+        bindings.elements.length > 0 &&
+        bindings.elements.every(element => element.isTypeOnly)
+    );
+  }
+  if (statement.isTypeOnly) return true;
+  const clause = statement.exportClause;
+  return Boolean(
+    clause &&
+      ts.isNamedExports(clause) &&
+      clause.elements.length > 0 &&
+      clause.elements.every(element => element.isTypeOnly)
+  );
+}
+
+function hasDeclareModifier(node) {
+  return (node.modifiers ?? []).some(
+    modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword
+  );
+}
+
+/**
+ * Whether one module-level statement emits JavaScript. Fail-closed: only the
+ * kinds proved erasable answer `false`, and every unrecognized kind emits.
+ */
+function statementEmits(statement) {
+  const { SyntaxKind } = ts;
+  switch (statement.kind) {
+    case SyntaxKind.TypeAliasDeclaration:
+    case SyntaxKind.InterfaceDeclaration:
+    // `export as namespace React;` names a UMD global for type consumers.
+    case SyntaxKind.NamespaceExportDeclaration:
+      return false;
+    // `declare namespace`/`declare module`/`declare global`, and an ambient
+    // module named by a string literal (`declare module "image:*"`), are
+    // erased. An instantiated `namespace N { ... }` emits an object.
+    case SyntaxKind.ModuleDeclaration:
+      return !(
+        hasDeclareModifier(statement) ||
+        statement.name?.kind === SyntaxKind.StringLiteral ||
+        (statement.flags & ts.NodeFlags.GlobalAugmentation) !== 0
+      );
+    case SyntaxKind.EnumDeclaration:
+    case SyntaxKind.ClassDeclaration:
+    case SyntaxKind.VariableStatement:
+      return !hasDeclareModifier(statement);
+    // A bodyless function declaration is an ambient signature or an overload
+    // signature; a real overload's implementation is a separate statement with
+    // a body, so an overloaded function still emits.
+    case SyntaxKind.FunctionDeclaration:
+      return !hasDeclareModifier(statement) && Boolean(statement.body);
+    // Only `import type` is erased. A bare `import "./effects.js"` has no
+    // clause at all and is exactly the side-effect import this must never
+    // clear, and an all-type-specifier clause stays emitting because whether it
+    // survives is a compiler-option question, not a property of these bytes.
+    case SyntaxKind.ImportDeclaration:
+      return statement.importClause?.isTypeOnly !== true;
+    case SyntaxKind.ExportDeclaration: {
+      if (statement.isTypeOnly) return false;
+      // `export * from "m"` and `export * as ns from "m"`.
+      if (!statement.exportClause) return true;
+      if (statement.exportClause.kind !== SyntaxKind.NamedExports) return true;
+      const elements = statement.exportClause.elements ?? [];
+      // `export {}` marks a module and emits nothing; `export {} from "m"`
+      // still evaluates `m`.
+      if (elements.length === 0) return Boolean(statement.moduleSpecifier);
+      return elements.some(element => element.isTypeOnly !== true);
+    }
+    // Both `export = value` and `export default <expression>`: the emitted
+    // module binds an evaluated expression, including an identifier whose only
+    // declaration in the file is ambient.
+    case SyntaxKind.ExportAssignment:
+      return true;
+    default:
+      return true;
+  }
+}
+
+/**
+ * Whether an erasable statement introduces at least one name — a type, an
+ * ambient value, a namespace, or a global augmentation. A statement that only
+ * re-exports locals (`export {}`, `export { type Local }`) or only imports for
+ * local use (`import type`) introduces none of its own, so a module made
+ * entirely of those is vacuous rather than a type module. Whether the name is
+ * *exported* is deliberately not the question: `interface Marker {}` with no
+ * export is a deliberate declaration, and this rule is about telling a written
+ * module from a broken build.
+ */
+function statementDeclares(statement) {
+  const { SyntaxKind } = ts;
+  switch (statement.kind) {
+    case SyntaxKind.TypeAliasDeclaration:
+    case SyntaxKind.InterfaceDeclaration:
+    case SyntaxKind.EnumDeclaration:
+    case SyntaxKind.ModuleDeclaration:
+    case SyntaxKind.FunctionDeclaration:
+    case SyntaxKind.ClassDeclaration:
+    case SyntaxKind.VariableStatement:
+      return true;
+    // `export type { Signal } from "solid-js"` adds `Signal` to this module's
+    // names; `export { type Local }` only re-exports one.
+    case SyntaxKind.ExportDeclaration:
+      return Boolean(
+        statement.moduleSpecifier &&
+          (!statement.exportClause ||
+            statement.exportClause.kind !== SyntaxKind.NamedExports ||
+            (statement.exportClause.elements ?? []).length > 0)
+      );
+    default:
+      return false;
+  }
+}
+
+/**
+ * The grammar Oxc refuses outright where TypeScript's parser is permissive.
+ *
+ * This is not a semantic rule; it is parity. Rust re-proves every claim with
+ * Oxc, whose declaration grammar rejects an ambient implementation body, an
+ * ambient property initializer, a bodyless namespace and a `using` declaration
+ * as parse errors. A claim made here that Rust cannot even parse refuses the
+ * whole proposal, so these shapes must never be answered on this side either.
+ * The shared corpus records each of them as refused under both premises.
+ */
+function refusedByPeerGrammar(statement) {
+  const { SyntaxKind } = ts;
+  // `declare namespace N;` — a namespace with no body at all.
+  if (statement.kind === SyntaxKind.ModuleDeclaration && !statement.body) return true;
+  if (!hasDeclareModifier(statement)) return false;
+  // `declare function f(): void { }` — an ambient implementation.
+  if (statement.kind === SyntaxKind.FunctionDeclaration) return Boolean(statement.body);
+  if (statement.kind === SyntaxKind.ClassDeclaration) {
+    // An ambient member implementation, or a plain field initializer. A static
+    // block and an `accessor` field are deliberately absent: the peer grammar
+    // accepts both, and the declaration-file premise's own gate answers them.
+    return (statement.members ?? []).some(member => {
+      if (member.kind === SyntaxKind.PropertyDeclaration) {
+        return (
+          Boolean(member.initializer) &&
+          !(member.modifiers ?? []).some(
+            modifier => modifier.kind === SyntaxKind.AccessorKeyword
+          )
+        );
+      }
+      if (!METHOD_LIKE_MEMBER_KINDS.includes(member.kind)) return false;
+      // A decorator on an ambient *method-like* member: the peer grammar
+      // refuses exactly this shape and accepts a decorator on the class, on an
+      // ambient field, on an `accessor` field and on a parameter, each of which
+      // the shared corpus pins as agreeing.
+      if ((member.modifiers ?? []).some(modifier => modifier.kind === SyntaxKind.Decorator)) {
+        return true;
+      }
+      return Boolean(member.body);
+    });
+  }
+  return false;
+}
+
+const METHOD_LIKE_MEMBER_KINDS = Object.freeze([
+  ts.SyntaxKind.MethodDeclaration,
+  ts.SyntaxKind.Constructor,
+  ts.SyntaxKind.GetAccessor,
+  ts.SyntaxKind.SetAccessor
+]);
+
+/**
+ * A parameter default inside a signature with no body. TS1039 forbids an
+ * initializer in an ambient context, and a bodyless signature is either ambient
+ * or an overload — so this is a shape TypeScript rejects and nothing emits from,
+ * and both premises refuse it rather than half-answering it. A default in a real
+ * implementation is not this: that function has a body, so it is already an
+ * emitting statement (or gated as an implementation body).
+ *
+ * Applied under *both* premises, unlike `ambientGateViolation`, because the peer
+ * implementation accepts these bytes and would otherwise answer non-emitting
+ * where this side refuses — or the reverse.
+ */
+function ambientParameterInitializer(node) {
+  const { SyntaxKind } = ts;
+  let found = false;
+  const visit = current => {
+    if (found) return;
+    const signature =
+      current.kind === SyntaxKind.FunctionDeclaration ||
+      METHOD_LIKE_MEMBER_KINDS.includes(current.kind);
+    if (signature && !current.body) {
+      for (const parameter of current.parameters ?? []) {
+        if (parameter.initializer) {
+          found = true;
+          return;
+        }
+      }
+    }
+    ts.forEachChild(current, visit);
+  };
+  visit(node);
+  return found ? "ambient parameter initializer" : undefined;
+}
+
+/**
+ * The declaration-file premise's ambient gate: an implementation body, an
+ * initializer, an expression statement or a side-effect import anywhere in the
+ * tree means these bytes are not the declaration file the suffix claims. Those
+ * are exactly the shapes TypeScript refuses in an ambient context (TS1183,
+ * TS1039), and refusing them is what stops the suffix from doing the work on
+ * its own.
+ */
+function ambientGateViolation(node) {
+  const { SyntaxKind } = ts;
+  let violation;
+  const visit = current => {
+    if (violation) return;
+    switch (current.kind) {
+      case SyntaxKind.FunctionDeclaration:
+      case SyntaxKind.MethodDeclaration:
+      case SyntaxKind.Constructor:
+      case SyntaxKind.GetAccessor:
+      case SyntaxKind.SetAccessor:
+      case SyntaxKind.FunctionExpression:
+        if (current.body) violation = "implementation body";
+        break;
+      case SyntaxKind.VariableDeclaration:
+        if (current.initializer) violation = "variable initializer";
+        break;
+      // `accessor value = 1` is a PropertyDeclaration carrying an
+      // `AccessorKeyword` *modifier*, so there is no separate node to inspect
+      // and no `AccessorKeyword` case here — the modifier token has no
+      // initializer of its own. Oxc models the same syntax as a distinct
+      // `AccessorProperty` node, which is why the peer gate has an arm this one
+      // does not need.
+      case SyntaxKind.PropertyDeclaration:
+        if (current.initializer) violation = "property initializer";
+        break;
+      case SyntaxKind.ClassStaticBlockDeclaration:
+        violation = "class static block";
+        break;
+      case SyntaxKind.ExpressionStatement:
+        violation = "expression statement";
+        break;
+      case SyntaxKind.ImportDeclaration:
+        if (!current.importClause) violation = "side-effect import";
+        break;
+      default:
+        break;
+    }
+    if (!violation) ts.forEachChild(current, visit);
+  };
+  visit(node);
+  return violation;
+}
+
+/**
+ * A declaration file also erases every re-export form, because it emits no
+ * module at all. The bytes-only premise cannot: there the same bytes are a
+ * working barrel. Returns "declares", "inert" or an emitting kind.
+ */
+function declarationFileStatement(statement, ambient, inDirectivePrologue = false) {
+  const { SyntaxKind } = ts;
+  if (statement.kind === SyntaxKind.ExportDeclaration && !statement.isTypeOnly) {
+    if (statement.moduleSpecifier) {
+      // `export * from "m"`, `export * as ns from "m"`, `export { name } from
+      // "m"` and `export { default } from "m"` all name something.
+      // `export {} from "m"` names nothing and evaluates nothing here, so it is
+      // vacuous rather than emitting.
+      if (!statement.exportClause) return "declares";
+      if (statement.exportClause.kind !== SyntaxKind.NamedExports) return "declares";
+      return (statement.exportClause.elements ?? []).length > 0 ? "declares" : "inert";
+    }
+  }
+  if (statement.kind === SyntaxKind.ExportAssignment && !statement.isExportEquals) {
+    // `export default _default;` where `_default` is a `declare`d binding in
+    // these same bytes: the whole file is ambient, so there is no expression to
+    // evaluate. An identifier nothing here declares, or any other expression,
+    // is not that shape.
+    const expression = statement.expression;
+    if (expression?.kind === SyntaxKind.Identifier) {
+      return ambient.has(expression.text)
+        ? "declares"
+        : "default export of an undeclared binding";
+    }
+  }
+  if (statementEmits(statement)) return emittingKind(statement, inDirectivePrologue);
+  return statementDeclares(statement) ? "declares" : "inert";
+}
+
+/** The names a file's own top-level `declare`d declarations bind. */
+function ambientBindings(statements) {
+  const { SyntaxKind } = ts;
+  const names = new Set();
+  for (const statement of statements) {
+    switch (statement.kind) {
+      case SyntaxKind.VariableStatement:
+        if (hasDeclareModifier(statement)) {
+          for (const declaration of statement.declarationList.declarations) {
+            if (declaration.name?.kind === SyntaxKind.Identifier) {
+              names.add(declaration.name.text);
+            }
+          }
+        }
+        break;
+      case SyntaxKind.FunctionDeclaration:
+        if ((hasDeclareModifier(statement) || !statement.body) && statement.name) {
+          names.add(statement.name.text);
+        }
+        break;
+      case SyntaxKind.ClassDeclaration:
+      case SyntaxKind.EnumDeclaration:
+        if (hasDeclareModifier(statement) && statement.name) names.add(statement.name.text);
+        break;
+      case SyntaxKind.ModuleDeclaration:
+        if (statement.name?.kind === SyntaxKind.Identifier) names.add(statement.name.text);
+        break;
+      default:
+        break;
+    }
+  }
+  return names;
+}
+
+/**
+ * Names why a statement emits, in the exact vocabulary
+ * `solid_facts::ast::EmittingStatement::kind` uses.
+ */
+function emittingKind(statement, inDirectivePrologue = false) {
+  const { SyntaxKind } = ts;
+  if (
+    inDirectivePrologue &&
+    statement.kind === SyntaxKind.ExpressionStatement &&
+    statement.expression?.kind === SyntaxKind.StringLiteral
+  ) {
+    // Oxc lifts the whole leading string-literal prologue into
+    // `Program::directives`, so it names this "directive". It emits either way.
+    return "directive";
+  }
+  switch (statement.kind) {
+    case SyntaxKind.EnumDeclaration:
+      return "enum declaration";
+    case SyntaxKind.ModuleDeclaration:
+      return "namespace declaration";
+    case SyntaxKind.FunctionDeclaration:
+      return "function declaration";
+    case SyntaxKind.ClassDeclaration:
+      return "class declaration";
+    case SyntaxKind.VariableStatement:
+      return "variable declaration";
+    case SyntaxKind.ImportEqualsDeclaration:
+      return "import-equals declaration";
+    case SyntaxKind.ImportDeclaration:
+      return "value import";
+    case SyntaxKind.ExportDeclaration: {
+      if (!statement.exportClause || statement.exportClause.kind !== SyntaxKind.NamedExports) {
+        return "re-export of all names";
+      }
+      return (statement.exportClause.elements ?? []).length === 0
+        ? "re-export of no names"
+        : "value export specifier";
+    }
+    case SyntaxKind.ExportAssignment:
+      return statement.isExportEquals ? "export assignment" : "default export";
+    case SyntaxKind.ExpressionStatement:
+      return "expression statement";
+    case SyntaxKind.Block:
+      return "block statement";
+    case SyntaxKind.EmptyStatement:
+      return "empty statement";
+    case SyntaxKind.IfStatement:
+    case SyntaxKind.SwitchStatement:
+    case SyntaxKind.TryStatement:
+    case SyntaxKind.WithStatement:
+    case SyntaxKind.LabeledStatement:
+      return "control-flow statement";
+    case SyntaxKind.DoStatement:
+    case SyntaxKind.ForInStatement:
+    case SyntaxKind.ForOfStatement:
+    case SyntaxKind.ForStatement:
+    case SyntaxKind.WhileStatement:
+      return "loop statement";
+    case SyntaxKind.BreakStatement:
+    case SyntaxKind.ContinueStatement:
+    case SyntaxKind.ReturnStatement:
+    case SyntaxKind.ThrowStatement:
+    case SyntaxKind.DebuggerStatement:
+      return "executable statement";
+    default:
+      return "statement";
+  }
+}
+
+function parseModuleEmissionSource(source, extension) {
+  const file = ts.createSourceFile(
+    `solid-checker-artifact-case${extension}`,
+    source,
+    ts.ScriptTarget.Latest,
+    false
+  );
+  // A parse this cannot confirm is clean is not an answer. The `?? [{}]` fails
+  // closed if the compiler ever stops exposing the diagnostics.
+  return (file.parseDiagnostics ?? [{}]).length > 0 ? undefined : file;
+}
+
+/**
+ * Answers one premise for exact module bytes. Returns
+ * `{ verdict: "non-emitting", statements }`, `{ verdict: "empty" }`,
+ * `{ verdict: "non-declaring" }`, `{ verdict: "unparsable" }` or
+ * `{ verdict: "emitting", kind }` — the same vocabulary as Rust's
+ * `ModuleEmission`, so the shared corpus can hold both sides to it.
+ */
+export function moduleEmission(source, flavor = MODULE_EMISSION_FLAVOR.Module) {
+  const declarationFile = flavor === MODULE_EMISSION_FLAVOR.DeclarationFile;
+  // A declaration file has exactly one grammar, and admitting the suffix as
+  // evidence is only sound while the parse is the ambient one.
+  const ladder = declarationFile ? [".d.ts"] : MODULE_EMISSION_LADDER;
+  for (const extension of ladder) {
+    const file = parseModuleEmissionSource(source, extension);
+    if (!file) continue;
+    const statements = file.statements ?? [];
+    if (statements.length === 0) return { verdict: "empty" };
+    for (const statement of statements) {
+      if (refusedByPeerGrammar(statement)) {
+        return { verdict: "emitting", kind: "unparsable to the verifier grammar" };
+      }
+    }
+    const ambientParameter = ambientParameterInitializer(file);
+    if (ambientParameter) return { verdict: "emitting", kind: ambientParameter };
+    let declares = false;
+    if (declarationFile) {
+      const ambient = ambientBindings(statements);
+      let prologue = true;
+      for (const statement of statements) {
+        const answer = declarationFileStatement(statement, ambient, prologue);
+        prologue = false;
+        if (answer === "declares") declares = true;
+        else if (answer !== "inert") return { verdict: "emitting", kind: answer };
+      }
+    } else {
+      let prologue = true;
+      for (const statement of statements) {
+        if (statementEmits(statement)) {
+          return { verdict: "emitting", kind: emittingKind(statement, prologue) };
+        }
+        prologue = false;
+        declares = declares || statementDeclares(statement);
+      }
+    }
+    if (!declares) return { verdict: "non-declaring" };
+    if (declarationFile) {
+      // Only now: bytes TypeScript would refuse in an ambient context are not a
+      // declaration file, so the suffix cannot speak for them.
+      const violation = ambientGateViolation(file);
+      if (violation) return { verdict: "emitting", kind: violation };
+    }
+    return { verdict: "non-emitting", statements: statements.length };
+  }
+  return { verdict: "unparsable" };
+}
+
+// One artifact-case candidate is asked twice — once while the census decides
+// dispositions and once while a reused proposal is revalidated — and a wildcard
+// census asks about hundreds of members. Memoize by exact bytes so the parse is
+// paid once per distinct file per process, and bound the table so a pathological
+// package cannot retain the whole tree.
+const MODULE_EMISSION_MEMO = new Map();
+const MODULE_EMISSION_MEMO_LIMIT = 8192;
+
+/**
+ * The selected runtime target's exact bytes emit no JavaScript at all, under
+ * the one premise its suffix selects. Answers `{ statements, arm }` —
+ * `erasable-statements` for the bytes-only premise, `declaration-file` for the
+ * suffix-admitting one — or `undefined` for every other file, including one
+ * that cannot be read, is larger than the byte bound, does not parse, has no
+ * statements whatsoever, or declares nothing.
+ *
+ * A module that declares nothing is deliberately not an answer. A module that
+ * declares at least one type is a deliberate type module; a file with no
+ * statements at all — zero bytes, or only comments — is indistinguishable from
+ * a broken build, and so is one whose whole body is `export {}`, which is how
+ * `@solid-devtools/shared` spells the same emptiness as its zero-byte sibling.
+ */
+export function nonEmittingModuleTarget(path) {
+  let bytes;
+  try {
+    bytes = readFileSync(path);
+  } catch {
+    return undefined;
+  }
+  if (bytes.length > MODULE_EMISSION_BYTE_LIMIT) return undefined;
+  const flavor = declarationFileFlavor(path);
+  const key = `${flavor}:${sha256(bytes)}`;
+  if (MODULE_EMISSION_MEMO.has(key)) return MODULE_EMISSION_MEMO.get(key);
+  const answer = uncachedNonEmittingModuleTarget(bytes, flavor);
+  if (MODULE_EMISSION_MEMO.size >= MODULE_EMISSION_MEMO_LIMIT) MODULE_EMISSION_MEMO.clear();
+  MODULE_EMISSION_MEMO.set(key, answer);
+  return answer;
+}
+
+function uncachedNonEmittingModuleTarget(bytes, flavor) {
+  const source = bytes.toString("utf8");
+  // Mirror Rust's `str::from_utf8` exactly: a lossy decode would let invalid
+  // bytes parse here and refuse there.
+  if (!Buffer.from(source, "utf8").equals(bytes)) return undefined;
+  const emission = moduleEmission(source, flavor);
+  if (emission.verdict !== "non-emitting") return undefined;
+  return {
+    statements: emission.statements,
+    arm:
+      flavor === MODULE_EMISSION_FLAVOR.DeclarationFile
+        ? "declaration-file"
+        : "erasable-statements"
+  };
+}
+
 // These programs answer exactly one kind of question, in `syntaxHazards` and
 // nowhere else: does the symbol this identifier resolves to have a declaration
 // in *this same source file*? `noResolve` already keeps every imported module
@@ -195,6 +807,75 @@ const ROLE_DEBUG = new Map([
   ["generated", "Generated"]
 ]);
 const ROLE_ORDER = new Map([...ROLE_DEBUG.keys()].map((value, index) => [value, index]));
+// The built-in runtime foundation, mirrored from the checked-in dialect
+// manifests (`rust/dialects/solid-v*/dialect.json`, whose `contracts[].package`
+// is the same list `Dialect::primitive_defining_packages` returns in Rust).
+// `artifact-resolution.test.mjs` pins the two against each other; a fourth
+// core package added to a dialect must reach both censuses or they disagree
+// about which imports are an opaque frontier.
+const CORE_RUNTIME_PACKAGES = ["solid-js", "@solidjs/signals", "@solidjs/web"];
+
+/// Whether a package *is* the built-in runtime foundation. Mirrors
+/// `solid_dialect::primitive_defining_package`.
+///
+/// `solid-js` re-exporting from `solid-js/web` is publishing its own surface,
+/// so ADR 0027's reason for dropping a core re-export -- that the package has
+/// no standing to describe a name it only forwards -- does not apply to it.
+export function coreRuntimePackage(name) {
+  return CORE_RUNTIME_PACKAGES.includes(name);
+}
+
+/// Whether a specifier names the built-in runtime foundation, or a subpath of
+/// it. Mirrors `solid_dialect::core_runtime_specifier`.
+export function coreRuntimeSpecifier(specifier) {
+  return CORE_RUNTIME_PACKAGES.some(
+    name => specifier === name || specifier.startsWith(`${name}/`)
+  );
+}
+
+/// Every core module Node loads under a bare name: Node's own
+/// `module.builtinModules` less the `node:`-only entries (`node:sea`,
+/// `node:sqlite`, `node:test`, `node:test/reporters`), which a bare name never
+/// reaches. Transcribed from Node 24 rather than read at run time, because this
+/// CLI also runs under Bun, whose `builtinModules` and `isBuiltin` answer for
+/// Bun: they add `bun`, `bun:*`, `ws`, `undici` and others that under Node are
+/// ordinary npm packages. The set is closed: since Node 18 a new core module is
+/// `node:`-only, so no later Node adds a bare name, and every name here already
+/// resolves bare on Node 20, the oldest release `engines` admits. The test
+/// suite compares it with the `node` on PATH.
+export const NODE_BARE_BUILTIN_MODULES = new Set([
+  "_http_agent", "_http_client", "_http_common", "_http_incoming", "_http_outgoing",
+  "_http_server", "_stream_duplex", "_stream_passthrough", "_stream_readable",
+  "_stream_transform", "_stream_wrap", "_stream_writable", "_tls_common", "_tls_wrap",
+  "assert", "assert/strict", "async_hooks", "buffer", "child_process", "cluster",
+  "console", "constants", "crypto", "dgram", "diagnostics_channel", "dns",
+  "dns/promises", "domain", "events", "fs", "fs/promises", "http", "http2", "https",
+  "inspector", "inspector/promises", "module", "net", "os", "path", "path/posix",
+  "path/win32", "perf_hooks", "process", "punycode", "querystring", "readline",
+  "readline/promises", "repl", "stream", "stream/consumers", "stream/promises",
+  "stream/web", "string_decoder", "sys", "timers", "timers/promises", "tls",
+  "trace_events", "tty", "url", "util", "util/types", "v8", "vm", "wasi",
+  "worker_threads", "zlib"
+]);
+
+/// Whether a module specifier names a Node built-in, and therefore names no
+/// package: nothing is installed for it, nothing can be locked, and no
+/// dependency environment entry can describe it.
+///
+/// This is Node's own rule, exactly. A `node:`-prefixed specifier is always the
+/// core module (or, for a name Node does not have, an error -- never a
+/// package). A bare specifier is the core module exactly when it is a member of
+/// `NODE_BARE_BUILTIN_MODULES`, and then it is the core module **even when a
+/// package of that name is installed**: Node's loaders consult the core-module
+/// table before any `node_modules` lookup, so `require("assert")` and
+/// `import "assert"` load the built-in beside an installed userland `assert`.
+/// Membership is exact, not a prefix: `assert/` (Node's documented spelling for
+/// the userland package), `fs/extra` and `test` all reach `node_modules`, so
+/// they are package specifiers like any other.
+export function nodeBuiltinSpecifier(specifier) {
+  return specifier.startsWith("node:") || NODE_BARE_BUILTIN_MODULES.has(specifier);
+}
+
 const HAZARD_DEBUG = new Map([
   ["nonliteral-dynamic-loading", "NonliteralDynamicLoading"],
   ["eval", "Eval"],
@@ -202,7 +883,12 @@ const HAZARD_DEBUG = new Map([
   ["opaque-wasm", "OpaqueWasm"],
   ["mutable-unbound-global", "MutableUnboundGlobal"],
   ["unmaterialized-transform", "UnmaterializedTransform"],
-  ["unaccepted-external-dependency", "UnacceptedExternalDependency"]
+  ["unaccepted-external-dependency", "UnacceptedExternalDependency"],
+  // Order is load-bearing: `HAZARD_ORDER` below is insertion order, and the
+  // Rust side sorts by `ClosureHazardKind`'s derived `Ord`, which is its
+  // declaration order in `artifact_resolution.rs`. Append here exactly where
+  // the variant was appended there.
+  ["runtime-accessor-installation", "RuntimeAccessorInstallation"]
 ]);
 const HAZARD_ORDER = new Map([...HAZARD_DEBUG.keys()].map((value, index) => [value, index]));
 
@@ -457,7 +1143,11 @@ function selectTarget(target, context) {
       break;
     case "string": {
       const selected = substitutePattern(target, context.capture);
-      const path = validateTargetString(selected, context.packageRoot);
+      const initial = validateTargetString(selected, context.packageRoot);
+      const path = context.axis === "declarations"
+        ? declarationCandidate(initial, context.mjsSourceFallback ?? false)
+        : initial;
+      if (!path) fail("declarations-not-found", `no declaration target exists for ${initial}`);
       return {
         path,
         branch: context.pointer,
@@ -480,7 +1170,8 @@ function selectTarget(target, context) {
             steps: [...context.steps, { condition: "array", target: String(index) }]
           });
         } catch (error) {
-          if (!(error instanceof ArtifactResolutionError) || error.code !== "invalid-target") throw error;
+          if (!(error instanceof ArtifactResolutionError) ||
+              (error.code !== "invalid-target" && error.code !== "declarations-not-found")) throw error;
           lastInvalid = error;
         }
       }
@@ -495,7 +1186,9 @@ function selectTarget(target, context) {
       // "default": "./index.js"}` under conditions ["vendor"] resolves to
       // ./index.js. Taking the first *matching* key and refusing there instead
       // would report a defect where every real consumer resolves fine. Only a
-      // nested `conditions-unmatched` backtracks: `null` (blocked) and an
+      // nested `conditions-unmatched` backtracks on the runtime axis. On the
+      // declarations axis, a missing declaration also permits the next arm.
+      // `null` (blocked) and an
       // invalid target are properties of the package and still refuse
       // immediately, exactly as Node's own algorithm treats them.
       //
@@ -505,6 +1198,7 @@ function selectTarget(target, context) {
       // condition the selection walked away from would put a name in the
       // resolution record's hashed trace that no consumer's resolution ever
       // traverses.
+      let missingDeclaration;
       for (const condition of keys) {
         if (condition !== "default" && !context.conditions.has(condition)) continue;
         try {
@@ -517,12 +1211,14 @@ function selectTarget(target, context) {
         } catch (error) {
           if (
             !(error instanceof ArtifactResolutionError) ||
-            error.code !== "conditions-unmatched"
+            (error.code !== "conditions-unmatched" && error.code !== "declarations-not-found")
           ) {
             throw error;
           }
+          if (error.code === "declarations-not-found") missingDeclaration = error;
         }
       }
+      if (missingDeclaration) throw missingDeclaration;
       fail("conditions-unmatched", `${context.entrypoint} selects no active package-export condition`);
       break;
     }
@@ -531,7 +1227,27 @@ function selectTarget(target, context) {
   }
 }
 
-function declarationCandidate(path) {
+// The file a legacy (no-`exports`) runtime subpath names. An exact request is
+// answered exactly; an extensionless one gets the CommonJS candidates a
+// `require` of it would find, in Node's order, because that is the only shape
+// in which an extensionless subpath is importable at all.
+function legacyRuntimeSubpath(path) {
+  if (isFile(path)) return path;
+  if (extname(path)) return undefined;
+  for (const candidate of [
+    `${path}.js`,
+    `${path}.json`,
+    `${path}.node`,
+    join(path, "index.js"),
+    join(path, "index.json"),
+    join(path, "index.node")
+  ]) {
+    if (isFile(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+function declarationCandidate(path, mjsSourceFallback = true) {
   if (DECLARATION_EXTENSIONS.some(extension => path.endsWith(extension))) return isFile(path) ? path : undefined;
   const extension = extname(path);
   const stem = extension ? path.slice(0, -extension.length) : path;
@@ -550,7 +1266,8 @@ function declarationCandidate(path) {
             : [];
   return (
     candidates.find(isFile) ??
-    ([".js", ".jsx", ".ts", ".tsx"].includes(extension) && isFile(path) ? path : undefined)
+    (([".js", ".jsx", ".ts", ".tsx"].includes(extension) ||
+      (extension === ".mjs" && mjsSourceFallback)) && isFile(path) ? path : undefined)
   );
 }
 
@@ -612,17 +1329,25 @@ export function selectPackageExportTarget({
 
   if (manifest.exports !== undefined) {
     const selected = selectSubpath(manifest.exports, entrypoint);
-    const target = selectTarget(selected.target, {
+    const context = {
       packageRoot,
+      axis,
       entrypoint,
       capture: selected.capture,
       conditions: active,
       pointer: selected.pointer,
       steps: [{ condition: "subpath", target: entrypoint }],
       conditionsTaken: []
-    });
-    const path = axis === "declarations" ? declarationCandidate(target.path) : target.path;
-    if (!path) fail("declarations-not-found", `no declaration target exists for ${target.path}`);
+    };
+    let target;
+    try {
+      target = selectTarget(selected.target, context);
+    } catch (error) {
+      if (axis !== "declarations" || error.code !== "declarations-not-found") throw error;
+      // Exhaust matching declaration branches before consulting ESM source.
+      target = selectTarget(selected.target, { ...context, mjsSourceFallback: true });
+    }
+    const path = target.path;
     return {
       path,
       exists: isFile(path),
@@ -632,7 +1357,45 @@ export function selectPackageExportTarget({
     };
   }
 
-  if (entrypoint !== ".") fail("not-exported", `${entrypoint} has no legacy package entrypoint`);
+  // A package with no `exports` field does not restrict its subpaths. Node's
+  // ESM_RESOLVE only applies PACKAGE_EXPORTS_RESOLVE when `exports` is
+  // present; without it, `pkg/sub` is LEGACY path resolution — the subpath is
+  // joined onto the package root, with CommonJS extension and index candidates
+  // for an extensionless request. Failing it as `not-exported` claimed the
+  // package excluded a module it publishes and can be imported: `dayjs`
+  // (1.11.23) ships `plugin/relativeTime.js` and no `exports`, `picomatch`
+  // (2.3.2) ships `lib/utils.js`, `fetch-blob` (3.2.0) ships `from.js`, and
+  // all three resolve at runtime. `not-exported` is now reserved for what it
+  // says: an `exports` map that excludes the subpath.
+  //
+  // A subpath that still does not exist is `target-not-found` at the caller's
+  // `resolvedFile`, or `exists: false` here — an absence, not an exclusion.
+  if (entrypoint !== ".") {
+    const requested = entrypoint.replace(/^\.\//, "");
+    const initial = resolve(packageRoot, requested);
+    const path =
+      axis === "declarations"
+        ? declarationCandidate(initial)
+        : legacyRuntimeSubpath(initial);
+    if (!path) {
+      fail(
+        axis === "declarations" ? "declarations-not-found" : "target-not-found",
+        `no ${axis === "declarations" ? "declaration" : "runtime"} target exists for ${initial}`
+      );
+    }
+    return {
+      path,
+      exists: isFile(path),
+      trace: {
+        branch: "legacy:subpath",
+        steps: [{ condition: "subpath", target: entrypoint }]
+      },
+      // No condition was consulted: there was no `exports` map to consult one
+      // in, and a legacy field names an entrypoint, never a subpath.
+      conditions: [],
+      legacyField: null
+    };
+  }
   const fallback = "index.js";
   const field =
     axis === "declarations"
@@ -685,6 +1448,7 @@ function resolvePackageImport({
   const selected = selectPackageImport(manifest.imports, specifier);
   const target = selectTarget(selected.target, {
     packageRoot,
+    axis,
     entrypoint: specifier,
     capture: selected.capture,
     conditions: active,
@@ -692,9 +1456,7 @@ function resolvePackageImport({
     steps: [{ condition: "imports", target: specifier }],
     conditionsTaken: []
   });
-  const path = axis === "declarations" ? declarationCandidate(target.path) : target.path;
-  if (!path) fail("declarations-not-found", `no declaration target exists for ${target.path}`);
-  return path;
+  return target.path;
 }
 
 // A `#` specifier whose conditional target matches none of this partition's
@@ -891,12 +1653,27 @@ class LazyClosureModuleParser {
   }
 }
 
+/// Every identifier a binding name introduces, through object and array
+/// destructuring patterns: `export const { a, b: [c] } = value` publishes
+/// `a` and `c`.
+function boundIdentifierNames(name) {
+  if (ts.isIdentifier(name)) return [name.text];
+  return name.elements.flatMap(element =>
+    ts.isOmittedExpression(element) ? [] : boundIdentifierNames(element.name)
+  );
+}
+
 function hasModifier(node, kind) {
   return node.modifiers?.some(modifier => modifier.kind === kind) ?? false;
 }
 
 function isLocallyBoundIdentifier(node, checker, sourceFile) {
-  const symbol = checker.getSymbolAtLocation(node);
+  // `parseModule` only builds a `ts.Program` for a module that needs symbol
+  // identity, so the census can run with no checker at all. Read that as "not
+  // locally bound", which is the conservative answer for every caller: each
+  // one negates this to decide whether a name is the global, and a hazard
+  // recorded for a shadowed name over-refuses rather than under-refuses.
+  const symbol = checker?.getSymbolAtLocation(node);
   return symbol?.declarations?.some(declaration => declaration.getSourceFile() === sourceFile) ?? false;
 }
 
@@ -1122,6 +1899,14 @@ function moduleDescription(path, axis, packageRoot, cache) {
     // runtime-only export from being mistaken for shared without granting a
     // namespace binding.
     declarationSurfaceOnly: new Set(),
+    // Every name a module-level export statement of this module publishes, in
+    // either space and by any spelling -- value, type-only, namespace,
+    // import-equals -- plus whether anything else could publish one: an
+    // `export =` assignment, or an `export *` this walk does not follow as a
+    // local value star. Only `declarationReexportGap` reads it, and only to
+    // prove that a module publishes *no* export by a name.
+    declaredNames: new Set(),
+    unfollowedExportSource: false,
     imports: new Map(),
     externalImports: new Map(),
     specifiers: [],
@@ -1140,6 +1925,10 @@ function moduleDescription(path, axis, packageRoot, cache) {
         text: statement.moduleSpecifier.text,
         target,
         asset: target ? undefined : localAssetTarget(path, statement.moduleSpecifier.text, packageRoot),
+        // The `type` modifier is recorded here, before the clause is read for
+        // bindings below, because the closure walk needs it: an erased edge
+        // reaches its target on the declarations axis, never the runtime one.
+        typeOnly: specifierIsTypeOnly(statement),
         optionalPeer:
           scope.packageRoot === packageRoot &&
           isExplicitOptionalPeer(scope.manifest, statement.moduleSpecifier.text)
@@ -1194,9 +1983,19 @@ function moduleDescription(path, axis, packageRoot, cache) {
           text: module.text,
           target,
           asset: target ? undefined : localAssetTarget(path, module.text, packageRoot),
+          typeOnly: specifierIsTypeOnly(statement),
           optionalPeer:
             scope.packageRoot === packageRoot && isExplicitOptionalPeer(scope.manifest, module.text)
         });
+      }
+      if (!statement.exportClause) {
+        if (statement.isTypeOnly || !target) description.unfollowedExportSource = true;
+      } else if (ts.isNamespaceExport(statement.exportClause)) {
+        description.declaredNames.add(statement.exportClause.name.text);
+      } else {
+        for (const element of statement.exportClause.elements) {
+          description.declaredNames.add(element.name.text);
+        }
       }
       if (statement.isTypeOnly) continue;
       if (!statement.exportClause) {
@@ -1241,9 +2040,23 @@ function moduleDescription(path, axis, packageRoot, cache) {
     }
     if (ts.isExportAssignment(statement)) {
       description.direct.set("default", { file: path, name: "default" });
+      // `export = value` (not `export default`) publishes the members of
+      // `value` to TypeScript's named imports, which no census here follows.
+      if (statement.isExportEquals) description.unfollowedExportSource = true;
       continue;
     }
     if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) continue;
+    if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
+      description.declaredNames.add("default");
+    } else if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        for (const name of boundIdentifierNames(declaration.name)) {
+          description.declaredNames.add(name);
+        }
+      }
+    } else if (statement.name && ts.isIdentifier(statement.name)) {
+      description.declaredNames.add(statement.name.text);
+    }
     if (
       axis === "declarations" &&
       ts.isModuleDeclaration(statement) &&
@@ -1253,6 +2066,9 @@ function moduleDescription(path, axis, packageRoot, cache) {
     }
     if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
       description.direct.set("default", { file: path, name: "default" });
+      // A default declaration's local binding is not another public export.
+      // A separate `export { local }` statement is processed independently.
+      continue;
     }
     if (
       (ts.isFunctionDeclaration(statement) ||
@@ -1341,6 +2157,29 @@ function acceptedExternalBinding(acceptedDependencies, specifier, name, axis) {
   return binding;
 }
 
+/// Whether the package being resolved is itself the runtime foundation.
+///
+/// Memoized on the resolution cache: the manifest is read once per package
+/// root, and a root whose manifest cannot be read answers `false`, which keeps
+/// the ordinary drop rather than widening a surface on a missing file.
+function ownPackageIsCore(packageRoot, cache) {
+  if (!cache) return false;
+  cache.ownCorePackage ??= new Map();
+  const memo = cache.ownCorePackage;
+  const key = String(packageRoot);
+  if (!memo.has(key)) {
+    let answer = false;
+    try {
+      const manifest = JSON.parse(readFileSync(join(key, "package.json"), "utf8"));
+      answer = typeof manifest.name === "string" && coreRuntimePackage(manifest.name);
+    } catch {
+      answer = false;
+    }
+    memo.set(key, answer);
+  }
+  return memo.get(key);
+}
+
 function bindExport(
   path,
   name,
@@ -1374,6 +2213,17 @@ function bindExport(
   }
   const externalDirect = description.externalDirect.get(name);
   if (externalDirect) {
+    // Before the lookup, not after it. A graph lane supplies `solid-js/web` as
+    // an accepted dependency node whenever the graph contains one, and the
+    // lookup then *succeeds* -- so the same package kept `isServer` on its
+    // surface as a graph node and dropped it standalone, and the two censuses
+    // disagreed by exactly one name. ADR 0027 is not conditional on what the
+    // graph happens to contain: core has no package contract by design, so a
+    // node for it is not one either.
+    if (!ownPackageIsCore(packageRoot, cache) && coreRuntimeSpecifier(externalDirect.specifier)) {
+      visiting.delete(identity);
+      return undefined;
+    }
     const result = acceptedExternalBinding(
       acceptedDependencies,
       externalDirect.specifier,
@@ -1381,10 +2231,43 @@ function bindExport(
       axis
     );
     if (!result) {
-      fail(
-        "accepted-dependency-binding",
-        `accepted dependency ${externalDirect.specifier} has no exact ${axis} binding for export ${externalDirect.name}`
-      );
+      // The built-in runtime foundation is not an unaccepted dependency, and a
+      // binding demand on it can never be met: `solid-js`, `@solidjs/signals`
+      // and `@solidjs/web` have no package contract by design (ADR 0027).
+      // `canonicalClosure` below already exempts them for the same reason;
+      // this branch did not, and the asymmetry refused the whole artifact case
+      // of any package re-exporting a core name.
+      //
+      // The emitter drops such a name from the document (Rust's
+      // `export_binds_core_runtime`), so the two censuses agree that it is not
+      // part of this package's surface. Returning unbound here is the same
+      // statement on the resolution side: the caller already skips a name with
+      // no binding (`if (!runtimeTarget || !declarationTarget) continue`), so
+      // every other export survives. ADR 0027's "missing native behavior stays
+      // unknown", not a claim that the export does not exist.
+      const message = `accepted dependency ${externalDirect.specifier} has no exact ${axis} binding for export ${externalDirect.name}`;
+      // ADR 0154: the dependency withholds exactly this name under ADR 0150.
+      // That is not yet a verdict -- the caller decides whether *both* axes
+      // forward the same withheld name, and refuses with `message` otherwise.
+      const withheld =
+        withheldDependencyExport(
+          acceptedDependencies,
+          externalDirect.specifier,
+          externalDirect.name,
+          message
+        ) ??
+        prunedDependencyExport(
+          acceptedDependencies,
+          cache.prunedDependencies,
+          externalDirect.specifier,
+          externalDirect.name,
+          message
+        );
+      if (withheld) {
+        visiting.delete(identity);
+        return withheld;
+      }
+      fail("accepted-dependency-binding", message);
     }
     visiting.delete(identity);
     return result;
@@ -1403,9 +2286,79 @@ function bindExport(
   ]
     .filter(Boolean);
   visiting.delete(identity);
+  // A local `export *` into a module that forwards a withheld name forwards
+  // it exactly when nothing else the stars reach binds or withholds that
+  // name differently (ADR 0154; `@solidjs/web`'s `types/index.d.ts` reaches
+  // `getOwner` through `export * from "./client.js"`). Any other mix keeps
+  // the refusal it had before the dependency's name was withheld.
+  const starWithheld = candidates.filter(isWithheldDependencyExport);
+  if (starWithheld.length > 0) {
+    const [first] = starWithheld;
+    if (
+      starWithheld.length === candidates.length &&
+      starWithheld.every(
+        candidate => candidate.packageName === first.packageName && candidate.name === first.name
+      )
+    ) {
+      return first;
+    }
+    fail("accepted-dependency-binding", first.message);
+  }
   const unique = new Map(candidates.map(candidate => [`${candidate.module.digest}:${candidate.exportName}`, candidate]));
   if (unique.size > 1) fail("ambiguous-export", `export ${name} resolves through multiple star exports`);
   return unique.values().next().value;
+}
+
+/// Whether `name`, looked up in declaration module `path`, reaches a module of
+/// this package that publishes no export by that name at all.
+///
+/// This is the one declaration-axis shape `bindExport` leaves unbound that is
+/// a fact about the published bytes rather than about this resolver's reach:
+/// `export { $DEVCOMP } from "./client/core.js"` where `core.d.ts` declares
+/// no `$DEVCOMP` (`solid-js@2.0.0-rc.9`, an upstream typing defect). The name
+/// has no declaration identity for any consumer, so it cannot be described,
+/// and ADR 0128 makes it cost only itself: it leaves the contract surface,
+/// and every other export of the entrypoint keeps its exact binding. The
+/// certifier replays this census from the archive and refuses a disagreement
+/// (`export_bindings.rs`'s `declaration_reexport_gap`); change the two
+/// together.
+///
+/// Fail-closed by construction: anything this walk cannot see through
+/// answers `false`, which leaves the name to its existing whole-case refusal.
+/// That is a module that declares the name in any space or by any spelling
+/// (a namespace, an interface, a type-only specifier), forwards it from
+/// outside the package, has an `export =` or an `export *` this walk does not
+/// follow, or a cycle.
+function declarationReexportGap(path, name, packageRoot, cache, visiting = new Set()) {
+  const identity = `${path}:${name}`;
+  if (visiting.has(identity)) return false;
+  visiting.add(identity);
+  const description = moduleDescription(path, "declarations", packageRoot, cache);
+  let gap;
+  const direct = description.direct.get(name);
+  if (direct) {
+    gap =
+      direct.file !== path &&
+      direct.name !== "*" &&
+      declarationReexportGap(direct.file, direct.name, packageRoot, cache, visiting);
+  } else if (
+    description.externalDirect.has(name) ||
+    description.declarationSurfaceOnly.has(name) ||
+    description.declaredNames.has(name) ||
+    description.unfollowedExportSource ||
+    description.externalStars.length > 0
+  ) {
+    gap = false;
+  } else if (name === "default") {
+    // ESM `export *` never forwards a default export.
+    gap = true;
+  } else {
+    gap = description.stars.every(target =>
+      declarationReexportGap(target, name, packageRoot, cache, visiting)
+    );
+  }
+  visiting.delete(identity);
+  return gap;
 }
 
 function exportedNames(
@@ -1451,9 +2404,16 @@ function exactExportBindings(
   sharedCache,
   parser,
   acceptedDependencies,
-  resolutionProgram
+  resolutionProgram,
+  prunedDependencies = {}
 ) {
-  const cache = { local: new Map(), shared: sharedCache, parser, resolutionProgram };
+  const cache = {
+    local: new Map(),
+    shared: sharedCache,
+    parser,
+    resolutionProgram,
+    prunedDependencies
+  };
   const runtimeNames = exportedNames(
     runtime.path,
     "runtime",
@@ -1470,6 +2430,12 @@ function exactExportBindings(
   );
   const names = [...runtimeNames].filter(name => declarationNames.has(name)).sort();
   const exports = {};
+  const unboundDeclarationExports = [];
+  const foreignDeclarationExports = [];
+  const ownerPackages = acceptedBindingOwners(acceptedDependencies);
+  const packageName = ownPackageName(packageRoot, cache);
+  const forwardedForeignExports = [];
+  const runtimeWithheldExports = [];
   for (const name of names) {
     const runtimeTarget = bindExport(
       runtime.path,
@@ -1487,23 +2453,275 @@ function exactExportBindings(
       cache,
       acceptedDependencies
     );
+    // ADR 0154: both axes forward, by exact name chains, the same name that
+    // the same planned dependency withholds under ADR 0150 (or forwards under
+    // this rule). It is that unavailable export, so it is unavailable here
+    // too. The certifier replays this from the dependency's verified plan.
+    //
+    // ADR 0156 widens this on the runtime axis. The runtime forwards exactly
+    // one withheld export -- a planned dependency's (ADR 0150, 0154 or 0156)
+    // or an own exact export of a dependency node ADR 0129 pruned -- and the
+    // declaration either forwards that same name or binds exactly, wherever
+    // it lives. The name is withheld, never bound. Anything else that reaches
+    // a withheld name -- a declaration forwarding a different withheld name,
+    // or no declaration binding, or a withheld declaration beside an exact
+    // runtime binding -- refuses exactly as before.
+    const runtimeWithheld = isWithheldDependencyExport(runtimeTarget);
+    const declarationWithheld = isWithheldDependencyExport(declarationTarget);
+    if (runtimeWithheld || declarationWithheld) {
+      const sameWithheld =
+        runtimeWithheld &&
+        declarationWithheld &&
+        runtimeTarget.kind === declarationTarget.kind &&
+        runtimeTarget.packageName === declarationTarget.packageName &&
+        runtimeTarget.name === declarationTarget.name;
+      if (sameWithheld && runtimeTarget.kind === "withheld") {
+        forwardedForeignExports.push(name);
+        continue;
+      }
+      if (sameWithheld || (runtimeWithheld && declarationTarget && !declarationWithheld)) {
+        runtimeWithheldExports.push(name);
+        continue;
+      }
+      fail(
+        "accepted-dependency-binding",
+        (runtimeWithheld ? runtimeTarget : declarationTarget).message
+      );
+    }
+    // Only a runtime-bound name qualifies: a runtime re-export of a name its
+    // module does not declare fails the whole module graph at link time, so
+    // no export of the entrypoint would be usable and the case must refuse.
+    if (
+      runtimeTarget &&
+      !declarationTarget &&
+      declarationReexportGap(declarations.path, name, packageRoot, cache)
+    ) {
+      unboundDeclarationExports.push(name);
+    }
     if (!runtimeTarget || !declarationTarget) continue;
+    // ADR 0150: the runtime binding is this package's own definition while
+    // the declaration binding is another package's declaration. The two are
+    // different entities -- `solid-js@2.0.0-rc.9`'s `dist/server.js` defines
+    // `action` itself while `types/index.d.ts` re-exports `@solidjs/signals`'
+    // -- so the types describe different code and neither axis describes the
+    // export. It leaves the surface alone; every other export keeps its exact
+    // binding. The certifier replays this census from the archive and refuses
+    // a disagreement (`export_bindings.rs`'s `foreign_declaration_owner`).
+    if (
+      packageName !== undefined &&
+      bindingOwner(runtimeTarget, ownerPackages, packageName) === packageName &&
+      foreignDeclarationOwner(declarationTarget, ownerPackages, packageName)
+    ) {
+      foreignDeclarationExports.push(name);
+      continue;
+    }
     exports[name] = { runtime: runtimeTarget, declarations: declarationTarget };
   }
-  return { exports, declarationExports: [...declarationNames].sort(), cache };
+  return {
+    exports,
+    declarationExports: [...declarationNames].sort(),
+    unboundDeclarationExports,
+    foreignDeclarationExports,
+    forwardedForeignExports,
+    runtimeWithheldExports,
+    cache
+  };
 }
+
+const WITHHELD_DEPENDENCY_EXPORT = Symbol("withheldDependencyExport");
+
+/// The marker `bindExport` returns for a named re-export of a name the
+/// accepted dependency withholds (ADR 0154): its record lists the name in
+/// `withheldExports` and binds nothing by it. The record's list is a claim of
+/// the orchestrator, not a proof -- the certifier recomputes the dependency's
+/// withheld set from its bytes, so a forged or stale list refuses there.
+function withheldDependencyExport(acceptedDependencies, specifier, name, message) {
+  const dependency = acceptedDependencies[specifier];
+  const withheld = dependency?.withheldExports;
+  if (!Array.isArray(withheld) || !withheld.includes(name)) return undefined;
+  if (dependency.exports?.[name] !== undefined) return undefined;
+  if (typeof dependency.packageName !== "string" || !dependency.packageName) return undefined;
+  return Object.freeze({
+    [WITHHELD_DEPENDENCY_EXPORT]: true,
+    kind: "withheld",
+    packageName: dependency.packageName,
+    name,
+    message
+  });
+}
+
+/// ADR 0156: the marker for a named re-export of a name the planned
+/// dependency node exports exactly, when ADR 0129 pruned that node (it
+/// proposed nothing, so no receipt can ever back it). The caller then
+/// withholds the dependent's export instead of refusing its case; it never
+/// binds it. `prunedDependencies[specifier]` is the orchestrator's record
+/// (`{ packageName, exports }`): the certifier replays the pruned node's
+/// identity and exports from its archive and refuses a record that disagrees.
+/// An accepted dependency for the same specifier always wins.
+function prunedDependencyExport(
+  acceptedDependencies,
+  prunedDependencies,
+  specifier,
+  name,
+  message
+) {
+  if (acceptedDependencies[specifier] !== undefined) return undefined;
+  const pruned = prunedDependencies?.[specifier];
+  if (!Array.isArray(pruned?.exports) || !pruned.exports.includes(name)) return undefined;
+  if (typeof pruned.packageName !== "string" || !pruned.packageName) return undefined;
+  return Object.freeze({
+    [WITHHELD_DEPENDENCY_EXPORT]: true,
+    kind: "pruned",
+    packageName: pruned.packageName,
+    name,
+    message
+  });
+}
+
+function isWithheldDependencyExport(target) {
+  return Boolean(target?.[WITHHELD_DEPENDENCY_EXPORT]);
+}
+
+/// Every accepted dependency binding object, mapped to the package names of
+/// the dependencies that supply it. `bindExport` returns an accepted binding
+/// by identity (`acceptedExternalBinding`), and a local binding as a fresh
+/// object, so this map is exactly the set of targets that crossed a package
+/// edge -- no path prefix is consulted, because a nested install lies
+/// lexically below the package root it is not a member of.
+function acceptedBindingOwners(acceptedDependencies) {
+  const owners = new Map();
+  for (const dependency of Object.values(acceptedDependencies)) {
+    for (const binding of Object.values(dependency?.exports ?? {})) {
+      for (const target of [binding?.runtime, binding?.declarations]) {
+        if (!target || typeof target !== "object") continue;
+        const names = owners.get(target) ?? new Set();
+        names.add(dependency.packageName);
+        owners.set(target, names);
+      }
+    }
+  }
+  return owners;
+}
+
+/// The package a bound target belongs to: this package for a target reached
+/// without crossing an accepted dependency edge, the dependency's package for
+/// one that did, and `undefined` when that is not exactly one named package.
+function bindingOwner(target, owners, packageName) {
+  const names = owners.get(target);
+  if (!names) return packageName;
+  if (names.size !== 1) return undefined;
+  const [name] = names;
+  return typeof name === "string" && name ? name : undefined;
+}
+
+/// Whether a declaration target is exactly another package's declaration. A
+/// self-package edge (ADR 0012) is this package's own, and an owner that is
+/// not exactly one named package proves nothing, which keeps the name bound
+/// and leaves any disagreement to the certifier's replay.
+function foreignDeclarationOwner(target, owners, packageName) {
+  const owner = bindingOwner(target, owners, packageName);
+  return owner !== undefined && owner !== packageName;
+}
+
+/// The resolved package's own manifest name, memoized like `ownPackageIsCore`.
+function ownPackageName(packageRoot, cache) {
+  cache.ownPackageName ??= new Map();
+  const key = String(packageRoot);
+  if (!cache.ownPackageName.has(key)) {
+    let name;
+    try {
+      const manifest = JSON.parse(readFileSync(join(key, "package.json"), "utf8"));
+      name = typeof manifest.name === "string" && manifest.name ? manifest.name : undefined;
+    } catch {
+      name = undefined;
+    }
+    cache.ownPackageName.set(key, name);
+  }
+  return cache.ownPackageName.get(key);
+}
+
+// Member names that install a property accessor, or a prototype carrying one,
+// at run time. The mirror of `Collector::ACCESSOR_INSTALLING_MEMBERS` in
+// `rust/crates/solid-facts/src/ast/mod.rs`; the two censuses must agree byte
+// for byte, so change them together.
+const ACCESSOR_INSTALLING_MEMBERS = new Set([
+  "defineProperty",
+  "defineProperties",
+  "setPrototypeOf",
+  "__defineGetter__",
+  "__defineSetter__",
+  "__proto__"
+]);
 
 function syntaxHazards(path, sourceFile, checker) {
   const hazards = [];
   const byteOffset = offset => Buffer.byteLength(sourceFile.text.slice(0, offset), "utf8");
-  const add = (kind, node) =>
+  // An installed accessor makes reads through the receiver invisible and says
+  // nothing about any other domain, so it names `reads` alone. Every other
+  // kind still opens everything.
+  const add = (kind, node, domains = DOMAIN_NAMES) =>
     hazards.push({
       kind,
       source: `${path}:${byteOffset(node.getStart(sourceFile))}-${byteOffset(node.end)}`,
       affectedExports: [],
-      affectedDomains: [...DOMAIN_NAMES]
+      affectedDomains: [...domains]
     });
+  const accessorInstallation = node => add("runtime-accessor-installation", node, ["reads"]);
   const visit = node => {
+    // `Proxy` by identifier rather than by `new Proxy(`: `Proxy.revocable`
+    // builds the same thing and `const P = Proxy` defers construction to a
+    // name this pass does not follow. A shadowed `Proxy` is somebody's own
+    // class and states nothing.
+    if (
+      ts.isIdentifier(node) &&
+      node.text === "Proxy" &&
+      !isLocallyBoundIdentifier(node, checker, sourceFile) &&
+      !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
+      !ts.isPropertyAssignment(node.parent) &&
+      !ts.isBindingElement(node.parent)
+    ) {
+      accessorInstallation(node);
+    }
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ACCESSOR_INSTALLING_MEMBERS.has(node.name.text)
+    ) {
+      accessorInstallation(node);
+    }
+    // A computed member on an intrinsic namespace can spell any of those
+    // names, so the namespace itself is the fact.
+    if (
+      ts.isElementAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      (node.expression.text === "Object" || node.expression.text === "Reflect") &&
+      !isLocallyBoundIdentifier(node.expression, checker, sourceFile)
+    ) {
+      accessorInstallation(node);
+    }
+    // `Object.create(prototype, descriptors)` installs what it is handed; the
+    // one-argument form installs nothing, so the arity is the distinction.
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "create" &&
+      node.arguments.length >= 2 &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === "Object" &&
+      !isLocallyBoundIdentifier(node.expression.expression, checker, sourceFile)
+    ) {
+      accessorInstallation(node);
+    }
+    // `{ __proto__: p }` sets the prototype at construction, and no member
+    // expression exists for a literal key. A computed `{ ["__proto__"]: p }`
+    // is an ordinary own property and installs nothing.
+    if (
+      ts.isPropertyAssignment(node) &&
+      !ts.isComputedPropertyName(node.name) &&
+      (ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name)) &&
+      node.name.text === "__proto__"
+    ) {
+      accessorInstallation(node);
+    }
     if (ts.isCallExpression(node)) {
       if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
         if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
@@ -1627,6 +2845,32 @@ function closureForRoots(
               `resolves into the closure; certifier replay does not support imports maps yet`
           );
         }
+        // An erased edge is a declarations-axis edge. TypeScript deletes the
+        // import statement whole, so nothing about the target is a runtime
+        // fact: giving it the runtime role claimed the emitted JavaScript
+        // loads a module it never mentions, and — because
+        // `localModuleTarget` substitutes `.d.ts` for a `.js` specifier on the
+        // runtime axis — put declaration files into the runtime census, which
+        // is what fed a target's `sourceFiles` list.
+        if (specifier.typeOnly && axis === "runtime") {
+          visit(specifier.target, "declarations");
+          continue;
+        }
+        // A *value* edge whose only resolution is a declaration file names a
+        // runtime module the package does not ship. `localModuleTarget` tries
+        // every runtime sibling first (`./x.js` → `x.js`, `x.ts`, `x.tsx`),
+        // so reaching a declaration file here proves none exists, and the
+        // emitted `import "./x.js"` would fail in any consumer. That is the
+        // 08-31 doctrine's criterion for a refusal, not a disposition: a
+        // consumer really reaches it and really breaks.
+        if (axis === "runtime" && isDeclarationFileName(specifier.target)) {
+          fail(
+            "local-runtime-target-is-declaration-only",
+            `local runtime module ${specifier.text} from ${relativePath} resolves only to ` +
+              `declaration file ${packagePath(packageRoot, specifier.target)}; the package ` +
+              `ships no runtime module under that specifier`
+          );
+        }
         visit(
           specifier.target,
           axis,
@@ -1692,7 +2936,18 @@ function closureForRoots(
           artifactCase: accepted.artifactCase,
           acceptedContractDigest: accepted.acceptedContractDigest
         });
-      } else {
+      } else if (coreRuntimeSpecifier(specifier.text)) {
+        // The built-in runtime foundation is not an unknown dependency, and
+        // an opaque frontier for it is a demand that can never be met: these
+        // packages have no contract by design. The specifier stays in the
+        // external dependency census above, so the exemption is recorded as
+        // a classified edge rather than as an absence. Mirror of the same
+        // arm in Rust's `record_external`; the two censuses must agree byte
+        // for byte.
+      } else if (!(axis === "declarations" && isDeclarationFileName(path))) {
+        // ADR 0010: a declaration file does not execute this import. Its
+        // acquisition edge above remains, and Type Facts can use its typings
+        // only through authenticated compiler sources. Mirror Rust replay.
         hazards.push({
           kind: specifier.text.endsWith(".node")
             ? "native-code"
@@ -1847,7 +3102,11 @@ export function resolvePackageArtifacts({
   conditions = [],
   resolutionKind = "import",
   integrity,
-  acceptedDependencies = {}
+  acceptedDependencies = {},
+  // ADR 0156: `{ [specifier]: { packageName, exports } }` for each planned
+  // dependency node that ADR 0129 pruned. Read only to withhold an exact
+  // forward of one of its exports; it is never an accepted dependency.
+  prunedDependencies = {}
 }, session = null) {
   const packageName = packageNameFromSpecifier(specifier);
   const logicalRoot = resolve(packageRoot ?? findPackageRoot(importer, packageName));
@@ -1901,19 +3160,32 @@ export function resolvePackageArtifacts({
         accepted.packageName,
         accepted.artifactCase,
         accepted.acceptedContractDigest,
-        accepted.exports
-      ])
+        accepted.exports,
+        accepted.withheldExports ?? null
+      ]),
+    Object.entries(prunedDependencies)
+      .sort(([left], [right]) => compareText(left, right))
+      .map(([dependency, pruned]) => [dependency, pruned.packageName, pruned.exports])
   ]);
   let semantic = session?.[SESSION_LOOKUP](semanticKey, logicalRoot);
   if (!semantic) {
-    const { exports, declarationExports, cache } = exactExportBindings(
+    const {
+      exports,
+      declarationExports,
+      unboundDeclarationExports,
+      foreignDeclarationExports,
+      forwardedForeignExports,
+      runtimeWithheldExports,
+      cache
+    } = exactExportBindings(
       runtime.file,
       declarations.file,
       logicalRoot,
       session?.[SESSION_MODULE_CACHE](),
       session?.[SESSION_MODULE_PARSER](logicalRoot),
       acceptedDependencies,
-      resolutionProgram
+      resolutionProgram,
+      prunedDependencies
     );
     const closure = closureForRoots(
       logicalRoot,
@@ -1923,7 +3195,15 @@ export function resolvePackageArtifacts({
       cache,
       acceptedDependencies
     );
-    semantic = { exports, declarationExports, closure };
+    semantic = {
+      exports,
+      declarationExports,
+      unboundDeclarationExports,
+      foreignDeclarationExports,
+      forwardedForeignExports,
+      runtimeWithheldExports,
+      closure
+    };
     session?.[SESSION_STORE](semanticKey, semantic);
   }
   const realRoot = realpath(logicalRoot);
@@ -1948,8 +3228,128 @@ export function resolvePackageArtifacts({
     closure: semantic.closure,
     exports: semantic.exports,
     declarationExports: semantic.declarationExports,
+    // Additive: absent unless nonempty, so every resolution without such a
+    // name keeps its exact bytes (and its receipt identity).
+    ...(semantic.unboundDeclarationExports.length > 0
+      ? { unboundDeclarationExports: semantic.unboundDeclarationExports }
+      : {}),
+    // ADR 0150, additive in the same way.
+    ...(semantic.foreignDeclarationExports.length > 0
+      ? { foreignDeclarationExports: semantic.foreignDeclarationExports }
+      : {}),
+    // ADR 0154, additive in the same way.
+    ...(semantic.forwardedForeignExports.length > 0
+      ? { forwardedForeignExports: semantic.forwardedForeignExports }
+      : {}),
+    // ADR 0156, additive in the same way.
+    ...(semantic.runtimeWithheldExports.length > 0
+      ? { runtimeWithheldExports: semantic.runtimeWithheldExports }
+      : {}),
     authority: "standalonePackageResolver"
   };
+}
+
+// Every extension a mainstream resolver probes for an extensionless relative
+// specifier (Vite, esbuild, webpack, Rollup's node-resolve, TypeScript's
+// runtime extensions), so that one existing candidate is the answer of every
+// one of them, whatever its order (ADR 0158 § 1).
+const BUNDLER_PROBE_EXTENSIONS = Object.freeze([
+  ...RUNTIME_EXTENSIONS,
+  ".json",
+  ".css",
+  ".wasm",
+  ".node"
+]);
+
+/// The one file an extensionless relative request `base` (already joined to
+/// the importer's directory) can load, or `undefined`. Only a request whose
+/// own extension is no runtime extension qualifies -- a missing `./m.js` is a
+/// missing file, not a request to guess -- and exactly one of `base + ext` and
+/// `base/index + ext`, over `BUNDLER_PROBE_EXTENSIONS`, may exist.
+function uniqueBundlerLanding(base) {
+  if (RUNTIME_EXTENSIONS.includes(extname(base))) return undefined;
+  const found = [
+    ...BUNDLER_PROBE_EXTENSIONS.map(extension => `${base}${extension}`),
+    ...BUNDLER_PROBE_EXTENSIONS.map(extension => join(base, `index${extension}`))
+  ].filter(isFile);
+  if (found.length !== 1 || isDeclarationFileName(found[0])) return undefined;
+  return found[0];
+}
+
+/// The package-local static ESM edges of one resolved artifact case, as the
+/// runtime loads them (ADR 0137): `{ importer, specifier, target }` for every
+/// import or `export … from` statement of a runtime module in the case's
+/// closure whose literal relative specifier lands, by ESM's relative-URL rule
+/// alone, on another runtime module of that closure.
+///
+/// This is the fact TypeScript does not supply. It resolves `./m.js` to a
+/// sibling `m.d.ts`, so the analysis binds the importer to the declaration
+/// while Node loads `m.js`. The analyzer joins the two only through compiler
+/// entities (`runtime_symbol_redirects`), and only where Type Facts confirms
+/// the specifier resolved to a declaration file; this side answers only
+/// which file the runtime loads.
+///
+/// Exact or absent, per edge:
+///
+/// - both ends are closure entries of this resolution, and both files' bytes
+///   hash to the digests the record pinned;
+/// - the specifier starts with `./` or `../` and carries no `?`, `#`, `%` or
+///   backslash, so the URL rule is plain path joining against the importer's
+///   real directory, the way Node resolves it (no extension or index
+///   guessing, which only a bundler does);
+/// - the landing is not a declaration file, and a type-only statement is no
+///   runtime edge.
+///
+/// One more landing is exact (ADR 0158 § 1): a specifier with no runtime
+/// extension that ESM's rule does not land -- `./m`, as a package's
+/// bundler-only source build (its `solid` condition) writes it -- when exactly
+/// one file answers the union of every mainstream resolver's probe list
+/// (`uniqueBundlerLanding`). That file is then what any resolver that
+/// resolves the specifier at all loads, and it is the one the closure walk
+/// (`localModuleTarget`) already chose; two candidates, a directory index
+/// beside a file, or a candidate outside the closure write no edge.
+///
+/// Anything else writes no edge, and the analysis keeps TypeScript's binding.
+export function runtimeModuleResolutions(resolution) {
+  const root = resolve(resolution.packageRoot);
+  const modules = new Map();
+  const admit = (path, digest) => {
+    if (isDeclarationFileName(path)) return;
+    const real = realpath(path);
+    if (!isFile(real) || fileDigest(real) !== digest) return;
+    modules.set(real, path);
+  };
+  if (resolution.runtime?.path && resolution.runtime?.digest) {
+    admit(resolve(resolution.runtime.path), resolution.runtime.digest);
+  }
+  for (const entry of resolution.closure?.entries ?? []) {
+    if (entry.role !== "runtime" && entry.role !== "literal-dynamic-chunk") continue;
+    admit(resolve(root, entry.path), entry.digest);
+  }
+  const edges = new Map();
+  for (const [real, importer] of modules) {
+    const file = ts.createSourceFile(real, readFileSync(real, "utf8"), ts.ScriptTarget.Latest, true);
+    for (const statement of file.statements) {
+      if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
+      if (!statement.moduleSpecifier || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
+      if (specifierIsTypeOnly(statement)) continue;
+      const specifier = statement.moduleSpecifier.text;
+      if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
+      if (/[?#%\\]/.test(specifier)) continue;
+      const landing = isFile(resolve(dirname(real), specifier))
+        ? resolve(dirname(real), specifier)
+        : uniqueBundlerLanding(resolve(dirname(real), specifier));
+      if (landing === undefined) continue;
+      const target = modules.get(realpath(landing));
+      if (target === undefined) continue;
+      edges.set(JSON.stringify([importer, specifier]), { importer, specifier, target });
+    }
+  }
+  return [...edges.values()].sort(
+    (left, right) =>
+      compareText(left.importer, right.importer) ||
+      compareText(left.specifier, right.specifier)
+  );
 }
 
 // Dependency certification planning needs the exact runtime/declaration

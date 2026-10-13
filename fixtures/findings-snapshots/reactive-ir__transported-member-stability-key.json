@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-member-stability-key/App.tsx",
+      "start": 1314,
+      "end": 1321,
+      "fixes": 0
+    }
+  ]
+}

@@ -89,12 +89,35 @@ export interface AcceptedContractInput {
   import: ResolvedImport
 }
 
+/**
+ * What the host resolved one imported specifier to, in its own installed tree.
+ *
+ * Accepted for compatibility and without effect: it fed the compiled-in
+ * certified tier, retired by ADR 0228. Supply package behavior through
+ * `acceptedContracts`.
+ */
+export interface InstalledPackage {
+  /** The specifier as written in the source. */
+  specifier: string
+  name: string
+  version: string
+  /** The registry tarball's subresource integrity, from the host's lockfile. */
+  integrity: string
+  /**
+   * The file this specifier resolves to, relative to the installed package
+   * root — `dist/index.js` or `dist/index.d.ts`.
+   */
+  resolvedTarget: string
+  /** The artifact snapshot root of the installed package's files. */
+  snapshotRoot?: string
+}
+
 export interface CheckRequest {
   projectId: string
   /**
-   * Dialect id ("solid-v2" or "solid-v1"). The wasm build cannot inspect a
-   * node_modules tree, so an absent dialect means the default (solid-v2)
-   * rather than detection.
+   * Dialect id ("solid-v2"). The wasm build cannot inspect a node_modules
+   * tree, so an absent dialect means the default (solid-v2) rather than
+   * detection.
    */
   dialect?: string
   generation: number
@@ -103,14 +126,20 @@ export interface CheckRequest {
   typeFacts: unknown
   /** Receipt-validated contracts. Missing imports remain uncertifiable. */
   acceptedContracts?: AcceptedContractInput[]
+  /** Accepted for compatibility; has no effect (ADR 0228). */
+  installedPackages?: InstalledPackage[]
+  /** Accepted for compatibility; has no effect (ADR 0228). */
+  exportConditions?: string[]
+  /** Accepted for compatibility; has no effect (ADR 0228). */
+  bundledContracts?: boolean
 }
 
 export interface PlanRequest {
   projectId: string
   /**
-   * Dialect id ("solid-v2" or "solid-v1"). The wasm build cannot inspect a
-   * node_modules tree, so an absent dialect means the default (solid-v2)
-   * rather than detection.
+   * Dialect id ("solid-v2"). The wasm build cannot inspect a node_modules
+   * tree, so an absent dialect means the default (solid-v2) rather than
+   * detection.
    */
   dialect?: string
   generation: number

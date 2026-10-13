@@ -1,0 +1,209 @@
+{
+  "@solid-primitives/drag-drop|createNativeDroppable": {
+    "projects": [
+      "solid-primitives__packages__upload"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/event-listener|createEventListener": {
+    "projects": [
+      "solid-primitives__packages__pointer"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/event-listener|makeEventListener": {
+    "projects": [
+      "solid-primitives__packages__active-element",
+      "solid-primitives__packages__analytics",
+      "solid-primitives__packages__bounds",
+      "solid-primitives__packages__connectivity",
+      "solid-primitives__packages__connectivity__stories",
+      "solid-primitives__packages__form",
+      "solid-primitives__packages__fullscreen",
+      "solid-primitives__packages__keyboard",
+      "solid-primitives__packages__keyboard__stories",
+      "solid-primitives__packages__media",
+      "solid-primitives__packages__page-utilities",
+      "solid-primitives__packages__resize-observer",
+      "solid-primitives__packages__url"
+    ],
+    "sites": 13
+  },
+  "@solid-primitives/event-listener|makeEventListenerStack": {
+    "projects": [
+      "solid-primitives__packages__mouse"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/memo|createLazyMemo": {
+    "projects": [
+      "solid-primitives__packages__deep"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/permission|createPermission": {
+    "projects": [
+      "solid-primitives__packages__notification"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/queue|makeQueue": {
+    "projects": [
+      "solid-primitives__packages__analytics"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/rootless|createHydratableSingletonRoot": {
+    "projects": [
+      "solid-primitives__packages__analytics",
+      "solid-primitives__packages__connectivity",
+      "solid-primitives__packages__connectivity__stories",
+      "solid-primitives__packages__media",
+      "solid-primitives__packages__mouse",
+      "solid-primitives__packages__page-utilities",
+      "solid-primitives__packages__resize-observer",
+      "solid-primitives__packages__scroll",
+      "solid-primitives__packages__styles"
+    ],
+    "sites": 9
+  },
+  "@solid-primitives/rootless|createSingletonRoot": {
+    "projects": [
+      "solid-primitives__packages__keyboard",
+      "solid-primitives__packages__keyboard__stories"
+    ],
+    "sites": 2
+  },
+  "@solid-primitives/rootless|createSubRoot": {
+    "projects": [
+      "solid-primitives__packages__pointer"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/signal-builders|sort": {
+    "projects": [
+      "solid-primitives__packages__sortable"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/static-store|createDerivedStaticStore": {
+    "projects": [
+      "solid-primitives__packages__scroll"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/static-store|createHydratableStaticStore": {
+    "projects": [
+      "solid-primitives__packages__media"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/trigger|TriggerCache": {
+    "projects": [
+      "solid-primitives__packages__map",
+      "solid-primitives__packages__set"
+    ],
+    "sites": 2
+  },
+  "@solid-primitives/trigger|createTriggerCache": {
+    "projects": [
+      "solid-primitives__packages__url"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/utils|EQUALS_FALSE_OPTIONS": {
+    "projects": [
+      "solid-primitives__packages__deep",
+      "solid-primitives__packages__memo"
+    ],
+    "sites": 2
+  },
+  "@solid-primitives/utils|INTERNAL_OPTIONS": {
+    "projects": [
+      "solid-primitives__packages__controlled-props",
+      "solid-primitives__packages__keyed",
+      "solid-primitives__packages__selection",
+      "solid-primitives__packages__spring",
+      "solid-primitives__packages__state-machine"
+    ],
+    "sites": 5
+  },
+  "@solid-primitives/utils|access": {
+    "projects": [
+      "solid-primitives__packages__a11y",
+      "solid-primitives__packages__async__stories",
+      "solid-primitives__packages__broadcast-channel__stories",
+      "solid-primitives__packages__clipboard",
+      "solid-primitives__packages__destructure",
+      "solid-primitives__packages__input-mask__stories",
+      "solid-primitives__packages__mutable__stories",
+      "solid-primitives__packages__sse",
+      "solid-primitives__packages__timer__stories",
+      "solid-primitives__packages__virtual"
+    ],
+    "sites": 10
+  },
+  "@solid-primitives/utils|accessWith": {
+    "projects": [
+      "solid-primitives__packages__controlled-signal"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/utils|asAccessor": {
+    "projects": [
+      "solid-primitives__packages__masonry"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/utils|asArray": {
+    "projects": [
+      "solid-primitives__packages__jsx-tokenizer",
+      "solid-primitives__packages__promise"
+    ],
+    "sites": 2
+  },
+  "@solid-primitives/utils|isDev": {
+    "projects": [
+      "solid-primitives__packages__list"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/utils|isServer": {
+    "projects": [
+      "solid-primitives__packages__storage"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/utils|noop": {
+    "projects": [
+      "solid-primitives__packages__map",
+      "solid-primitives__packages__orientation",
+      "solid-primitives__packages__raf",
+      "solid-primitives__packages__set",
+      "solid-primitives__packages__transition-group",
+      "solid-primitives__packages__trigger"
+    ],
+    "sites": 6
+  },
+  "storybook-solidjs-vite/next|definePreview": {
+    "projects": [
+      "solid-primitives__packages__async__stories",
+      "solid-primitives__packages__audio__stories",
+      "solid-primitives__packages__broadcast-channel__stories",
+      "solid-primitives__packages__connectivity__stories",
+      "solid-primitives__packages__controlled-signal__stories",
+      "solid-primitives__packages__date__stories",
+      "solid-primitives__packages__drag-drop__stories",
+      "solid-primitives__packages__favicon__stories",
+      "solid-primitives__packages__input-mask__stories",
+      "solid-primitives__packages__keyboard__stories",
+      "solid-primitives__packages__memo__stories",
+      "solid-primitives__packages__mutable__stories",
+      "solid-primitives__packages__props__stories",
+      "solid-primitives__packages__static-store__stories",
+      "solid-primitives__packages__timer__stories",
+      "solid-primitives__packages__transition-group__stories"
+    ],
+    "sites": 16
+  }
+}

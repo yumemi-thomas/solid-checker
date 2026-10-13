@@ -1,0 +1,185 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "089cabdddad28452a42518ef55aebe89ef979c0288739f4e200dd46978f0b12d",
+            "path": "./index.js",
+            "sha256": "fdfb052eb440027f537f3ce189f959ab9a3db8f80aa051a11d81c7384232a2eb"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "97b4406bc42572fbfdc2d970b8511033be5b023255541df1fc8b97b96390a85f"
+          },
+          "exports": {
+            "captured": "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb",
+            "direct": "summary-2c4a021394694c5d6e1efa6435900875003de15ff5815f066c84b839a4b9fe68",
+            "mixed": "summary-39b90624cd823675cf491d3836138162a21a2a22e2305c54ab5af288d9eb9223"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:4cc36dab600217c32ebfef2f8592e0dc201e38716a8ef7acb615df88bfb80183",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "4cc36dab600217c32ebfef2f8592e0dc201e38716a8ef7acb615df88bfb80183"
+    },
+    "name": "captured-parameter-member-read",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-2c4a021394694c5d6e1efa6435900875003de15ff5815f066c84b839a4b9fe68": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "protocol": "get",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "of",
+                  "values"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "reads": [
+          "read-0"
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-39b90624cd823675cf491d3836138162a21a2a22e2305c54ab5af288d9eb9223": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "protocol": "get",
+            "tracking": "ambient-at-execution",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "proposedClosures": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "proposedClosures": [
+          "callbacks",
+          "creates",
+          "returns"
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    }
+  }
+}

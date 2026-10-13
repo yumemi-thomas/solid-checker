@@ -1,0 +1,410 @@
+{
+  "package": "@solid-primitives/range",
+  "version": "1.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "repeat": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation.",
+        "minZero": [
+          "cleanup"
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - No package-owned reactive read at construction. times reads belong to the tracked memo callback; memoLen() is inside the omitted returned mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - One returned-callable, graph omitted. Mapping, fallback and per-item owner behavior are not certified. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - No factory signal. Exactly one child-requiring optional-parent memo, enumerated in computations; item/fallback roots occur only in omitted returned mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - times runs once eagerly and on later tracked memo reruns under length-memo-owner. mapFn/fallback are only inside the omitted mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+          "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/solid-js/dist/server.dev.js:211-217,586-679 - Sound host-free weakening: same factory, eager tracked memo and returned mapLength shape. Server onCleanup skips an absent owner; preserve cleanup minZero. Do not claim a guaranteed server missing-owner violation. Domain census: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - Exactly one direct onCleanup at 18; registered disposer traversal runs at cleanup, and invokes package-created root disposers only. No additional factory cleanup. P1/P2: typed numeric callback results and package-owned arrays are plain."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - A-discarded full factory census; whole returned graph omitted. Existing positive pairs retained; new discarded-owner pair binds fresh returned-callable observations.",
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "length-memo",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "length-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "times-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "length-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "length-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "returned-callable"
+            }
+          },
+          {
+            "id": "times-recompute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "length-memo-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "length-memo-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "computations": [
+          "length-memo"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "times-compute"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "times-recompute"
+          }
+        ],
+        "resources": [
+          {
+            "id": "length-memo-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - No package-owned reactive read at construction. times reads belong to the tracked memo callback; memoLen() is inside the omitted returned mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - One returned-callable, graph omitted. Mapping, fallback and per-item owner behavior are not certified. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - No factory signal. Exactly one child-requiring optional-parent memo, enumerated in computations; item/fallback roots occur only in omitted returned mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - times runs once eagerly and on later tracked memo reruns under length-memo-owner. mapFn/fallback are only inside the omitted mapLength. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-repeat-module-scope/node_modules/@solid-primitives/range/dist/repeat.js:14-53 - Exactly one direct onCleanup at 18; registered disposer traversal runs at cleanup, and invokes package-created root disposers only. No additional factory cleanup. P1/P2: typed numeric callback results and package-owned arrays are plain."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        },
+        {
+          "label": "times-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "times runs in the created memo at construction; ordinary signal writes throw there."
+        },
+        {
+          "label": "discarded-owner",
+          "rule": "missing-owner",
+          "why": "Fresh discarded-result pair: unowned asynchronous setup versus live root; no returned function/object is called, read or escaped.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "mapRange": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - A-discarded full factory census; whole returned graph omitted. Existing positive pairs retained; new discarded-owner pair binds fresh returned-callable observations.",
+      "call": {
+        "operations": [
+          {
+            "id": "initial-step",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "returned-callable"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "initial-step"
+          }
+        ],
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - No package-owned reactive read at construction. Initial getStep() is explicitly an ambient caller callback; getStart/getTo and later step reads occur only inside the omitted returned mapper. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - One returned-callable, graph omitted. Mapping, fallback and per-item owner behavior are not certified. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - No factory signal. No factory reactive owner or computation; mapper/fallback roots occur only when the omitted returned function runs. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - Only getStep runs once during construction on the caller stack. getStart/getTo/mapFn/fallback and subsequent step invocations belong only to the omitted returned graph. P1/P2: typed numeric callback results and package-owned arrays are plain.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/range-mapRange-module-scope/node_modules/@solid-primitives/range/dist/mapRange.js:27-103 - Exactly one direct onCleanup at 29; registered disposer traversal runs at cleanup, and invokes package-created root disposers only. No additional factory cleanup. P1/P2: typed numeric callback results and package-owned arrays are plain."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        },
+        {
+          "label": "initial-step",
+          "rule": "strict-read-untracked",
+          "why": "getStep is invoked before onCleanup (dist/mapRange.js:28-29) in the ambient component body. A case-file callback invokes step() so the diagnosed operation is application code, rather than a bare accessor invoked directly by the package; the constant callback twin remains clean."
+        },
+        {
+          "label": "discarded-owner",
+          "rule": "missing-owner",
+          "why": "Fresh discarded-result pair: unowned asynchronous setup versus live root; no returned function/object is called, read or escaped.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

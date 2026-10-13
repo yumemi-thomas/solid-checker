@@ -1,0 +1,41 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "unresolved-dispatch-domains-control",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "Direct",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createSignal",
+      "location": "<package-root>/channel.js:90:105",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "Direct",
+      "domain": "creates",
+      "kind": "refusing-callee-fixpoint",
+      "package": "",
+      "callee": "",
+      "location": "<package-root>/index.js:177:201",
+      "declaration": "<package-root>/channel.js:49:123",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

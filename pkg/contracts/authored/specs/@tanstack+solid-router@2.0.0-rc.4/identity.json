@@ -1,0 +1,356 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@tanstack/solid-router",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/esm/index.js",
+      "declarationTarget": "dist/esm/index.d.ts",
+      "packageIntegrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+      "snapshotRoot": "sha256:680e595bd532def542e9e83d3a151a3b0b6952fb7c452c50d038f5131d7ec5c9",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "6cae1b2c3e0b61f6e591e845335e62e6a6b5f284e66b43161a8e9f48d6e8e861",
+                  "path": "./dist/esm/index.js",
+                  "sha256": "48bd5d97e48d0e65b3cec6f7056729ada6c90083107cd9463592aae978b3413a"
+                },
+                "declarations": {
+                  "path": "./dist/esm/index.d.ts",
+                  "sha256": "ed97f6872cc7f130f4a305fd7f1d3f1e0e3d79bd8a4179010e8a57faa7426a16"
+                },
+                "exports": {
+                  "Asset": "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c",
+                  "Await": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Block": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "CatchBoundary": "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c",
+                  "CatchNotFound": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "ClientOnly": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "DEFAULT_PROTOCOL_ALLOWLIST": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "DefaultGlobalNotFound": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "ErrorComponent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "FileRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "FileRouteLoader": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "HeadContent": "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c",
+                  "LazyRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Link": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Match": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "MatchRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Matches": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Navigate": "summary-b9058521c93fe84af7a3e9a920c45be3b76aea5117c23c7851b56c65849e8a1f",
+                  "NotFoundRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Outlet": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "RootRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Route": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "RouteApi": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Router": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "RouterContextProvider": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "RouterProvider": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "ScriptOnce": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Scripts": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "ScrollRestoration": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "SearchParamError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "cleanPath": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "composeRewrites": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createBrowserHistory": "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c",
+                  "createControlledPromise": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createFileRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createHashHistory": "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c",
+                  "createHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createLazyFileRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createLazyRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createLink": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createMemoryHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRootRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRootRouteWithContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRouteMask": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "createRouter": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createSerializationAdapter": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "deepEqual": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defaultParseSearch": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defaultStringifySearch": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defer": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "functionalUpdate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getRouteApi": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "interpolatePath": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isMatch": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isNotFound": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isPlainArray": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isPlainObject": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isRedirect": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "joinPaths": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "lazyFn": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "lazyRouteComponent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "linkOptions": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "notFound": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "parseSearchWith": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "redirect": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "replaceEqualDeep": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "resolvePath": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "retainSearchParams": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "rootRouteId": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "rootRouteWithContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "stringifySearchWith": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "stripSearchParams": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "trimPath": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "trimPathLeft": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "trimPathRight": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useAwaited": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useBlocker": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useCanGoBack": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useChildMatches": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useElementScrollRestoration": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useHydrated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useLinkProps": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useLoaderData": "summary-d4a3b849c5802e43eb330ea24fb890f8b5c3f1a7884f54cc8496dd55a390f416",
+                  "useLoaderDeps": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useLocation": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useMatch": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useMatchRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useMatches": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useNavigate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useParams": "summary-d4a3b849c5802e43eb330ea24fb890f8b5c3f1a7884f54cc8496dd55a390f416",
+                  "useParentMatches": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useRouteContext": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useRouter": "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c",
+                  "useRouterState": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useSearch": "summary-d4a3b849c5802e43eb330ea24fb890f8b5c3f1a7884f54cc8496dd55a390f416",
+                  "useTags": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "5c3ceb176e4f8cb8720c585a20316a12e2d182df1bb413fa7c0ab7e48042adaa"
+          },
+          "name": "@tanstack/solid-router",
+          "version": "2.0.0-rc.4"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-b9058521c93fe84af7a3e9a920c45be3b76aea5117c23c7851b56c65849e8a1f": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-d4a3b849c5802e43eb330ea24fb890f8b5c3f1a7884f54cc8496dd55a390f416": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "specifier": "@tanstack/solid-router",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import",
+        "solid"
+      ],
+      "runtimeTarget": "dist/source/index.jsx",
+      "declarationTarget": "dist/source/index.d.ts",
+      "packageIntegrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+      "snapshotRoot": "sha256:680e595bd532def542e9e83d3a151a3b0b6952fb7c452c50d038f5131d7ec5c9",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "f33f5704ac36ec87738940aa8e58ecb28ead434f7c9a577c02206553006ed0a9",
+                  "path": "./dist/source/index.jsx",
+                  "sha256": "93b07d359100fa2e60d046165896b01e1a6904dcb8ccf0657f03e2e342451abe"
+                },
+                "declarations": {
+                  "path": "./dist/source/index.d.ts",
+                  "sha256": "8c754833daa7e45eb0c8ce363b62e9d1b3f4b3d5a1cbfd6977bd4c4cb213ef49"
+                },
+                "exports": {
+                  "Asset": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Await": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Block": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "CatchBoundary": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "CatchNotFound": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "ClientOnly": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "DEFAULT_PROTOCOL_ALLOWLIST": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "DefaultGlobalNotFound": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "ErrorComponent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "FileRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "FileRouteLoader": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "HeadContent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "LazyRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Link": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Match": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "MatchRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Matches": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Navigate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "NotFoundRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Outlet": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "RootRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Route": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "RouteApi": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Router": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "RouterContextProvider": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "RouterProvider": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "ScriptOnce": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Scripts": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "ScrollRestoration": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "SearchParamError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "cleanPath": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "composeRewrites": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createBrowserHistory": "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c",
+                  "createControlledPromise": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createFileRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createHashHistory": "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c",
+                  "createHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createLazyFileRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createLazyRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createLink": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createMemoryHistory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRootRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRootRouteWithContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createRouteMask": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "createRouter": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createSerializationAdapter": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "deepEqual": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defaultParseSearch": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defaultStringifySearch": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defer": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "functionalUpdate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "getRouteApi": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "interpolatePath": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isMatch": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isNotFound": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isPlainArray": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isPlainObject": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isRedirect": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "joinPaths": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "lazyFn": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "lazyRouteComponent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "linkOptions": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "notFound": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "parseSearchWith": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "redirect": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "replaceEqualDeep": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "resolvePath": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "retainSearchParams": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "rootRouteId": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "rootRouteWithContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "stringifySearchWith": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "stripSearchParams": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "trimPath": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "trimPathLeft": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "trimPathRight": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useAwaited": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useBlocker": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useCanGoBack": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useChildMatches": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useElementScrollRestoration": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useHydrated": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useLinkProps": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useLoaderData": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useLoaderDeps": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useLocation": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useMatch": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useMatchRoute": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useMatches": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useNavigate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useParams": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useParentMatches": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useRouteContext": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useRouter": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useRouterState": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useSearch": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useTags": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./solid/default",
+                  "typesBranch": "/exports/./solid/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-DCHpsdvlWuJ3064od5ScYe4fUaFFaj8z/cqDPggh5CJ2hI/ZjUrCa1GnHbbjWGNk/WKDLfwdwRDPHFKU/dI/ug==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "5c3ceb176e4f8cb8720c585a20316a12e2d182df1bb413fa7c0ab7e48042adaa"
+          },
+          "name": "@tanstack/solid-router",
+          "version": "2.0.0-rc.4"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-8e03c909bd1251e7f067461166e0bbfad8b1d8f10fd6984fbf2fd28305b5f68c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,297 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "c929f7c66e79e81bc0dcdecaad15d2bd2c7cb34629be335739d6cc36f6df6914",
+            "path": "./dist/index.js",
+            "sha256": "8d970f9c1964ea8cbc12c657c7c1b5e153a6c2fd653d0c46c6862584c79d8f20"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "5bb0b91a8aea2f1bcb0aadff063d7b0b4781439996869c575217b6543419fb19"
+          },
+          "exports": {
+            "createMutationObserver": "authored-createMutationObserver",
+            "mutationObserver": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-QbBVd/3B4vLJh7Hbd2nbW2AVXOrWeRNvXIojkS8cr2DfnnT2/+MAOl7gJmowuIfbZmoLBvgCFmaBnNXg31BzVQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "23cd6210156a64b961cdc04de4c77724a2159908dcfe83cbaaa75ee8f815e815"
+    },
+    "name": "@solid-primitives/mutation-observer",
+    "version": "3.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createMutationObserver": {
+      "call": {
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "returns": [
+          "return"
+        ],
+        "cleanups": [
+          "observer-cleanup"
+        ],
+        "operations": [
+          {
+            "id": "observer-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "callable"
+                },
+                {
+                  "kind": "object",
+                  "closed": [
+                    "properties"
+                  ],
+                  "properties": [
+                    {
+                      "name": "start",
+                      "value": {
+                        "kind": "callable"
+                      }
+                    },
+                    {
+                      "name": "stop",
+                      "value": {
+                        "kind": "callable"
+                      }
+                    },
+                    {
+                      "name": "instance",
+                      "value": {
+                        "kind": "plain"
+                      }
+                    },
+                    {
+                      "name": "isSupported",
+                      "value": {
+                        "kind": "plain"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": "settled-registration",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "settled-leaf",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            }
+          },
+          {
+            "id": "initial-start",
+            "kind": "invoke",
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "trigger": {
+              "event": "settle"
+            },
+            "at": {
+              "event": "settle",
+              "schedule": "queued"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "native-handler-two",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "native-handler-three",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "plain"
+                }
+              ]
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "settled-leaf",
+            "kind": "owner"
+          }
+        ],
+        "computations": [
+          "settled-registration"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "initial-start"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "native-handler-two"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "native-handler-three"
+          }
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

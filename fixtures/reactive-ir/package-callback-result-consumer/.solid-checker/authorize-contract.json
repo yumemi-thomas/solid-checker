@@ -1,0 +1,219 @@
+{
+  "document": "node_modules/reactive-package/solid-reactivity.json",
+  "import": {
+    "authority": "host",
+    "closure": {
+      "digest": "sha256:cb8aeef15a571deaaef974ea87367f48cca32595883f2dd0c98a1b9d27c50b37",
+      "entries": [
+        {
+          "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+          "path": "./package.json",
+          "role": "manifest"
+        }
+      ]
+    },
+    "declarationTrace": {
+      "branch": ""
+    },
+    "declarations": {
+      "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+      "path": "node_modules/reactive-package/package.json"
+    },
+    "exports": {
+      "takeResult": {
+        "declarations": {
+          "exportName": "takeResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "takeResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "getResult": {
+        "declarations": {
+          "exportName": "getResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "getResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "getTrackedResult": {
+        "declarations": {
+          "exportName": "getTrackedResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "getTrackedResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "callTrackedResult": {
+        "declarations": {
+          "exportName": "callTrackedResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "callTrackedResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "unknownResult": {
+        "declarations": {
+          "exportName": "unknownResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "unknownResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "escapeResult": {
+        "declarations": {
+          "exportName": "escapeResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "escapeResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "readResult": {
+        "declarations": {
+          "exportName": "readResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "readResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "iterateResult": {
+        "declarations": {
+          "exportName": "iterateResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "iterateResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "coerceResult": {
+        "declarations": {
+          "exportName": "coerceResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "coerceResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "escapingTrackedResult": {
+        "declarations": {
+          "exportName": "escapingTrackedResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "escapingTrackedResult",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      },
+      "noResultUses": {
+        "declarations": {
+          "exportName": "noResultUses",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        },
+        "runtime": {
+          "exportName": "noResultUses",
+          "module": {
+            "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+            "path": "node_modules/reactive-package/package.json"
+          }
+        }
+      }
+    },
+    "importer": "App.tsx",
+    "packageIntegrity": "fixture:sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+    "packageManifest": {
+      "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+      "path": "node_modules/reactive-package/package.json"
+    },
+    "packageName": "reactive-package",
+    "packageRoot": "node_modules/reactive-package",
+    "packageVersion": "1.0.0",
+    "requestedEntrypoint": ".",
+    "runtime": {
+      "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+      "path": "node_modules/reactive-package/package.json"
+    },
+    "runtimeTrace": {
+      "branch": ""
+    },
+    "specifier": "reactive-package"
+  }
+}

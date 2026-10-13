@@ -1,0 +1,499 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@tanstack/solid-query",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "@tanstack/custom-condition",
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "src/index.ts",
+      "declarationTarget": "src/index.ts",
+      "packageIntegrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+      "snapshotRoot": "sha256:88646e469d77d68f00556b0c3a9cf08087a25f4377945e3ab93513c199a426db",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "d5125c6fe633f22e65853f48df89b3c32b3b92c28c033c4434f773d4ce77e02e",
+                  "path": "./src/index.ts",
+                  "sha256": "b51a47649ee94b27d8bd81f9d42c1b03f6236e4f4496044dbe8165b902020636"
+                },
+                "declarations": {
+                  "path": "./src/index.ts",
+                  "sha256": "b51a47649ee94b27d8bd81f9d42c1b03f6236e4f4496044dbe8165b902020636"
+                },
+                "exports": {
+                  "CancelledError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "FLIGHT_DATA_SOURCE": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "InfiniteQueryObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "IsRestoringContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Mutation": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "MutationCache": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "MutationObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueriesObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Query": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryCache": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryClient": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryClientContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryClientProvider": "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a",
+                  "QueryObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "dataTagErrorSymbol": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "dataTagSymbol": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "defaultScheduler": "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5",
+                  "defaultShouldDehydrateMutation": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "defaultShouldDehydrateQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "dehydrate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "dehydrateSettled": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "environmentManager": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "experimental_streamedQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "focusManager": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "hashKey": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "hydrate": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "infiniteQueryOptions": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isCancelledError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "isServer": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "keepPreviousData": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "matchMutation": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "matchQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "mutationOptions": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "noop": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "notifyManager": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "onlineManager": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "partialMatchKey": "summary-bab938674cc281a252d0da5eb3f5904b5762333ed2c28e67383ee6e58c0dfb89",
+                  "queryOptions": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "replaceEqualDeep": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "shouldThrowError": "summary-bc0c2a791c27effe9833182e90365f52ccca32786253ab22243b13839eba4cef",
+                  "skipToken": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "timeoutManager": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "unsetMarker": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+                  "useInfiniteQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useIsFetching": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useIsMutating": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useIsRestoring": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useMutation": "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055",
+                  "useMutationState": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useQueries": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useQueryClient": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+                  "typesBranch": "/exports/./@tanstack~1custom-condition"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "8af2b3a0c5480f589b767ec3904a2dfd7657e61d50ec02eab189f885b328f999"
+          },
+          "name": "@tanstack/solid-query",
+          "version": "6.0.0-rc.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-bab938674cc281a252d0da5eb3f5904b5762333ed2c28e67383ee6e58c0dfb89": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-bc0c2a791c27effe9833182e90365f52ccca32786253ab22243b13839eba4cef": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "specifier": "@tanstack/solid-query",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "development",
+        "import"
+      ],
+      "runtimeTarget": "build/dev.js",
+      "declarationTarget": "build/index.d.ts",
+      "packageIntegrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+      "snapshotRoot": "sha256:88646e469d77d68f00556b0c3a9cf08087a25f4377945e3ab93513c199a426db",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "1dcb8b279b3088fdbf4c7f3192fa74468ded12dd1c19d06c88f8bb72a8ff64c4",
+                  "path": "./build/dev.js",
+                  "sha256": "ba9a827cb9308b6c1cf9bf5f0c69ee5cf894a70df7b848ba03eb021a13eb9505"
+                },
+                "declarations": {
+                  "path": "./build/index.d.ts",
+                  "sha256": "5032aabb7fec1efde5f09307425a1da18ed39259fa4f06e6e0a0c5558bb2d4df"
+                },
+                "exports": {
+                  "CancelledError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "FLIGHT_DATA_SOURCE": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "InfiniteQueryObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "IsRestoringContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Mutation": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "MutationCache": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "MutationObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueriesObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Query": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryCache": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryClient": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryClientContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryClientProvider": "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a",
+                  "QueryObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "dataTagErrorSymbol": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "dataTagSymbol": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "defaultScheduler": "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5",
+                  "defaultShouldDehydrateMutation": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
+                  "defaultShouldDehydrateQuery": "summary-944edb85cdb6cf72f953f3d7cab733e536756d424b3a0da468ac341110313d8c",
+                  "dehydrate": "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690",
+                  "dehydrateSettled": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "environmentManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "experimental_streamedQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "focusManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "hashKey": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "hydrate": "summary-c0c792c1af07f09b28bf8081d0fac5d5a37225649e3e49f367b9d281f9cbf9f8",
+                  "infiniteQueryOptions": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "isCancelledError": "summary-d2638b2041b6a2569ee8907e8f1ddb33807f59e88135e9f67fb7eb4822aecd68",
+                  "isServer": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "keepPreviousData": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "matchMutation": "summary-62035fd99f69c011fc32522774f5571c2ceda7a2fce6867d0b295ee014ce983c",
+                  "matchQuery": "summary-d615a59a47f8874edb6e213972f22668fa07acbf456e698c47a2e2b10caff851",
+                  "mutationOptions": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "noop": "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb",
+                  "notifyManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "onlineManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "partialMatchKey": "summary-17f7114426cc832752a5119174217a04ec0daf425973a03f75380978d8c65125",
+                  "queryOptions": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "replaceEqualDeep": "summary-bab938674cc281a252d0da5eb3f5904b5762333ed2c28e67383ee6e58c0dfb89",
+                  "shouldThrowError": "summary-a5963ba9fbacb3f87b65e2a91a46a8547144a70f01d28caa10cdda036f8f3a12",
+                  "skipToken": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "timeoutManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "unsetMarker": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "useInfiniteQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useIsFetching": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useIsMutating": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useIsRestoring": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useMutation": "summary-7fae29d449969adb9bc21fb783c994fcaa26776f3a46f4ee9923614847874529",
+                  "useMutationState": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useQueries": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useQueryClient": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./development/import/default",
+                  "typesBranch": "/exports/./development/import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "8af2b3a0c5480f589b767ec3904a2dfd7657e61d50ec02eab189f885b328f999"
+          },
+          "name": "@tanstack/solid-query",
+          "version": "6.0.0-rc.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-17f7114426cc832752a5119174217a04ec0daf425973a03f75380978d8c65125": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-62035fd99f69c011fc32522774f5571c2ceda7a2fce6867d0b295ee014ce983c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7fae29d449969adb9bc21fb783c994fcaa26776f3a46f4ee9923614847874529": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-944edb85cdb6cf72f953f3d7cab733e536756d424b3a0da468ac341110313d8c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-a5963ba9fbacb3f87b65e2a91a46a8547144a70f01d28caa10cdda036f8f3a12": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-bab938674cc281a252d0da5eb3f5904b5762333ed2c28e67383ee6e58c0dfb89": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c0c792c1af07f09b28bf8081d0fac5d5a37225649e3e49f367b9d281f9cbf9f8": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-d2638b2041b6a2569ee8907e8f1ddb33807f59e88135e9f67fb7eb4822aecd68": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-d615a59a47f8874edb6e213972f22668fa07acbf456e698c47a2e2b10caff851": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    },
+    {
+      "specifier": "@tanstack/solid-query",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "build/index.js",
+      "declarationTarget": "build/index.d.ts",
+      "packageIntegrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+      "snapshotRoot": "sha256:88646e469d77d68f00556b0c3a9cf08087a25f4377945e3ab93513c199a426db",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "cf9c6f282cedb0313ea8164c6e3cc5362205270da5bc3694928cb4ef56fb12a8",
+                  "path": "./build/index.js",
+                  "sha256": "ba9a827cb9308b6c1cf9bf5f0c69ee5cf894a70df7b848ba03eb021a13eb9505"
+                },
+                "declarations": {
+                  "path": "./build/index.d.ts",
+                  "sha256": "5032aabb7fec1efde5f09307425a1da18ed39259fa4f06e6e0a0c5558bb2d4df"
+                },
+                "exports": {
+                  "CancelledError": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "FLIGHT_DATA_SOURCE": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "InfiniteQueryObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "IsRestoringContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Mutation": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "MutationCache": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "MutationObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueriesObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "Query": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryCache": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryClient": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryClientContext": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "QueryClientProvider": "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a",
+                  "QueryObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "dataTagErrorSymbol": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "dataTagSymbol": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "defaultScheduler": "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5",
+                  "defaultShouldDehydrateMutation": "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce",
+                  "defaultShouldDehydrateQuery": "summary-944edb85cdb6cf72f953f3d7cab733e536756d424b3a0da468ac341110313d8c",
+                  "dehydrate": "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690",
+                  "dehydrateSettled": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "environmentManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "experimental_streamedQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "focusManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "hashKey": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "hydrate": "summary-c0c792c1af07f09b28bf8081d0fac5d5a37225649e3e49f367b9d281f9cbf9f8",
+                  "infiniteQueryOptions": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "isCancelledError": "summary-d2638b2041b6a2569ee8907e8f1ddb33807f59e88135e9f67fb7eb4822aecd68",
+                  "isServer": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "keepPreviousData": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "matchMutation": "summary-62035fd99f69c011fc32522774f5571c2ceda7a2fce6867d0b295ee014ce983c",
+                  "matchQuery": "summary-d615a59a47f8874edb6e213972f22668fa07acbf456e698c47a2e2b10caff851",
+                  "mutationOptions": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "noop": "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb",
+                  "notifyManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "onlineManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "partialMatchKey": "summary-17f7114426cc832752a5119174217a04ec0daf425973a03f75380978d8c65125",
+                  "queryOptions": "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7",
+                  "replaceEqualDeep": "summary-bab938674cc281a252d0da5eb3f5904b5762333ed2c28e67383ee6e58c0dfb89",
+                  "shouldThrowError": "summary-a5963ba9fbacb3f87b65e2a91a46a8547144a70f01d28caa10cdda036f8f3a12",
+                  "skipToken": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "timeoutManager": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "unsetMarker": "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76",
+                  "useInfiniteQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useIsFetching": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useIsMutating": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useIsRestoring": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useMutation": "summary-7fae29d449969adb9bc21fb783c994fcaa26776f3a46f4ee9923614847874529",
+                  "useMutationState": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "useQueries": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useQuery": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "useQueryClient": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-Wj23dMyRnVmKiYvvyMImZqb3+2Ftxc7FngUfloCAmQE2dpQO/QeqaSHNlpjbG6eoKqazVPe4k1xhxofUU+w/dA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "8af2b3a0c5480f589b767ec3904a2dfd7657e61d50ec02eab189f885b328f999"
+          },
+          "name": "@tanstack/solid-query",
+          "version": "6.0.0-rc.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-17f7114426cc832752a5119174217a04ec0daf425973a03f75380978d8c65125": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2bea96ef54a98a43971017a6037500e6147b57eee612e1b64a4bb8a48e2097ce": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-62035fd99f69c011fc32522774f5571c2ceda7a2fce6867d0b295ee014ce983c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7fae29d449969adb9bc21fb783c994fcaa26776f3a46f4ee9923614847874529": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-8ddeecec8d034f386fd4751defe54934c5e0095ad195f4ad162475643d9d4a76": {
+            "call": {},
+            "shape": "plain"
+          },
+          "summary-944edb85cdb6cf72f953f3d7cab733e536756d424b3a0da468ac341110313d8c": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-9bb43de4c34e527b130ebb3321d9b91aa113f8b7d22b3dbd4e44b836b3cc348a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-a5963ba9fbacb3f87b65e2a91a46a8547144a70f01d28caa10cdda036f8f3a12": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-bab938674cc281a252d0da5eb3f5904b5762333ed2c28e67383ee6e58c0dfb89": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c0c792c1af07f09b28bf8081d0fac5d5a37225649e3e49f367b9d281f9cbf9f8": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-c52f712e67c81b69340b265e1335987e456737027126af4b45fa7a6a1702afd7": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-cd719acaeb7892d543fd8085c736eafff7bd10635b9a9cab7fec9f739afcc2bb": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-d2638b2041b6a2569ee8907e8f1ddb33807f59e88135e9f67fb7eb4822aecd68": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-d615a59a47f8874edb6e213972f22668fa07acbf456e698c47a2e2b10caff851": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

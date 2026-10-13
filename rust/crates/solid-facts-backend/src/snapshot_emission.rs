@@ -47,7 +47,8 @@ pub(crate) fn emit(
             }
             output
         }
-        "default" => render_default(dialect, project_id, snapshot, elapsed)?,
+        "default" => render_default(dialect, project_id, snapshot, elapsed, true)?,
+        "full" => render_default(dialect, project_id, snapshot, elapsed, false)?,
         format => return Err(format!("unsupported format {format:?}").into()),
     };
     Ok(Emission {
@@ -56,16 +57,230 @@ pub(crate) fn emit(
     })
 }
 
+/// The rules whose uncertifiable findings describe what the analysis could not
+/// see (a package without a contract, a dispatch it could not resolve), not a
+/// claim about code the user wrote. ADR 0202 groups them in the default output.
+const COVERAGE_RULES: &[&str] = &[
+    "package-contract-incomplete",
+    "reactive-dispatch-unresolved",
+    "reactive-source-uncaptured",
+    "unaudited-solid-release",
+];
+
+/// How many coverage groups the default output lists before summarizing.
+const COVERAGE_GROUPS_SHOWN: usize = 20;
+
 fn render_default(
     dialect: &'static Dialect,
     project_id: &str,
     snapshot: &Snapshot,
     elapsed: Duration,
+    tiered: bool,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let project = Path::new(project_id);
     let cwd = project.parent().unwrap_or_else(|| Path::new("."));
+    let mut output = Vec::new();
+    if tiered {
+        // ADR 0202: violations, then uncertifiable findings about the user's
+        // code, then the analysis-coverage gaps grouped by root cause.
+        let coverage = |finding: &&SnapshotFinding| {
+            finding.kind == "uncertifiable" && COVERAGE_RULES.contains(&finding.rule.as_str())
+        };
+        let violations = snapshot
+            .findings
+            .iter()
+            .filter(|finding| finding.kind != "uncertifiable")
+            .collect::<Vec<_>>();
+        let review = snapshot
+            .findings
+            .iter()
+            .filter(|finding| finding.kind == "uncertifiable" && !coverage(finding))
+            .collect::<Vec<_>>();
+        let gaps = snapshot
+            .findings
+            .iter()
+            .filter(coverage)
+            .collect::<Vec<_>>();
+        if !violations.is_empty() {
+            output.extend_from_slice(format!("Violations ({})\n\n", violations.len()).as_bytes());
+            output.extend(render_diagnostics(dialect, cwd, violations)?);
+        }
+        if !review.is_empty() {
+            output.extend_from_slice(
+                format!(
+                    "Needs review ({}): solid-checker could not prove these correct or wrong\n\n",
+                    review.len()
+                )
+                .as_bytes(),
+            );
+            output.extend(render_diagnostics(dialect, cwd, review)?);
+        }
+        if !gaps.is_empty() {
+            output.extend(render_coverage(cwd, &gaps));
+        }
+    } else {
+        output.extend(render_diagnostics(
+            dialect,
+            cwd,
+            snapshot.findings.iter().collect(),
+        )?);
+    }
+    let threads = std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(1);
+    output.extend_from_slice(
+        format!(
+            "Finished in {}ms on {} files with {} rules using {threads} threads.\n",
+            elapsed.as_millis(),
+            snapshot.metrics.files_analyzed,
+            dialect.rule_count,
+        )
+        .as_bytes(),
+    );
+    Ok(output)
+}
+
+/// How many subjects a coverage family names before summarizing the rest.
+const COVERAGE_SUBJECTS_SHOWN: usize = 5;
+
+/// ADR 0205: the heading of a coverage family, and what its subjects are.
+fn coverage_family_heading(family: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match family {
+        "package-contract" => (
+            "imports from packages without a complete reactivity contract",
+            "package",
+            "packages",
+        ),
+        "own-export-contract" => (
+            "callbacks this project's exports hand to code with unknown timing",
+            "export",
+            "exports",
+        ),
+        "caller-supplied-member" => (
+            "helpers that call a method on a value their caller supplies",
+            "helper",
+            "helpers",
+        ),
+        "call-target" => (
+            "calls whose runtime target cannot be selected exactly",
+            "call",
+            "calls",
+        ),
+        "undescribed-callee" => (
+            "reactive values passed to functions whose behaviour is not described",
+            "function",
+            "functions",
+        ),
+        "leaf-callback" => (
+            "calls in a leaf owner's callback whose body cannot be followed",
+            "owner",
+            "owners",
+        ),
+        _ => return None,
+    })
+}
+
+fn plural(count: usize, one: &str, many: &str) -> String {
+    format!("{count} {}", if count == 1 { one } else { many })
+}
+
+/// The analysis-coverage gaps, grouped by root cause (ADR 0202, ADR 0205): one
+/// group per coverage family, naming its most frequent subjects, and one per
+/// rule and message for a gap with no family.
+fn render_coverage(cwd: &Path, gaps: &[&SnapshotFinding]) -> Vec<u8> {
+    let mut groups = BTreeMap::<(&str, &str, &str), Vec<&SnapshotFinding>>::new();
+    for finding in gaps {
+        let key = if coverage_family_heading(&finding.coverage_family).is_some() {
+            (finding.id.as_str(), finding.coverage_family.as_str(), "")
+        } else {
+            (
+                finding.id.as_str(),
+                finding.rule.as_str(),
+                finding.message.as_str(),
+            )
+        };
+        groups.entry(key).or_default().push(finding);
+    }
+    let mut groups = groups.into_iter().collect::<Vec<_>>();
+    groups.sort_by(|left, right| right.1.len().cmp(&left.1.len()).then(left.0.cmp(&right.0)));
+    let mut output = format!(
+        "Analysis coverage: {} in {} that solid-checker could not analyze; they are not findings about your code (all of them: --format full or json)\n\n",
+        plural(gaps.len(), "site", "sites"),
+        plural(groups.len(), "group", "groups"),
+    );
+    for ((id, family, message), sites) in groups.iter().take(COVERAGE_GROUPS_SHOWN) {
+        let first = sites
+            .iter()
+            .map(|finding| &finding.primary_location)
+            .min_by(|left, right| {
+                (left.path.as_str(), left.line, left.column).cmp(&(
+                    right.path.as_str(),
+                    right.line,
+                    right.column,
+                ))
+            });
+        let at = first
+            .map(|location| {
+                let path = Path::new(&location.path);
+                let shown = path.strip_prefix(cwd).unwrap_or(path).display().to_string();
+                format!("{shown}:{}:{}", location.line, location.column)
+            })
+            .unwrap_or_default();
+        if let Some((heading, one, many)) = coverage_family_heading(family) {
+            let mut subjects = BTreeMap::<&str, usize>::new();
+            for finding in sites {
+                *subjects
+                    .entry(finding.coverage_subject.as_str())
+                    .or_default() += 1;
+            }
+            let mut subjects = subjects.into_iter().collect::<Vec<_>>();
+            subjects.sort_by(|left, right| right.1.cmp(&left.1).then(left.0.cmp(right.0)));
+            let mut named = subjects
+                .iter()
+                .take(COVERAGE_SUBJECTS_SHOWN)
+                .map(|(subject, count)| format!("{subject} ({count})"))
+                .collect::<Vec<_>>();
+            if subjects.len() > COVERAGE_SUBJECTS_SHOWN {
+                named.push(format!(
+                    "and {} more",
+                    subjects.len() - COVERAGE_SUBJECTS_SHOWN
+                ));
+            }
+            let mut heading = heading.to_owned();
+            if let Some(first) = heading.get_mut(..1) {
+                first.make_ascii_uppercase();
+            }
+            output.push_str(&format!(
+                "  [{id}] {heading}: {} in {}\n      {}\n      first at {at}\n",
+                plural(sites.len(), "site", "sites"),
+                plural(subjects.len(), one, many),
+                named.join(", "),
+            ));
+        } else {
+            output.push_str(&format!(
+                "  [{id}] {message}\n      {}, first at {at}\n",
+                plural(sites.len(), "site", "sites"),
+            ));
+        }
+    }
+    if groups.len() > COVERAGE_GROUPS_SHOWN {
+        output.push_str(&format!(
+            "  ... and {} more\n",
+            plural(groups.len() - COVERAGE_GROUPS_SHOWN, "group", "groups"),
+        ));
+    }
+    output.push('\n');
+    output.into_bytes()
+}
+
+/// The graphical rendering of `findings`, grouped by file.
+fn render_diagnostics(
+    dialect: &'static Dialect,
+    cwd: &Path,
+    findings: Vec<&SnapshotFinding>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut by_path = BTreeMap::<PathBuf, Vec<&SnapshotFinding>>::new();
-    for finding in &snapshot.findings {
+    for finding in findings {
         by_path
             .entry(PathBuf::from(&finding.primary_location.path))
             .or_default()
@@ -123,18 +338,6 @@ fn render_default(
 
     let mut output = Vec::new();
     service.run(&mut output);
-    let threads = std::thread::available_parallelism()
-        .map(usize::from)
-        .unwrap_or(1);
-    output.extend_from_slice(
-        format!(
-            "Finished in {}ms on {} files with {} rules using {threads} threads.\n",
-            elapsed.as_millis(),
-            snapshot.metrics.files_analyzed,
-            dialect.rule_count,
-        )
-        .as_bytes(),
-    );
     Ok(output)
 }
 
@@ -206,6 +409,7 @@ mod tests {
 
     fn snapshot(status: &str) -> Snapshot {
         Snapshot {
+            feedback_facts: Vec::new(),
             status: status.into(),
             findings: Vec::new(),
             package_summaries: Vec::new(),
@@ -360,6 +564,8 @@ mod tests {
             hint: "Keep the props object intact and read props.<name> inside JSX.".into(),
             analysis_context: String::new(),
             subject_kind: "component-props".into(),
+            coverage_family: String::new(),
+            coverage_subject: String::new(),
             primary_location: SourceLocation {
                 path: source_path.to_string_lossy().into_owned(),
                 start_byte: 20,

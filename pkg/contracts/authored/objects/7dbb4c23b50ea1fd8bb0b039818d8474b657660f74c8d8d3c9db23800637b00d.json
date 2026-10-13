@@ -1,0 +1,427 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "1f33b3820282d9892a4087fb3090bf5f39dcba47c6e77b0b8466b5b3e797b38f",
+            "path": "./dist/index.js",
+            "sha256": "342d91d80ddf7f75d6a4481299dc029678c31b5249900e5d1b3b33f249a1c9c3"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "d1fd607925e078bd0f29eb68989688c7769410b119c9842d85eb09571078889e"
+          },
+          "exports": {
+            "changed": "open-callable",
+            "promiseTimeout": "open-callable",
+            "raceTimeout": "open-callable",
+            "retry": "open-callable",
+            "until": "authored-until",
+            "untilAll": "open-callable",
+            "untilAny": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-+RHW7pHv6Dg94S5dO7y2Dk0UFnyU1Tx1BoN2fb/7fZeqDJ4IBi6uFE0dws21qTTk30vsfHyvTPBymTLSfflRoQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "bc33a5d0e3f99c5dbcc2c42cf8c6ef5b5d19a9faf16628108f5103af8c962fc3"
+    },
+    "name": "@solid-primitives/promise",
+    "version": "2.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-until": {
+      "call": {
+        "operations": [
+          {
+            "id": "condition-first",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "condition-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "condition-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "condition-flush",
+            "kind": "invoke",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "condition-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "condition-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "until-root-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "until-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "until-memo-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "resources": [
+              "until-memo",
+              "condition-owner"
+            ]
+          },
+          {
+            "id": "until-effect-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "resources": [
+              "until-effect-owner"
+            ]
+          },
+          {
+            "id": "until-memo-first-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "until-memo"
+              }
+            ]
+          },
+          {
+            "id": "until-memo-flush-read",
+            "kind": "read",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "until-memo"
+              }
+            ]
+          },
+          {
+            "id": "until-rejection-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "until-parent-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "dispose",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "condition-first"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "condition-flush"
+          }
+        ],
+        "resources": [
+          {
+            "id": "condition-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "until-root",
+            "kind": "owner"
+          },
+          {
+            "id": "until-memo",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "until-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "creates": [
+          "until-root-production",
+          "until-memo-production",
+          "until-effect-production"
+        ],
+        "reads": [
+          "until-memo-first-read",
+          "until-memo-flush-read"
+        ],
+        "cleanups": [
+          "until-rejection-cleanup",
+          "until-parent-cleanup"
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

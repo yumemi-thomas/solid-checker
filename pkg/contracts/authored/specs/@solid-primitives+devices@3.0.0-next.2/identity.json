@@ -1,0 +1,69 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/devices",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-/wJgCgYt69Z10A501hecGgunjaFHHxysOoN+GLv98Do1aq5Kvgb97vFe1HNhBMv+qhezpxmjeY5wRglrXQq0/g==",
+      "snapshotRoot": "sha256:b5ef6683b9e5bd9cd899f84d611460692708a31345d1698fe920f797e5a72ffe",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "62892ac45b92adae7e692ad2b21c890352b22947d16bd76bbecae03885472816",
+                  "path": "./dist/index.js",
+                  "sha256": "eaf4ae6c8e7d7880eae42da534a616308d0ae35699133fef359a94eec91e223c"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "d5d78f977a81786b3f9b5b2e0da3e94f20cd02b48b060a4b8ecd297e8338c7fb"
+                },
+                "exports": {
+                  "createCameras": "summary-526a54c4a1da4ec69531474fbf10d7b9bbd910dc7619c95c50a759d6146f5a92",
+                  "createDevices": "summary-0e65c756b8f2bd956b48874ea0f21a8c213cd2cd65cfe2af311e6ce4fa97f39c",
+                  "createMicrophones": "summary-526a54c4a1da4ec69531474fbf10d7b9bbd910dc7619c95c50a759d6146f5a92",
+                  "createSpeakers": "summary-526a54c4a1da4ec69531474fbf10d7b9bbd910dc7619c95c50a759d6146f5a92"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-/wJgCgYt69Z10A501hecGgunjaFHHxysOoN+GLv98Do1aq5Kvgb97vFe1HNhBMv+qhezpxmjeY5wRglrXQq0/g==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "4ab6226ebbc7abd78628bf8babd9ceae879df42f461319a06d3686f50f9384b7"
+          },
+          "name": "@solid-primitives/devices",
+          "version": "3.0.0-next.2"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-526a54c4a1da4ec69531474fbf10d7b9bbd910dc7619c95c50a759d6146f5a92": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-0e65c756b8f2bd956b48874ea0f21a8c213cd2cd65cfe2af311e6ce4fa97f39c": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

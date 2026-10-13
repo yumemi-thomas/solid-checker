@@ -49,8 +49,8 @@ function solidJsPackument() {
       "2.0.0-beta.34": {},
       "2.0.0-rc.0": {},
       "2.0.0-rc.1": {},
-      "2.0.0-rc.3": {},
-      "2.0.0-rc.4": {}
+      "2.0.0-rc.9": {},
+      "2.0.0-rc.10": {}
     },
     { latest: "1.9.15", next: "2.0.0-rc.1", beta: "1.10.0-beta.0" }
   );
@@ -68,7 +68,7 @@ test("solidReleaseCatalog splits every runtime package's releases by Solid major
     "2.0.0-experimental.0",
     "2.0.0-rc.0",
     "2.0.0-rc.1",
-    "2.0.0-rc.3"
+    "2.0.0-rc.9"
   ]);
   assert.deepEqual(catalog["solid-js"].distTags, { latest: "1.9.15", next: "2.0.0-rc.1", beta: "1.10.0-beta.0" });
   // Runtime packages missing from the map (or unpublished) get an empty,
@@ -79,13 +79,13 @@ test("solidReleaseCatalog splits every runtime package's releases by Solid major
   assert.deepEqual(catalog["@solidjs/signals"], { v1: [], v2: [], distTags: {}, peers: {} });
 });
 
-test("Solid 2 catalog and official runtime rows are capped at audited RC.3", () => {
+test("Solid 2 catalog and official runtime rows are capped at the audited release", () => {
   const solidJs = solidJsPackument();
   const web = packument({ [AUDITED_SOLID_2]: { peerDependencies: { "solid-js": `^${AUDITED_SOLID_2}` } } });
   const signals = packument({ [AUDITED_SOLID_2]: {} });
   const catalog = solidReleaseCatalog(runtimePackuments({ solidJs, web, signals }));
   assert.equal(catalog["solid-js"].v2.at(-1), AUDITED_SOLID_2);
-  assert.equal(catalog["solid-js"].v2.includes("2.0.0-rc.4"), false);
+  assert.equal(catalog["solid-js"].v2.includes("2.0.0-rc.10"), false, "the unreviewed release above the ceiling");
 
   const result = selectRow({
     packageName: "solid-js",
@@ -132,7 +132,7 @@ test("Solid 2 official runtime rows fail closed when the audited tuple is incomp
     auditedSolid2: AUDITED_SOLID_2
   });
   assert.equal(result.kind, "exclusion");
-  assert.match(result.exclusion.detail, /@solidjs\/web@2\.0\.0-rc\.3 is missing/);
+  assert.match(result.exclusion.detail, new RegExp(`@solidjs/web@${AUDITED_SOLID_2.replace(/\./g, "\\.")} is missing`));
 });
 
 test("prereleaseChannel reads the prerelease identifier, never a string prefix trick", () => {
@@ -186,7 +186,7 @@ test("solid1: solid-js not published at the audited version is excluded not-publ
 });
 
 test.each([
-  ["@tanstack/charts", "0.15.0", ["./solid"]],
+  ["@tanstack/charts", "0.18.0", ["./solid"]],
   ["@tanstack/devtools-utils", "0.7.0", ["./solid", "./solid/class"]],
   [
     "@tanstack/devtools-a11y",
@@ -291,7 +291,7 @@ test("solid2: caret prerelease range accepts same-tuple prereleases up to rc but
       "2.0.0-experimental.0",
       "2.0.0-rc.0",
       "2.0.0-rc.1",
-      "2.0.0-rc.3"
+      "2.0.0-rc.9"
     ]
   });
   assert.equal(result.row.probes.length, 2);
@@ -302,7 +302,7 @@ test("solid2: caret prerelease range accepts same-tuple prereleases up to rc but
   // supported window. `compatibleSolidVersions` above still records the full
   // accepted set, so the range fact is not lost -- only the probe moves.
   assert.equal(result.row.probes[0].solid["solid-js"], "2.0.0-rc.0");
-  assert.equal(result.row.probes[1].solid["solid-js"], "2.0.0-rc.3");
+  assert.equal(result.row.probes[1].solid["solid-js"], "2.0.0-rc.9");
   assert.equal(result.row.probes[0].channel, "rc");
   assert.equal(result.row.probes[1].channel, "rc");
 });
@@ -335,13 +335,13 @@ test("solid2: floor/head for ^2.0.0-beta.17 are minSatisfying/maxSatisfying dire
   // primitive level rather than observed through selectRow's probes: the
   // experimental release satisfies the range (it is semver-greater than
   // beta.17 within the 2.0.0 tuple) but it is never the floor or the head,
-  // since beta.17 stays the minimum and audited rc.3 stays the maximum of the
+  // since beta.17 stays the minimum and audited rc.9 stays the maximum of the
   // accepted set.
   const catalog = solidReleaseCatalog(runtimePackuments({ solidJs: solidJsPackument() }));
   const pool = catalog["solid-js"].v2;
   const range = "^2.0.0-beta.17";
   assert.equal(minSatisfying(pool, range), "2.0.0-beta.17");
-  assert.equal(maxSatisfying(pool, range), "2.0.0-rc.3");
+  assert.equal(maxSatisfying(pool, range), "2.0.0-rc.9");
 });
 
 test("solid2: >=2.0.0 does not accept a 2.0.0-rc.1-only catalog (npm's stable-range/prerelease rule)", () => {

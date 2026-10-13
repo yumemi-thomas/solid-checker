@@ -1,0 +1,1283 @@
+diff --git a/THIRD_PARTY_NOTICES.md b/THIRD_PARTY_NOTICES.md
+index a7137cd9a..1e9205786 100644
+--- a/THIRD_PARTY_NOTICES.md
++++ b/THIRD_PARTY_NOTICES.md
+@@ -6,11 +6,11 @@ whose original notices remain applicable.
+ ## Solid 2 compiler
+ 
+ - Upstream: https://github.com/solidjs/solid
+-- Upstream base: `a10cf1a147209d8da50697896742d2b1d4afad75`
+-- Consumed semantic-only fork: https://github.com/yumemi-thomas/solid
+-- Semantic implementation revision: `7f4e1135943c1fb01231d1bda707b4a1856a5607`
+-- Pinned distribution revision: `9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4`
+-- Fork branch: `solid-checker/compiler-facts-v3`
++- Upstream base: `5efaf260becb32293f2bcb4d32f8be72be6de674`
++- Consumed semantic-only fork: local RC.13 candidate, preserved in the saved Git bundle
++- Semantic implementation revision: `c04c48779812d3d87166da3741c625748458c62f`
++- Pinned distribution revision: `3ad4bbec37ae30f325a803cdb4271a71c86a2a2d`
++- Fork branch: `codex/compiler-facts-rc13` (local; unpublished)
+ - License: MIT
+ 
+ The `solidjs-compiler` crate under `packages/compiler` is consumed as a pinned
+diff --git a/docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json b/docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json
+index 55aa89b98..01117359e 100644
+--- a/docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json
++++ b/docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json
+@@ -1,74 +1,39 @@
+ {
+   "schemaVersion": 1,
+   "documentKind": "solid-compiler-semantic-facts-bootstrap-conformance",
+-  "capturedAt": "2026-08-27",
++  "capturedAt": "2026-10-03",
+   "upstream": {
+     "repository": "https://github.com/solidjs/solid",
+-    "revision": "a10cf1a147209d8da50697896742d2b1d4afad75",
++    "revision": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+     "branch": "next"
+   },
+   "fork": {
+-    "repository": "https://github.com/yumemi-thomas/solid",
+-    "revision": "1d81e67fd393d12c74b13aa7d3fb492f3d85353b",
+-    "branch": "solid-checker/compiler-facts-v2",
+-    "upstreamPullRequest": false,
+-    "scope": "semantic facts only"
++    "repository": "@COMPILER_REPOSITORY_URI@",
++    "revision": "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d",
++    "implementationRevision": "c04c48779812d3d87166da3741c625748458c62f",
++    "branch": "codex/compiler-facts-rc13",
++    "scope": "semantic facts only",
++    "upstreamPullRequest": false
+   },
+   "trace": {
+-    "version": 2,
+-    "baselineEntries": 358,
+-    "baselineBytes": 955562,
+-    "baselineSha256": "2f7f2b9a9d8a8cf3eb1d60a0cc35ee4a97142a9ff027fdcb2079f741ed00b92b",
++    "version": 3,
++    "baselineEntries": 365,
+     "independentlyGeneratedUpstreamBaselineMatched": true,
+     "javascriptSourceMapDiagnosticNeutrality": true
+   },
+   "checker": {
+     "dependency": "solidjs-compiler",
+-    "compilerFactsProtocol": 1,
+-    "findingsBefore": 558,
+-    "findingsAfter": 557,
+-    "reviewedFindingDelta": "one stale uncertifiable SC1001 removed because current Solid positively reports the source child as tracked",
+-    "otherFindingChanges": 0
++    "compilerFactsProtocol": 2,
++    "status": "passed local whole-checker make verify; development evidence"
+   },
+   "checks": {
+-    "compilerRustDefaultFeatures": "passed",
+-    "compilerRustNoDefaultFeatures": "passed",
+-    "compilerJavaScript": {
+-      "testFiles": 28,
+-      "tests": 3933,
++    "producerRust": "passed",
++    "producerJavaScript": {
++      "testFiles": 41,
++      "tests": 5938,
+       "status": "passed"
+     },
+-    "adapterSolid2": {
+-      "tests": 9,
+-      "status": "passed"
+-    },
+-    "adapterSolid1AndSelection": {
+-      "tests": 7,
+-      "status": "passed"
+-    },
+-    "contractProcess": {
+-      "tests": 57,
+-      "status": "passed"
+-    },
+-    "dialectProcess": {
+-      "tests": 37,
+-      "status": "passed"
+-    },
+-    "coverage": {
+-      "projects": 94,
+-      "findings": 557,
+-      "status": "passed"
+-    },
+-    "ownershipGate": {
+-      "cases": 289,
+-      "ledgerRows": 465,
+-      "pending": 0,
+-      "status": "passed"
+-    },
+-    "makeVerify": {
+-      "elapsedSeconds": 42.83,
+-      "status": "passed"
+-    }
++    "localChecker": "pending"
+   },
+   "knownInheritedGate": {
+     "command": "cargo clippy --manifest-path packages/compiler/Cargo.toml --no-default-features --all-targets --locked -- -D warnings",
+diff --git a/docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md b/docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md
+index a8a70ac3f..1a6ee3603 100644
+--- a/docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md
++++ b/docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md
+@@ -1,5 +1,12 @@
+ # Phase 4 completion report: compiler execution facts
+ 
++Local RC.13 integration overlay (2026-10-03): this isolated checkout reads
++upstream `5efaf260becb32293f2bcb4d32f8be72be6de674`, implementation
++`c04c48779812d3d87166da3741c625748458c62f` and distribution
++`3ad4bbec37ae30f325a803cdb4271a71c86a2a2d` from a local Git dependency. Its
++branch is `codex/compiler-facts-rc13`; no remote publication occurred. The
++historical prose below is not a new production-adoption certificate.
++
+ Date: 2026-08-27
+ 
+ ## Outcome
+@@ -13,10 +20,10 @@ request was opened against upstream Solid.
+ 
+ | Role | Identity |
+ | --- | --- |
+-| Official upstream base | `solidjs/solid@a10cf1a147209d8da50697896742d2b1d4afad75` |
++| Official upstream base | `solidjs/solid@5efaf260becb32293f2bcb4d32f8be72be6de674` |
+ | Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-v3` |
+-| Semantic implementation | `7f4e1135943c1fb01231d1bda707b4a1856a5607` |
+-| Identity-only distribution commit | `9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4` |
++| Semantic implementation | `c04c48779812d3d87166da3741c625748458c62f` |
++| Identity-only distribution commit | `3ad4bbec37ae30f325a803cdb4271a71c86a2a2d` |
+ | Solid 2 trace | version 3 |
+ | Checker compiler-facts | protocol 2 |
+ | Solid 1 producer | `yumemi-thomas/solid-1x-compiler@ca3bbfae7d1e00e28ef73f9af58bdb46e248b512`, trace 2 |
+diff --git a/docs/package-contract-v2/phase4/compiler-identity.json b/docs/package-contract-v2/phase4/compiler-identity.json
+index 61a1e11f8..6b08992ca 100644
+--- a/docs/package-contract-v2/phase4/compiler-identity.json
++++ b/docs/package-contract-v2/phase4/compiler-identity.json
+@@ -1,11 +1,11 @@
+ {
+   "format": 1,
+   "documentKind": "solid-checker-solid2-compiler-facts-identity",
+-  "repository": "https://github.com/yumemi-thomas/solid",
+-  "branch": "solid-checker/compiler-facts-v3",
+-  "upstreamRevision": "a10cf1a147209d8da50697896742d2b1d4afad75",
+-  "implementationRevision": "7f4e1135943c1fb01231d1bda707b4a1856a5607",
+-  "distributionRevision": "9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4",
++  "repository": "@COMPILER_REPOSITORY_URI@",
++  "branch": "codex/compiler-facts-rc13",
++  "upstreamRevision": "5efaf260becb32293f2bcb4d32f8be72be6de674",
++  "implementationRevision": "c04c48779812d3d87166da3741c625748458c62f",
++  "distributionRevision": "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d",
+   "semanticTraceVersion": 3,
+   "compilerFactsProtocol": 2
+ }
+diff --git a/docs/precision-backlog.md b/docs/precision-backlog.md
+index 070a23cdd..b7bc80d81 100644
+--- a/docs/precision-backlog.md
++++ b/docs/precision-backlog.md
+@@ -1,5 +1,29 @@
+ # Precision backlog
+ 
++## First development-feedback implementation (2026-10-03)
++
++The CLI now runs native analysis and admits input-bound development captures.
++Proven findings, native gaps and recorded observations have separate fields;
++untracked reads stay informational because reactive intent remains open.
++TypeScript errors suppress additional capture guidance. Eighteen focused tests
++cover capture admission, stale inputs, event grouping and native result/status
++preservation. Browser collection and package source inference remain unported.
++
++Eight real published-typing applications expose a lost uncertainty fact in
++SC5001: unknown pending-handler callbacks were classified as proven throws.
++AsyncRead now preserves callee callback timing, and native isPending accessor
++probes suppress the strict pending-read guard. The fixture distinguishes two
++open callbacks, four proven reads, namespace/native probes and shadowing;
++all new cases pass the published rc.9 types. Reanalysis changes eight claimed
++violations into native gaps, with zero typing errors and eight informational
++observations. This is not an improvement to the historical warning selector's
++target/control accuracy. See [development feedback](development-feedback.md).
++
++The RC.13 candidate passes whole-checker verification in a local integration
++checkout. Production compiler Git pins and the runtime package audit remain
++unchanged. The obsolete keygen fixture case now lives in a separate rejection
++regression against both the candidate and the actual published RC.13 compiler.
++
+ ## Fresh fixed structural return proof (2026-09-30)
+ 
+ Status: **implemented, source verified, tier authenticated and checkpoint
+diff --git a/docs/rules/pending-async-unsuspendable-read.md b/docs/rules/pending-async-unsuspendable-read.md
+index 611d15abb..2c6239d2b 100644
+--- a/docs/rules/pending-async-unsuspendable-read.md
++++ b/docs/rules/pending-async-unsuspendable-read.md
+@@ -28,6 +28,20 @@ body's strict-read window it throws `PENDING_ASYNC_UNTRACKED_READ` in dev, and
+ invoked later it throws a plain `NotReadyError` (probed on rc.3 and rc.9), and
+ the checker does not prove which.
+ 
++The same uncertainty applies when a project or unknown external helper receives
++the callback. Unless its exact body or an accepted contract proves invocation
++during the call, the checker cannot prove the callback runs in the lexical
++scope or leaves pending values unhandled. Such results are uncertifiable and
++their wording identifies the open callback context. Exact cross-file and
++namespace helpers that invoke the parameter directly retain the violation.
++
++Native `isPending(() => accessor())` suppresses the strict pending-accessor
++safeguard, so it has no `SC5001` error. This exemption resolves the exact
++primitive and its direct callback: shadowed functions do not inherit it.
++Subscription findings retain their own facts, and an ordinary `NotReadyError`
++may still propagate as graph suspension. Store proxy reads follow a different
++runtime path and do not inherit this accessor exemption.
++
+ ## Examples
+ 
+ Incorrect:
+diff --git a/fixtures/findings-snapshots/reactive-ir__callee-callback-timing.json b/fixtures/findings-snapshots/reactive-ir__callee-callback-timing.json
+index 5e676d54b..aeb87c94e 100644
+--- a/fixtures/findings-snapshots/reactive-ir__callee-callback-timing.json
++++ b/fixtures/findings-snapshots/reactive-ir__callee-callback-timing.json
+@@ -91,6 +91,86 @@
+       "end": 2578,
+       "fixes": 0
+     },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "uncertifiable",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 361,
++      "end": 369,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "uncertifiable",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 538,
++      "end": 546,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "violation",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 701,
++      "end": 709,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "violation",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 879,
++      "end": 887,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "violation",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 962,
++      "end": 970,
++      "fixes": 0
++    },
++    {
++      "rule": "strict-read-untracked",
++      "code": "SC1001",
++      "kind": "violation",
++      "severity": "warning",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 1142,
++      "end": 1150,
++      "fixes": 0
++    },
++    {
++      "rule": "strict-read-untracked",
++      "code": "SC1001",
++      "kind": "violation",
++      "severity": "warning",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 1214,
++      "end": 1222,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "violation",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 1455,
++      "end": 1463,
++      "fixes": 0
++    },
+     {
+       "rule": "strict-read-untracked",
+       "code": "SC1001",
+diff --git a/fixtures/findings-snapshots/reactive-ir__jsx-void-child-divergence-solid-2.json b/fixtures/findings-snapshots/reactive-ir__jsx-void-child-divergence-solid-2.json
+index d3f9bbdab..c67f13718 100644
+--- a/fixtures/findings-snapshots/reactive-ir__jsx-void-child-divergence-solid-2.json
++++ b/fixtures/findings-snapshots/reactive-ir__jsx-void-child-divergence-solid-2.json
+@@ -7,8 +7,8 @@
+       "kind": "violation",
+       "severity": "warning",
+       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx",
+-      "start": 2497,
+-      "end": 2506,
++      "start": 2312,
++      "end": 2321,
+       "fixes": 0,
+       "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
+       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component."
+diff --git a/fixtures/reactive-ir/callee-callback-timing/README.md b/fixtures/reactive-ir/callee-callback-timing/README.md
+index b2a17c5aa..bbbb5c98d 100644
+--- a/fixtures/reactive-ir/callee-callback-timing/README.md
++++ b/fixtures/reactive-ir/callee-callback-timing/README.md
+@@ -44,7 +44,20 @@ with `render(() => createComponent(...))`:
+ Remaining approximations: a literal stored in a local array or object
+ (`const arr = [() => n()]`, `const obj = { f: () => n() }`) is not an argument
+ and keeps its lexical role; writes in such literals keep theirs too (the flag is
+-a read hole), and so do pending async reads (`SC5001`).
++a read hole).
++
++`Async.tsx` pins the same invocation uncertainty for pending reads (`SC5001`):
++an unknown member's pending handler and a deferred cross-file callback are
++uncertifiable. A component-body read and callbacks invoked by the exact
++cross-file/namespace helper remain violations. Native `isPending`, including a
++namespace import, has no pending-read error; a shadowed local function with
++the same name remains a violation. Subscription rules retain their own facts.
++The pending-read wording must identify the unproven callback context and must
++not assert a runtime exception. The added memo overload and probe signature
++come from the published rc.9 declarations; these cases pass no memo options.
++The new async cases and cross-file helpers pass TypeScript 5.9.3 with the real
++audited `solid-js`, signals and web rc.9 installs (`strict`, `noEmit`,
++`skipLibCheck`, and the published JSX runtime declarations): zero errors.
+ 
+ **Stub.** `solid-js.d.ts` holds `createSignal` verbatim from the rc.9 typings,
+ as its header lists. `App.tsx` and `helpers.ts` type-check cleanly against the
+diff --git a/fixtures/reactive-ir/callee-callback-timing/solid-js.d.ts b/fixtures/reactive-ir/callee-callback-timing/solid-js.d.ts
+index 567aaeff5..8500d62cf 100644
+--- a/fixtures/reactive-ir/callee-callback-timing/solid-js.d.ts
++++ b/fixtures/reactive-ir/callee-callback-timing/solid-js.d.ts
+@@ -36,4 +36,20 @@ declare module "solid-js" {
+     unobserved?: () => void;
+   }
+   export function createSignal<T>(value: Exclude<T, Function>, options?: SignalOptions<T>): Signal<T>;
++  // rc.9 signals.d.ts: the overload without a required loadingValue. These
++  // cases pass no options; the omitted overload cannot affect their claims.
++  export type NoInfer<T extends any> = [T][T extends any ? 0 : never];
++  export type ComputeFunction<Prev, Next extends Prev = Prev> = (v: Prev) => PromiseLike<Next> | AsyncIterable<Next> | Next;
++  export interface MemoOptions<T> {
++    id?: string;
++    name?: string;
++    transparent?: boolean;
++    equals?: false | ((prev: T, next: T) => boolean);
++    unobserved?: () => void;
++    lazy?: boolean;
++    sync?: boolean;
++    loadingValue?: T;
++  }
++  export function createMemo<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, options?: MemoOptions<T>): SourceAccessor<T>;
++  export function isPending(fn: () => any): boolean;
+ }
+diff --git a/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx b/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx
+index a9d9651cb..3b2469d77 100644
+--- a/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx
++++ b/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx
+@@ -35,14 +35,8 @@ function NestedNoscriptOffTheFastPath() {
+   return <div><noscript id={tag()}>{body()}</noscript></div>;
+ }
+ 
+-// Dialect-specific controls. Solid 1.x treats these legacy tags as void and
+-// reports their child lists discarded; Solid 2 treats them as non-void and
+-// reports their reads tracked. Both outcomes are certified and silent.
+-function NestedKeygenChild() {
+-  const [keyed] = createSignal(0);
+-  return <div><keygen>{keyed()}</keygen></div>;
+-}
+-
++// RC.13 accepts menuitem as ordinary child-bearing markup. Its HTML validator
++// rejects keygen markup; the separate compiler refusal regression covers it.
+ function RootMenuitemChild() {
+   const [item] = createSignal(0);
+   return <menuitem>{item()}</menuitem>;
+@@ -81,7 +75,6 @@ export function Root() {
+       <AdjacentTrackedChildStaysCertified />
+       <RootNoscriptChild />
+       <NestedNoscriptOffTheFastPath />
+-      <NestedKeygenChild />
+       <RootMenuitemChild />
+       <ShadowedJsxValuedChildrenReconciles />
+     </div>
+diff --git a/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/README.md b/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/README.md
+index e1c687c96..6b8c781e5 100644
+--- a/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/README.md
++++ b/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/README.md
+@@ -1,16 +1,17 @@
+ # JSX discarded-child coverage — Solid 2
+ 
+-This fixture revalidates discarded child-content behavior at
+-`dom-expressions#next`
+-`26e744fb4feb973a3652bfc45a8c3938ece667f0`.
++This local integration fixture revalidates discarded child-content behavior at
++published Solid RC.13 `5efaf260becb32293f2bcb4d32f8be72be6de674`.
+ 
+-Its source is byte-identical to the Solid 1.x sibling. Ordinary HTML void and
++Ordinary HTML void and
+ `<noscript>` child expressions are not checker-maintained transform
+ divergences at this pin. Template-root void child lists are explicit discarded
+ regions; nested void children remain live under Ryan's authoritative `next`
+ semantics and are tracked. A surviving source expression with no execution
+ entry remains an ordinary census gap.
+ 
+-Unlike Solid 1.x, Solid 2 has no parity-target-only void tags. `<keygen>` and
+-`<menuitem>` children are therefore certified from the producer trace and
+-remain silent. The module-scope cleanup is the proven missing-owner control.
++`<menuitem>` children are classified from the producer trace and remain silent.
++RC.13 rejects the removed `<keygen>` case as malformed HTML, so it cannot be
++included in a fixture whose claim requires successful compiler facts. The
++separate compiler-refusal check preserves that boundary. The module-scope
++cleanup is the proven missing-owner control.
+diff --git a/packages/cli/README.md b/packages/cli/README.md
+index 21f237b23..e5f79f0b9 100644
+--- a/packages/cli/README.md
++++ b/packages/cli/README.md
+@@ -12,6 +12,27 @@ bun add --dev solid-checker
+ 
+ Then run `solid-checker --certify`.
+ 
++## Development feedback
++
++The experimental feedback command combines native findings with recorded
++application observations:
++
++```sh
++solid-checker feedback --project tsconfig.json
++solid-checker feedback manifest --project tsconfig.json > capture.json
++solid-checker feedback --project tsconfig.json --capture capture.json
++```
++
++The manifest starts an input-bound capture. A collector fills its `events` and
++`runtimeInputs` before the final command. Source, configuration, resolution and
++runtime changes refuse stale captures. Native findings keep their original
++violation/uncertifiable classification; recorded untracked reads are information
++because snapshot intent is open. Runtime exceptions and failed application
++assertions can be supplied as separate observations. This first implementation
++does not collect browser events or infer package behavior automatically.
++
++See [the capture format and current limits](../../docs/development-feedback.md).
++
+ Library maintainers can generate an unaccepted stable-v1 proposal from one
+ exact installed package without writing semantic JSON:
+ 
+diff --git a/packages/cli/bin/solid-checker.mjs b/packages/cli/bin/solid-checker.mjs
+index 86626a2b3..8efb0d18a 100755
+--- a/packages/cli/bin/solid-checker.mjs
++++ b/packages/cli/bin/solid-checker.mjs
+@@ -2,7 +2,15 @@
+ 
+ import { launch, runNative } from "./launcher.mjs";
+ 
+-if (process.argv[2] === "contract") {
++if (process.argv[2] === "feedback") {
++  try {
++    const { developmentFeedback } = await import("../scripts/development-feedback.mjs");
++    developmentFeedback(process.argv.slice(3));
++  } catch (error) {
++    console.error(`solid-checker: ${error instanceof Error ? error.message : error}`);
++    process.exitCode = 2;
++  }
++} else if (process.argv[2] === "contract") {
+   try {
+     const { generatePackageContract, packageContractHelp } = await import(
+       "../scripts/generate-package-contract.mjs"
+diff --git a/rust/Cargo.lock b/rust/Cargo.lock
+index 1b73afa68..4a3120f55 100644
+--- a/rust/Cargo.lock
++++ b/rust/Cargo.lock
+@@ -1696,7 +1696,7 @@ dependencies = [
+ [[package]]
+ name = "solidjs-compiler"
+ version = "0.0.0"
+-source = "git+https://github.com/yumemi-thomas/solid?rev=9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4#9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4"
++source = "git+@COMPILER_REPOSITORY_URI@?rev=3ad4bbec37ae30f325a803cdb4271a71c86a2a2d#3ad4bbec37ae30f325a803cdb4271a71c86a2a2d"
+ dependencies = [
+  "html5ever",
+  "htmlize",
+diff --git a/rust/Cargo.toml b/rust/Cargo.toml
+index 8830c7284..fa785401a 100644
+--- a/rust/Cargo.toml
++++ b/rust/Cargo.toml
+@@ -28,13 +28,13 @@ rust-version = "1.97"
+ [workspace.dependencies]
+ # Solid 2 compiler facts come from the semantic-only fork of the compiler now
+ # owned by solidjs/solid. This exact fork commit is based on upstream `next` at
+-# `a10cf1a1` and adds only trace models, output-neutral recording hooks,
+-# validation/serialization, and fact tests. Its 358-entry generated-output
++# `5efaf260` and adds only trace models, output-neutral recording hooks,
++# validation/serialization, and fact tests. Its 365-entry generated-output
+ # baseline is byte-identical to that exact upstream base. No upstream PR is
+ # opened for this fork; compiler behavior fixes remain outside this branch.
+ # The producer carries `SEMANTIC_TRACE_VERSION = 3`; the adapter has an
+ # independent literal and const assertion so an incompatible pin cannot build.
+-solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4", default-features = false }
++solidjs-compiler = { git = "@COMPILER_REPOSITORY_URI@", rev = "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d", default-features = false }
+ # Moved from `3296ec8` for the signature-less `Function`-supertype answer
+ # (producer ADR 0021): wire table schema 15, handshake protocol still 2.
+ # `Callability::UntypedCallable` is positive runtime-function evidence without
+diff --git a/rust/crates/solid-dialect/src/lib.rs b/rust/crates/solid-dialect/src/lib.rs
+index 352f3be7a..bdfafdb3b 100644
+--- a/rust/crates/solid-dialect/src/lib.rs
++++ b/rust/crates/solid-dialect/src/lib.rs
+@@ -1981,6 +1981,14 @@ pub trait Dialect: Sync {
+     /// and stop reporting reads inside it.
+     fn runs_callback_deferred(&self, primitive: Primitive) -> bool;
+ 
++    /// Whether this callback suppresses the strict pending-accessor safeguard.
++    /// Ordinary NotReadyError can still propagate as graph suspension. This
++    /// says nothing about store proxy reads or subscription: their runtime
++    /// paths can differ.
++    fn callback_handles_pending_accessor_read(&self, _primitive: Primitive, _index: usize) -> bool {
++        false
++    }
++
+     /// Whether this primitive clears tracking around a callback it nonetheless
+     /// runs **before its own call returns**.
+     ///
+diff --git a/rust/crates/solid-dialect/src/solid_2.rs b/rust/crates/solid-dialect/src/solid_2.rs
+index 70da7a313..55fa1dfa5 100644
+--- a/rust/crates/solid-dialect/src/solid_2.rs
++++ b/rust/crates/solid-dialect/src/solid_2.rs
+@@ -4782,6 +4782,13 @@ static NEGATIVE_AUTHORITY: DialectNegativeAuthority = DialectNegativeAuthority {
+ };
+ 
+ impl Dialect for Solid2 {
++    // rc.9 dev-shared.js core read() explicitly excludes pendingCheckActive
++    // from the strict pending-read safeguard; verdict.isPending supplies it.
++    // Store proxy traps have a different guard, so this is accessor-only.
++    fn callback_handles_pending_accessor_read(&self, primitive: Primitive, index: usize) -> bool {
++        primitive == Primitive::IsPending && index == 0
++    }
++
+     fn version(&self) -> Version {
+         Version::V2
+     }
+diff --git a/rust/crates/solid-facts-backend/src/dialect.rs b/rust/crates/solid-facts-backend/src/dialect.rs
+index e39c702eb..32f01704f 100644
+--- a/rust/crates/solid-facts-backend/src/dialect.rs
++++ b/rust/crates/solid-facts-backend/src/dialect.rs
+@@ -1127,6 +1127,7 @@ mod tests {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
+             }],
+             static_defects: defect_kinds
+                 .into_iter()
+diff --git a/rust/crates/solid-facts-backend/tests/contract_interface.rs b/rust/crates/solid-facts-backend/tests/contract_interface.rs
+index aa7c323bf..5c4b42fb2 100644
+--- a/rust/crates/solid-facts-backend/tests/contract_interface.rs
++++ b/rust/crates/solid-facts-backend/tests/contract_interface.rs
+@@ -305,11 +305,11 @@ fn compiler_certification_child_binds_the_live_pid_request_and_materialized_outp
+         assert_eq!(response["nonce"], nonce);
+         assert_eq!(
+             response["compilerIdentity"],
+-            "solid-v2:trace3:7f4e1135943c1fb01231d1bda707b4a1856a5607"
++            "solid-v2:trace3:c04c48779812d3d87166da3741c625748458c62f"
+         );
+         assert_eq!(
+             response["compilerSourceManifestSha256"],
+-            "sha256:613049ba60fa514c662bd9350adb4b0ed9c3031e4f80f2bd1ecb23d56846fde0"
++            "sha256:35f4874f646f9482d0549fdf052f0d37bd02ec47b5c024d5732b6d9796423a9a"
+         );
+         let map: ExecutionMap = serde_json::from_value(response["executionMap"].clone()).unwrap();
+         assert!(map.semantic_model.source_operations_complete);
+diff --git a/rust/crates/solid-facts-backend/tests/diagnostics_process.rs b/rust/crates/solid-facts-backend/tests/diagnostics_process.rs
+index 0e0656fd7..6618272d3 100644
+--- a/rust/crates/solid-facts-backend/tests/diagnostics_process.rs
++++ b/rust/crates/solid-facts-backend/tests/diagnostics_process.rs
+@@ -424,6 +424,37 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
+     );
+ }
+ 
++#[test]
++fn pending_callback_reads_preserve_callee_invocation_uncertainty() {
++    let Some(findings) = diagnostic_fixture("callee-callback-timing") else {
++        return;
++    };
++    let pending = findings_for_rule(&findings, "pending-async-unsuspendable-read");
++    assert_eq!(pending.len(), 6, "{pending:#?}");
++    assert_eq!(
++        pending
++            .iter()
++            .filter(|finding| finding["kind"] == "violation")
++            .count(),
++        4,
++        "{pending:#?}"
++    );
++    let open = pending
++        .iter()
++        .filter(|finding| finding["kind"] == "uncertifiable")
++        .collect::<Vec<_>>();
++    assert_eq!(open.len(), 2, "{pending:#?}");
++    assert!(
++        open.iter().all(|finding| {
++            finding["message"].as_str().is_some_and(|message| {
++                message.contains("pending handling are unproven")
++                    && !message.contains("throws PENDING_ASYNC_UNTRACKED_READ")
++            })
++        }),
++        "{open:#?}"
++    );
++}
++
+ #[test]
+ fn ssr_client_hole_distinguishes_proven_and_unresolved_server_rendering() {
+     let Some(findings) = diagnostic_fixture("ssr-client-boundary") else {
+diff --git a/rust/crates/solid-reactive-ir/src/execution_role.rs b/rust/crates/solid-reactive-ir/src/execution_role.rs
+index f9a78ef99..50e8ffc75 100644
+--- a/rust/crates/solid-reactive-ir/src/execution_role.rs
++++ b/rust/crates/solid-reactive-ir/src/execution_role.rs
+@@ -2228,6 +2228,23 @@ pub(super) fn async_execution_role(
+     }
+ }
+ 
++pub(super) fn pending_accessor_probe(
++    file: &solid_facts::FileFacts,
++    span: Span,
++    lookup: &SemanticLookup<'_>,
++) -> bool {
++    file.ast.arguments_containing(span).any(|(call, index)| {
++        direct_callback_contains(file, call.arguments[index].span, span)
++            && lookup
++                .primitive_at_call(file, call.span)
++                .is_some_and(|primitive| {
++                    lookup
++                        .dialect
++                        .callback_handles_pending_accessor_read(primitive, index)
++                })
++    })
++}
++
+ pub(super) fn allowed_callback_spans(
+     file: &solid_facts::FileFacts,
+     lookup: &SemanticLookup<'_>,
+diff --git a/rust/crates/solid-reactive-ir/src/lib.rs b/rust/crates/solid-reactive-ir/src/lib.rs
+index eb380ad4a..66d8eedc7 100644
+--- a/rust/crates/solid-reactive-ir/src/lib.rs
++++ b/rust/crates/solid-reactive-ir/src/lib.rs
+@@ -1081,6 +1081,12 @@ pub struct AsyncRead {
+     /// obligation rather than a proven throw.
+     #[serde(default, skip_serializing_if = "is_false")]
+     pub host_callback_timing: bool,
++    /// The read's callback is handed to a callee whose invocation is not
++    /// proven on the current stack ([`ReactiveRead::callee_callback_timing`]).
++    /// The callee may defer the read or handle pending values, so SC5001 is
++    /// an open obligation rather than a proven pending-read exception.
++    #[serde(default, skip_serializing_if = "is_false")]
++    pub callee_callback_timing: bool,
+ }
+ 
+ fn default_async_provenance() -> bool {
+diff --git a/rust/crates/solid-reactive-ir/src/local_access.rs b/rust/crates/solid-reactive-ir/src/local_access.rs
+index c62a3e404..c4aad36d2 100644
+--- a/rust/crates/solid-reactive-ir/src/local_access.rs
++++ b/rust/crates/solid-reactive-ir/src/local_access.rs
+@@ -26,8 +26,8 @@ use std::{
+ use crate::execution_role::{
+     RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
+     control_flow_execution_role, host_callback_timing, missing_jsx_census,
+-    named_callback_execution_role, read_analysis_context, semantic_execution_role,
+-    semantic_write_execution_role,
++    named_callback_execution_role, pending_accessor_probe, read_analysis_context,
++    semantic_execution_role, semantic_write_execution_role,
+ };
+ use crate::identity::SymbolId;
+ use crate::indexes::{EntitySymbols, SemanticLookup};
+@@ -568,9 +568,10 @@ impl LocalAccessContext<'_, '_> {
+                 }
+                 let async_provenance = self.async_sources.contains(symbol);
+                 let async_options = self.effective_async_options(symbol);
+-                if async_provenance
++                if (async_provenance
+                     || async_options.ssr_client_bare
+-                    || async_options.server_rendering_unresolved
++                    || async_options.server_rendering_unresolved)
++                    && !pending_accessor_probe(file, call.callee, self.lookup)
+                 {
+                     let async_execution = async_execution_role(file, call.callee, execution);
+                     result.async_reads.push(Arc::new(AsyncRead {
+@@ -603,6 +604,12 @@ impl LocalAccessContext<'_, '_> {
+                             async_execution,
+                             self.lookup,
+                         ),
++                        callee_callback_timing: callee_callback_timing(
++                            file,
++                            call.callee,
++                            async_execution,
++                            self.lookup,
++                        ),
+                     }));
+                 }
+             }
+@@ -1044,6 +1051,12 @@ impl LocalAccessContext<'_, '_> {
+                         async_execution,
+                         self.lookup,
+                     ),
++                    callee_callback_timing: callee_callback_timing(
++                        file,
++                        member.span,
++                        async_execution,
++                        self.lookup,
++                    ),
+                 }));
+             }
+         }
+@@ -1168,6 +1181,7 @@ impl LocalAccessContext<'_, '_> {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
+             }));
+         }
+         result
+diff --git a/rust/crates/solid-reactive-ir/src/projection.rs b/rust/crates/solid-reactive-ir/src/projection.rs
+index 9c21bd3b3..2a91bac9d 100644
+--- a/rust/crates/solid-reactive-ir/src/projection.rs
++++ b/rust/crates/solid-reactive-ir/src/projection.rs
+@@ -1172,6 +1172,11 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) ->
+             if read.host_callback_timing && finding.id == "SC5001" {
+                 finding.kind = "uncertifiable".into();
+             }
++            // Lexical placement cannot prove an unknown callee runs the
++            // callback in this window or leaves pending values unhandled.
++            if read.callee_callback_timing && finding.id == "SC5001" {
++                finding.kind = "uncertifiable".into();
++            }
+             if read.server_rendering_unresolved {
+                 finding.kind = "uncertifiable".into();
+             }
+@@ -1608,6 +1613,7 @@ mod tests {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
+             }],
+             ..Program::default()
+         };
+@@ -1648,6 +1654,7 @@ mod tests {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
+             }],
+             ..Program::default()
+         };
+@@ -1698,6 +1705,7 @@ mod tests {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
+             }],
+             ..Program::default()
+         };
+diff --git a/rust/dialects/solid-v2/compiler/src/lib.rs b/rust/dialects/solid-v2/compiler/src/lib.rs
+index 67e6801eb..be201a454 100644
+--- a/rust/dialects/solid-v2/compiler/src/lib.rs
++++ b/rust/dialects/solid-v2/compiler/src/lib.rs
+@@ -26,21 +26,21 @@ const READS_TRACE_VERSION: u32 = 3;
+ 
+ /// Consumer-owned provenance literals. These deliberately do not reuse the
+ /// producer constants: otherwise a typo in the producer could certify itself.
+-const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "a10cf1a147209d8da50697896742d2b1d4afad75";
+-const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "7f4e1135943c1fb01231d1bda707b4a1856a5607";
+-pub const COMPILER_DISTRIBUTION_REVISION: &str = "9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4";
++const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "5efaf260becb32293f2bcb4d32f8be72be6de674";
++const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "c04c48779812d3d87166da3741c625748458c62f";
++pub const COMPILER_DISTRIBUTION_REVISION: &str = "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d";
+ 
+ /// Stable cache identity for the exact semantic producer this adapter reads.
+ /// Keep this synchronized with the pinned compiler revision and trace
+ /// implementation when either changes.
+ pub const COMPILER_FACTS_IDENTITY: &str =
+-    "solid-v2:trace3:7f4e1135943c1fb01231d1bda707b4a1856a5607";
++    "solid-v2:trace3:c04c48779812d3d87166da3741c625748458c62f";
+ 
+ /// Digest of the exact Git-owned semantic compiler source identity consumed by
+ /// this adapter. The independent identity gate recomputes this value from the
+ /// upstream, implementation, distribution, trace, and protocol pins.
+ pub const COMPILER_SOURCE_MANIFEST_SHA256: &str =
+-    "sha256:613049ba60fa514c662bd9350adb4b0ed9c3031e4f80f2bd1ecb23d56846fde0";
++    "sha256:35f4874f646f9482d0549fdf052f0d37bd02ec47b5c024d5732b6d9796423a9a";
+ 
+ /// A pin move that changes the producer's schema version fails the build here
+ /// instead of silently making the runtime refusal below unreachable again. The
+diff --git a/rust/dialects/solid-v2/dialect.json b/rust/dialects/solid-v2/dialect.json
+index 0a8368962..1e5e650de 100644
+--- a/rust/dialects/solid-v2/dialect.json
++++ b/rust/dialects/solid-v2/dialect.json
+@@ -10,7 +10,7 @@
+     "conformance": "docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json",
+     "report": "docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md",
+     "cargoPackage": "solidjs-compiler",
+-    "cargoSourcePrefix": "git+https://github.com/yumemi-thomas/solid?"
++    "cargoSourcePrefix": "git+@COMPILER_REPOSITORY_URI@?"
+   },
+   "contracts": [
+     {
+diff --git a/rust/dialects/solid-v2/rules/src/lib.rs b/rust/dialects/solid-v2/rules/src/lib.rs
+index ebd4e79af..41977a19f 100644
+--- a/rust/dialects/solid-v2/rules/src/lib.rs
++++ b/rust/dialects/solid-v2/rules/src/lib.rs
+@@ -369,6 +369,30 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) ->
+ }
+ 
+ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
++    if read.callee_callback_timing {
++        let mut metadata = Rule::PendingAsyncUnsuspendableRead.metadata();
++        if read.leaf_owner.is_some() {
++            metadata.severity = "warning";
++        }
++        return FindingWording::new(
++            metadata,
++            format!(
++                "async accessor {:?} is read in a callback whose callee's invocation context and pending handling are unproven; this does not establish that the read throws",
++                read.accessor
++            ),
++            "Inspect when the callee invokes this callback and whether it handles pending values. Read async values in a tracking scope when the callback needs suspension and retry.".to_owned(),
++        )
++        .with_evidence(vec![
++            EvidenceStep {
++                message: "the source's computation is async; the callback's callee does not prove an unhandled pending read".to_owned(),
++                location: Some(read.declaration.clone()),
++            },
++            EvidenceStep {
++                message: "callback invocation remains an open obligation".to_owned(),
++                location: Some(read.location.clone()),
++            },
++        ]);
++    }
+     // Declared first paint (probed against rc.0): a loadingValue /
+     // seedLoadingValue node is born committed, so its *first flight* cannot
+     // throw anywhere — but once the first real answer lands, a pending
+diff --git a/fixtures/reactive-ir/callee-callback-timing/Async.tsx b/fixtures/reactive-ir/callee-callback-timing/Async.tsx
+new file mode 100644
+--- /dev/null
++++ b/fixtures/reactive-ir/callee-callback-timing/Async.tsx
+@@ -0,0 +1,45 @@
++import { createMemo, isPending } from "solid-js";
++import { runNow, runLater } from "./helpers";
++import * as helpers from "./helpers";
++import * as Solid from "solid-js";
++
++declare const harness: { checkPending(callback: () => unknown): boolean };
++
++export function UnknownPendingHandler() {
++  const result = createMemo(async () => 1);
++  harness.checkPending(() => result()); // uncertifiable: pending handling unknown
++  return <span />;
++}
++
++export function DeferredPendingRead() {
++  const result = createMemo(async () => 1);
++  runLater(() => result()); // uncertifiable: callback invocation unknown
++  return <span />;
++}
++
++export function DirectPendingRead() {
++  const result = createMemo(async () => 1);
++  result(); // violation: pending read in the component body
++  return <span />;
++}
++
++export function InlinePendingRead() {
++  const result = createMemo(async () => 1);
++  runNow(() => result()); // violation: exact cross-file helper invokes it
++  helpers.runNow(() => result()); // violation: same symbol through namespace
++  return <span />;
++}
++
++export function NativePendingHandler() {
++  const result = createMemo(async () => 1);
++  isPending(() => result()); // clean: known native pending probe
++  Solid.isPending(() => result()); // same exact primitive through namespace
++  return <span />;
++}
++
++export function ShadowedPendingHandler() {
++  const result = createMemo(async () => 1);
++  const isPending = (callback: () => unknown) => callback();
++  isPending(() => result()); // violation: local symbol supplies no pending probe
++  return <span />;
++}
+diff --git a/packages/cli/scripts/development-feedback.mjs b/packages/cli/scripts/development-feedback.mjs
+new file mode 100644
+--- /dev/null
++++ b/packages/cli/scripts/development-feedback.mjs
+@@ -0,0 +1,171 @@
++import assert from "node:assert/strict";
++import { createHash } from "node:crypto";
++import { readFileSync, realpathSync } from "node:fs";
++import { dirname, resolve } from "node:path";
++import { performance } from "node:perf_hooks";
++import ts from "typescript";
++import { runNative } from "../bin/launcher.mjs";
++
++const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
++
++// TypeScript is the published-typing oracle here. Semantic analysis remains in
++// the native checker and its Type Facts/compiler fact domains.
++export function feedbackSnapshot(project) {
++  project = realpathSync(resolve(project));
++  const inputs = new Map();
++  const record = input => inputs.set(JSON.stringify([input.kind, input.path, input.arguments]), input);
++  const system = { ...ts.sys };
++  for (const method of ["readFile", "fileExists", "directoryExists", "realpath", "readDirectory", "getDirectories"]) {
++    const original = ts.sys[method];
++    if (!original) continue;
++    system[method] = (...args) => {
++      const result = original(...args);
++      record({ kind: method, path: resolve(args[0]), arguments: args.slice(1).map(value => value ?? null),
++        result: method === "readFile" ? result === undefined ? null : hash(result) : result });
++      return result;
++    };
++  }
++  const config = ts.readConfigFile(project, system.readFile);
++  assert(!config.error, "Cannot read the TypeScript project");
++  const parsed = ts.parseJsonConfigFileContent(config.config, system, dirname(project), {}, project);
++  assert(!parsed.projectReferences?.length, "Feedback project references need explicit project sessions");
++  const host = ts.createCompilerHost(parsed.options);
++  Object.assign(host, { readFile: system.readFile, fileExists: system.fileExists,
++    directoryExists: system.directoryExists, realpath: system.realpath, getDirectories: system.getDirectories,
++    getSourceFile(path, languageVersion) {
++      const text = system.readFile(path);
++      return text === undefined ? undefined : ts.createSourceFile(path, text, languageVersion, true);
++    } });
++  const program = ts.createProgram(parsed.fileNames, parsed.options, host);
++  const typingErrors = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)]
++    .filter(item => item.category === ts.DiagnosticCategory.Error).length;
++  const manifest = { project, typescript: ts.version, inputs: [...inputs.values()] };
++  return { manifest, inputId: hash(JSON.stringify(manifest)), typingErrors, sources: program.getSourceFiles() };
++}
++
++export function validateFeedbackInputs(manifest) {
++  for (const input of manifest.inputs) {
++    const read = ts.sys[input.kind];
++    assert(["readFile", "fileExists", "directoryExists", "realpath", "readDirectory", "getDirectories"].includes(input.kind)
++      && typeof read === "function", "Unsupported feedback input");
++    const current = read(input.path, ...input.arguments.map(value => value ?? undefined));
++    const result = input.kind === "readFile" ? current === undefined ? null : hash(current) : current;
++    assert.deepEqual(result, input.result, `Feedback input changed: ${input.path}`);
++  }
++}
++
++export function captureTemplate(snapshot) {
++  return { schemaVersion: 1, documentKind: "solid-checker-development-capture",
++    project: snapshot.manifest.project, inputId: snapshot.inputId,
++    manifest: snapshot.manifest, runtimeInputs: [], events: [],
++    authority: false, certification: false };
++}
++
++export function admitFeedbackCapture(snapshot, capture) {
++  assert.equal(capture.schemaVersion, 1);
++  assert.equal(capture.documentKind, "solid-checker-development-capture");
++  assert.equal(capture.authority, false); assert.equal(capture.certification, false);
++  assert.equal(capture.project, snapshot.manifest.project);
++  assert.equal(capture.inputId, snapshot.inputId, "Capture belongs to different project inputs");
++  assert.deepEqual(capture.manifest, snapshot.manifest, "Capture input manifest differs");
++  assert(Array.isArray(capture.runtimeInputs) && Array.isArray(capture.events));
++  validateFeedbackInputs(capture.manifest);
++  const runtime = new Map();
++  for (const input of capture.runtimeInputs) {
++    assert.equal(realpathSync(input.path), input.path, "Runtime input path is not canonical");
++    assert.equal(hash(readFileSync(input.path)), input.sha256, "Runtime input changed");
++    assert(!runtime.has(input.path), "Duplicate runtime input"); runtime.set(input.path, input.sha256);
++  }
++  const sources = new Map(snapshot.sources.map(source => [resolve(source.fileName), source]));
++  const seen = new Set(), observations = [], groups = new Map();
++  for (const event of capture.events) {
++    assert(typeof event.id === "string" && event.id.length && !seen.has(event.id), "Duplicate or missing capture event identity");
++    seen.add(event.id);
++    assert(["runtime-exception", "untracked-read", "assertion-failure"].includes(event.kind), "Unsupported capture event");
++    assert(typeof event.message === "string" && event.message.trim(), "Capture event message is missing");
++    const location = event.location, source = sources.get(location?.path);
++    assert(source && !source.isDeclarationFile, "Capture location is outside analyzed source");
++    assert.equal(event.sourceSha256, hash(source.text), "Captured source changed");
++    const bytes = Buffer.from(source.text);
++    assert(Number.isSafeInteger(location.startByte) && Number.isSafeInteger(location.endByte)
++      && location.startByte >= 0 && location.endByte > location.startByte && location.endByte <= bytes.length,
++      "Invalid capture source span");
++    assert.equal(Buffer.byteLength(bytes.subarray(0, location.startByte).toString("utf8")), location.startByte,
++      "Capture span cuts a UTF-8 code point");
++    assert.equal(Buffer.byteLength(bytes.subarray(0, location.endByte).toString("utf8")), location.endByte,
++      "Capture span cuts a UTF-8 code point");
++    if (event.kind === "untracked-read") {
++      assert(event.tracking === "untracked" && event.runtimeInput && runtime.has(event.runtimeInput),
++        "Read observation needs explicit tracking state and bound runtime bytes");
++    }
++    // These are supplied development observations, never static violations.
++    // Intent-sensitive read records remain information, including snapshots.
++    const key = JSON.stringify([event.kind, location, event.message, event.runtimeInput]);
++    if (groups.has(key)) {
++      groups.get(key).eventIds.push(event.id);
++      groups.get(key).occurrences++;
++      continue;
++    }
++    const observation = { id: event.id, eventIds: [event.id], occurrences: 1,
++      channel: "recorded-runtime", kind: event.kind,
++      severity: event.kind === "untracked-read" ? "info" : "error", message: event.message,
++      location, sourceSha256: event.sourceSha256, inputId: capture.inputId,
++      reactiveIntent: "open", authority: false, certification: false };
++    observations.push(observation); groups.set(key, observation);
++  }
++  return snapshot.typingErrors ? { observations: [], excluded: "TypeScript owns this input" }
++    : { observations, excluded: null };
++}
++
++export function inspectDevelopmentFeedback(project, { capture = null, analyze } = {}) {
++  const started = performance.now(), snapshot = feedbackSnapshot(project);
++  const admitted = capture ? admitFeedbackCapture(snapshot, capture) : { observations: [], excluded: null };
++  validateFeedbackInputs(snapshot.manifest);
++  const native = analyze ? analyze(snapshot.manifest.project) : runNative("solid-checker", [
++    "--project", snapshot.manifest.project, "--format", "json"
++  ], { stdio: "pipe", encoding: "utf8", env: { SOLID_CHECKER_DAEMON: "0" } });
++  if (native.error) throw native.error;
++  assert([0, 1].includes(native.status), native.stderr || "Native analysis failed");
++  const analysis = JSON.parse(native.stdout);
++  assert(Array.isArray(analysis.findings), "Native response has no findings");
++  validateFeedbackInputs(snapshot.manifest);
++  if (capture) admitFeedbackCapture(snapshot, capture);
++  return { schemaVersion: 1, documentKind: "solid-checker-development-feedback",
++    authority: false, certification: false, project: snapshot.manifest.project,
++    inputId: snapshot.inputId, analysis, nativeExitCode: native.status, ...admitted, typingErrorCount: snapshot.typingErrors,
++    findings: analysis.findings.filter(finding => finding.kind === "violation"),
++    gaps: analysis.findings.filter(finding => finding.kind === "uncertifiable"),
++    coverage: { runtime: capture ? "supplied-records-only" : "unavailable", packageInference: "unavailable" },
++    durationMs: performance.now() - started };
++}
++
++export const developmentFeedbackHelp = `Development feedback (experimental)
++  solid-checker feedback --project <tsconfig.json> [--capture <capture.json>]
++  solid-checker feedback manifest --project <tsconfig.json>
++
++Returns native checker findings and separately labeled recorded observations.
++Read observations are information; they do not prove a stale result.
++The manifest command creates a capture template before application execution.
++`;
++
++export function developmentFeedback(args) {
++  if (!args.length || args.includes("--help") || args.includes("-h")) {
++    process.stdout.write(developmentFeedbackHelp); return;
++  }
++  const manifest = args[0] === "manifest";
++  if (manifest) args = args.slice(1);
++  let project, capture;
++  for (let index = 0; index < args.length; index++) {
++    const name = args[index];
++    assert(["--project", "--capture"].includes(name), `Unknown feedback option ${name}`);
++    assert(args[index + 1] && !args[index + 1].startsWith("--"), `${name} requires a path`);
++    if (name === "--project") { assert(!project, "Duplicate project option"); project = args[++index]; }
++    else { assert(!capture, "Duplicate capture option"); capture = args[++index]; }
++  }
++  assert(project, "Feedback requires --project");
++  assert(!manifest || !capture, "Capture manifest does not accept --capture");
++  const result = manifest ? captureTemplate(feedbackSnapshot(project))
++    : inspectDevelopmentFeedback(project, { capture: capture ? JSON.parse(readFileSync(capture, "utf8")) : null });
++  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
++  if (!manifest) process.exitCode = result.nativeExitCode;
++}
+diff --git a/packages/cli/test/development-feedback.test.mjs b/packages/cli/test/development-feedback.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/packages/cli/test/development-feedback.test.mjs
+@@ -0,0 +1,94 @@
++import assert from "node:assert/strict";
++import { createHash } from "node:crypto";
++import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { spawnSync } from "node:child_process";
++import { test } from "vitest";
++import { feedbackSnapshot, captureTemplate, admitFeedbackCapture, inspectDevelopmentFeedback } from "../scripts/development-feedback.mjs";
++
++const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
++function fixture(run) {
++  const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-")));
++  const path = join(root, "app.ts"), project = join(root, "tsconfig.json"), runtime = join(root, "runtime.js");
++  const source = "export const value = 1;\n";
++  writeFileSync(path, source); writeFileSync(runtime, "export const read = () => 1;\n");
++  writeFileSync(project, JSON.stringify({ compilerOptions: { strict: true, noEmit: true, types: [], skipLibCheck: false }, files: [path] }));
++  try {
++    const snapshot = feedbackSnapshot(project), capture = JSON.parse(JSON.stringify(captureTemplate(snapshot)));
++    capture.runtimeInputs.push({ path: runtime, sha256: hash(readFileSync(runtime)) });
++    capture.events.push({ id: "read-1", kind: "untracked-read", message: "Read while tracking was off", tracking: "untracked",
++      runtimeInput: runtime, sourceSha256: hash(source), location: { path, startByte: 13, endByte: 18 } });
++    return run({ root, path, project, runtime, snapshot, capture });
++  } finally { rmSync(root, { recursive: true, force: true }); }
++}
++test("capture JSON round trip retains current inputs and an informational read", () => fixture(({ snapshot, capture }) => {
++  const result = admitFeedbackCapture(snapshot, capture);
++  assert.equal(result.observations[0].severity, "info");
++  assert.equal(result.observations[0].reactiveIntent, "open");
++  assert.equal(result.observations[0].certification, false);
++}));
++test("native proven findings retain their own channel and uncertifiable rows", () => fixture(({ project, capture }) => {
++  const analysis = { findings: [{ kind: "violation", id: "SC1005" }, { kind: "uncertifiable", id: "SC1001" }] };
++  const report = inspectDevelopmentFeedback(project, { capture, analyze: () => ({ status: 0, stdout: JSON.stringify(analysis) }) });
++  assert.deepEqual(report.analysis, analysis);
++  assert.deepEqual(report.findings, [analysis.findings[0]]);
++  assert.deepEqual(report.gaps, [analysis.findings[1]]);
++  assert.equal(report.observations.length, 1);
++  assert.equal(report.coverage.packageInference, "unavailable");
++}));
++for (const kind of ["runtime-exception", "assertion-failure"]) {
++  test(`admits a supplied ${kind} without claiming native proof`, () => fixture(({ snapshot, capture }) => {
++    const read = capture.events[0];
++    capture.runtimeInputs = [];
++    capture.events = [{ id: "failure-1", kind, message: "Recorded application failure",
++      location: read.location, sourceSha256: read.sourceSha256 }];
++    const result = admitFeedbackCapture(snapshot, capture);
++    assert.equal(result.observations[0].kind, kind);
++    assert.equal(result.observations[0].severity, "error");
++    assert.equal(result.observations[0].channel, "recorded-runtime");
++    assert.equal(result.observations[0].authority, false);
++    assert.equal(result.observations[0].certification, false);
++  }));
++}
++for (const [name, edit] of [
++  ["source changes", ({ path }) => writeFileSync(path, "export const value = 2;\n")],
++  ["runtime changes", ({ runtime }) => writeFileSync(runtime, "export const read = () => 2;\n")],
++  ["configuration changes", ({ project }) => writeFileSync(project, "{}")],
++  ["forged source digest", ({ capture }) => { capture.events[0].sourceSha256 = hash("other"); }],
++  ["duplicate events", ({ capture }) => { capture.events.push(capture.events[0]); }],
++  ["unsupported event", ({ capture }) => { capture.events[0].kind = "proven-package-defect"; }],
++  ["missing native read input", ({ capture }) => { capture.runtimeInputs = []; }],
++  ["authority assertion", ({ capture }) => { capture.authority = true; }],
++  ["source span outside file", ({ capture }) => { capture.events[0].location.endByte = 1000; }],
++]) test(`refuses ${name}`, () => fixture(state => { edit(state); assert.throws(() => admitFeedbackCapture(state.snapshot, state.capture)); }));
++test("inputs changed during native analysis refuse the complete report", () => fixture(({ project, path, capture }) => {
++  assert.throws(() => inspectDevelopmentFeedback(project, { capture, analyze: () => {
++    writeFileSync(path, "export const value = 2;\n"); return { status: 0, stdout: '{"findings":[]}' };
++  } }));
++}));
++test("repeated observations group without dropping event identities", () => fixture(({ snapshot, capture }) => {
++  capture.events.push({ ...capture.events[0], id: "read-2" });
++  const result = admitFeedbackCapture(snapshot, capture);
++  assert.equal(result.observations.length, 1);
++  assert.equal(result.observations[0].occurrences, 2);
++  assert.deepEqual(result.observations[0].eventIds, ["read-1", "read-2"]);
++}));
++test("real TypeScript errors suppress additional captured guidance", () => fixture(({ project, path, runtime }) => {
++  writeFileSync(path, 'export const value: number = "wrong";\n');
++  const snapshot = feedbackSnapshot(project), capture = captureTemplate(snapshot);
++  capture.events.push({ id: "failure-1", kind: "runtime-exception", message: "A recorded failure",
++    location: { path, startByte: 13, endByte: 18 }, sourceSha256: hash(readFileSync(path)) });
++  assert(snapshot.typingErrors > 0);
++  assert.deepEqual(admitFeedbackCapture(snapshot, capture).observations, []);
++}));
++test("feedback manifest CLI works without the native binary", () => fixture(({ project }) => {
++  const result = spawnSync(process.execPath, [new URL("../bin/solid-checker.mjs", import.meta.url).pathname,
++    "feedback", "manifest", "--project", project], { encoding: "utf8" });
++  assert.equal(result.status, 0, result.stderr);
++  assert.equal(JSON.parse(result.stdout).documentKind, "solid-checker-development-capture");
++}));
++test("native failure exit status remains visible in the feedback report", () => fixture(({ project }) => {
++  const report = inspectDevelopmentFeedback(project, { analyze: () => ({ status: 1, stdout: '{"findings":[]}' }) });
++  assert.equal(report.nativeExitCode, 1);
++}));
+diff --git a/docs/development-feedback.md b/docs/development-feedback.md
+new file mode 100644
+--- /dev/null
++++ b/docs/development-feedback.md
+@@ -0,0 +1,88 @@
++# Development feedback
++
++`solid-checker feedback` is the first implementation boundary for the package
++feedback experiment. It runs the native checker on the original application,
++then admits optional recorded application observations against those exact
++inputs. Package certification is not required to show an independent compiler
++finding or a recorded runtime failure. Unknown package behavior stays
++uncertifiable in native analysis.
++
++## Use from this checkout
++
++```sh
++export SOLID_CHECKER_NATIVE_BIN="$PWD/rust/target/debug/solid-checker-rust"
++export SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts"
++node packages/cli/bin/solid-checker.mjs feedback --project /absolute/path/tsconfig.json
++node packages/cli/bin/solid-checker.mjs feedback manifest --project /absolute/path/tsconfig.json > capture.json
++node packages/cli/bin/solid-checker.mjs feedback --project /absolute/path/tsconfig.json --capture capture.json
++```
++
++Build the main checkout with `make build-checker-debug` first. To use the
++locally integrated RC.13 build, set
++`SOLID_CHECKER_NATIVE_BIN` to
++`rust/target/local-rc13-checker/rust/target/debug/solid-checker-rust` and
++`SOLID_TYPEFACTS_BIN` to this checkout's `bin/solid-typefacts`, both as absolute
++paths. The compiler candidate has not been published. Production Git pins
++remain on their prior compiler revision. The integration patch and restoration
++instructions are in `benchmarks/compiler-facts/rc13/`.
++
++The manifest command works without a native binary. Project references require
++explicit project sessions and currently refuse. TypeScript checks the installed
++package declarations; it supplies no behavioral package inference here. When
++the input has TypeScript errors, additional capture guidance is suppressed.
++Existing native findings retain their own classification.
++
++## Capture format
++
++Keep the generated `project`, `inputId`, `manifest`, `authority: false` and
++`certification: false`. Fill `runtimeInputs` with canonical absolute file paths
++and SHA-256 digests (`sha256:…`) of the executed runtime bytes. Fill `events`
++with unique IDs and exact original-source locations:
++
++```json
++{
++  "id": "read-1",
++  "kind": "untracked-read",
++  "message": "Recorded read while tracking was off",
++  "tracking": "untracked",
++  "runtimeInput": "/absolute/path/instrumented-runtime.mjs",
++  "sourceSha256": "sha256:…",
++  "location": {
++    "path": "/absolute/path/src/App.tsx",
++    "startByte": 120,
++    "endByte": 128
++  }
++}
++```
++
++`runtime-exception` and `assertion-failure` are also admitted, with a message,
++source digest and location. They do not require a tracking state. Locations
++must belong to a source file in the configured project and use valid UTF-8
++byte boundaries. This is a supplied-record interface: digests detect changed
++inputs, but do not authenticate that an event occurred. Collectors and callers
++remain responsible for the observation's truth and original-source mapping.
++
++The report preserves native `analysis.findings`. Top-level `findings` contains
++proven violations; `gaps` contains uncertifiable native results, and
++`observations` contains recorded runtime events.
++Repeated equivalent observations retain all event IDs and an occurrence count.
++Untracked reads have severity `info` and `reactiveIntent: "open"`. Recorded
++exceptions/assertion failures have severity `error` in their own channel. No
++observation becomes a static violation or a package contract. The exit status
++preserves native analysis status; supplied observations do not fail CI.
++
++Inputs are checked before and after native analysis. Changed source, resolved
++declarations, directory listings, missing resolution candidates or recorded
++runtime bytes refuse a stale report. This boundary does not yet provide an
++atomic shared Type Facts/runtime session or bind browser conditions.
++
++## Remaining implementation
++
++The reusable CLI currently has no browser collector, editor/watch integration,
++source model extraction or automatic warning selector. The experiment's
++test-assisted intent checks and package projections remain research code.
++Porting them needs explicit evidence interfaces in the native fact owners;
++TypeScript syntax in this adapter must not become a second semantic analyzer.
++The next implementation slice is a live collector that maps events to this
++capture format, with positive failures and quiet snapshot controls measured
++against published package typings.

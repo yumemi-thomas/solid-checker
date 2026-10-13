@@ -1,0 +1,203 @@
+{
+  "entrypoints": {
+    "./immutable": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "880d191076feb4f8f3e64e862a2a4d1fd5fbb722a2f23013eac6d4ce886516b7",
+            "path": "./dist/immutable/index.js",
+            "sha256": "17770f2b1915ea7a883edffeddf79ebd7ab7fefe316cfa56634eeeea79b06d97"
+          },
+          "declarations": {
+            "path": "./dist/immutable/index.d.ts",
+            "sha256": "8990edbcc23030578ca0993437831ff39f2fdc0f6d75bab29a886d91803b7a8d"
+          },
+          "exports": {
+            "add": "open-callable",
+            "clamp": "authored-clamp",
+            "concat": "open-callable",
+            "divide": "open-callable",
+            "drop": "open-callable",
+            "dropRight": "open-callable",
+            "fill": "open-callable",
+            "filter": "open-callable",
+            "filterInstance": "open-callable",
+            "filterOut": "open-callable",
+            "filterOutInstance": "open-callable",
+            "flatten": "open-callable",
+            "get": "open-callable",
+            "map": "open-callable",
+            "merge": "open-callable",
+            "multiply": "open-callable",
+            "omit": "open-callable",
+            "pick": "open-callable",
+            "power": "open-callable",
+            "push": "open-callable",
+            "remove": "open-callable",
+            "removeItems": "open-callable",
+            "shallowArrayCopy": "open-callable",
+            "shallowCopy": "open-callable",
+            "shallowObjectCopy": "open-callable",
+            "slice": "open-callable",
+            "sort": "open-callable",
+            "sortBy": "open-callable",
+            "splice": "open-callable",
+            "split": "open-callable",
+            "substract": "open-callable",
+            "update": "open-callable",
+            "withArrayCopy": "open-callable",
+            "withCopy": "open-callable",
+            "withObjectCopy": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1immutable/import/default",
+            "typesBranch": "/exports/.~1immutable/import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "f72b16817e60816623cea5d22869fd641ec3bdb07728bb4b0cc4a511ecc8af0b"
+    },
+    "name": "@solid-primitives/utils",
+    "version": "7.0.0-next.4"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-clamp": {
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          },
+          {
+            "id": "coerce-0",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "coerce-1",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "coerce-2",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "coerce-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "coerce-1"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "coerce-2"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "shape": "callable"
+    }
+  }
+}

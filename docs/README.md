@@ -15,8 +15,8 @@
   migration gates, and adversarial review reports
 - [Adding a dialect](adding-a-dialect.md) — forward checklist and assembly manifest
 - [Monorepo policy](monorepo.md) — upstream and dependency policy
-- [Design-review remediation](design-review-remediation.md) — phased plan
-  from the 2026-08 full-catalog review
+- [Design-review remediation](design-review-remediation.md) — historical:
+  the 2026-08 full-catalog review's phased plan, written against two catalogs
 
 Contribution and verification instructions are in
 [CONTRIBUTING.md](../CONTRIBUTING.md).

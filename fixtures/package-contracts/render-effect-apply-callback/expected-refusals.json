@@ -1,0 +1,97 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "render-effect-apply-callback",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "effectApplyRead",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createEffect",
+      "location": "<package-root>/index.ts:2035:2099",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "effectApplyWrapper",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createEffect",
+      "location": "<package-root>/index.ts:1152:1209",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "renderApplyForwarded",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createRenderEffect",
+      "location": "<package-root>/index.ts:954:989",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "renderApplyRead",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createRenderEffect",
+      "location": "<package-root>/index.ts:1802:1872",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "renderApplyWrapper",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createRenderEffect",
+      "location": "<package-root>/index.ts:658:721",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "renderComputeWrapper",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "createRenderEffect",
+      "location": "<package-root>/index.ts:1412:1468",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

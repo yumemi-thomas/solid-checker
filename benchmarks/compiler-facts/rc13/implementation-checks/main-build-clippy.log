@@ -1,0 +1,18 @@
+TYPEFACTS_BUILD_ID="dev" scripts/build-typefacts.sh
+build-typefacts: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts already at source b4e7d9aa17d7212a18bb18ec241166041d0680bbf42058aa8811f09e1590be77 (build id dev)
+SOLID_TYPEFACTS_CERTIFICATION_SHA256="sha256:$(shasum -a 256 bin/solid-typefacts | awk '{print $1}')" SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256="sha256:$(node scripts/typefacts-source-identity.mjs --build-id "dev" --digest)" PROBE_NODE="/Users/thomas/.vite-plus/js_runtime/node/24.21.0/bin/node" SOLID_CHECKER_PROBE_HARNESS_SHA256="sha256:$(node scripts/probe-harness-source-identity.mjs --build-id "dev" --write-stamp --digest)" SOLID_CHECKER_PROBE_NODE_SHA256="sha256:$(shasum -a 256 "/Users/thomas/.vite-plus/js_runtime/node/24.21.0/bin/node" | awk '{print $1}')"  SOLID_CHECKER_BUILD_ID="dev" TYPEFACTS_BUILD_ID="dev" cargo +1.97 build --manifest-path rust/Cargo.toml \
+	  -p solid-facts-backend --bin solid-checker-rust --bin solid-contract-authorize \
+	  --bin solid-contract-bundle
+   Compiling solid-dialect v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/crates/solid-dialect)
+   Compiling solid-reactive-ir v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/crates/solid-reactive-ir)
+   Compiling solid-v2-rules v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/dialects/solid-v2/rules)
+   Compiling solid-facts-backend v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/crates/solid-facts-backend)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 47.95s
+cargo +1.97 fmt --manifest-path rust/Cargo.toml --all -- --check
+SOLID_TYPEFACTS_CERTIFICATION_SHA256="sha256:$(shasum -a 256 bin/solid-typefacts | awk '{print $1}')" SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256="sha256:$(node scripts/typefacts-source-identity.mjs --build-id "dev" --digest)" PROBE_NODE="/Users/thomas/.vite-plus/js_runtime/node/24.21.0/bin/node" SOLID_CHECKER_PROBE_HARNESS_SHA256="sha256:$(node scripts/probe-harness-source-identity.mjs --build-id "dev" --write-stamp --digest)" SOLID_CHECKER_PROBE_NODE_SHA256="sha256:$(shasum -a 256 "/Users/thomas/.vite-plus/js_runtime/node/24.21.0/bin/node" | awk '{print $1}')"  SOLID_CHECKER_BUILD_ID="dev" TYPEFACTS_BUILD_ID="dev" cargo +1.97 clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
+    Checking solid-dialect v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/crates/solid-dialect)
+    Checking solid-reactive-ir v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/crates/solid-reactive-ir)
+    Checking solid-v2-rules v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/dialects/solid-v2/rules)
+    Checking solid-facts-backend v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/crates/solid-facts-backend)
+    Checking solid-checker-wasm v0.1.0 (/Users/thomas/Documents/Github/solid-checker/rust/crates/solid-checker-wasm)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 13s

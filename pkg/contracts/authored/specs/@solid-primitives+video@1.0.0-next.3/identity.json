@@ -1,0 +1,88 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/video",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-M+R6HGvKMqRXy9mGEwpyq+IAZew7kBEJYfL58i+1QGuuTGtiCQjeXGME7fe4UG/mDldW56WA/TRSJEGeF8kQxg==",
+      "snapshotRoot": "sha256:4a72261603b0bb12a67d9be1d39d2a0e9a5215871f1437141dc56d49d2ffc85f",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "7399a3a2823e796d2971b01ed1e164494702d398ec4e7fc3677c7f0089ffca1b",
+                  "path": "./dist/index.js",
+                  "sha256": "b29ed6ff980293aa40088855ea5b2e23cc67471f7639de0a6e12040d28628d42"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "7bc06acf33647a0f6773e4fc9dd4614288b2f4bb498b1fd54675227f1ca794da"
+                },
+                "exports": {
+                  "createVideo": "summary-8ec977ad880f8d3c508846cfd8ef14ad0766bd22c92a8a7372ec82969c369071",
+                  "createVideoFrameCallback": "summary-f2b24e7149f11600c67390eba5e72af063fb29809f2194e37568cf46fcd9e33a",
+                  "createVideoPlayer": "summary-2a7d30625f40c10b06d11d9c4fb0e0104c3c2b4e57f4fd1b37e67905179e598b",
+                  "makeVideo": "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8",
+                  "makeVideoFrameCallback": "summary-dceae1ad561dbfb05245d43ffbc017c0b67c4c27d73e1d423eba18aa521b4427",
+                  "makeVideoPlayer": "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8",
+                  "setVideoSrc": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-M+R6HGvKMqRXy9mGEwpyq+IAZew7kBEJYfL58i+1QGuuTGtiCQjeXGME7fe4UG/mDldW56WA/TRSJEGeF8kQxg==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "97e14600a150535db5ecfbcdb73ddf56d8eaba46f53685b5929db0249dfc2534"
+          },
+          "name": "@solid-primitives/video",
+          "version": "1.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-8ec977ad880f8d3c508846cfd8ef14ad0766bd22c92a8a7372ec82969c369071": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-f2b24e7149f11600c67390eba5e72af063fb29809f2194e37568cf46fcd9e33a": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-2a7d30625f40c10b06d11d9c4fb0e0104c3c2b4e57f4fd1b37e67905179e598b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-dceae1ad561dbfb05245d43ffbc017c0b67c4c27d73e1d423eba18aa521b4427": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

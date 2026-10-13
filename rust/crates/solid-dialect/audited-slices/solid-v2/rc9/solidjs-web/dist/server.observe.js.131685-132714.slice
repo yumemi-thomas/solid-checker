@@ -1,0 +1,34 @@
+function httpStatus(code, text) {
+  const event = getRequestEvent();
+  const response = event && event.response;
+  if (response && !response.committed) {
+    let ledger = statusLedgers.get(response);
+    if (!ledger) {
+      ledger = {
+        base: {
+          status: response.status,
+          statusText: response.statusText
+        },
+        live: []
+      };
+      statusLedgers.set(response, ledger);
+    }
+    const declaration = {
+      status: code,
+      statusText: text
+    };
+    ledger.live.push(declaration);
+    response.status = code;
+    response.statusText = text;
+    onCleanup(() => {
+      if (response.committed) return;
+      const index = ledger.live.indexOf(declaration);
+      if (index < 0) return;
+      ledger.live.splice(index, 1);
+      const effective = ledger.live.length ? ledger.live[ledger.live.length - 1] : ledger.base;
+      response.status = effective.status;
+      response.statusText = effective.statusText;
+      if (!ledger.live.length) statusLedgers.delete(response);
+    });
+  }
+}

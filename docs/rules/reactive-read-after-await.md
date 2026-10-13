@@ -42,6 +42,24 @@ Nothing else in the standard library is treated as synchronous yet, and the
 extension reports only inside the awaiting function's own directly written
 filter callbacks (it does not recurse into a filter nested in another one).
 
+**A source already tracked is exempt** (ADR 0195). A read after the await of
+an accessor that the same function already called *on every run, before its
+first suspension* is not reported: that earlier call ran inside the tracking
+window, so the source is a dependency and the computation re-runs when it
+changes. The earlier call must be in the function's own straight-line flow
+(not under a branch, logical operator, loop, switch, `try` or optional chain,
+and not in a nested function) and must precede every suspension, a
+conditional `await` included. Only accessor calls are exempted this way;
+store-path and props member reads are not.
+
+**The runtime agrees from rc.13.** `@solidjs/signals@2.0.0-rc.13` warns
+`UNTRACKED_READ_AFTER_AWAIT` in dev for a read after the first `await` of an
+async computation. It is silent inside `untrack`, before the first `await`,
+for a source already a dependency, in a plain async function, in an async
+effect apply or tracked effect, and in an action body; the rule is silent in
+each of those cases too (the rc.13 review, runtime § 3.4.2). The warning
+needs V8 async stack frames and is absent from production builds.
+
 ## Why is this bad?
 
 Tracking is synchronous: a computation collects dependencies only until its first

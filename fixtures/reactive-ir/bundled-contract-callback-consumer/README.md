@@ -6,7 +6,9 @@ runtime artifact whose manifest, runtime bytes, declarations, closure, and
 receipt match a first-party bundle case. Package spelling alone therefore
 cannot authorize either bundle.
 
-The nested `doubled()` read in `Untracked` remains a locally proven violation.
+The nested `doubled()` read in `Untracked` is uncertifiable: with no claim
+applied to `flatten`, nothing says it invokes the arrow during the call
+(`execution_role::callee_callback_timing`; `callee-callback-timing`).
 The old additional findings on the `flatten` and `applyRef` call sites were
 name-only contract effects and intentionally disappear. The compiler-tracked
 controls and native `createEffect` control remain clean.

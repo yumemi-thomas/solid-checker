@@ -1,0 +1,41 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "props-split-vocabulary",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "withoutEitherKey",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "omit",
+      "location": "<package-root>/index.js:1117:1143",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "withoutKeys",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "omit",
+      "location": "<package-root>/index.js:511:528",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

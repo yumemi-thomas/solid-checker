@@ -147,7 +147,18 @@ Producer side only. **The gate `require_verifiable_root_premise` is not touched
 observation *closed* only where the type system genuinely answers.
 
 Keep `openIndex` exactly as it is inside `walkCallablePathsLocked` (path facts).
-In `invocationValueFactLocked`, ask a narrower question before stamping. Three
+In `invocationValueFactLocked`, ask a narrower question before stamping.
+
+> **Superseded 2026-09-03 for the array arm only** — see the precision-backlog
+> entry "An exact Array's numeric index is subtree enumeration, not an open
+> shape". A path fact for an *exact* Array element index now records
+> `SubtreeEnumerated = false` alone and keeps its own `Complete`. That is the
+> same split M4 (§4) introduced, and it is what the whole-census gates already
+> read, so `require_all_callable_paths_closed` /
+> `require_export_callable_paths_closed` still refuse. Every other index —
+> string- or symbol-keyed, an array-*like* object's declared numeric index, a
+> generic array-like interface, any tuple with an optional or rest element —
+> keeps `openIndex` on path facts exactly as this section says. Three
 independently gateable arms, in increasing order of blast radius — ship them one
 at a time and measure each:
 
@@ -468,3 +479,35 @@ subtree is enumerated after the wire split, but the next exact requested union
 alternative is absent. Its demand moved from `32c3e7f3…` (`depthLimit`) to
 `1808f351…` (`presence=Absent`) and correctly remains refused. This supersedes
 the M4 acceptance claim above without weakening the consumer.
+
+---
+
+## 12. Resolution of §10 / §11 (2026-09-02)
+
+The favicon open item is closed, and it was not in the producer's type
+observation. A one-run temporary print showed the observed type as
+`Component<FaviconLinkProps>` with flags `0x1` (`TypeFlagsAny`) and one TS2307
+at `from "solid-js"` in every one of the package's declaration files: the
+witness program contained no `solid-js` at all.
+
+The cause is on the Node side. `dist/components.js` imports `solid-js/web`,
+which Solid 2 does not export, and the declaration-only source walk's catch
+withheld the *package name* the failing subpath carried — deleting the
+authenticated `solid-js` source it had already acquired, and collapsing every
+alias the typings import to `any`. §10's "remaining hypothesis" (an early
+`valueUnavailable` refusal) stays falsified, and so does §11's narrowing to the
+type observation: the observation was correct about the program it was given.
+
+With the resolver repaired the rows certified, which exposed a second,
+independent gap: `dist/components.js` imports a module the authenticated
+`solid-js` 2.0 provably does not export (its map is `.`, `./refresh`,
+`./types/*`, `./package.json`, in both rc.0 and rc.3), and nothing refused it.
+Both rows now **refuse** `dependency-target-not-exported`, naming that
+dependency and subpath; `@solid-primitives/drag-drop@0.1.0-next.0` refuses on
+the same true reason. The five §8 must-not-clear rows and the five §9 controls
+are unchanged on byte-identical digests. See `docs/precision-backlog.md`,
+2026-09-02, "An unresolvable subpath no longer unnames its package's
+declarations" and "An import of a subpath the dependency does not export
+refuses the case" — the latter carries the three premises that keep the class
+off a transitive package's specifier, a type-only import, and a dependency
+that ships no `exports` map at all.

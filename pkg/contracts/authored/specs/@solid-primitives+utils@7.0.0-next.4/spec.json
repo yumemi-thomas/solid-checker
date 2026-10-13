@@ -1,0 +1,1222 @@
+{
+  "package": "@solid-primitives/utils",
+  "version": "7.0.0-next.4",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "pairs": "../_pairs/@solid-primitives+utils",
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "access": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "access-argument",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                },
+                {
+                  "arg": 0,
+                  "path": [
+                    "length"
+                  ],
+                  "literal": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          },
+          {
+            "id": "return-invocation",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "invocation-result",
+              "parameter": 0
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "access-argument"
+          }
+        ],
+        "returns": [
+          "return",
+          "return-invocation"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 The only own property Get is built-in function length, excluded by the premise. Conditional v() is enumerated in callbacks, not claimed inert.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 The complete caller-code use is v() under the callable and length=0 guard; length is a plain property under the premise. Unknown guard truth remains unknown, not a guaranteed invocation.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 No package-defined owner/source/cleanup/computation is created; any v() body is caller code governed by access-argument.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-access-argument-read/node_modules/@solid-primitives/utils/dist/index.js:88 \u2014 COMPLETE return alternatives: v itself unless v is a zero-arity function, otherwise exactly v()'s result. Existing return (parameter 0) and return-invocation (invocation-result parameter 0), alongside the existing access-argument guarded invoke, cover all normal completions. Closing this alternative set does not assert either alternative is a non-reactive value or that the caller callback is inert."
+      },
+      "probes": [
+        {
+          "label": "callback-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The zero-arity case-file callback inherits the caller memo's tracked owned scope. Both callbacks read a signal in the case file. Only the misuse attempts an owned-scope write; the correct twin writes in the driven event handler.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88; Identical length-zero callable guard, ambient invocation, and parameter-or-invocation-result return on both hosts. No host branch. Returns remains open as in the browser claim.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88; Identical length-zero callable guard, ambient invocation, and parameter-or-invocation-result return on both hosts. No host branch. Returns remains open as in the browser claim.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 The only own property Get is built-in function length, excluded by the premise. Conditional v() is enumerated in callbacks, not claimed inert.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88; Identical length-zero callable guard, ambient invocation, and parameter-or-invocation-result return on both hosts. No host branch. Returns remains open as in the browser claim.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 No package-defined owner/source/cleanup/computation is created; any v() body is caller code governed by access-argument.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88; Identical length-zero callable guard, ambient invocation, and parameter-or-invocation-result return on both hosts. No host branch. Returns remains open as in the browser claim.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:80-88 \u2014 The complete caller-code use is v() under the callable and length=0 guard; length is a plain property under the premise. Unknown guard truth remains unknown, not a guaranteed invocation."
+        }
+      }
+    },
+    "asArray": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "parameter",
+              "index": 0
+            }
+          },
+          {
+            "id": "return-singleton",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "argument-array",
+              "items": [
+                0
+              ]
+            }
+          },
+          {
+            "id": "return-empty",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "argument-array",
+              "items": []
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return",
+          "return-singleton",
+          "return-empty"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "cleanups",
+          "disposals",
+          "returns"
+        ],
+        "reads": [],
+        "writes": [],
+        "creates": [],
+        "invalidates": [],
+        "cleanups": [],
+        "disposals": []
+      },
+      "closures": {
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness invoke no caller callback.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness make no reactive read.",
+        "writes": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 No reactive primitive or owner registration; ordinary arrays are the three result shapes.",
+        "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+        "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:93 - CURRENT parameter + argument-array return alternatives are exact; project_return recognizes their complete enumeration (ADR 0115). Consumer intentionally drops the mixed reactive leaf join, so closure is not a promise to track every returned element.; consumer contracts.rs:615-713 implements the exact heterogeneous return join, dropping rather than inventing a common reactive leaf."
+      },
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:93; Identical Array.isArray/falsy/singleton branches and exact caller-array, argument singleton, or empty-array returns. No dependency call or host branch. Returns and throws stay open.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "cleanups",
+          "disposals"
+        ],
+        "closures": {
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:93; Identical Array.isArray/falsy/singleton branches and exact caller-array, argument singleton, or empty-array returns. No dependency call or host branch. Returns and throws stay open.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness invoke no caller callback.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:93; Identical Array.isArray/falsy/singleton branches and exact caller-array, argument singleton, or empty-array returns. No dependency call or host branch. Returns and throws stay open.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness make no reactive read.",
+          "writes": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:93; Identical Array.isArray/falsy/singleton branches and exact caller-array, argument singleton, or empty-array returns. No dependency call or host branch. Returns and throws stay open.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:93; Identical Array.isArray/falsy/singleton branches and exact caller-array, argument singleton, or empty-array returns. No dependency call or host branch. Returns and throws stay open.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 No reactive primitive or owner registration; ordinary arrays are the three result shapes.",
+          "invalidates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:93; Identical Array.isArray/falsy/singleton branches and exact caller-array, argument singleton, or empty-array returns. No dependency call or host branch. Returns and throws stay open.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+          "cleanups": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:93; Identical Array.isArray/falsy/singleton branches and exact caller-array, argument singleton, or empty-array returns. No dependency call or host branch. Returns and throws stay open.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration.",
+          "disposals": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:93; Identical Array.isArray/falsy/singleton branches and exact caller-array, argument singleton, or empty-array returns. No dependency call or host branch. Returns and throws stay open.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:89-93 \u2014 Array.isArray and truthiness only; returns the original array, a new singleton containing argument 0, or an empty array; no traversal, invocation, reactive primitive, or owner registration."
+        }
+      }
+    },
+    "clamp": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          },
+          {
+            "id": "coerce-0",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "coerce-1",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          },
+          {
+            "id": "coerce-2",
+            "kind": "invoke",
+            "protocol": "coerce",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "coerce-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "coerce-1"
+          },
+          {
+            "from": {
+              "arg": 2,
+              "path": []
+            },
+            "operation": "coerce-2"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 All normal completions return Math.min(Math.max(n,min),max), a number including NaN; no asynchronous completion.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 Numeric primitive coercion is not a reactive read by premise; nonprimitive numeric conversion is fully enumerated by the three coerce protocol rows, without declaring their bodies inert. No separate own reactive read.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 Exactly the numeric conversion of arguments 0, 1 and 2 can enter caller code; coerce-0/1/2 enumerate it. Primitive arguments enter none, and nonprimitive any values are not declared inert.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 No package-defined owner/source/cleanup/computation; user conversion methods belong to the coerce rows."
+      },
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:73; Identical Math.min/Math.max coercions of each parameter and plain numeric return. No host branch.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:73; Identical Math.min/Math.max coercions of each parameter and plain numeric return. No host branch.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 All normal completions return Math.min(Math.max(n,min),max), a number including NaN; no asynchronous completion.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:73; Identical Math.min/Math.max coercions of each parameter and plain numeric return. No host branch.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 Numeric primitive coercion is not a reactive read by premise; nonprimitive numeric conversion is fully enumerated by the three coerce protocol rows, without declaring their bodies inert. No separate own reactive read.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:73; Identical Math.min/Math.max coercions of each parameter and plain numeric return. No host branch.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 No package-defined owner/source/cleanup/computation; user conversion methods belong to the coerce rows.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:73; Identical Math.min/Math.max coercions of each parameter and plain numeric return. No host branch.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:72-73 \u2014 Exactly the numeric conversion of arguments 0, 1 and 2 can enter caller code; coerce-0/1/2 enumerate it. Primitive arguments enter none, and nonprimitive any values are not declared inert."
+        }
+      }
+    },
+    "defer": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:118-137 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          },
+          {
+            "id": "dependency",
+            "kind": "invoke",
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            }
+          },
+          {
+            "id": "body",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            }
+          },
+          {
+            "id": "delayed-wrapper-reads",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "parameter",
+                "index": 0
+              }
+            ]
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "dependency"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "body"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "creates",
+          "reads"
+        ],
+        "creates": [],
+        "reads": [
+          "delayed-wrapper-reads"
+        ]
+      },
+      "closures": {
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:118-137 \u2014 Construction allocates plain lexical state and a wrapper, with no reactive primitive or owner registration.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:118-137 \u2014 No call-time reactive read. Later wrapper array length/index Gets are delayed-wrapper-reads, and dependency/body callback execution remains separately open."
+      }
+    },
+    "keys": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "array",
+              "element": {
+                "kind": "plain"
+              }
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 Object.keys returns a fresh array of string keys on every normal completion.",
+        "reads": "P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 P2: Object.keys input enumeration is plain-data traversal, not an additional reactive getter or caller callback protocol under the accepted data premise. The body contains no explicit caller-function invocation, Solid creation, owner or cleanup registration. Reactive store/props sources remain owned by the analyzer; this is not authority for adversarial Proxy behavior outside P2.",
+        "creates": "P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 P2: Object.keys input enumeration is plain-data traversal, not an additional reactive getter or caller callback protocol under the accepted data premise. The body contains no explicit caller-function invocation, Solid creation, owner or cleanup registration. Reactive store/props sources remain owned by the analyzer; this is not authority for adversarial Proxy behavior outside P2.",
+        "callbacks": "P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 P2: Object.keys input enumeration is plain-data traversal, not an additional reactive getter or caller callback protocol under the accepted data premise. The body contains no explicit caller-function invocation, Solid creation, owner or cleanup registration. Reactive store/props sources remain owned by the analyzer; this is not authority for adversarial Proxy behavior outside P2."
+      },
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:145; The export is the same Object.keys function on both builds; plain key-array output, no caller callback invocation or own reactive operation.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:145; The export is the same Object.keys function on both builds; plain key-array output, no caller callback invocation or own reactive operation.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 Object.keys returns a fresh array of string keys on every normal completion.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:145; The export is the same Object.keys function on both builds; plain key-array output, no caller callback invocation or own reactive operation.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 P2: Object.keys input enumeration is plain-data traversal, not an additional reactive getter or caller callback protocol under the accepted data premise. The body contains no explicit caller-function invocation, Solid creation, owner or cleanup registration. Reactive store/props sources remain owned by the analyzer; this is not authority for adversarial Proxy behavior outside P2.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:145; The export is the same Object.keys function on both builds; plain key-array output, no caller callback invocation or own reactive operation.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 P2: Object.keys input enumeration is plain-data traversal, not an additional reactive getter or caller callback protocol under the accepted data premise. The body contains no explicit caller-function invocation, Solid creation, owner or cleanup registration. Reactive store/props sources remain owned by the analyzer; this is not authority for adversarial Proxy behavior outside P2.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:145; The export is the same Object.keys function on both builds; plain key-array output, no caller callback invocation or own reactive operation.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: P2: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:142-145 \u2014 P2: Object.keys input enumeration is plain-data traversal, not an additional reactive getter or caller callback protocol under the accepted data premise. The body contains no explicit caller-function invocation, Solid creation, owner or cleanup registration. Reactive store/props sources remain owned by the analyzer; this is not authority for adversarial Proxy behavior outside P2."
+        }
+      }
+    },
+    "noop": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "reads": [],
+        "writes": [],
+        "creates": [],
+        "invalidates": [],
+        "throws": [],
+        "cleanups": [],
+        "disposals": []
+      },
+      "closures": {
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "writes": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "throws": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs."
+      },
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "closures": {
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+          "writes": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+          "invalidates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+          "throws": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The complete implementation is ()=>void 0; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+          "cleanups": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+          "disposals": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:12; Identical undefined-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:11-12 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs."
+        }
+      }
+    },
+    "trueFn": {
+      "why": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 Round 3 source-reviewed candidate under ADR 0226, P1/P2. Closed domains cite installed bytes; positive probes are pending. See ../../matrix.md and ../../probe-plan.md. Browser artifact only; runtime pins and ADR 0223 pairs are retained.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "plain"
+            }
+          }
+        ],
+        "callbacks": [],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "reads": [],
+        "writes": [],
+        "creates": [],
+        "invalidates": [],
+        "throws": [],
+        "cleanups": [],
+        "disposals": []
+      },
+      "closures": {
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "writes": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "invalidates": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "throws": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+        "disposals": "/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs."
+      },
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "closures": {
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+          "writes": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+          "invalidates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+          "throws": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The complete implementation is ()=>true; no caller invocation, reactive read, owner/resource registration, or other result shape.",
+          "cleanups": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs.",
+          "disposals": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:14; Identical true-returning function with no operations in any other closed domain on either build.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/app-game/node_modules/@solid-primitives/utils/dist/index.js:13-14 \u2014 The entire implementation is a primitive operation with no reactive state, owner registration, callback, cleanup, invalidation, disposal, or asynchronous completion; real typings supply only primitive numeric clamp inputs."
+        }
+      }
+    },
+    "createMicrotask": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196. Same stateful microtask wrapper on both builds: queueMicrotask invokes fn later with the last arguments; direct cleanup resets the call counter. No host branch or untrack. returns stays open, and server onCleanup can skip the registration when no owner exists. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [
+          "microtask-cleanup"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196. Same stateful microtask wrapper on both builds: queueMicrotask invokes fn later with the last arguments; direct cleanup resets the call counter. No host branch or untrack. returns stays open, and server onCleanup can skip the registration when no owner exists. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196. Same stateful microtask wrapper on both builds: queueMicrotask invokes fn later with the last arguments; direct cleanup resets the call counter. No host branch or untrack. returns stays open, and server onCleanup can skip the registration when no owner exists. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196. Same stateful microtask wrapper on both builds: queueMicrotask invokes fn later with the last arguments; direct cleanup resets the call counter. No host branch or untrack. returns stays open, and server onCleanup can skip the registration when no owner exists. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred.",
+          "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196. Same stateful microtask wrapper on both builds: queueMicrotask invokes fn later with the last arguments; direct cleanup resets the call counter. No host branch or untrack. returns stays open, and server onCleanup can skip the registration when no owner exists. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/a11y-createReducedMotion-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain cleanups: The server path has only the listed direct cleanup registration; server onCleanup may skip an absent owner. The lowered lower bound permits that branch without claiming a guaranteed registration."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 \u2014 Honest partial claim: whole returned wrapper remains opaque, so returns stays open (ADR 0234). Other constructor domains are exhausted; probes pending.",
+      "rule": "missing-owner",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Unconditional onCleanup throws in a leaf."
+        },
+        {
+          "label": "queued-callback",
+          "rule": "missing-owner",
+          "why": "After invoking the returned wrapper, fn runs on the native microtask stack; cleanup in fn lacks owner unless fn restores the captured owner.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "call": {
+        "operations": [
+          {
+            "id": "microtask-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "queued-fn",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "queued"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ],
+        "cleanups": [
+          "microtask-cleanup"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "queued-fn"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 \u2014 Counter and captured args are ordinary local data. Constructor and wrapper read no package reactive source; fn is the separately described caller invocation.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 \u2014 No signal or computed owner is created; the sole owner operation is onCleanup, listed in cleanups.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 \u2014 The only caller-code invocation is fn(...args) in queueMicrotask, later and only for the final noncancelled task. Minimum zero covers an unused wrapper, batching and cleanup cancellation.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solid-primitives/utils/dist/index.js:188-196; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createMicrotask-module-scope/node_modules/@solidjs/signals/dist/dev.js:2311-2340 \u2014 onCleanup(() => calls = 0) occurs exactly once on construction, with no other explicit cleanup registration."
+      }
+    },
+    "createHydratableSignal": {
+      "rule": "strict-read-untracked",
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219 \u2014 Nonhydrating update result is passed to createSignal; callable initializers are conditional tracked computations. Hydration callback timing/context remains open; do not close callbacks.",
+      "call": {
+        "closed": [
+          "reads",
+          "returns",
+          "creates"
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "signal"
+        ],
+        "computations": [
+          "conditional-initializer",
+          "hydration-settled"
+        ],
+        "resources": [
+          {
+            "id": "state",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "initializer-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "hydration-leaf",
+            "kind": "owner"
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "update-now"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "update-hydrating"
+          },
+          {
+            "from": {
+              "operation": "update-now",
+              "path": []
+            },
+            "operation": "initialize-update-result"
+          }
+        ],
+        "operations": [
+          {
+            "id": "signal",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "state"
+            ]
+          },
+          {
+            "id": "conditional-initializer",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "initializer-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "update-now",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "update-hydrating",
+            "kind": "invoke",
+            "trigger": {
+              "event": "settle"
+            },
+            "count": {
+              "scope": "trigger",
+              "min": 0,
+              "max": 1
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "reactive",
+                  "role": "accessor",
+                  "resource": "state"
+                },
+                {
+                  "kind": "reactive",
+                  "role": "setter",
+                  "resource": "state"
+                }
+              ]
+            }
+          },
+          {
+            "id": "initialize-update-result",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "initializer-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "initializer-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "hydration-settled",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "hydration-leaf",
+                  "children": "forbidden",
+                  "cleanup": "forbidden"
+                }
+              ]
+            },
+            "count": {
+              "scope": "call",
+              "min": 0,
+              "max": 1
+            }
+          }
+        ],
+        "edges": [
+          {
+            "kind": "data",
+            "from": "update-now",
+            "to": "initialize-update-result"
+          }
+        ],
+        "callbackResults": [
+          {
+            "producer": "update-now",
+            "shape": "unknown",
+            "uses": [
+              "initialize-update-result"
+            ],
+            "closed": [
+              "uses"
+            ],
+            "callableOnly": [
+              "initialize-update-result"
+            ]
+          },
+          {
+            "producer": "update-hydrating",
+            "shape": "unknown"
+          }
+        ]
+      },
+      "resultClosures": {
+        "update-now": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219; createSignal initializer callable test: solid-js/types/client/hydration.d.ts and audited rc.13 signal entrypoint."
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219 \u2014 Signal tuple and conditional initializer computation; no own reactive read. Callback result uses are separate from reads. Hydration invokes the update through the setter wrapper rather than invoking its result.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219 \u2014 Signal tuple and conditional initializer computation; no own reactive read. Callback result uses are separate from reads. Hydration invokes the update through the setter wrapper rather than invoking its result.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/utils-createHydratableSignal-top-level-read/node_modules/@solid-primitives/utils/dist/index.js:209-219 \u2014 Signal tuple and conditional initializer computation; no own reactive read. Callback result uses are separate from reads. Hydration invokes the update through the setter wrapper rather than invoking its result."
+      },
+      "probes": [
+        {
+          "label": "result-initializer",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Case-file result code distinguishes the result-use context from the producer callback. Fresh runtime probe required; no passed observation is fabricated."
+        }
+      ]
+    }
+  }
+}

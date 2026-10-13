@@ -46,6 +46,7 @@ fn operation(id: &str, min: u32) -> Operation {
         at: Some(solid_reactive_ir::contract_semantics::Event::Call),
         schedule: Some(Schedule::SameStack),
         tracking: Tracking::Untracked,
+        strict_read: None,
         owner: OwnerRelation {
             source: OwnerSource::None,
             requirements: OwnerRequirements {
@@ -68,6 +69,8 @@ fn operation(id: &str, min: u32) -> Operation {
         inputs: vec![],
         output: None,
         resources: BTreeSet::new(),
+        composed_from: None,
+        protocol: None,
     }
 }
 
@@ -85,6 +88,7 @@ fn claims(
         returns: KnowledgeSet::Complete(vec![]),
         cleanups: KnowledgeSet::Complete(vec![]),
         disposals: KnowledgeSet::Complete(vec![]),
+        computations: KnowledgeSet::Unknown,
     }
 }
 
@@ -134,6 +138,7 @@ fn export(
 fn analysis() -> ProposalAnalysis {
     let closure = ClosureManifest::new(vec![], vec![], vec![]).unwrap();
     let mut case = ArtifactCase {
+        initialization: None,
         id: "import-case".into(),
         entrypoint: ".".into(),
         resolution_trace: vec![
@@ -219,6 +224,10 @@ fn analysis() -> ProposalAnalysis {
         transform: None,
         exports,
         declaration_exports: std::collections::BTreeSet::new(),
+        unbound_declaration_exports: std::collections::BTreeSet::new(),
+        foreign_declaration_exports: std::collections::BTreeSet::new(),
+        forwarded_foreign_exports: std::collections::BTreeSet::new(),
+        runtime_withheld_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::StandalonePackageResolver,
     };
     ProposalAnalysis {
@@ -399,6 +408,7 @@ fn runtime_probe_plan_accepts_only_witness_and_closure_subjects_from_the_proposa
             timeout_millis: 5_000,
             max_microtask_turns: 4,
             max_macrotask_turns: 0,
+            max_animation_frame_turns: 0,
             max_events: 128,
         },
     )

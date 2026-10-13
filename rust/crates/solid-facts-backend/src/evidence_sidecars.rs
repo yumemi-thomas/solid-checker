@@ -1117,6 +1117,7 @@ wire_enum!(WireClaimDomain, ClaimDomain, {
     Returns,
     Cleanups,
     Disposals,
+    Computations,
 });
 wire_enum!(WireValueClaimDomain, ValueClaimDomain, {
     Shape,

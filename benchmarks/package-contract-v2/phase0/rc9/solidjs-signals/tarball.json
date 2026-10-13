@@ -1,0 +1,24 @@
+{
+  "name": "@solidjs/signals",
+  "version": "2.0.0-rc.9",
+  "tarball": "https://registry.npmjs.org/@solidjs/signals/-/signals-2.0.0-rc.9.tgz",
+  "gitHead": "9a29b1a07aa3e06ee32afd1fc4c18414b4a558bb",
+  "registryIntegrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+  "registryShasum": "2140db06574f917ec35ce590f3420bd37a05c9b5",
+  "registryFileCount": 119,
+  "registryUnpackedSize": 2530873,
+  "downloaded": {
+    "date": "2026-09-26",
+    "by": "npm pack @solidjs/signals@2.0.0-rc.9",
+    "bytes": 723305,
+    "sha512": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw==",
+    "sha1": "2140db06574f917ec35ce590f3420bd37a05c9b5",
+    "sha256": "661548ddec851f8d37ed82d571d97673d9ca7d2d053c1e3430baf8b0c0673e16",
+    "extractedFileCount": 119,
+    "extractedTreeEqualsLockfileInstall": true
+  },
+  "lockfileIntegrity": {
+    "source": "solid-primitives (next) pnpm-lock.yaml, line 4881",
+    "integrity": "sha512-o3pqiTgpH5NR2DstiKrt9s/6+0YOFtv+MfvLONwLsS247I+EWMMyTu9BkRcgd35UR5Pa1DM16lI1/5uaIMY6Gw=="
+  }
+}

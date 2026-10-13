@@ -1,0 +1,4 @@
+ */ function createRoot(e, n) {
+    const t = createOwner(n);
+    return runWithOwner(t, () => e(() => t.dispose()));
+}

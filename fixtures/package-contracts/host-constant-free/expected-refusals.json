@@ -1,0 +1,69 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "host-constant-guard-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [],
+  "declinedClosures": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "guardedCleanup",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "onCleanup",
+      "location": "<package-root>/index.js:1592:1605",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "namespaceGuard",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "onCleanup",
+      "location": "<package-root>/index.js:1338:1376",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "onElementConnect",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "onCleanup",
+      "location": "<package-root>/index.js:561:599",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "closure-proposal",
+      "export": "shadowedGuard",
+      "domain": "creates",
+      "kind": "dialect-silent",
+      "package": "solid-js",
+      "callee": "onCleanup",
+      "location": "<package-root>/index.js:982:1020",
+      "declaration": "",
+      "shape": "",
+      "spelling": ""
+    }
+  ]
+}

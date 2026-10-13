@@ -5,8 +5,9 @@ use crate::cache::{CachedLateStages, same_compiler_semantics};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_slice_results};
 use crate::{
     BuildTimings, ExecutionRole, Fix, FunctionBoundary, OwnerRequirement,
-    OwnerRequirementOperation, PrimitiveName, TextEdit, containing_function_indexed,
-    function_indices_by_path, jsx_primitive_name, known_primitive, location, primitive_name,
+    OwnerRequirementOperation, PrimitiveName, TextEdit, call_primitive_name,
+    containing_function_indexed, function_indices_by_path, jsx_primitive_name, known_primitive,
+    location,
 };
 
 use std::{
@@ -20,7 +21,7 @@ use crate::effect_api::ProofStatus;
 use crate::execution_role::{argument_references_callback_symbol, execution_role, function_symbol};
 use crate::identity::SymbolId;
 use crate::indexes::{CrossFileProofDigest, EntitySymbols, ProjectIndexes, SemanticLookup};
-use solid_dialect::{Dialect, Primitive};
+use solid_dialect::{Dialect, OwnerRequirementRole, Primitive};
 use solid_facts::ProjectFacts;
 use solid_facts::core::{SourceHash, SourcePath, Span};
 
@@ -204,6 +205,23 @@ pub(crate) fn containing_ast_function(
         .min_by_key(|function| function.body.end - function.body.start)
 }
 
+/// Whether `span` is written directly in `function`'s own body: inside the
+/// body, and inside no other function written there -- its body *or its
+/// parameter list*. A nested function's default parameter lies in the outer
+/// body but outside every nested body, so [`containing_ast_function`] alone
+/// names the outer function for it; that code runs only when the nested
+/// function is called (ADR 0204).
+pub(crate) fn written_directly_in(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    function.body.contains(span)
+        && !ast
+            .functions_within(function.body)
+            .any(|nested| nested.span != function.span && nested.span.contains(span))
+}
+
 pub(crate) const OWNER_CONTEXT_OWNED: u8 = 1;
 pub(crate) const OWNER_CONTEXT_UNOWNED: u8 = 2;
 pub(crate) const OWNER_CONTEXT_LEAF: u8 = 4;
@@ -217,6 +235,37 @@ pub(crate) const OWNER_CONTEXT_COMPONENT_UNCERTAIN: u8 = 8;
 /// one proven unowned invocation is enough to prove an ownership defect even
 /// when other invocations may be owned.
 pub(crate) const OWNER_CONTEXT_PROVEN_UNOWNED: u8 = 16;
+/// The possible-unowned half of this context comes from a callback that runs
+/// under its caller's owner only on its first run
+/// ([`solid_dialect::CallbackOwner::InheritsFirstRun`]): a later run, from the
+/// scheduler's flush, runs with no owner. Kept as its own bit so the finding
+/// names that reason instead of a nullable `runWithOwner` owner.
+pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u8 = 32;
+
+/// Whether a node's unowned context is *only* the open-world assumption an
+/// exported non-component entry seeds ([`owner_node`]), carried to this node
+/// along call edges.
+///
+/// The seed sets [`OWNER_CONTEXT_UNOWNED`] without [`OWNER_CONTEXT_PROVEN_UNOWNED`]
+/// -- "an unseen caller may supply no owner" -- and `Preserve` edges forward
+/// the bit unchanged, so a private helper called only from exported functions
+/// inherits it. Every other source of the unowned bit sets a companion bit (a
+/// proven unowned edge sets the proof, a conditional edge sets owned, a
+/// first-run edge sets later-run), so the bare bit names the open world and
+/// nothing else. A requirement under it is a caller obligation exactly like
+/// the same call written inside the exported function itself, and is no more a
+/// proven violation one call-edge away.
+const fn open_world_unowned_only(context: u8, node: &OwnerNode) -> bool {
+    !node.component
+        && !node.component_uncertain
+        && context
+            & (OWNER_CONTEXT_OWNED
+                | OWNER_CONTEXT_UNOWNED
+                | OWNER_CONTEXT_PROVEN_UNOWNED
+                | OWNER_CONTEXT_LATER_RUN_UNOWNED
+                | OWNER_CONTEXT_LEAF)
+            == OWNER_CONTEXT_UNOWNED
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OwnerEdgeKind {
@@ -224,6 +273,9 @@ pub(crate) enum OwnerEdgeKind {
     Owned,
     Unowned,
     Conditional,
+    /// The source's context on the callback's first run, and possibly no
+    /// owner on a later one.
+    InheritsFirstRun,
     Leaf,
 }
 
@@ -303,16 +355,7 @@ impl OwnerFileIndex {
             .ast
             .calls
             .iter()
-            .map(|call| {
-                primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    entities,
-                    symbol_names,
-                    lookup.dialect,
-                )
-            })
+            .map(|call| call_primitive_name(file, call, entities, symbol_names, lookup.dialect))
             .collect::<Vec<_>>();
         let providing_regions = file
             .ast
@@ -503,11 +546,20 @@ pub(crate) struct OwnerRequirementCandidate {
     pub(crate) report_mask: u8,
     pub(crate) allow_uncertain: bool,
     pub(crate) runtime_uncertain: bool,
+    /// ADR 0161: the site is a call of a contract export, and whether that
+    /// export registers on every call.
+    pub(crate) through_contract: bool,
+    pub(crate) registration_uncertain: bool,
     pub(crate) settled_target: Option<OwnerTarget>,
     /// For call-site-gated leaf owners (2.0 `onSettled`): the owner call's
     /// span, published as a [`LeafGateDecision`] once the graph settles so
     /// the leaf-operation table can be resolved against real ownership.
     pub(crate) settled_gate: Option<Span>,
+    /// [`providing_region_chain`] for the operation, keyed by function span:
+    /// `None` outside every owner-providing region. Whether the region answers
+    /// it depends on those functions' propagated owner contexts, which a
+    /// per-file fragment does not have yet; see [`root_owned_at`].
+    pub(crate) providing_region_chain: Option<Vec<Span>>,
 }
 
 /// Whether a call-site-gated leaf owner (`onSettled`) actually materializes
@@ -636,10 +688,15 @@ fn apply_settled_requirement_gates(
 #[derive(Clone, Copy)]
 pub(crate) struct OwnerRequirementStatus {
     pub(crate) uncertain: bool,
+    /// ADR 0161: the site is a call of a contract export (`through_contract`).
+    pub(crate) through_contract: bool,
     pub(crate) runtime_uncertain: bool,
     pub(crate) caller_uncertain: bool,
     pub(crate) conditional_owner: bool,
+    pub(crate) later_run_unowned: bool,
     pub(crate) component_uncertain: bool,
+    /// The operation runs after an `await` ([`AwaitContinuations`]).
+    pub(crate) after_await: bool,
     pub(crate) report: bool,
 }
 
@@ -747,7 +804,9 @@ pub(crate) fn find_missing_owners(
                 callback.role,
                 solid_facts::compiler::CallbackRoleKind::EventHandler
                     | solid_facts::compiler::CallbackRoleKind::DirectiveApply
-            ) {
+            ) || (callback.role == solid_facts::compiler::CallbackRoleKind::DirectiveApply
+                && !ref_application_on_intrinsic(file, callback.span))
+            {
                 continue;
             }
             if let Some(index) = owner_callback_index(
@@ -768,8 +827,25 @@ pub(crate) fn find_missing_owners(
     }
     propagate_owner_contexts(&mut contexts, &outgoing);
 
+    let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::new();
     for (file_index, file) in facts.files.iter().enumerate() {
+        let file_nodes = nodes_by_path
+            .get(file.path.as_str())
+            .map_or(&[][..], Vec::as_slice);
+        let root_owned_span = |span: Span| {
+            root_owned_at(
+                providing_region_chain(
+                    &owner_file_indexes[file_index].providing_regions,
+                    file_nodes
+                        .iter()
+                        .map(|index| (*index, nodes[*index].span, nodes[*index].body)),
+                    span,
+                )
+                .as_deref(),
+                |index| contexts[*index],
+            )
+        };
         for (call_index, call) in file.ast.calls.iter().enumerate() {
             let primitive =
                 known_primitive(&owner_file_indexes[file_index].call_primitives[call_index]);
@@ -780,20 +856,45 @@ pub(crate) fn find_missing_owners(
                 file.path.as_str(),
                 call.span,
             );
-            let root_owned = inside_owner_providing_region(
-                &owner_file_indexes[file_index].providing_regions,
-                call.span,
-            );
+            // `onSettled`'s returned cleanup is a different owner question
+            // (whether an unowned settle registers at all), so it keeps the
+            // enclosing context.
+            let after_await = continuations.contains(file.path.as_str(), call.callee.start)
+                && !matches!(
+                    primitive
+                        .and_then(|primitive| lookup.dialect.owner_requirement_role(primitive)),
+                    Some(OwnerRequirementRole::SettledCleanup)
+                );
+            let entry_context = context;
+            let context = if after_await {
+                await_continuation_context(context)
+            } else {
+                context
+            };
+            let root_owned = root_owned_span(call.span);
             if !root_owned
                 && let Some(symbol) = lookup.callee_symbol(file, call.callee)
                 && let Some(requirements_for_call) = lookup.contract_owner_requirements(symbol)
             {
-                let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
-                let conditional_owner = !proven_unowned
-                    && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                        == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
-                let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0;
                 for requirement in requirements_for_call {
+                    let Some(guaranteed) = owner_requirement_at_call(requirement, call) else {
+                        continue;
+                    };
+                    let after_await = after_await
+                        && requirement.operation
+                            != crate::OwnerRequirementOperation::SettledCleanup;
+                    let context = if after_await { context } else { entry_context };
+                    let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+                    let later_run_unowned =
+                        !proven_unowned && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
+                    let conditional_owner = !proven_unowned
+                        && !later_run_unowned
+                        && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+                            == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                    let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0;
+                    // ADR 0161: an export that may register without doing so
+                    // on every call leaves the unowned call a proof obligation.
+                    let registration_uncertain = !guaranteed;
                     let operation = match requirement.operation {
                         crate::OwnerRequirementOperation::Effect => "effect",
                         crate::OwnerRequirementOperation::Cleanup => "cleanup",
@@ -807,13 +908,20 @@ pub(crate) fn find_missing_owners(
                         file,
                         call.span,
                         OwnerRequirementStatus {
-                            uncertain: conditional_owner || component_uncertain,
+                            through_contract: true,
+                            uncertain: conditional_owner
+                                || later_run_unowned
+                                || component_uncertain
+                                || registration_uncertain,
                             runtime_uncertain: false,
                             caller_uncertain: false,
                             conditional_owner,
+                            later_run_unowned,
                             component_uncertain,
+                            after_await,
                             report: context & OWNER_CONTEXT_UNOWNED != 0,
                         },
+                        lookup,
                     );
                 }
             }
@@ -842,18 +950,15 @@ pub(crate) fn find_missing_owners(
                     ),
                 );
             }
-            let operation = match primitive {
-                // `createRenderEffect` is deliberately included alongside
-                // `createEffect`: both register a computation on the owner,
-                // and 2.0's render effect outside any owner leaks the same
-                // way. The engine matched only `createEffect` and
-                // `createTrackedEffect` before the dialect extraction; that
-                // omission was the gap, not the rule.
-                Some(
-                    primitive @ (Primitive::CreateEffect
-                    | Primitive::CreateRenderEffect
-                    | Primitive::CreateTrackedEffect),
-                ) if !root_owned => {
+            // Which primitives carry which owner-requirement role is the
+            // dialect's answer (`owner_requirement_role`), not a set spelled
+            // out here. The two owner passes used to spell it out separately
+            // and drifted: this one omitted `createRenderEffect`, so a render
+            // effect outside any owner leaked with nothing reported.
+            let role =
+                primitive.and_then(|primitive| lookup.dialect.owner_requirement_role(primitive));
+            let operation = match (role, primitive) {
+                (Some(OwnerRequirementRole::Effect), Some(primitive)) if !root_owned => {
                     let registration =
                         crate::effect_api::classify_effect_call(file, call, primitive, lookup)
                             .owner_registration;
@@ -863,12 +968,12 @@ pub(crate) fn find_missing_owners(
                         registration == ProofStatus::Uncertain,
                     ))
                 }
-                Some(Primitive::OnCleanup) if !root_owned => Some((
+                (Some(OwnerRequirementRole::Cleanup), _) if !root_owned => Some((
                     "cleanup",
                     context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
                     false,
                 )),
-                Some(Primitive::OnSettled) if !root_owned => {
+                (Some(OwnerRequirementRole::SettledCleanup), _) if !root_owned => {
                     let proof = call
                         .arguments
                         .first()
@@ -941,19 +1046,25 @@ pub(crate) fn find_missing_owners(
                 let component_uncertain = !proven_unowned
                     && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                         || owner_index.is_some_and(|index| nodes[index].component_uncertain));
+                let later_run_unowned = !component_uncertain
+                    && !proven_unowned
+                    && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
                 let conditional_owner = !component_uncertain
                     && !proven_unowned
+                    && !later_run_unowned
                     && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
                         == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
                 let caller_uncertain = !proven_unowned
                     && owner_index.is_some_and(|index| {
-                        nodes[index].exported
+                        (nodes[index].exported
                             && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
                             && !nodes[index].component
-                            && !nodes[index].component_uncertain
+                            && !nodes[index].component_uncertain)
+                            || open_world_unowned_only(context, &nodes[index])
                     });
                 let uncertain = runtime_uncertain
                     || conditional_owner
+                    || later_run_unowned
                     || caller_uncertain
                     || component_uncertain;
                 let operation_span = if operation == "settled-cleanup" {
@@ -970,13 +1081,17 @@ pub(crate) fn find_missing_owners(
                     file,
                     operation_span,
                     OwnerRequirementStatus {
+                        through_contract: false,
                         uncertain,
                         runtime_uncertain,
                         caller_uncertain,
                         conditional_owner,
+                        later_run_unowned,
                         component_uncertain,
+                        after_await,
                         report,
                     },
+                    lookup,
                 );
             }
         }
@@ -996,10 +1111,7 @@ pub(crate) fn find_missing_owners(
                 file.path.as_str(),
                 element.span,
             );
-            if inside_owner_providing_region(
-                &owner_file_indexes[file_index].providing_regions,
-                element.span,
-            ) {
+            if root_owned_span(element.span) {
                 continue;
             }
             let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
@@ -1012,8 +1124,12 @@ pub(crate) fn find_missing_owners(
                         element.span,
                     )
                     .is_some_and(|index| nodes[index].component_uncertain));
+            let later_run_unowned = !component_uncertain
+                && !proven_unowned
+                && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
             let conditional_owner = !component_uncertain
                 && !proven_unowned
+                && !later_run_unowned
                 && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
                     == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
             push_owner_requirement(
@@ -1023,13 +1139,17 @@ pub(crate) fn find_missing_owners(
                 file,
                 Span::new(element.span.start, element.name.span.end),
                 OwnerRequirementStatus {
-                    uncertain: conditional_owner || component_uncertain,
+                    through_contract: false,
+                    uncertain: conditional_owner || later_run_unowned || component_uncertain,
                     runtime_uncertain: false,
                     caller_uncertain: false,
                     conditional_owner,
+                    later_run_unowned,
                     component_uncertain,
+                    after_await: false,
                     report: context & OWNER_CONTEXT_UNOWNED != 0,
                 },
+                lookup,
             );
         }
     }
@@ -1058,6 +1178,15 @@ pub(crate) fn discover_owner_file(
     let owner_at = |span| {
         containing_function_indexed(&nodes, &nodes_by_path, file.path.as_str(), span)
             .map(|index| nodes[index].span)
+    };
+    // Keyed by function span: the emission pass resolves it to the node whose
+    // propagated context it reads, as it does `owner`.
+    let region_chain = |span| {
+        providing_region_chain(
+            &providing_regions,
+            nodes.iter().map(|node| (node.span, node.span, node.body)),
+            span,
+        )
     };
     let callback_target = |argument: Span| {
         nodes_by_path
@@ -1114,13 +1243,16 @@ pub(crate) fn discover_owner_file(
                 });
             }
         }
-        if inside_owner_providing_region(&providing_regions, call.span) {
-            continue;
-        }
+        // Not skipped here: whether the region answers the operation needs the
+        // propagated context, so the emission pass decides (`root_owned_at`).
+        let providing_region_chain = region_chain(call.span);
         if let Some(symbol) = lookup.callee_symbol(file, call.callee)
             && let Some(contract_requirements) = lookup.contract_owner_requirements(symbol)
         {
             for requirement in contract_requirements {
+                let Some(guaranteed) = owner_requirement_at_call(requirement, call) else {
+                    continue;
+                };
                 let operation = match requirement.operation {
                     crate::OwnerRequirementOperation::Effect => "effect",
                     crate::OwnerRequirementOperation::Cleanup => "cleanup",
@@ -1134,20 +1266,21 @@ pub(crate) fn discover_owner_file(
                     report_mask: OWNER_CONTEXT_UNOWNED,
                     allow_uncertain: true,
                     runtime_uncertain: false,
+                    through_contract: true,
+                    registration_uncertain: !guaranteed,
                     settled_target: None,
                     settled_gate: None,
+                    providing_region_chain: providing_region_chain.clone(),
                 });
             }
         }
-        let operation = match known_primitive(&call_primitives[call_index]) {
-            // See the batch owner pass: `createRenderEffect` belongs with the
-            // other effect constructors, and its earlier absence there was
-            // the two passes' drift, not a narrower contract.
-            Some(
-                primitive @ (Primitive::CreateEffect
-                | Primitive::CreateRenderEffect
-                | Primitive::CreateTrackedEffect),
-            ) => {
+        // Same seam as the batch owner pass, for the same reason: these two
+        // matched the effect set independently and disagreed about
+        // `createRenderEffect`.
+        let known = known_primitive(&call_primitives[call_index]);
+        let role = known.and_then(|primitive| lookup.dialect.owner_requirement_role(primitive));
+        let operation = match (role, known) {
+            (Some(OwnerRequirementRole::Effect), Some(primitive)) => {
                 let registration =
                     crate::effect_api::classify_effect_call(file, call, primitive, lookup)
                         .owner_registration;
@@ -1159,14 +1292,14 @@ pub(crate) fn discover_owner_file(
                     registration == ProofStatus::Uncertain,
                 ))
             }
-            Some(Primitive::OnCleanup) => Some((
+            (Some(OwnerRequirementRole::Cleanup), _) => Some((
                 "cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 None,
                 call.callee,
                 false,
             )),
-            Some(Primitive::OnSettled) => Some((
+            (Some(OwnerRequirementRole::SettledCleanup), _) => Some((
                 "settled-cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 call.arguments
@@ -1192,8 +1325,11 @@ pub(crate) fn discover_owner_file(
                 report_mask,
                 allow_uncertain: true,
                 runtime_uncertain,
+                through_contract: false,
+                registration_uncertain: false,
                 settled_target,
                 settled_gate,
+                providing_region_chain,
             });
         }
     }
@@ -1202,7 +1338,9 @@ pub(crate) fn discover_owner_file(
             callback.role,
             solid_facts::compiler::CallbackRoleKind::EventHandler
                 | solid_facts::compiler::CallbackRoleKind::DirectiveApply
-        ) && let Some(target) = callback_target(callback.span)
+        ) && (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
+            || ref_application_on_intrinsic(file, callback.span))
+            && let Some(target) = callback_target(callback.span)
         {
             edges.push(SymbolicOwnerEdge {
                 source: None,
@@ -1216,7 +1354,6 @@ pub(crate) fn discover_owner_file(
         if boundary
             .as_deref()
             .is_some_and(|tag| dialect.is_async_boundary(tag))
-            && !inside_owner_providing_region(&providing_regions, element.span)
         {
             requirements.push(OwnerRequirementCandidate {
                 operation: "boundary",
@@ -1225,8 +1362,11 @@ pub(crate) fn discover_owner_file(
                 report_mask: OWNER_CONTEXT_UNOWNED,
                 allow_uncertain: false,
                 runtime_uncertain: false,
+                through_contract: false,
+                registration_uncertain: false,
                 settled_target: None,
                 settled_gate: None,
+                providing_region_chain: region_chain(element.span),
             });
         }
     }
@@ -1355,6 +1495,7 @@ pub(crate) fn find_missing_owners_incremental(
 
     let requirements_started = Instant::now();
     let mut requirements = Vec::new();
+    let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::new();
     let mut seen = HashSet::new();
     for file in &facts.files {
@@ -1362,13 +1503,36 @@ pub(crate) fn find_missing_owners_incremental(
             continue;
         };
         for candidate in &fragment.requirements {
+            let owner_index = candidate.owner.and_then(|span| {
+                nodes_by_span
+                    .get(file.path.as_str())
+                    .and_then(|nodes| nodes.get(&span))
+                    .copied()
+            });
+            let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
+            // As in the batch pass: effects, cleanups and contract calls, never
+            // a JSX boundary or `onSettled`'s returned cleanup.
+            let after_await = (candidate.through_contract
+                || matches!(candidate.operation, "effect" | "cleanup"))
+                && candidate.operation != "settled-cleanup"
+                && continuations.contains(file.path.as_str(), candidate.operation_span.start);
+            let context = if after_await {
+                await_continuation_context(context)
+            } else {
+                context
+            };
+            // The batch pass skips these before recording a settled gate too.
+            // Every chain span is one of this fragment's own nodes; one that
+            // did not resolve would withhold the lexical answer, not grant it.
+            if root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
+                nodes_by_span
+                    .get(file.path.as_str())
+                    .and_then(|nodes| nodes.get(span))
+                    .map_or(OWNER_CONTEXT_LEAVES_REGION, |index| contexts[*index])
+            }) {
+                continue;
+            }
             if let Some(gate) = candidate.settled_gate {
-                let owner_index = candidate.owner.and_then(|span| {
-                    nodes_by_span
-                        .get(file.path.as_str())
-                        .and_then(|nodes| nodes.get(&span))
-                        .copied()
-                });
                 settled_gates.insert(
                     (
                         file.path.to_string(),
@@ -1421,28 +1585,26 @@ pub(crate) fn find_missing_owners_incremental(
                     CleanupReturnProof::Unresolved => continue,
                 }
             }
-            let owner_index = candidate.owner.and_then(|span| {
-                nodes_by_span
-                    .get(file.path.as_str())
-                    .and_then(|nodes| nodes.get(&span))
-                    .copied()
-            });
-            let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
             let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
             let component_uncertain = !proven_unowned
                 && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
                     || owner_index.is_some_and(|index| nodes[index].component_uncertain));
+            let later_run_unowned = !component_uncertain
+                && !proven_unowned
+                && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
             let conditional_owner = !component_uncertain
                 && !proven_unowned
+                && !later_run_unowned
                 && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
                     == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
             let caller_uncertain = candidate.allow_uncertain
                 && !proven_unowned
                 && owner_index.is_some_and(|index| {
-                    nodes[index].exported
+                    (nodes[index].exported
                         && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
                         && !nodes[index].component
-                        && !nodes[index].component_uncertain
+                        && !nodes[index].component_uncertain)
+                        || open_world_unowned_only(context, &nodes[index])
                 });
             let cleanup_return_uncertain = candidate.operation == "settled-cleanup"
                 && candidate
@@ -1472,8 +1634,12 @@ pub(crate) fn find_missing_owners_incremental(
                         )
                     });
             let runtime_uncertain = candidate.runtime_uncertain || cleanup_return_uncertain;
-            let uncertain =
-                runtime_uncertain || conditional_owner || caller_uncertain || component_uncertain;
+            let uncertain = runtime_uncertain
+                || conditional_owner
+                || later_run_unowned
+                || caller_uncertain
+                || component_uncertain
+                || candidate.registration_uncertain;
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
@@ -1481,13 +1647,17 @@ pub(crate) fn find_missing_owners_incremental(
                 file,
                 candidate.operation_span,
                 OwnerRequirementStatus {
+                    through_contract: candidate.through_contract,
                     uncertain,
                     runtime_uncertain,
                     caller_uncertain,
                     conditional_owner,
+                    later_run_unowned,
                     component_uncertain,
+                    after_await,
                     report: context & candidate.report_mask != 0,
                 },
+                lookup,
             );
         }
     }
@@ -1505,10 +1675,89 @@ pub(crate) fn find_missing_owners_incremental(
     )
 }
 
-pub(crate) fn inside_owner_providing_region(providing_regions: &[Span], span: Span) -> bool {
-    providing_regions
+/// The owner context bits that take a function out of the synchronous extent
+/// of an owner-providing region written around it. See [`root_owned_at`].
+const OWNER_CONTEXT_LEAVES_REGION: u8 =
+    OWNER_CONTEXT_PROVEN_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED;
+
+/// The functions standing between `span` and the innermost owner-providing
+/// region around it: every function whose body contains `span` and which is
+/// itself written inside that region, the region's own callback included.
+/// `None` when no region contains `span`.
+///
+/// `functions` yields `(key, span, body)` for the file's owner nodes; the key
+/// comes back unchanged, so the batch pass can carry node indices and a
+/// per-file fragment, which has no indices yet, function spans. The innermost
+/// region is the only one that needs asking: an outer region's chain is a
+/// superset of it, so an outer region answers only where the innermost does.
+pub(crate) fn providing_region_chain<K>(
+    providing_regions: &[Span],
+    functions: impl IntoIterator<Item = (K, Span, Span)>,
+    span: Span,
+) -> Option<Vec<K>> {
+    let region = providing_regions
         .iter()
-        .any(|argument| argument.contains(span))
+        .filter(|region| region.contains(span))
+        .min_by_key(|region| region.end - region.start)?;
+    Some(
+        functions
+            .into_iter()
+            .filter(|(_, function, body)| body.contains(span) && region.contains(*function))
+            .map(|(key, _, _)| key)
+            .collect(),
+    )
+}
+
+/// Whether an operation lexically inside an owner-providing region is answered
+/// by that region's owner. `chain` is [`providing_region_chain`]'s answer and
+/// `context_of` each chain function's propagated owner context. Both owner
+/// passes, every operation kind, ask this one question.
+///
+/// The region's owner is current only for code that runs in the region's
+/// synchronous extent, and a function nested in the region leaves that extent
+/// when its context carries either bit of [`OWNER_CONTEXT_LEAVES_REGION`]:
+///
+/// - [`OWNER_CONTEXT_LATER_RUN_UNOWNED`], from a `createRenderEffect` apply
+///   ([`solid_dialect::CallbackOwner::InheritsFirstRun`]). `@solidjs/signals`
+///   2.0.0-rc.3 and rc.9 (dev and prod client builds) run every apply after
+///   the first from the flush with `getOwner() === null`, so an `onCleanup`
+///   there under a `createRoot` never runs on dispose and raises
+///   `NO_OWNER_CLEANUP`, while the first run's cleanup registers on the root.
+/// - [`OWNER_CONTEXT_PROVEN_UNOWNED`], from a callback some invocation of
+///   which runs with no owner: a [`solid_dialect::CallbackOwner::None`]
+///   position (a `createEffect` apply, a `createReaction` invalidation, a
+///   `runWithOwner(null, fn)` callback), a compiler event-handler or
+///   directive-apply role, or an `unowned` contract row. Probed on
+///   `solid-js`/`@solidjs/signals`/`@solidjs/web` 2.0.0-rc.3 and rc.9, dev and
+///   prod client builds, each written inside a `createRoot` (the delegated
+///   handler inside a `render` callback): `getOwner()` is `null` in every one
+///   of them, the `onCleanup` raises `NO_OWNER_CLEANUP` (dev) and never runs
+///   on dispose, and an `onSettled` in the `createEffect` apply runs
+///   out-of-band, its returned cleanup raising `SETTLED_CLEANUP_UNOWNED`.
+///
+/// Such an operation is judged on the owner graph instead, which makes it a
+/// violation where the propagated context is proven unowned and uncertifiable
+/// where it carries only the later-run bit.
+///
+/// Only functions *inside* the region are asked. A region written inside the
+/// detached function -- a `createRoot` created in a `createEffect` apply, or a
+/// compiled JSX child, whose generated render effect owns its expression --
+/// answers for what it contains: probed, an `onCleanup` in either runs on that
+/// owner's disposal or re-run.
+///
+/// A callback handed to a reviewed fresh-stack host scheduler (`setTimeout`,
+/// `queueMicrotask`, `Promise.then`, an observer constructor, ...) gets the
+/// dialect's unowned edge ([`fresh_stack_scheduler_edges`]) and is judged on
+/// the graph like the positions above. A nested callback with no owner edge at
+/// all (one handed to an unmodelled function, or to a scheduler through a
+/// wrapper call) carries neither bit and is still answered by the region: a
+/// pre-existing approximation this does not widen.
+pub(crate) fn root_owned_at<K>(chain: Option<&[K]>, context_of: impl Fn(&K) -> u8) -> bool {
+    chain.is_some_and(|chain| {
+        chain
+            .iter()
+            .all(|function| context_of(function) & OWNER_CONTEXT_LEAVES_REGION == 0)
+    })
 }
 
 pub(crate) fn owner_callback_index(
@@ -1544,8 +1793,69 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         OwnerEdgeKind::Owned => OWNER_CONTEXT_OWNED,
         OwnerEdgeKind::Unowned => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::Conditional => OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
+        // Not proven unowned: a later run happens only if the primitive runs
+        // the callback again, which needs a change nothing here proves. A
+        // source that is itself proven unowned stays proven: then every run,
+        // first or later, is unowned.
+        OwnerEdgeKind::InheritsFirstRun => {
+            source | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
+        }
         OwnerEdgeKind::Leaf => OWNER_CONTEXT_LEAF,
     }
+}
+
+/// Calls that run after an `await` on every path through their async
+/// function's own body, keyed by file and callee start.
+///
+/// The positions are the producer's `calls_after_await` dominance fact (the
+/// same one `reactive-read-after-await` proves reads with): branches, `&&`,
+/// `try`/`catch`, loops and `switch` merge conservatively, and a nested
+/// closure is never scanned, so a callback handed to `runWithOwner` after the
+/// `await` is not one of them. Such a call runs from a promise continuation,
+/// on an otherwise empty stack. Whether an owner is current there is the
+/// dialect's fresh-stack answer, the same one host schedulers get
+/// ([`Dialect::fresh_stack_callback_owner`]): Solid 2.0's owner is a
+/// synchronous dynamic scope, so none is. Empty for a dialect that does not
+/// answer [`solid_dialect::CallbackOwner::None`].
+pub(crate) struct AwaitContinuations<'a> {
+    starts: HashMap<&'a str, HashSet<u64>>,
+}
+
+impl<'a> AwaitContinuations<'a> {
+    pub(crate) fn new(facts: &'a ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
+        let mut starts = HashMap::<&'a str, HashSet<u64>>::new();
+        if lookup.dialect.fresh_stack_callback_owner() == Some(solid_dialect::CallbackOwner::None) {
+            for file in facts.typescript.files() {
+                for function in file.async_functions.iter() {
+                    for call in &function.calls_after_await {
+                        starts
+                            .entry(call.path.as_ref())
+                            .or_default()
+                            .insert(call.start_byte);
+                    }
+                }
+            }
+        }
+        Self { starts }
+    }
+
+    /// Whether the call whose callee starts at `start` runs after an `await`.
+    pub(crate) fn contains(&self, path: &str, start: u32) -> bool {
+        self.starts
+            .get(path)
+            .is_some_and(|starts| starts.contains(&u64::from(start)))
+    }
+}
+
+/// The owner context of an operation that runs after an `await`
+/// ([`AwaitContinuations`]): proven unowned on every run, whatever context
+/// the enclosing function was entered with.
+const fn await_continuation_context(context: u8) -> u8 {
+    (context | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED)
+        & !(OWNER_CONTEXT_OWNED
+            | OWNER_CONTEXT_LEAF
+            | OWNER_CONTEXT_COMPONENT_UNCERTAIN
+            | OWNER_CONTEXT_LATER_RUN_UNOWNED)
 }
 
 pub(crate) fn owner_context_at(
@@ -1557,6 +1867,59 @@ pub(crate) fn owner_context_at(
 ) -> u8 {
     containing_function_indexed(nodes, nodes_by_path, path, span)
         .map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index])
+}
+
+/// Whether the operation at `span` runs only after the same invocation of its
+/// function has seen a non-null owner: it is the right operand of
+/// `getOwner() && …`, or sits in the consequent of `getOwner() ? … : …` or of
+/// `if (getOwner()) …`, where the test is a call of Solid's own `getOwner`
+/// resolved by symbol (a same-named local function proves nothing).
+///
+/// Such an operation never executes without an owner, so "no scope's disposal
+/// can trigger it" is false on every path that reaches it: probed on the
+/// audited 2.0.0-rc.9, dev and prod, an exported helper written this way and
+/// called at module scope skips `onCleanup` (no `NO_OWNER_CLEANUP`), while the
+/// unguarded helper beside it warns. The guard and the operation must share
+/// one function body with no `await` between them -- an owner seen before an
+/// `await` is not current after it -- and nothing else is read as a guard:
+/// `owner && …` over a binding, `!getOwner() || …`, and early returns keep
+/// their requirement.
+fn guarded_by_owner_probe(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let owner_probe = |test: Span| {
+        let test = file.ast.peel_ts_sugar_span(test);
+        file.ast.calls.iter().any(|call| {
+            call.span == test
+                && call.arguments.is_empty()
+                && lookup.primitive_at_call(file, call.span) == Some(Primitive::GetOwner)
+        })
+    };
+    let function = containing_ast_function(&file.ast, span).map(|function| function.span);
+    let same_invocation = |test: Span, region: Span| {
+        containing_ast_function(&file.ast, test).map(|function| function.span) == function
+            && !file
+                .ast
+                .awaits
+                .iter()
+                .any(|awaited| region.contains(*awaited) && awaited.start < span.start)
+    };
+    file.ast.logical_expressions.iter().any(|logical| {
+        logical.operator == solid_facts::ast::LogicalOperatorKind::And
+            && logical.right.contains(span)
+            && owner_probe(logical.left)
+            && same_invocation(logical.left, logical.right)
+    }) || file.ast.conditional_expressions.iter().any(|conditional| {
+        conditional.consequent.contains(span)
+            && owner_probe(conditional.test)
+            && same_invocation(conditional.test, conditional.consequent)
+    }) || file.ast.if_regions.iter().any(|region| {
+        region.consequent.contains(span)
+            && owner_probe(region.test)
+            && same_invocation(region.test, region.consequent)
+    })
 }
 
 /// The one place an owner requirement becomes a finding seed — both owner
@@ -1573,6 +1936,7 @@ pub(crate) fn push_owner_requirement(
     file: &solid_facts::FileFacts,
     span: Span,
     status: OwnerRequirementStatus,
+    lookup: &SemanticLookup<'_>,
 ) {
     // The compiler deleted this operation. There is no owner question to
     // answer and no obligation to record: "this cleanup will never run" is a
@@ -1583,13 +1947,35 @@ pub(crate) fn push_owner_requirement(
     if crate::execution_role::discarded_region_contains(file, span) {
         return;
     }
+    // The operation runs only once the same invocation has seen an owner, so
+    // there is no unowned execution to report and nothing left unproven.
+    if guarded_by_owner_probe(file, span, lookup) {
+        return;
+    }
     let location = location(file.path.as_str(), span);
-    if seen.insert((
+    if !seen.insert((
         location.path.to_string(),
         location.start_byte,
         location.end_byte,
         operation.into(),
     )) {
+        // ADR 0252: a second requirement of the same operation at the same
+        // call (a guarded registration beside an unguarded optional one, say)
+        // merges into the first. One certain registration proves the call
+        // registers; the context is the call's either way, so only the
+        // registration's own certainty folds.
+        let operation = crate::OwnerRequirementOperation::from_internal(operation);
+        let certain = !status.uncertain;
+        if certain
+            && let Some(existing) = requirements
+                .iter_mut()
+                .find(|existing| existing.location == location && existing.operation == operation)
+        {
+            existing.uncertain = existing.missing_jsx_census;
+        }
+        return;
+    }
+    {
         let missing_jsx_census = crate::execution_role::missing_jsx_census_region(file, span);
         requirements.push(OwnerRequirement {
             operation: crate::OwnerRequirementOperation::from_internal(operation),
@@ -1598,8 +1984,11 @@ pub(crate) fn push_owner_requirement(
             runtime_uncertain: status.runtime_uncertain,
             caller_uncertain: status.caller_uncertain,
             conditional_owner: status.conditional_owner,
+            later_run_unowned: status.later_run_unowned,
             component_uncertain: status.component_uncertain,
+            after_await: status.after_await,
             missing_jsx_census,
+            through_contract: status.through_contract,
             report: status.report,
         });
     }
@@ -1639,6 +2028,10 @@ pub(crate) fn owner_callback_edges(
         }
     }
     let Some(primitive) = known_primitive(primitive) else {
+        let scheduled = fresh_stack_scheduler_edges(file, call, lookup);
+        if !scheduled.is_empty() {
+            return scheduled;
+        }
         // A call that names no primitive can still be an invocation of a
         // function some primitive returned -- but only where the dialect models
         // such a function. Solid 2.0 models none, so the binding-chain walk
@@ -1703,12 +2096,70 @@ pub(crate) fn owner_callback_edges(
     edges
 }
 
+/// The owner edges of callbacks handed to a reviewed fresh-stack host
+/// scheduler (`runtime_semantics::FRESH_STACK_SCHEDULERS`: `setTimeout`,
+/// `queueMicrotask`, `Promise.then`, the observer constructors, ...).
+///
+/// Two separately reviewed facts compose here. The host fact -- the scheduler
+/// invokes the argument only from a task or microtask queue, on an otherwise
+/// empty stack -- comes from the compiler-selected standard-library
+/// declaration, never from spelling. The owner fact -- what that empty stack
+/// means for the owner -- is the dialect's
+/// ([`Dialect::fresh_stack_callback_owner`]); a dialect that does not answer
+/// gives no edge, and the callback keeps its lexical answer.
+///
+/// Only an argument that *is* the callback gets the edge: a function literal
+/// or an identifier naming one. `setTimeout(wrap(() => ...))` hands the host
+/// whatever `wrap` returns, and the arrow inside may run on `wrap`'s own
+/// stack, under the scheduling call's owner.
+///
+/// Both owner passes reach this through [`owner_callback_edges`], so the
+/// batch and incremental graphs cannot disagree about it.
+fn fresh_stack_scheduler_edges(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<OwnerCallbackEdge> {
+    let Some(owner) = lookup.dialect.fresh_stack_callback_owner() else {
+        return Vec::new();
+    };
+    let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+        return Vec::new();
+    };
+    call.arguments
+        .iter()
+        .enumerate()
+        .filter(|(_, argument)| {
+            matches!(
+                argument.value,
+                solid_facts::ast::ArgumentValueKind::Function
+                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                    | solid_facts::ast::ArgumentValueKind::Identifier
+            )
+        })
+        .filter(|(index, argument)| {
+            let callability = lookup
+                .entity_at(file.path.as_str(), argument.span)
+                .and_then(|entity| entity.callability);
+            crate::runtime_semantics::argument_behavior(resolved, callability, *index)
+                .is_some_and(crate::runtime_semantics::RuntimeArgumentBehavior::runs_on_fresh_stack)
+        })
+        .map(|(argument, _)| OwnerCallbackEdge {
+            argument,
+            kind: callback_owner_edge_kind(owner),
+            source_path: file.path.to_string(),
+            source: call.span,
+        })
+        .collect()
+}
+
 pub(crate) const fn callback_owner_edge_kind(owner: solid_dialect::CallbackOwner) -> OwnerEdgeKind {
     match owner {
         solid_dialect::CallbackOwner::Creates => OwnerEdgeKind::Owned,
         solid_dialect::CallbackOwner::Conditional => OwnerEdgeKind::Conditional,
         solid_dialect::CallbackOwner::Inherits => OwnerEdgeKind::Preserve,
         solid_dialect::CallbackOwner::None => OwnerEdgeKind::Unowned,
+        solid_dialect::CallbackOwner::InheritsFirstRun => OwnerEdgeKind::InheritsFirstRun,
         solid_dialect::CallbackOwner::Leaf => OwnerEdgeKind::Leaf,
     }
 }
@@ -1765,14 +2216,7 @@ pub(crate) fn containing_leaf_owner(
     file.ast
         .arguments_containing(span)
         .find_map(|(call, index)| {
-            let owner = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-                lookup.dialect,
-            )?;
+            let owner = call_primitive_name(file, call, entities, symbol_names, lookup.dialect)?;
             owner
                 .primitive()
                 .is_some_and(|primitive| {
@@ -1783,17 +2227,44 @@ pub(crate) fn containing_leaf_owner(
         })
 }
 
-pub(crate) fn read_is_under_loading(
+/// Whether a `Loading` boundary above a render position is proven, proven
+/// absent, or cannot be resolved from the analyzed project.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LoadingCover {
+    /// A boundary encloses the position, directly or through the call sites
+    /// that render the function containing it.
+    Covered,
+    /// Every call-site chain was followed to a mount root (a `render` or
+    /// `hydrate` argument) and none passed through a boundary.
+    Uncovered,
+    /// A chain ends at a function nothing in the project renders -- an
+    /// exported component, a route handed to a router, a lazy page -- so the
+    /// boundary above it is decided by code the analysis cannot see. Missing
+    /// is not absent.
+    Unresolved,
+}
+
+pub(crate) fn read_loading_cover(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     span: Span,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-) -> bool {
+) -> LoadingCover {
+    loading_cover_at(lookup, file, span, symbol_names, &mut HashSet::new())
+}
+
+fn loading_cover_at(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    span: Span,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    visited: &mut HashSet<(String, Span)>,
+) -> LoadingCover {
     let entities = lookup.entities();
     if file.ast.jsx_containing(span).any(|element| {
         jsx_element_is_loading(file, element, entities, symbol_names, lookup.dialect)
     }) {
-        return true;
+        return LoadingCover::Covered;
     }
     if file.ast.jsx_containing(span).any(|element| {
         jsx_target_function(lookup, file, element).is_some_and(|(target_file, target)| {
@@ -1808,21 +2279,156 @@ pub(crate) fn read_is_under_loading(
             })
         })
     }) {
-        return true;
+        return LoadingCover::Covered;
     }
-    let Some(owner) = containing_ast_function(&file.ast, span) else {
-        return false;
-    };
-    // For call sites whose target matched (file, owner), the "wrapper" the
-    // second branch resolves is the owner itself, so the caller scan
-    // distributes into: a Loading-wrapped call site exists, or any call site
-    // exists and the owner's own body renders a Loading element.
-    let call_sites = lookup.jsx_call_site_loading(file.path.as_str(), owner.span);
-    call_sites.loading_wrapped
-        || (call_sites.any
-            && file.ast.jsx_within(owner.body).any(|candidate| {
+    // Walk outward from the innermost function. A closure nothing in the
+    // project calls (a `<For>` row callback, a render prop) is part of the
+    // function around it; the first function the project does render or call
+    // is the one whose call sites decide.
+    let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
+    enclosing.sort_by_key(|function| function.body.end - function.body.start);
+    for function in enclosing {
+        if !visited.insert((file.path.as_str().to_owned(), function.span)) {
+            // Already being resolved on this chain: it adds no information.
+            return LoadingCover::Uncovered;
+        }
+        let call_sites = lookup.function_call_sites(file.path.as_str(), function.span);
+        if !call_sites.is_empty() {
+            if file.ast.jsx_within(function.body).any(|candidate| {
                 jsx_element_is_loading(file, candidate, entities, symbol_names, lookup.dialect)
-            }))
+            }) {
+                return LoadingCover::Covered;
+            }
+            let mut result = LoadingCover::Uncovered;
+            for (caller_file, callee) in call_sites {
+                match loading_cover_at(lookup, caller_file, callee, symbol_names, visited) {
+                    LoadingCover::Covered => return LoadingCover::Covered,
+                    LoadingCover::Unresolved => result = LoadingCover::Unresolved,
+                    LoadingCover::Uncovered => {}
+                }
+            }
+            return result;
+        }
+        if function_is_mount_root(lookup, file, function) {
+            return LoadingCover::Uncovered;
+        }
+    }
+    LoadingCover::Unresolved
+}
+
+/// Whether `function` is what a `render`/`hydrate` call mounts: the function
+/// literal passed as its first argument, or a function it names.
+fn function_is_mount_root(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    file.ast.calls.iter().any(|call| {
+        lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| lookup.dialect.mounts_component_tree(primitive))
+            && call.arguments.first().is_some_and(|argument| {
+                let argument = file.ast.peel_ts_sugar_span(argument.span);
+                argument == function.span
+                    || lookup
+                        .function_called_at(file.path.as_str(), argument)
+                        .is_some_and(|(target_file, target)| {
+                            target_file.path == file.path && target.span == function.span
+                        })
+            })
+    })
+}
+
+/// Whether a compiler ref/directive application role at `span` belongs to an
+/// intrinsic element. The runtime applies an intrinsic element's `ref` through
+/// `ref()` with no owner; a component (a capitalized or member tag) receives
+/// `ref` as an ordinary prop and invokes it whenever its own code does, often
+/// in its owned body. By JSX semantics a lowercase, non-member tag is
+/// intrinsic, so a callback written as an attribute value of any other element
+/// is not a proven ownerless application.
+pub(crate) fn ref_application_on_intrinsic(file: &solid_facts::FileFacts, span: Span) -> bool {
+    !file.ast.jsx_elements.iter().any(|element| {
+        let tag = file
+            .source
+            .get(element.name.span.start as usize..element.name.span.end as usize)
+            .unwrap_or_default();
+        let component = tag.contains('.') || tag.starts_with(|c: char| c.is_ascii_uppercase());
+        component
+            && element.attributes.iter().any(|attribute| {
+                attribute
+                    .expression
+                    .is_some_and(|value| file.ast.peel_ts_sugar_span(value).contains(span))
+            })
+    })
+}
+
+/// The role a pending async read plays for the missing-boundary claim: a
+/// tracked read inside a non-render computation (a memo, a user effect's
+/// compute, a derived signal) is not a render of the value, so it is not
+/// [`ExecutionRole::TrackedJsx`] for that claim. The pending state flows on to
+/// whichever render effect consumes the computation, and that consumer is the
+/// one whose boundary matters.
+pub(crate) fn async_read_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: crate::ExecutionRole,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> crate::ExecutionRole {
+    if role != crate::ExecutionRole::TrackedJsx {
+        return role;
+    }
+    // A function that is a JSX attribute's value (an event handler, a callback
+    // prop) runs when something calls it, not while the JSX renders. Nothing
+    // proves a read inside it is rendered, so it is not a render read. A
+    // `children` attribute is the element's own children and keeps its role.
+    if file.ast.functions_body_containing(span).any(|function| {
+        file.ast.jsx_containing(function.span).any(|element| {
+            element.attributes.iter().any(|attribute| {
+                attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+                    && attribute
+                        .expression
+                        .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == function.span)
+                    && file
+                        .source
+                        .get(attribute.name.start as usize..attribute.name.end as usize)
+                        != Some("children")
+            })
+        })
+    }) {
+        return crate::ExecutionRole::Unknown;
+    }
+    let dialect = lookup.dialect;
+    let in_computation = file.ast.arguments_containing(span).any(|(call, index)| {
+        let argument = &call.arguments[index];
+        matches!(
+            argument.value,
+            solid_facts::ast::ArgumentValueKind::Identifier
+                | solid_facts::ast::ArgumentValueKind::Function
+                | solid_facts::ast::ArgumentValueKind::AsyncFunction
+        ) && call_primitive_name(file, call, entities, symbol_names, dialect)
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| {
+                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                    && dialect
+                        .callback_semantics_at(primitive, index, call.arguments.len())
+                        .tracks_reads
+                    && !dialect.computation_read_is_render(primitive)
+            })
+            // A JSX region written inside the computation is a render again.
+            && !file
+                .compiler
+                .tracked_regions
+                .iter()
+                .any(|region| argument.span.contains(region.span) && region.span.contains(span))
+    });
+    if in_computation {
+        crate::ExecutionRole::Unknown
+    } else {
+        role
+    }
 }
 
 pub(crate) fn jsx_element_is_loading(
@@ -1853,21 +2459,27 @@ pub(crate) fn computation_is_async(
     file: &solid_facts::FileFacts,
     argument: Span,
 ) -> bool {
+    // The computation is the argument's own function. An async function that
+    // is merely nested inside it (`createMemo(() => async () => ...)`, an async
+    // IIFE) is a value the computation returns or runs, not the computation:
+    // the memo's result is a function and can never be pending.
+    let argument = file.ast.peel_ts_sugar_span(argument);
     if lookup
         .typescript_file(file.path.as_str())
         .is_some_and(|typescript_file| {
             typescript_file.async_functions.iter().any(|function| {
                 function.can_return_async
-                    && u64::from(argument.start) <= function.expression.start_byte
-                    && function.expression.end_byte <= u64::from(argument.end)
+                    && u64::from(argument.start) == function.expression.start_byte
+                    && function.expression.end_byte == u64::from(argument.end)
             })
         })
     {
         return true;
     }
     file.ast
-        .functions_within(argument)
-        .max_by_key(|function| function.span.end - function.span.start)
+        .functions
+        .iter()
+        .find(|function| function.span == argument)
         .is_some_and(|function| function.r#async)
 }
 
@@ -1893,10 +2505,12 @@ pub(crate) fn computation_is_async_with_contracts(
     if contracted_async_at(argument) {
         return true;
     }
+    let argument = file.ast.peel_ts_sugar_span(argument);
     let Some(function) = file
         .ast
-        .functions_within(argument)
-        .max_by_key(|function| function.span.end - function.span.start)
+        .functions
+        .iter()
+        .find(|function| function.span == argument)
     else {
         return false;
     };
@@ -2100,6 +2714,9 @@ pub(crate) fn run_with_owner_callback_owner(
     if lookup.primitive_at_call(file, owner.span) == Some(Primitive::CreateOwner) {
         return Some(solid_dialect::CallbackOwner::Creates);
     }
+    if component_owner_binding(file, owner.span, lookup) {
+        return Some(solid_dialect::CallbackOwner::Creates);
+    }
 
     if let Some(descriptor) = lookup
         .entity_at(file.path.as_str(), owner.span)
@@ -2123,6 +2740,44 @@ pub(crate) fn run_with_owner_callback_owner(
     }
 
     Some(solid_dialect::CallbackOwner::Conditional)
+}
+
+/// ADR 0206: whether `value` names a `const` bound to `getOwner()` written
+/// directly in a proven component's body.
+///
+/// A proven component's body runs under an owner: the owner graph seeds it
+/// owned (`owner_node`), as its render does. `getOwner()` called directly
+/// there, not in a nested function or a default, therefore returns that
+/// owner, never `null`, and a `const` keeps it. The owner may have been
+/// disposed by the time a later callback hands it to `runWithOwner`; that is
+/// not the null owner this question is about.
+fn component_owner_binding(
+    file: &solid_facts::FileFacts,
+    value: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let value = file.ast.peel_ts_sugar_span(value);
+    let Some((binding_file, binding, _)) = lookup.binding_at_reference(file.path.as_str(), value)
+    else {
+        return false;
+    };
+    let Some(initializer) = binding.call_initializer else {
+        return false;
+    };
+    if !binding.immutable
+        || binding.shape != solid_facts::ast::BindingShape::Identifier
+        || lookup.primitive_at_call(binding_file, initializer) != Some(Primitive::GetOwner)
+    {
+        return false;
+    }
+    let Some(component) = containing_ast_function(&binding_file.ast, initializer) else {
+        return false;
+    };
+    !component.r#async
+        && !component.generator
+        && written_directly_in(&binding_file.ast, component, initializer)
+        && lookup.function_component_status(binding_file, component)
+            == crate::indexes::ComponentStatus::Proven
 }
 
 /// Resolve the primitive whose returned function is the callee of `call`.
@@ -2548,6 +3203,11 @@ pub(crate) fn returned_arrow_function(ast: &solid_facts::ast::AstFacts, span: Sp
 /// invents an untracked-read violation in a function whose only read is
 /// inside a tracked or deferred callback.
 ///
+/// One `Deferred` slot is the exception, and the owner word says which:
+/// a [`solid_dialect::CallbackOwner::InheritsFirstRun`] callback (2.0
+/// `createRenderEffect`'s apply) runs its first time during the call with the
+/// caller's listener still current, so that run's reads are the caller's.
+///
 /// The read must sit inside a function *literal* in that argument. An
 /// eagerly evaluated argument — `createEffect(count())` — is read while the
 /// argument list is built, which is the caller's read after all.
@@ -2567,24 +3227,28 @@ pub(crate) fn read_escapes_synchronous_extent(
         {
             return false;
         }
-        primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
-        .as_ref()
-        .and_then(PrimitiveName::primitive)
-        .is_some_and(|primitive| {
-            matches!(
-                dialect
-                    .callback_semantics_at(primitive, index, call.arguments.len())
-                    .execution,
-                Some(solid_dialect::Execution::Tracked | solid_dialect::Execution::Deferred)
-            )
-        })
+        call_primitive_name(file, call, entities, symbol_names, dialect)
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| {
+                let semantics =
+                    dialect.callback_semantics_at(primitive, index, call.arguments.len());
+                // A callback the primitive first runs during the call, under the
+                // caller's owner and listener, performs its first run's reads
+                // inside the caller's synchronous extent -- 2.0
+                // `createRenderEffect`'s apply, whose attribution word is
+                // `Deferred` for its later runs only. Probed: a memo whose compute
+                // creates the render effect re-runs when a signal read only in
+                // that apply changes. Dropping the read from the caller's summary
+                // would close a `reads` domain over a read the call performs.
+                if semantics.owner == Some(solid_dialect::CallbackOwner::InheritsFirstRun) {
+                    return false;
+                }
+                matches!(
+                    semantics.execution,
+                    Some(solid_dialect::Execution::Tracked | solid_dialect::Execution::Deferred)
+                )
+            })
     })
 }
 
@@ -2756,15 +3420,21 @@ pub(crate) fn analysis_context(
         .map(|(call, index)| (call, index, call.arguments[index].span))
         .min_by_key(|(_, _, argument)| argument.end - argument.start);
     if let Some((call, argument, _)) = callback
-        && let Some(primitive) = primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
+        && let Some(primitive) = call_primitive_name(file, call, entities, symbol_names, dialect)
     {
+        // An owner-transparent inline callback (`untrack`, `flush(fn)`) runs
+        // under its call site's owner, so it is described as that call site.
+        // It has no label of its own: an anonymous one used to leave the
+        // sentence with an empty scope name.
+        if let Some(resolved) = primitive.primitive()
+            && dialect.callback_preserves_owner_write_context(resolved)
+            && dialect
+                .callback_semantics_at(resolved, argument, call.arguments.len())
+                .execution
+                == Some(solid_dialect::Execution::Inline)
+        {
+            return analysis_context(file, call.span, entities, symbol_names, dialect, lookup);
+        }
         // Which phase of a primitive an argument is, asked of the dialect
         // rather than matched here. The pair this had hardcoded is 2.0's:
         // `createEffect(compute, apply)`. 1.x's second argument is a seed
@@ -2778,15 +3448,21 @@ pub(crate) fn analysis_context(
                 // schedules it) but imperative to its reads, and calling
                 // it a compute would describe the wrong phase.
                 solid_dialect::Execution::Tracked if semantics.tracks_reads => Some("compute"),
-                // Only an effect's deferred argument is an apply phase; a
-                // deferred executor's callback keeps its enclosing label.
+                // Only an effect's apply slot is an apply phase; a deferred
+                // executor's callback keeps its enclosing label. Which slot
+                // that is -- or whether the primitive has one -- is the
+                // dialect's answer, not a pair named here.
                 solid_dialect::Execution::Deferred
-                    if matches!(
-                        resolved,
-                        Primitive::CreateEffect | Primitive::CreateRenderEffect
-                    ) =>
+                    if dialect.apply_callback_argument(resolved) == Some(argument) =>
                 {
                     Some("apply callback")
+                }
+                // A root body names its root: an anonymous one has no
+                // enclosing label to fall back to.
+                solid_dialect::Execution::Inline
+                    if dialect.callback_runs_in_created_root(resolved, argument) =>
+                {
+                    Some("callback")
                 }
                 _ => None,
             })
@@ -2798,14 +3474,32 @@ pub(crate) fn analysis_context(
     enclosing
 }
 
+/// Whether an accepted registration is required at this exact call. False
+/// guards remove the branch; unknown guards retain a possible requirement
+/// (ADR 0231). Only a true guard preserves an operation's certified min >= 1.
+pub(crate) fn owner_requirement_at_call(
+    requirement: &crate::ContractOwnerRequirement,
+    call: &solid_facts::ast::CallFact,
+) -> Option<bool> {
+    use crate::contract_semantics::{GuardTruth, owner_guard_at_call};
+    let Some(guard) = &requirement.guard else {
+        return Some(requirement.guaranteed);
+    };
+    match owner_guard_at_call(guard, call) {
+        GuardTruth::True => Some(requirement.guaranteed),
+        GuardTruth::False => None,
+        GuardTruth::Unknown => Some(false),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        OWNER_CONTEXT_COMPONENT_UNCERTAIN, OWNER_CONTEXT_LEAF, OWNER_CONTEXT_OWNED,
-        OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
-        binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
-        compose_owner_edge, inside_owner_providing_region, owner_edge_context,
-        propagate_owner_contexts, returned_arrow_function, seed_contexts,
+        OWNER_CONTEXT_COMPONENT_UNCERTAIN, OWNER_CONTEXT_LATER_RUN_UNOWNED, OWNER_CONTEXT_LEAF,
+        OWNER_CONTEXT_OWNED, OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind,
+        OwnerNode, binding_returns_reactive_source, callback_owner_edge_kind,
+        compiler_owner_context, compose_owner_edge, owner_edge_context, propagate_owner_contexts,
+        providing_region_chain, returned_arrow_function, root_owned_at, seed_contexts,
     };
     use solid_facts::ast;
     use solid_facts::compiler::{
@@ -2813,6 +3507,288 @@ mod tests {
     };
     use solid_facts::core::SourceHash;
     use solid_facts::core::Span;
+
+    fn guarded_registration(
+        source: &str,
+        atoms: Vec<crate::contract_semantics::GuardAtom>,
+        guaranteed: bool,
+    ) -> Option<bool> {
+        let facts = ast::extract("guards.ts", source).unwrap();
+        let requirement = crate::ContractOwnerRequirement {
+            operation: crate::OwnerRequirementOperation::Cleanup,
+            guaranteed,
+            guard: Some(crate::contract_semantics::Guard(atoms)),
+        };
+        super::owner_requirement_at_call(&requirement, &facts.calls[0])
+    }
+
+    #[test]
+    fn owner_closed_key_guard_refuses_aliases_and_open_runtime_maps() {
+        use crate::contract_semantics::GuardAtom;
+        let atoms = vec![
+            GuardAtom::OwnDataKeys {
+                argument: 0,
+                path: vec![],
+                names: vec!["onDown".into(), "target".into()],
+            },
+            GuardAtom::Property {
+                argument: 0,
+                path: vec![],
+                name: "onDown".into(),
+                callable: Some(true),
+            },
+        ];
+        for source in [
+            "register({ target: node, onDown: () => {} });",
+            "register(({ onDown() {}, target: node }) satisfies Config);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, atoms.clone(), true),
+                Some(true)
+            );
+            assert_eq!(
+                guarded_registration(source, atoms.clone(), false),
+                Some(false)
+            );
+        }
+        for source in [
+            "register({ target: node, onDown: () => {}, ondown: undefined });",
+            "register({ onDown: () => {} });",
+            "register({ target: node });",
+        ] {
+            assert_eq!(guarded_registration(source, atoms.clone(), true), None);
+        }
+        for source in [
+            "register({ target: node, onDown: fn });",
+            "register(config);",
+            "register({ target: node, onDown: () => {}, ...rest });",
+            "register({ target: node, get onDown() { return fn; } });",
+            "register({ target: node, [key]: () => {} });",
+            "register({ target: node, onDown: () => {}, __proto__: proto });",
+            "register(new Proxy({ target: node, onDown: () => {} }, traps));",
+            "register(...args);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, atoms.clone(), true),
+                Some(false)
+            );
+        }
+    }
+
+    #[test]
+    fn owner_literal_guards_require_exact_runtime_arguments() {
+        use crate::contract_semantics::{GuardAtom, Literal};
+        let atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec![],
+            value: Literal::Bool(true),
+        };
+        for source in [
+            "register(true);",
+            "register((true as boolean) satisfies boolean);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(true)
+            );
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], false),
+                Some(false)
+            );
+        }
+        assert_eq!(
+            guarded_registration("register(false);", vec![atom.clone()], true),
+            None
+        );
+        for source in [
+            "register(enabled);",
+            "register(...args);",
+            "register(...[], true);",
+            "register();",
+            "const enabled = true; register(enabled);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(false)
+            );
+        }
+    }
+
+    #[test]
+    fn owner_literal_guards_compare_values_instead_of_source_spelling() {
+        use crate::contract_semantics::{GuardAtom, Literal};
+        for number in ["2", "2.0", "2e0"] {
+            let atom = GuardAtom::Literal {
+                argument: 0,
+                path: vec!["length".into()],
+                value: Literal::Number(number.into()),
+            };
+            assert_eq!(
+                guarded_registration("register(['A', 'B']);", vec![atom.clone()], true),
+                Some(true)
+            );
+            assert_eq!(
+                guarded_registration("register([]);", vec![atom], true),
+                None
+            );
+        }
+        let atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec![],
+            value: Literal::String("resize".into()),
+        };
+        assert_eq!(
+            guarded_registration(r#"register('re\u0073ize');"#, vec![atom], true),
+            Some(true)
+        );
+        let atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec![],
+            value: Literal::Null,
+        };
+        assert_eq!(
+            guarded_registration("register(null);", vec![atom.clone()], true),
+            Some(true)
+        );
+        assert_eq!(
+            guarded_registration("register(undefined);", vec![atom], true),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn owner_property_guards_use_final_exact_data_properties() {
+        use crate::contract_semantics::GuardAtom;
+        let atom = GuardAtom::Property {
+            argument: 1,
+            path: vec![],
+            name: "resize".into(),
+            callable: Some(true),
+        };
+        for source in [
+            "register(window, { resize: () => {} });",
+            "register(window, ({ 'resize'() {} }) satisfies Map);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(true)
+            );
+        }
+        for source in [
+            "register(window, {});",
+            "register(window, { resize: false });",
+            "register(window, { resize: () => {}, resize: null });",
+        ] {
+            assert_eq!(guarded_registration(source, vec![atom.clone()], true), None);
+        }
+        for source in [
+            "register(window, handlers);",
+            "register(window, { resize: handler });",
+            "register(window, { resize: () => {}, ...other });",
+            "register(window, { get resize() { return handler; } });",
+            "register(window, { [key]: () => {} });",
+            "register(...targets, { resize: () => {} });",
+            "register(window, { __proto__: proto, resize: () => {} });",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(false)
+            );
+        }
+    }
+
+    #[test]
+    fn owner_length_guards_use_exact_array_lengths_and_nested_paths() {
+        use crate::contract_semantics::{GuardAtom, Literal};
+        let atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec!["length".into()],
+            value: Literal::Number("2".into()),
+        };
+        for source in [
+            "register(['Control', 'K']);",
+            "register([, ,]);",
+            "register((['Control', 'K'] as const));",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(true)
+            );
+        }
+        for source in [
+            "register([]);",
+            "register(['K']);",
+            "register(['A', 'B', 'C']);",
+        ] {
+            assert_eq!(guarded_registration(source, vec![atom.clone()], true), None);
+        }
+        for source in [
+            "register(keys);",
+            "register(['A', ...keys]);",
+            "register(...args);",
+        ] {
+            assert_eq!(
+                guarded_registration(source, vec![atom.clone()], true),
+                Some(false)
+            );
+        }
+        let nested = GuardAtom::Literal {
+            argument: 0,
+            path: vec!["keys".into(), "length".into()],
+            value: Literal::Number("2".into()),
+        };
+        assert_eq!(
+            guarded_registration("register({ keys: ['A', 'B'] });", vec![nested], true),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn owner_guards_do_not_guess_unavailable_axes_or_strengthen_zero_minimums() {
+        use crate::contract_semantics::{GuardAtom, Literal, ValueKind};
+        let unknown = GuardAtom::Signature("selected".into());
+        let false_atom = GuardAtom::Literal {
+            argument: 0,
+            path: vec![],
+            value: Literal::Bool(true),
+        };
+        assert_eq!(
+            guarded_registration("register(false);", vec![unknown.clone(), false_atom], true),
+            None
+        );
+        for atom in [
+            unknown,
+            GuardAtom::ArtifactCase("".into()),
+            GuardAtom::ArgumentCount { min: 1, max: None },
+            GuardAtom::TupleAlternative {
+                argument: 0,
+                alternative: 0,
+            },
+            GuardAtom::ResultProtocol(ValueKind::Plain),
+        ] {
+            assert_eq!(
+                guarded_registration("register(true);", vec![atom], true),
+                Some(false)
+            );
+        }
+        let callable = GuardAtom::ValueKind {
+            argument: 0,
+            path: vec![],
+            kind: ValueKind::Callable,
+        };
+        assert_eq!(
+            guarded_registration("register(() => {});", vec![callable.clone()], true),
+            Some(true)
+        );
+        assert_eq!(
+            guarded_registration("register({});", vec![callable], true),
+            None
+        );
+        assert_eq!(
+            guarded_registration("register();", vec![], false),
+            Some(false)
+        );
+    }
 
     fn returned_arrow(source: &str) -> bool {
         let source = format!("function outer() {{ return {source}; }}");
@@ -3026,9 +4002,71 @@ mod tests {
     #[test]
     fn owner_providing_regions_contain_spans_inclusively() {
         let regions = [Span::new(10, 20), Span::new(40, 50)];
-        assert!(inside_owner_providing_region(&regions, Span::new(12, 18)));
-        assert!(inside_owner_providing_region(&regions, Span::new(40, 50)));
-        assert!(!inside_owner_providing_region(&regions, Span::new(19, 21)));
-        assert!(!inside_owner_providing_region(&[], Span::new(0, 0)));
+        let none = std::iter::empty::<((), Span, Span)>;
+        assert_eq!(
+            providing_region_chain(&regions, none(), Span::new(12, 18)),
+            Some(vec![])
+        );
+        assert_eq!(
+            providing_region_chain(&regions, none(), Span::new(40, 50)),
+            Some(vec![])
+        );
+        assert_eq!(
+            providing_region_chain(&regions, none(), Span::new(19, 21)),
+            None
+        );
+        assert_eq!(providing_region_chain(&[], none(), Span::new(0, 0)), None);
+    }
+
+    /// `createRoot(() => { createEffect(c, () => { createRoot(() => { OP }) }) })`
+    /// as spans: the outer root callback 10..100, the effect apply 20..90, the
+    /// inner root callback 30..80, and an operation in each.
+    #[test]
+    fn providing_region_chain_stops_at_the_innermost_region() {
+        let regions = [Span::new(10, 100), Span::new(30, 80)];
+        let functions = [
+            ("outer-root", Span::new(10, 100), Span::new(15, 100)),
+            ("effect-apply", Span::new(20, 90), Span::new(25, 90)),
+            ("inner-root", Span::new(30, 80), Span::new(35, 80)),
+        ];
+        let chain = |span| providing_region_chain(&regions, functions, span);
+        assert_eq!(chain(Span::new(16, 18)), Some(vec!["outer-root"]));
+        assert_eq!(
+            chain(Span::new(26, 28)),
+            Some(vec!["outer-root", "effect-apply"])
+        );
+        // The inner root sits inside the detached apply and answers for what
+        // it contains: the apply is not in its chain.
+        assert_eq!(chain(Span::new(40, 50)), Some(vec!["inner-root"]));
+        let context = |function: &&str| match *function {
+            "effect-apply" => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+            _ => OWNER_CONTEXT_OWNED,
+        };
+        assert!(root_owned_at(chain(Span::new(16, 18)).as_deref(), context));
+        assert!(!root_owned_at(chain(Span::new(26, 28)).as_deref(), context));
+        assert!(root_owned_at(chain(Span::new(40, 50)).as_deref(), context));
+        assert!(!root_owned_at(None::<&[&str]>, context));
+    }
+
+    #[test]
+    fn root_owned_at_withholds_for_either_detaching_bit() {
+        let chain = [0_u8];
+        for (context, answered) in [
+            (OWNER_CONTEXT_OWNED, true),
+            (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED, true),
+            (OWNER_CONTEXT_LEAF, true),
+            (0, true),
+            (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED, false),
+            (
+                OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED,
+                false,
+            ),
+        ] {
+            assert_eq!(
+                root_owned_at(Some(&chain[..]), |_| context),
+                answered,
+                "context {context:#b}"
+            );
+        }
     }
 }

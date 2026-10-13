@@ -31,10 +31,55 @@ export function createCliWorkerPool({
   let nextId = 1;
 
   const spawnWorker = () => {
+    const groupLeader = process.platform !== "win32";
     const child = spawn(executable, [workerScript], {
-      env: environment,
+      // `detached` makes the worker a session and process-group leader, which
+      // is what lets it take its own native children down with it when this
+      // process dies. The worker cannot detect that on its own -- POSIX offers
+      // it no `getpgid` through Node -- so the fact is stated here, by the only
+      // party that knows it. Without the flag the worker exits alone and its
+      // certification children are orphaned, which is the leak this pairs with.
+      env: groupLeader
+        ? { ...environment, SOLID_CHECKER_CLI_WORKER_GROUP_LEADER: "1" }
+        : environment,
+      detached: groupLeader,
       stdio: ["pipe", "pipe", "pipe"]
     });
+    // Native certification children inherit this worker's POSIX process group.
+    // Killing only the worker leaves them orphaned, consuming CPU and retaining
+    // pipe handles after the request's deadline. Preserve the kill interface
+    // used by memory supervision, but scope it to this isolated group.
+    if (process.platform !== "win32" && child.pid) {
+      const killChild = child.kill.bind(child);
+      child.kill = (signal = "SIGTERM") => {
+        try {
+          process.kill(-child.pid, signal);
+          return true;
+        } catch (error) {
+          if (error.code !== "ESRCH") throw error;
+          return killChild(signal);
+        }
+      };
+      // `close` may wait for a descendant that inherited stdout. The parent's
+      // `exit` is the point at which its remaining children lose their owner.
+      //
+      // Best-effort, and separately from the deadline path above: by the time
+      // this runs the worker is already gone, so the group may be gone with it
+      // (`ESRCH`) or owned by a recycled pid this process may not signal
+      // (`EPERM`, which is what macOS answers here). Neither is a failure to
+      // clean up — there is nothing of ours left to kill. Letting either
+      // escape throws from inside an EventEmitter handler and takes the whole
+      // run down with no report written, which is how a 9-minute corpus pass
+      // was lost. The deadline kill keeps rethrowing, because there a failure
+      // to signal a *live* group is a real one.
+      child.once("exit", () => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // See above: the group is already unreachable.
+        }
+      });
+    }
     const worker = { child, busy: null, served: 0, dead: false, stderr: "" };
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
     lines.on("line", line => {

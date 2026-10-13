@@ -1,0 +1,67 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/selection",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "browser",
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-Je/EokdP5ULTBaskSFIogo0xAbHwnZqvQNYkjvp/nwA/xPt7jN9iS1m4TDo376k0hTwqvlpFqTcPfAK5+em/cw==",
+      "snapshotRoot": "sha256:eed122671da965ed771cfe6c45208fbebffb06924bc8f07cf8872d4ee888e506",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "12cfd7e2298c86d97a0f1854cee480f5886ee8fd482528cb566fc39d11d7c947",
+                  "path": "./dist/index.js",
+                  "sha256": "70b6fcf4e5d01edd181d8fee9faa2c7502c9a3236da81609e1663e52ff2c0c53"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "37102bfc23638f3c7187cadf130368a5dac785de5da2ba7922e8c89a6ab92bab"
+                },
+                "exports": {
+                  "createSelection": "summary-619a0cd02aba93e264badc5a792cfcd8abb7eb36c92a580097f46fd923810b23",
+                  "getTextNodes": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-Je/EokdP5ULTBaskSFIogo0xAbHwnZqvQNYkjvp/nwA/xPt7jN9iS1m4TDo376k0hTwqvlpFqTcPfAK5+em/cw==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "a00a71afc0757d2f2835fc9cec59d50db0e661802d98300e9b3185f91c29f232"
+          },
+          "name": "@solid-primitives/selection",
+          "version": "1.0.0-next.2"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-619a0cd02aba93e264badc5a792cfcd8abb7eb36c92a580097f46fd923810b23": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

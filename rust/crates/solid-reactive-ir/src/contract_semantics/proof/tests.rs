@@ -25,6 +25,7 @@ fn closed_claims() -> CallClaims {
         returns: KnowledgeSet::complete(vec![]),
         cleanups: KnowledgeSet::complete(vec![]),
         disposals: KnowledgeSet::complete(vec![]),
+        computations: KnowledgeSet::Unknown,
     }
 }
 
@@ -32,6 +33,7 @@ fn closed_contract(runtime_digest: char) -> NormalizedContract {
     let runtime = artifact("dist/solid.js", runtime_digest);
     let declarations = artifact("types/index.d.ts", 'c');
     let mut case = ArtifactCase {
+        initialization: None,
         id: "browser-import".into(),
         entrypoint: ".".into(),
         resolution_trace: vec![ResolutionStep {

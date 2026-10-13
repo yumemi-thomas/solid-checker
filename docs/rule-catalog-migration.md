@@ -1,8 +1,16 @@
 # Rule catalog reduction migration
 
-The 2026-08 catalog reduction leaves 18 Solid 1.x rules and 26 Solid 2.0
-rules. It removes policy checks that could not certify a Solid runtime defect,
-merges related diagnostics, and gives retained rules product vocabulary.
+The 2026-08 catalog reduction left 18 Solid 1.x rules and 26 Solid 2.0 rules.
+It removed policy checks that could not certify a Solid runtime defect, merged
+related diagnostics, and gave retained rules product vocabulary.
+
+**The 1.x half of this note is history.** Solid 1.x was retired in 2026-09
+([ADR 0110](adr/0110-the-checker-analyzes-solid-2-only.md)): the catalog is
+gone, its 18 remaining `v1/` identities are in the retired-rule ledger so an
+existing `rule-options.json` keeps loading as a no-op, and a project whose
+installed `solid-js` resolves to 1.x is refused with `SC9013`. The mappings
+below remain the way to read a `v1/` suppression onto its 2.0 identity; they
+are no longer a description of two live catalogs.
 
 There are two compatibility channels:
 
@@ -103,8 +111,8 @@ This change itself adds 31 retired identities and 19 aliases.
 ## Preference default change
 
 As of the beta following this catalog reduction, every retained `prefer-*`
-rule is enabled by default: `prefer-for` and `prefer-show` in both dialects,
-plus Solid 1.x `prefer-classlist`. Native projects opt out with
+rule is enabled by default: `prefer-for` and `prefer-show` (and, while the 1.x
+catalog existed, `prefer-classlist`). Native projects opt out with
 `enabled: false` in `.solid-checker/rule-options.json`; ESLint projects set the
 corresponding generated dialect rule to `off`. The `preferences` preset,
 `--enable-rule`, and `preferences-v1` / `preferences-v2` configs remain

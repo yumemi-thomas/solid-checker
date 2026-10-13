@@ -1,0 +1,3 @@
+function createMemo(e, t) {
+    return accessor(computed(e, t));
+}

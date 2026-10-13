@@ -1,0 +1,638 @@
+{
+  "format": "solid-checker-reviewed-model-experiment",
+  "version": 1,
+  "authority": false,
+  "runtime": "2.0.0-rc.9",
+  "models": [
+    {
+      "package": "@solid-primitives/utils",
+      "version": "7.0.0-next.4",
+      "files": [
+        "dist/index.js"
+      ],
+      "exports": {
+        "access": {
+          "browser": {
+            "invokesArgument": 0
+          },
+          "node": {
+            "invokesArgument": 0
+          }
+        },
+        "createMicrotask": {
+          "browser": {
+            "owner": "cleanup"
+          }
+        }
+      },
+      "basis": "reviewed-source-assumption",
+      "pins": [
+        {
+          "package": "@solid-primitives/utils",
+          "version": "7.0.0-next.4",
+          "digest": "sha256:246a859068b05ffef36addf54b3f3690822da5070b61151c72fb49b311aff4f0"
+        },
+        {
+          "package": "@solidjs/signals",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:fe7fa5926d31d0f04bf3b21ee422c941169e8135bb71e6e8e748e927730bcb38"
+        },
+        {
+          "package": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:820fbdc0f948af1f0d3d5460014840108ef223ed54c66a7805b71e1a1af8b733"
+        },
+        {
+          "package": "csstype",
+          "version": "3.2.3",
+          "digest": "sha256:e727fb358ad5eff811a3519483e64a21b379fb267aa0e15fa084f0d7bdefa846"
+        },
+        {
+          "package": "seroval-plugins",
+          "version": "1.6.7",
+          "digest": "sha256:ec7f47473636c41bb837a6870523d84156c02fbcef8426e5910325a60604d081"
+        },
+        {
+          "package": "seroval",
+          "version": "1.6.7",
+          "digest": "sha256:7e84a675b9a7d7d3dd236c8e8ced36131d02a9048c5c91ce41f1c22f08b3db95"
+        },
+        {
+          "package": "solid-js",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:e245cdebb5fb4d60f64fcf7eec433808a8099e90a2b28c2465a59467c0cebc52"
+        }
+      ],
+      "sourceReferences": [
+        {
+          "path": "dist/index.js",
+          "sha256": "sha256:59dd297c1ff4a90620cd3f27aa9b0a650404e8178513d6501af5ec1c3f8370f8",
+          "source": "/* @ts-self-types=\"./index.d.ts\" */\nimport { DEV, createSignal, getOwner, onCleanup, onSettled, sharedConfig, untrack } from \"solid-js\";\n//#region src/index.ts\nconst isServer = typeof window === \"undefined\";\n/** `true` in the browser, `false` on the server. */\nconst isClient = !isServer;\n/** `true` in the browser with Solid's DEV mode active. */\nconst isDev = isClient && !!DEV;\n/** `true` when DEV mode is off (i.e. production browser builds and all SSR). */\nconst isProd = !isDev;\n/** No-operation function — accepts any arguments and returns `undefined`. */\nconst noop = (() => void 0);\n/** A function that always returns `true`. Useful as a default predicate prop. */\nconst trueFn = () => true;\n/** A function that always returns `false`. Useful as a default predicate prop. */\nconst falseFn = () => false;\n/** @deprecated use {@link equalFn} from \"solid-js\" */\nconst defaultEquals = Object.is.bind(Object);\n/**\n* Signal options that disable equality checking, causing the signal to always\n* notify subscribers even when the value hasn't changed. Useful for signals\n* holding mutable objects where structural equality cannot be assumed.\n*/\nconst EQUALS_FALSE_OPTIONS = { equals: false };\n/**\n* Signal options that allow writes from inside an owned reactive scope\n* (component body, memo, or effect) without throwing `SIGNAL_WRITE_IN_OWNED_SCOPE`\n* in Solid 2.0 dev mode.\n*\n* Use only for implementation-detail signals that genuinely need to be written\n* from within a scope — not as a general escape hatch.\n*/\nconst INTERNAL_OPTIONS = { ownedWrite: true };\n/**\n* Returns `true` if `v` is an instance of `c`. Checks both `instanceof` and\n* `constructor` so that values created across different realms (e.g. iframes) match.\n*/\nconst ofClass = (v, c) => v instanceof c || v && v.constructor === c;\n/** Check if value is typeof \"object\" or \"function\" */\nfunction isObject(value) {\n\treturn value !== null && (typeof value === \"object\" || typeof value === \"function\");\n}\n/** Type guard: returns `true` when `i` is neither `null` nor `undefined`. */\nconst isNonNullable = (i) => i != null;\n/** Returns a new array with all `null` and `undefined` items removed. */\nconst filterNonNullable = (arr) => arr.filter(isNonNullable);\n/** Three-way comparison: returns `-1` if `a < b`, `1` if `a > b`, `0` if equal. */\nconst compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;\n/**\n* Check shallow array equality\n*/\nconst arrayEquals = (a, b) => a === b || a.length === b.length && a.every((e, i) => e === b[i]);\n/**\n* Returns a function that will call all functions in the order they were chained with the same arguments.\n*/\nfunction chain(callbacks) {\n\treturn (...args) => {\n\t\tfor (const callback of callbacks) callback && callback(...args);\n\t};\n}\n/**\n* Returns a function that will call all functions in the reversed order with the same arguments.\n*/\nfunction reverseChain(callbacks) {\n\treturn (...args) => {\n\t\tfor (let i = callbacks.length - 1; i >= 0; i--) {\n\t\t\tconst callback = callbacks[i];\n\t\t\tcallback && callback(...args);\n\t\t}\n\t};\n}\n/** Clamps `n` to the inclusive range `[min, max]`. */\nconst clamp = (n, min, max) => Math.min(Math.max(n, min), max);\n/** Creates an ID generator with its own isolated counter and per-generator random segment. Each call to the returned function produces a `timestamp-sequence-random` string that is unique within the generator and with high probability unique across independent generators (e.g. separate processes or SSR requests). */\nconst createIdGenerator = () => {\n\tlet seq = 0;\n\tconst rand = Math.random().toString(36).slice(2, 8);\n\treturn () => `${Date.now().toString(36)}-${(++seq).toString(36)}-${rand}`;\n};\n/**\n* Accesses the value of a MaybeAccessor\n* @example\n* ```ts\n* access(\"foo\") // => \"foo\"\n* access(() => \"foo\") // => \"foo\"\n* ```\n*/\nconst access = (v) => typeof v === \"function\" && !v.length ? v() : v;\n/**\n* Wraps `value` in a single-element array. If `value` is already an array it is\n* returned as-is. Falsy values (except `0` and `false`) produce an empty array.\n*/\nconst asArray = (value) => Array.isArray(value) ? value : value ? [value] : [];\n/**\n* Access an array of MaybeAccessors\n* @example\n* const list = [1, 2, () => 3)] // T: MaybeAccessor<number>[]\n* const newList = accessArray(list) // T: number[]\n*/\nconst accessArray = (list) => list.map((v) => access(v));\n/**\n* Run the function if the accessed value is not `undefined` nor `null`\n* @param value\n* @param fn\n*/\nconst withAccess = (value, fn) => {\n\tfn(access(value));\n};\n/**\n* Wraps a plain value in a zero-argument accessor `() => value`.\n* If `v` is already a function it is returned unchanged.\n*/\nconst asAccessor = (v) => typeof v === \"function\" ? v : () => v;\n/** If value is a function – call it with a given arguments – otherwise get the value as is */\nfunction accessWith(valueOrFn, ...args) {\n\treturn typeof valueOrFn === \"function\" ? valueOrFn(...args) : valueOrFn;\n}\nfunction defer(deps, fn, initialValue) {\n\tconst isArray = Array.isArray(deps);\n\tlet prevInput;\n\tlet shouldDefer = true;\n\treturn ((prevValue) => {\n\t\tlet input;\n\t\tif (isArray) {\n\t\t\tinput = Array(deps.length);\n\t\t\tfor (let i = 0; i < deps.length; i++) input[i] = deps[i]();\n\t\t} else input = deps();\n\t\tif (shouldDefer) {\n\t\t\tshouldDefer = false;\n\t\t\tprevInput = input;\n\t\t\treturn initialValue;\n\t\t}\n\t\tconst result = untrack(() => fn(input, prevInput, prevValue));\n\t\tprevInput = input;\n\t\treturn result;\n\t});\n}\n/**\n* Get entries of an object\n*/\nconst entries = Object.entries;\n/**\n* Get keys of an object\n*/\nconst keys = Object.keys;\n/**\n* Solid's `onCleanup` that doesn't warn in development if used outside of a component.\n*/\nconst tryOnCleanup = isDev ? (fn) => getOwner() ? onCleanup(fn) : fn : onCleanup;\n/**\n* Creates a stack of callbacks that can be pushed to, executed all at once, or cleared.\n* All callbacks receive the same arguments when `execute` is called; the stack is\n* automatically cleared after execution.\n*\n* @example\n* ```ts\n* const stack = createCallbackStack<string>();\n* stack.push(s => console.log(\"a:\", s));\n* stack.push(s => console.log(\"b:\", s));\n* stack.execute(\"hello\"); // logs \"a: hello\", \"b: hello\" — stack is now empty\n* ```\n*/\nconst createCallbackStack = () => {\n\tlet stack = [];\n\tconst clear = () => stack = [];\n\treturn {\n\t\tpush: (...callbacks) => stack.push(...callbacks),\n\t\texecute(arg0, arg1, arg2, arg3) {\n\t\t\tstack.forEach((cb) => cb(arg0, arg1, arg2, arg3));\n\t\t\tclear();\n\t\t},\n\t\tclear\n\t};\n};\n/**\n* Returns a debounced wrapper around `fn` that batches rapid synchronous calls\n* into a single invocation. Only the most-recently-passed arguments are forwarded.\n* The counter resets on cleanup so stale microtasks are silently discarded.\n*\n* @example\n* ```ts\n* const flush = createMicrotask((value: string) => console.log(value));\n* flush(\"a\");\n* flush(\"b\");\n* flush(\"c\"); // only \"c\" is logged (in the next microtask)\n* ```\n*/\nfunction createMicrotask(fn) {\n\tlet calls = 0;\n\tlet args;\n\tonCleanup(() => calls = 0);\n\treturn (...a) => {\n\t\targs = a, calls++;\n\t\tqueueMicrotask(() => --calls === 0 && fn(...args));\n\t};\n}\n/**\n* A hydratable version of the {@link createSignal}. It will use the serverValue on the server and the update function on the client. If initialized during hydration it will use serverValue as the initial value and update it once hydration is complete.\n*\n* @param serverValue initial value of the state on the server\n* @param update called once on the client or on hydration to initialize the value\n* @param options {@link SignalOptions}\n* @returns\n* ```ts\n* [state: Accessor<T>, setState: Setter<T>]\n* ```\n* @see {@link createSignal}\n*/\nfunction createHydratableSignal(serverValue, update, options) {\n\tif (isServer) return createSignal(serverValue, options);\n\tif (sharedConfig.hydrating) {\n\t\tconst [state, setState] = createSignal(serverValue, options);\n\t\tonSettled(() => {\n\t\t\tsetState(() => update());\n\t\t});\n\t\treturn [state, setState];\n\t}\n\treturn createSignal(update(), options);\n}\n/** @deprecated use {@link createHydratableSignal} instead */\nconst createHydrateSignal = createHydratableSignal;\n/**\n* Diffs two arrays by reference and calls `handleAdded` / `handleRemoved` for\n* each item that appeared or disappeared. Items are compared with `===`.\n*\n* @param current - the new array\n* @param prev - the previous array snapshot\n* @param handleAdded - called once for each item present in `current` but not `prev`\n* @param handleRemoved - called once for each item present in `prev` but not `current`\n*/\nfunction handleDiffArray(current, prev, handleAdded, handleRemoved) {\n\tconst currLength = current.length;\n\tconst prevLength = prev.length;\n\tlet i = 0;\n\tif (!prevLength) {\n\t\tfor (; i < currLength; i++) handleAdded(current[i]);\n\t\treturn;\n\t}\n\tif (!currLength) {\n\t\tfor (; i < prevLength; i++) handleRemoved(prev[i]);\n\t\treturn;\n\t}\n\tfor (; i < prevLength; i++) if (prev[i] !== current[i]) break;\n\tlet prevEl;\n\tlet currEl;\n\tprev = prev.slice(i);\n\tcurrent = current.slice(i);\n\tfor (prevEl of prev) if (!current.includes(prevEl)) handleRemoved(prevEl);\n\tfor (currEl of current) if (!prev.includes(currEl)) handleAdded(currEl);\n}\n/**\n* Schedules `fn` to run after the browser has painted by nesting two\n* requestAnimationFrame calls. No-op in non-browser environments.\n*/\nconst afterPaint = (fn) => {\n\tif (typeof requestAnimationFrame === \"function\") requestAnimationFrame(() => requestAnimationFrame(fn));\n};\n/**\n* Parse a string as a single JSON value.\n*\n* ```ts\n* const { data } = createSSE<{ status: string }>(url, { transform: json });\n* ```\n*/\nconst json = (raw) => JSON.parse(raw);\n/**\n* Parse a string as newline-delimited JSON (NDJSON / JSON Lines).\n*\n* Each non-empty line is parsed as a separate JSON value and returned as an array.\n*\n* ```ts\n* const { data } = createSSE<TickEvent[]>(url, { transform: ndjson });\n* // data() === [{ id: 1, type: \"tick\" }, { id: 2, type: \"tick\" }]\n* ```\n*/\nconst ndjson = (raw) => raw.split(\"\\n\").filter((line) => line !== \"\").map((line) => JSON.parse(line));\n/**\n* Split a string into individual lines, returning a `string[]`. Empty lines are filtered out.\n*\n* ```ts\n* const { data } = createSSE<string[]>(url, { transform: lines });\n* // data() === [\"line one\", \"line two\"]\n* ```\n*/\nconst lines = (raw) => raw.split(\"\\n\").filter((line) => line !== \"\");\n/**\n* Parse a string as a number using `Number()` semantics.\n*\n* Note: `\"\"` → `0`, non-numeric strings → `NaN`.\n*\n* ```ts\n* const { data } = createSSE<number>(url, { transform: number });\n* // data() === 42\n* ```\n*/\nconst number = (raw) => Number(raw);\nfunction safe(transform, fallback) {\n\treturn (raw) => {\n\t\ttry {\n\t\t\treturn transform(raw);\n\t\t} catch {\n\t\t\treturn fallback;\n\t\t}\n\t};\n}\n/**\n* Compose two transforms into one: the output of `a` is passed as the input of `b`.\n*\n* ```ts\n* const { data } = createSSE<RawEvent[]>(url, {\n*   transform: pipe(ndjson<RawEvent>, rows => rows.filter(r => r.type === \"tick\")),\n* });\n* ```\n*/\nfunction pipe(a, b) {\n\treturn (raw) => b(a(raw));\n}\n/**\n* Check if a wrapper element contains a target element.\n* Portal-aware: follows SolidJS `_$host` links so elements rendered inside\n* a `<Portal>` are correctly treated as children of the portal's anchor.\n*/\nconst contains = (wrapper, target) => {\n\tif (wrapper.contains(target)) return true;\n\tlet current = target;\n\twhile (current) {\n\t\tif (current === wrapper) return true;\n\t\tcurrent = current._$host ?? current.parentElement;\n\t}\n\treturn false;\n};\n/**\n* Returns a singleton value keyed by `key`, shared across every copy of the calling module that\n* ends up loaded in the same JS realm (a `Symbol.for(key)` slot on `globalThis`, not a module-scope\n* binding). Use this instead of a plain module-scope `let`/`const` for state that must stay\n* consistent (ref-counts, active-instance stacks) even if the app's dependency graph ends up with\n* more than one installed copy of the package — module-scope state would otherwise be split across\n* copies and go out of sync (e.g. a \"topmost instance\" check disagreeing between copies).\n*\n* ```ts\n* const registry = globalRegistry(\"@solid-primitives/my-package:my-state\", () => ({\n*   stack: createSignal<string[]>([], { ownedWrite: true }),\n*   nextId: 0,\n* }));\n* ```\n*/\nfunction globalRegistry(key, init) {\n\tconst g = globalThis;\n\treturn g[Symbol.for(key)] ??= init();\n}\nfunction wrapSetter(signalOrStore, wrapper) {\n\treturn [\n\t\tsignalOrStore[0],\n\t\twrapper(signalOrStore[1]),\n\t\t...signalOrStore.slice(2)\n\t];\n}\n//#endregion\nexport { EQUALS_FALSE_OPTIONS, INTERNAL_OPTIONS, access, accessArray, accessWith, afterPaint, arrayEquals, asAccessor, asArray, chain, clamp, compare, contains, createCallbackStack, createHydratableSignal, createHydrateSignal, createIdGenerator, createMicrotask, defaultEquals, defer, entries, falseFn, filterNonNullable, globalRegistry, handleDiffArray, isClient, isDev, isNonNullable, isObject, isProd, isServer, json, keys, lines, ndjson, noop, number, ofClass, pipe, reverseChain, safe, trueFn, tryOnCleanup, withAccess, wrapSetter };\n"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/raf",
+      "version": "4.0.0-next.2",
+      "files": [
+        "dist/index.js"
+      ],
+      "exports": {
+        "createRAF": {
+          "browser": {
+            "owner": "cleanup",
+            "returns": "tuple0"
+          },
+          "node": {
+            "inert": true
+          }
+        },
+        "createMs": {
+          "browser": {
+            "owner": "cleanup",
+            "returns": "accessor"
+          }
+        }
+      },
+      "basis": "reviewed-source-assumption",
+      "pins": [
+        {
+          "package": "@solid-primitives/raf",
+          "version": "4.0.0-next.2",
+          "digest": "sha256:ea3463cb53b53286bcf9f68d319c9003dd9b614f812b338fa90600bb63a778bb"
+        },
+        {
+          "package": "@solid-primitives/utils",
+          "version": "7.0.0-next.4",
+          "digest": "sha256:246a859068b05ffef36addf54b3f3690822da5070b61151c72fb49b311aff4f0"
+        },
+        {
+          "package": "@solidjs/signals",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:fe7fa5926d31d0f04bf3b21ee422c941169e8135bb71e6e8e748e927730bcb38"
+        },
+        {
+          "package": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:820fbdc0f948af1f0d3d5460014840108ef223ed54c66a7805b71e1a1af8b733"
+        },
+        {
+          "package": "csstype",
+          "version": "3.2.3",
+          "digest": "sha256:e727fb358ad5eff811a3519483e64a21b379fb267aa0e15fa084f0d7bdefa846"
+        },
+        {
+          "package": "seroval-plugins",
+          "version": "1.6.7",
+          "digest": "sha256:ec7f47473636c41bb837a6870523d84156c02fbcef8426e5910325a60604d081"
+        },
+        {
+          "package": "seroval",
+          "version": "1.6.7",
+          "digest": "sha256:7e84a675b9a7d7d3dd236c8e8ced36131d02a9048c5c91ce41f1c22f08b3db95"
+        },
+        {
+          "package": "solid-js",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:e245cdebb5fb4d60f64fcf7eec433808a8099e90a2b28c2465a59467c0cebc52"
+        }
+      ],
+      "sourceReferences": [
+        {
+          "path": "dist/index.js",
+          "sha256": "sha256:5513b328a9174ee6fdb3b8b6790555cafae42994611455bff079c399b796d477",
+          "source": "/* @ts-self-types=\"./index.d.ts\" */\nimport { noop } from \"@solid-primitives/utils\";\nimport { createMemo, createSignal, onCleanup } from \"solid-js\";\nimport { isServer } from \"@solidjs/web\";\n//#region src/index.ts\n/**\n* A primitive creating reactive `window.requestAnimationFrame`, that is automatically disposed onCleanup.\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/raf#createRAF\n* @param callback The callback to run each frame\n* @returns Returns a signal if currently running as well as start and stop methods\n* ```ts\n* [running: Accessor<boolean>, start: VoidFunction, stop: VoidFunction]\n* ```\n*\n* @example\n* const [running, start, stop] = createRAF((timestamp) => {\n*    el.style.transform = \"translateX(...)\"\n* });\n*/\nfunction createRAF(callback) {\n\tif (isServer) return [\n\t\t() => false,\n\t\tnoop,\n\t\tnoop\n\t];\n\tconst [running, setRunning] = createSignal(false, { ownedWrite: true });\n\tlet requestID = 0;\n\tconst loop = (timeStamp) => {\n\t\trequestID = requestAnimationFrame(loop);\n\t\tcallback(timeStamp);\n\t};\n\tconst start = () => {\n\t\tif (running()) return;\n\t\tsetRunning(true);\n\t\trequestID = requestAnimationFrame(loop);\n\t};\n\tconst stop = () => {\n\t\tsetRunning(false);\n\t\tcancelAnimationFrame(requestID);\n\t};\n\tonCleanup(stop);\n\treturn [\n\t\trunning,\n\t\tstart,\n\t\tstop\n\t];\n}\n/**\n* A primitive for wrapping `window.requestAnimationFrame` callback function to limit the execution of the callback to specified number of FPS.\n*\n* Keep in mind that limiting FPS is achieved by not executing a callback if the frames are above defined limit. This can lead to not consistant frame duration.\n*\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/raf#targetFPS\n* @param callback The callback to run each *allowed* frame\n* @param fps The target FPS limit\n* @returns Wrapped RAF callback\n*\n* @example\n* const [running, start, stop] = createRAF(\n*   targetFPS(() => {...}, 60)\n* );\n*/\nfunction targetFPS(callback, fps) {\n\tif (isServer) return callback;\n\tconst interval = typeof fps === \"function\" ? createMemo(() => Math.floor(1e3 / fps())) : (() => {\n\t\tconst newInterval = Math.floor(1e3 / fps);\n\t\treturn () => newInterval;\n\t})();\n\tlet elapsed = 0;\n\tlet lastRun = 0;\n\tlet missedBy = 0;\n\treturn (timeStamp) => {\n\t\telapsed = timeStamp - lastRun;\n\t\tif (Math.ceil(elapsed + missedBy) >= interval()) {\n\t\t\tlastRun = timeStamp;\n\t\t\tmissedBy = Math.max(elapsed - interval(), 0);\n\t\t\tcallback(timeStamp);\n\t\t}\n\t};\n}\n/**\n* A primitive that creates a signal counting up milliseconds with a given frame rate to base your animations on.\n*\n* @param fps the frame rate, either as Accessor or number\n* @param limit an optional limit, either as Accessor or number, after which the counter is reset\n*\n* @returns an Accessor returning the current number of milliseconds and the following methods:\n* - `reset()`: manually resetting the counter\n* - `running()`: returns if the counter is currently setRunning\n* - `start()`: restarts the counter if stopped\n* - `stop()`: stops the counter if running\n*\n* ```ts\n* const ms = createMs(60);\n* createEffect(() => ms() > 500000 ? ms.stop());\n* return <rect x=\"0\" y=\"0\" height=\"10\" width={Math.min(100, ms() / 5000)} />\n* ```\n*/\nfunction createMs(fps, limit) {\n\tconst [ms, setMs] = createSignal(0);\n\tlet initialTs = 0;\n\tconst reset = () => {\n\t\tinitialTs = 0;\n\t};\n\tconst [running, start, stop] = createRAF(targetFPS((ts) => {\n\t\tinitialTs ||= ts;\n\t\tconst ms = ts - initialTs;\n\t\tsetMs(ts - initialTs);\n\t\tif (ms === (typeof limit === \"function\" ? limit() : limit)) reset();\n\t}, fps));\n\tstart();\n\tonCleanup(stop);\n\treturn Object.assign(ms, {\n\t\treset,\n\t\trunning,\n\t\tstart,\n\t\tstop\n\t});\n}\n//#endregion\nexport { createMs, createRAF, createRAF as default, targetFPS };\n"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/event-listener",
+      "version": "3.0.0-next.5",
+      "files": [
+        "dist/eventListener.js",
+        "dist/eventListenerMap.js"
+      ],
+      "exports": {
+        "createEventListener": {
+          "browser": {
+            "owner": "effect"
+          },
+          "node": {
+            "inert": true
+          }
+        },
+        "createEventListenerMap": {
+          "browser": {
+            "owner": "effect"
+          },
+          "node": {
+            "inert": true
+          }
+        },
+        "createEventSignal": {
+          "browser": {
+            "owner": "effect",
+            "returns": "accessor"
+          },
+          "node": {
+            "inert": true
+          }
+        }
+      },
+      "basis": "reviewed-source-assumption",
+      "pins": [
+        {
+          "package": "@solid-primitives/event-listener",
+          "version": "3.0.0-next.5",
+          "digest": "sha256:b1fcf0dbfa895c3924f8cba2f83617d6796fd75e01973256e7a8f7b3d836f7b6"
+        },
+        {
+          "package": "@solid-primitives/utils",
+          "version": "7.0.0-next.4",
+          "digest": "sha256:246a859068b05ffef36addf54b3f3690822da5070b61151c72fb49b311aff4f0"
+        },
+        {
+          "package": "@solidjs/signals",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:fe7fa5926d31d0f04bf3b21ee422c941169e8135bb71e6e8e748e927730bcb38"
+        },
+        {
+          "package": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:820fbdc0f948af1f0d3d5460014840108ef223ed54c66a7805b71e1a1af8b733"
+        },
+        {
+          "package": "csstype",
+          "version": "3.2.3",
+          "digest": "sha256:e727fb358ad5eff811a3519483e64a21b379fb267aa0e15fa084f0d7bdefa846"
+        },
+        {
+          "package": "seroval-plugins",
+          "version": "1.6.7",
+          "digest": "sha256:ec7f47473636c41bb837a6870523d84156c02fbcef8426e5910325a60604d081"
+        },
+        {
+          "package": "seroval",
+          "version": "1.6.7",
+          "digest": "sha256:7e84a675b9a7d7d3dd236c8e8ced36131d02a9048c5c91ce41f1c22f08b3db95"
+        },
+        {
+          "package": "solid-js",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:e245cdebb5fb4d60f64fcf7eec433808a8099e90a2b28c2465a59467c0cebc52"
+        }
+      ],
+      "sourceReferences": [
+        {
+          "path": "dist/eventListener.js",
+          "sha256": "sha256:4f6b49cd2446afca79859501ae3cf34c80bc611c01e3bd85e3ac65a0b9724cdc",
+          "source": "/* @ts-self-types=\"./eventListener.d.ts\" */\nimport { isServer } from \"@solidjs/web\";\nimport { access, asArray, tryOnCleanup } from \"@solid-primitives/utils\";\nimport { createEffect, createRenderEffect, createSignal } from \"solid-js\";\n//#region src/eventListener.ts\nfunction makeEventListener(target, type, handler, options) {\n\ttarget?.addEventListener?.(type, handler, options);\n\treturn tryOnCleanup(target?.removeEventListener?.bind(target, type, handler, options));\n}\nfunction createEventListener(targets, type, handler, options) {\n\tif (isServer) return;\n\tconst compute = () => ({\n\t\tels: asArray(access(targets)).filter((x) => !!x),\n\t\ttypes: asArray(access(type))\n\t});\n\tconst apply = ({ els, types }) => {\n\t\tconst cleanups = [];\n\t\tfor (const el of els) for (const t of types) {\n\t\t\tel.addEventListener(t, handler, options);\n\t\t\tcleanups.push(el.removeEventListener.bind(el, t, handler, options));\n\t\t}\n\t\treturn () => cleanups.forEach((c) => c());\n\t};\n\tif (typeof targets === \"function\") createEffect(compute, apply);\n\telse createRenderEffect(compute, apply);\n}\nfunction createEventSignal(target, type, options) {\n\tif (isServer) return () => void 0;\n\tconst [lastEvent, setLastEvent] = createSignal();\n\tcreateEventListener(target, type, setLastEvent, options);\n\treturn lastEvent;\n}\n/**\n* Directive Usage. Creates an event listener, that will be automatically disposed on cleanup.\n*\n* @param props [eventType, handler, options]\n*\n* @example\n* <button use:eventListener={[\"click\", () => {...}]}>Click me!</button>\n*/\nconst eventListener = (target, props) => {\n\tcreateEffect(props, ([type, handler, options]) => {\n\t\ttarget.addEventListener(type, handler, options);\n\t\treturn () => target.removeEventListener(type, handler, options);\n\t});\n};\n//#endregion\nexport { createEventListener, createEventSignal, eventListener, makeEventListener };\n"
+        },
+        {
+          "path": "dist/eventListenerMap.js",
+          "sha256": "sha256:a79f65cdcd00163d8984a900e3d546abea36b5df0b2e247faab29129236c8370",
+          "source": "/* @ts-self-types=\"./eventListenerMap.d.ts\" */\nimport { createEventListener } from \"./eventListener.js\";\nimport { isServer } from \"@solidjs/web\";\nimport { entries } from \"@solid-primitives/utils\";\n//#region src/eventListenerMap.ts\nfunction createEventListenerMap(targets, handlersMap, options) {\n\tif (isServer) return;\n\tfor (const [eventName, handler] of entries(handlersMap)) if (handler) createEventListener(targets, eventName, handler, options);\n}\n//#endregion\nexport { createEventListenerMap };\n"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/timer",
+      "version": "1.4.5-next.1",
+      "files": [
+        "dist/index.js"
+      ],
+      "exports": {
+        "createTimer": {
+          "browser": {
+            "owner": "cleanup"
+          },
+          "node": {
+            "inert": true
+          }
+        },
+        "createTimeoutLoop": {
+          "browser": {
+            "owner": "cleanup"
+          },
+          "node": {
+            "inert": true
+          }
+        },
+        "createPolled": {
+          "browser": {
+            "owner": "cleanup",
+            "returns": "accessor"
+          },
+          "node": {
+            "inert": true
+          }
+        },
+        "createIntervalCounter": {
+          "browser": {
+            "owner": "cleanup",
+            "returns": "accessor"
+          },
+          "node": {
+            "inert": true
+          }
+        }
+      },
+      "basis": "reviewed-source-assumption",
+      "pins": [
+        {
+          "package": "@solid-primitives/timer",
+          "version": "1.4.5-next.1",
+          "digest": "sha256:eca728ea69de13d61c6642c54e674772dfdb154bfcd8472dd18a88215c031fd7"
+        },
+        {
+          "package": "@solidjs/signals",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:fe7fa5926d31d0f04bf3b21ee422c941169e8135bb71e6e8e748e927730bcb38"
+        },
+        {
+          "package": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:820fbdc0f948af1f0d3d5460014840108ef223ed54c66a7805b71e1a1af8b733"
+        },
+        {
+          "package": "csstype",
+          "version": "3.2.3",
+          "digest": "sha256:e727fb358ad5eff811a3519483e64a21b379fb267aa0e15fa084f0d7bdefa846"
+        },
+        {
+          "package": "seroval-plugins",
+          "version": "1.6.7",
+          "digest": "sha256:ec7f47473636c41bb837a6870523d84156c02fbcef8426e5910325a60604d081"
+        },
+        {
+          "package": "seroval",
+          "version": "1.6.7",
+          "digest": "sha256:7e84a675b9a7d7d3dd236c8e8ced36131d02a9048c5c91ce41f1c22f08b3db95"
+        },
+        {
+          "package": "solid-js",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:e245cdebb5fb4d60f64fcf7eec433808a8099e90a2b28c2465a59467c0cebc52"
+        }
+      ],
+      "sourceReferences": [
+        {
+          "path": "dist/index.js",
+          "sha256": "sha256:3c5f1fc3eec2b1fe89cf37f8ad500edd3631b24c7fa50e0aee547de1ca4c4373",
+          "source": "/* @ts-self-types=\"./index.d.ts\" */\nimport { createEffect, createSignal, onCleanup, untrack } from \"solid-js\";\nimport { isServer } from \"@solidjs/web\";\n//#region src/index.ts\n/**\n* Primitives to manage timeout and interval.\n*\n* @module\n*/\n/**\n* Create a timer ({@link setTimeout} or {@link setInterval}) and return a function to clear it.\n* Does not integrate with the reactive lifecycle — the caller is responsible for cleanup.\n*\n* @param fn Function to be called every {@link delay}.\n* @param delay Number representing the time between executions of {@link fn} in ms.\n* @param timer The timer to create: {@link setTimeout} or {@link setInterval}.\n* @returns Function to clear the timer.\n*/\nconst makeTimer = (fn, delay, timer) => {\n\tif (isServer) return () => void 0;\n\tconst id = timer(fn, delay);\n\treturn () => clearInterval(id);\n};\n/**\n* Create a timer ({@link setTimeout} or {@link setInterval})\n* with an optionally reactive delay.\n* If it changes, the elapsed fraction of the previous delay\n* will be counted as elapsed for the first new delay as well.\n*\n* @param fn Function to be called every {@link delay}.\n* @param delay Number or {@link Accessor} containing a number representing\n* the time between executions of {@link fn} in ms, or false to disable the timer.\n* @param timer The timer to create: {@link setTimeout} or {@link setInterval}.\n*/\nconst createTimer = (fn, delay, timer) => {\n\tif (isServer) return;\n\tif (typeof delay === \"number\") {\n\t\tonCleanup(makeTimer(fn, delay, timer));\n\t\treturn;\n\t}\n\tlet done = false;\n\tlet prevTime = performance.now();\n\tlet fractionDone = 0;\n\tlet shouldHandleFraction = false;\n\tconst callHandler = () => {\n\t\tuntrack(fn);\n\t\tprevTime = performance.now();\n\t\tdone = timer === setTimeout;\n\t};\n\tcreateEffect(() => delay(), (currDelay, prevDelay) => {\n\t\tif (done) return;\n\t\tif (currDelay === false) {\n\t\t\tif (typeof prevDelay === \"number\") fractionDone += (performance.now() - prevTime) / prevDelay;\n\t\t\treturn;\n\t\t}\n\t\tif (prevDelay === false) prevTime = performance.now();\n\t\tif (shouldHandleFraction) {\n\t\t\tif (typeof prevDelay === \"number\") fractionDone += (performance.now() - prevTime) / prevDelay;\n\t\t\tprevTime = performance.now();\n\t\t\tif (fractionDone >= 1) {\n\t\t\t\tfractionDone = 0;\n\t\t\t\tcallHandler();\n\t\t\t} else if (fractionDone > 0) {\n\t\t\t\tconst reconcileDelay = (1 - fractionDone) * currDelay;\n\t\t\t\tfractionDone = 0;\n\t\t\t\tlet mainId;\n\t\t\t\tconst reconcileId = setTimeout(() => {\n\t\t\t\t\tshouldHandleFraction = false;\n\t\t\t\t\tcallHandler();\n\t\t\t\t\tif (!done) mainId = timer(callHandler, currDelay);\n\t\t\t\t}, reconcileDelay);\n\t\t\t\treturn () => {\n\t\t\t\t\tclearTimeout(reconcileId);\n\t\t\t\t\tif (mainId !== void 0) clearInterval(mainId);\n\t\t\t\t};\n\t\t\t}\n\t\t}\n\t\tfractionDone = 0;\n\t\tshouldHandleFraction = true;\n\t\tif (done) return () => {};\n\t\tconst id = timer(callHandler, currDelay);\n\t\treturn () => clearInterval(id);\n\t});\n};\n/**\n* Like an interval from {@link createTimer}\n* except the timeout only updates between executions.\n*\n* @param handler Function to be called every {@link timeout}\n* @param timeout Number or Function returning a number representing the time\n* between executions of {@link handler} in ms, or false to disable looping.\n*/\nconst createTimeoutLoop = (handler, timeout) => {\n\tif (isServer) return;\n\tif (typeof timeout === \"number\") {\n\t\tonCleanup(makeTimer(handler, timeout, setInterval));\n\t\treturn;\n\t}\n\tconst [currentTimeout, setCurrentTimeout] = createSignal(untrack(timeout));\n\tcreateEffect(() => {\n\t\tconst t = timeout();\n\t\tconst curr = currentTimeout();\n\t\treturn curr === false ? t : curr;\n\t}, (currTimeout) => {\n\t\tif (currTimeout === false) return () => {};\n\t\tconst id = setInterval(() => {\n\t\t\thandler();\n\t\t\tsetCurrentTimeout(timeout());\n\t\t}, currTimeout);\n\t\treturn () => clearInterval(id);\n\t});\n};\n/** @internal implementation signature for the overloads above */\nfunction createPolled(fn, timeout, value, options) {\n\tif (isServer) {\n\t\tconst v = fn(value);\n\t\treturn () => v;\n\t}\n\tconst [tick, setTick] = createSignal(0);\n\tconst [depSignal] = createSignal((prev) => {\n\t\ttick();\n\t\treturn fn(prev !== void 0 ? prev : value);\n\t});\n\tconst [polled, setPolled] = createSignal(depSignal(), options);\n\tcreateEffect(() => depSignal(), (newValue) => {\n\t\tsetPolled(() => newValue);\n\t});\n\tcreateTimer(() => setTick((t) => t + 1), timeout, setInterval);\n\treturn polled;\n}\n/**\n* Creates a counter which increments periodically.\n*\n* @param timeout Number or {@link Accessor} containing a number representing\n* the time between increments in ms, or false to disable the counter.\n* @returns An {@link Accessor} containing the current count.\n*/\nconst createIntervalCounter = (timeout, options) => {\n\tif (isServer) return () => 0;\n\treturn createPolled((prev) => prev + 1, timeout, -1, options);\n};\n//#endregion\nexport { createIntervalCounter, createPolled, createTimeoutLoop, createTimer, makeTimer };\n"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/media",
+      "version": "4.0.0-next.2",
+      "files": [
+        "dist/index.js"
+      ],
+      "exports": {
+        "createMediaQuery": {
+          "browser": {
+            "returns": "accessor"
+          },
+          "node": {
+            "inert": true
+          }
+        },
+        "createPrefersDark": {
+          "browser": {
+            "returns": "accessor"
+          },
+          "node": {
+            "inert": true
+          }
+        }
+      },
+      "basis": "reviewed-source-assumption",
+      "pins": [
+        {
+          "package": "@solid-primitives/event-listener",
+          "version": "3.0.0-next.5",
+          "digest": "sha256:b1fcf0dbfa895c3924f8cba2f83617d6796fd75e01973256e7a8f7b3d836f7b6"
+        },
+        {
+          "package": "@solid-primitives/media",
+          "version": "4.0.0-next.2",
+          "digest": "sha256:4883354fe4a950750bf30a5102993cf85bc62b621717ce3d09bec6195cb2c06e"
+        },
+        {
+          "package": "@solid-primitives/rootless",
+          "version": "2.0.0-next.2",
+          "digest": "sha256:f84bef7f411065b13cdad69f47cc3dd4fc97640166689183d45cd310fdcad295"
+        },
+        {
+          "package": "@solid-primitives/static-store",
+          "version": "1.0.0-next.2",
+          "digest": "sha256:35b6f7d0e9afc414bef91fbd06cef43f63a4345df8b206cad60d82bf47df18f8"
+        },
+        {
+          "package": "@solid-primitives/utils",
+          "version": "7.0.0-next.4",
+          "digest": "sha256:246a859068b05ffef36addf54b3f3690822da5070b61151c72fb49b311aff4f0"
+        },
+        {
+          "package": "@solidjs/signals",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:fe7fa5926d31d0f04bf3b21ee422c941169e8135bb71e6e8e748e927730bcb38"
+        },
+        {
+          "package": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:820fbdc0f948af1f0d3d5460014840108ef223ed54c66a7805b71e1a1af8b733"
+        },
+        {
+          "package": "csstype",
+          "version": "3.2.3",
+          "digest": "sha256:e727fb358ad5eff811a3519483e64a21b379fb267aa0e15fa084f0d7bdefa846"
+        },
+        {
+          "package": "seroval-plugins",
+          "version": "1.6.7",
+          "digest": "sha256:ec7f47473636c41bb837a6870523d84156c02fbcef8426e5910325a60604d081"
+        },
+        {
+          "package": "seroval",
+          "version": "1.6.7",
+          "digest": "sha256:7e84a675b9a7d7d3dd236c8e8ced36131d02a9048c5c91ce41f1c22f08b3db95"
+        },
+        {
+          "package": "solid-js",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:e245cdebb5fb4d60f64fcf7eec433808a8099e90a2b28c2465a59467c0cebc52"
+        }
+      ],
+      "sourceReferences": [
+        {
+          "path": "dist/index.js",
+          "sha256": "sha256:877037b6484457c32d552c0d1f42bb3f451e3ec8b087204642c40edc27318cd1",
+          "source": "/* @ts-self-types=\"./index.d.ts\" */\nimport \"solid-js\";\nimport { isServer } from \"@solidjs/web\";\nimport { makeEventListener } from \"@solid-primitives/event-listener\";\nimport { createHydratableSignal, entries, noop } from \"@solid-primitives/utils\";\nimport { createHydratableStaticStore } from \"@solid-primitives/static-store\";\nimport { createHydratableSingletonRoot } from \"@solid-primitives/rootless\";\n//#region src/index.ts\n/**\n* attaches a MediaQuery listener to window, listeneing to changes to provided query\n* @param query Media query to listen for\n* @param callback function called every time the media match changes\n* @returns function removing the listener\n* @example\n* const clear = makeMediaQueryListener(\"(max-width: 767px)\", e => {\n*    console.log(e.matches)\n* });\n* // remove listeners (will happen also on cleanup)\n* clear()\n*/\nfunction makeMediaQueryListener(query, callback) {\n\tif (isServer) return noop;\n\treturn makeEventListener(typeof query === \"string\" ? window.matchMedia(query) : query, \"change\", callback);\n}\n/**\n* Creates a very simple and straightforward media query monitor.\n*\n* @param query Media query to listen for\n* @param fallbackState Server fallback state *(Defaults to `false`)*\n* @returns Boolean value if media query is met or not\n*\n* @example\n* ```ts\n* const isSmall = createMediaQuery(\"(max-width: 767px)\");\n* console.log(isSmall());\n* ```\n*/\nfunction createMediaQuery(query, serverFallback = false) {\n\tif (isServer) return () => serverFallback;\n\tconst mql = window.matchMedia(query);\n\tconst [state, setState] = createHydratableSignal(serverFallback, () => mql.matches);\n\tconst update = () => setState(mql.matches);\n\tmakeEventListener(mql, \"change\", update);\n\treturn state;\n}\n/**\n* Provides a signal indicating if the user has requested dark color theme. The setting is being watched with a [Media Query](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme).\n*\n* @param serverFallback value that should be returned on the server — defaults to `false`\n*\n* @returns a boolean signal\n* @example\n* const prefersDark = usePrefersDark();\n* createEffect(() => {\n*    prefersDark() // => boolean\n* });\n*/\nfunction createPrefersDark(serverFallback) {\n\treturn createMediaQuery(\"(prefers-color-scheme: dark)\", serverFallback);\n}\n/**\n* Provides a signal indicating if the user has requested dark color theme. The setting is being watched with a [Media Query](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme).\n*\n* This is a [singleton root primitive](https://github.com/solidjs-community/solid-primitives/tree/main/packages/rootless#createSingletonRoot) except if during hydration.\n*\n* @returns a boolean signal\n* @example\n* const prefersDark = usePrefersDark();\n* createEffect(() => {\n*    prefersDark() // => boolean\n* });\n*/\nconst usePrefersDark = /*#__PURE__*/ createHydratableSingletonRoot(createPrefersDark.bind(void 0, false));\nconst getEmptyMatchesFromBreakpoints = (breakpoints) => entries(breakpoints).reduce((matches, [key]) => {\n\tmatches[key] = false;\n\treturn matches;\n}, {});\n/**\n* Creates a multi-breakpoint monitor to make responsive components easily.\n* \n* @param breakpoints Map of breakpoint names and their widths\n* @param options Options to customize watch, fallback, responsive mode.\n* @returns map of currently matching breakpoints.\n* \n* @example\n* ```ts\n* const breakpoints = {\nsm: \"640px\",\nlg: \"1024px\",\nxl: \"1280px\",\n};\n* const matches = createBreakpoints(breakpoints);\n* console.log(matches.lg);\n* ```\n*/\nfunction createBreakpoints(breakpoints, options = {}) {\n\tconst fallback = Object.defineProperty(options.fallbackState ?? getEmptyMatchesFromBreakpoints(breakpoints), \"key\", {\n\t\tenumerable: false,\n\t\tget: () => Object.keys(breakpoints).pop()\n\t});\n\tif (isServer || !window.matchMedia) return fallback;\n\tconst { mediaFeature = \"min-width\", watchChange = true } = options;\n\tconst [matches, setMatches] = createHydratableStaticStore(fallback, () => {\n\t\tconst matches = {};\n\t\tentries(breakpoints).forEach(([token, width]) => {\n\t\t\tconst mql = window.matchMedia(`(${mediaFeature}: ${width})`);\n\t\t\tmatches[token] = mql.matches;\n\t\t\tif (watchChange) makeEventListener(mql, \"change\", (e) => setMatches(token, e.matches));\n\t\t});\n\t\treturn matches;\n\t});\n\treturn Object.defineProperty(matches, \"key\", {\n\t\tenumerable: false,\n\t\tget: () => Object.keys(matches).findLast((token) => matches[token])\n\t});\n}\n/**\n* Creates a sorted copy of the Breakpoints Object\n* If you want to use the result of `createBreakpoints()` with string coercion:\n* ```ts\n* createBreakpoints(sortBreakpoints({ tablet: \"980px\", mobile: \"640px\" }))\n* ```\n*/\nfunction sortBreakpoints(breakpoints) {\n\tconst sorted = entries(breakpoints);\n\tsorted.sort((x, y) => parseInt(x[1], 10) - parseInt(y[1], 10));\n\treturn sorted.reduce((obj, [key, value]) => {\n\t\tobj[key] = value;\n\t\treturn obj;\n\t}, {});\n}\n//#endregion\nexport { createBreakpoints, createMediaQuery, createPrefersDark, makeMediaQueryListener, sortBreakpoints, usePrefersDark };\n"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/date",
+      "version": "3.0.0-next.3",
+      "files": [
+        "dist/primitives.js"
+      ],
+      "exports": {
+        "createDateNow": {
+          "browser": {
+            "owner": "effect",
+            "returns": "tuple0"
+          },
+          "node": {
+            "inert": true
+          }
+        },
+        "createDate": {
+          "browser": {
+            "returns": "tuple0"
+          }
+        }
+      },
+      "basis": "reviewed-source-assumption",
+      "pins": [
+        {
+          "package": "@solid-primitives/date",
+          "version": "3.0.0-next.3",
+          "digest": "sha256:d11ce9eba08229577bd0ad382c5cf256ea50900a872d7af32e92116c9bf7cd15"
+        },
+        {
+          "package": "@solid-primitives/timer",
+          "version": "1.4.5-next.1",
+          "digest": "sha256:eca728ea69de13d61c6642c54e674772dfdb154bfcd8472dd18a88215c031fd7"
+        },
+        {
+          "package": "@solid-primitives/utils",
+          "version": "7.0.0-next.4",
+          "digest": "sha256:246a859068b05ffef36addf54b3f3690822da5070b61151c72fb49b311aff4f0"
+        },
+        {
+          "package": "@solidjs/signals",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:fe7fa5926d31d0f04bf3b21ee422c941169e8135bb71e6e8e748e927730bcb38"
+        },
+        {
+          "package": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:820fbdc0f948af1f0d3d5460014840108ef223ed54c66a7805b71e1a1af8b733"
+        },
+        {
+          "package": "csstype",
+          "version": "3.2.3",
+          "digest": "sha256:e727fb358ad5eff811a3519483e64a21b379fb267aa0e15fa084f0d7bdefa846"
+        },
+        {
+          "package": "seroval-plugins",
+          "version": "1.6.7",
+          "digest": "sha256:ec7f47473636c41bb837a6870523d84156c02fbcef8426e5910325a60604d081"
+        },
+        {
+          "package": "seroval",
+          "version": "1.6.7",
+          "digest": "sha256:7e84a675b9a7d7d3dd236c8e8ced36131d02a9048c5c91ce41f1c22f08b3db95"
+        },
+        {
+          "package": "solid-js",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:e245cdebb5fb4d60f64fcf7eec433808a8099e90a2b28c2465a59467c0cebc52"
+        }
+      ],
+      "sourceReferences": [
+        {
+          "path": "dist/primitives.js",
+          "sha256": "sha256:971f4f5c21d7c0ee9bfc776d3bf3b5982805b45c872b80140a4717b3e41dc7d8",
+          "source": "/* @ts-self-types=\"./primitives.d.ts\" */\nimport { DEFAULT_MESSAGES, HOUR, MINUTE } from \"./variables.js\";\nimport { formatDate, formatDateRelative, getCountdown, getDate, getDateDifference } from \"./utils.js\";\nimport { access, accessWith, noop } from \"@solid-primitives/utils\";\nimport { isServer } from \"@solidjs/web\";\nimport { createEffect, createMemo, createRenderEffect, createSignal, createStore } from \"solid-js\";\n//#region src/primitives.ts\n/**\n* Creates a reactive `Date` signal.\n*\n* @param init timestamp `number` | date `string` | `Date` instance; *May be a reactive signal*\n* @returns [`Date` signal, setter function]\n*/\nconst createDate = (init) => {\n\tconst [date, setDate] = createSignal(() => getDate(access(init)));\n\tconst setter = (input) => setDate((prev) => getDate(accessWith(input, prev)));\n\treturn [date, setter];\n};\n/**\n* Creates an autoupdating and reactive `new Date()`\n*\n* @param interval delay in ms for updating the date. Set to `false` to disable autoupdating. *Default = `30000`*\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/date#createDateNow\n*\n* @example\n* ```ts\n* // updates every second:\n* const [now] = createDateNow(1000);\n*\n* // reactive timeout value\n* const [timeout, setTimeout] = createSignal(500);\n* const [now] = createDateNow(timeout);\n*\n* // won't autoupdate:\n* const [now, update] = createDateNow(() => false);\n*\n* // update manually:\n* update()\n* ```\n*/\nfunction createDateNow(interval = MINUTE / 2) {\n\tif (isServer) {\n\t\tconst d = /* @__PURE__ */ new Date();\n\t\treturn [() => d, noop];\n\t}\n\tconst [now, setNow] = createSignal(/* @__PURE__ */ new Date(), { equals: (a, b) => a.getTime() === b.getTime() });\n\tconst update = () => setNow(/* @__PURE__ */ new Date());\n\tcreateEffect(() => typeof interval === \"function\" ? interval() : interval, (ms) => {\n\t\tif (ms === false || ms === 0) return;\n\t\tconst id = setInterval(update, ms);\n\t\treturn () => clearInterval(id);\n\t});\n\treturn [now, update];\n}\n/**\n* Provides a reactive time difference *(in ms)* signal.\n*\n* @param from timestamp `number` | date `string` | `Date` instance;\n* *May be a reactive signal*\n* @param to timestamp `number` | date `string` | `Date` instance;\n* *May be a reactive signal*\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/date#createTimeDifference\n*\n* @example\n* const [target, setTarget] = createSignal(1641408329089)\n* const [diff, { from, to }] = createTimeDifference(\"2020 1 11\", target)\n* diff() // T: number\n* from() // T: Date\n* to() // T: Date\n*/\nfunction createTimeDifference(from, to) {\n\tconst [fromDate] = createDate(from), [toDate] = createDate(to);\n\treturn [createMemo(() => getDateDifference(fromDate(), toDate())), {\n\t\tfrom: fromDate,\n\t\tto: toDate\n\t}];\n}\n/**\n* Provides a autoupdating, reactive time difference *(in ms)* from today *(now)* as a signal.\n*\n* @param to a target timestamp `number` | date `string` | `Date` instance;\n* *May be a reactive signal*\n* @param updateInterval number or a function returning a number of ms to wait before updating the **now**\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/date#createTimeDifferenceFromNow\n*\n* @example\n* const [target, setTarget] = createSignal(1641408329089)\n* const [diff, { target, now, update }] = createTimeDifferenceFromNow(target)\n* diff() // T: number\n* target() // T: Date\n* now() // T: Date\n* // manual update (automatic one can be disabled by passing false)\n* update()\n*/\nfunction createTimeDifferenceFromNow(to, updateInterval = (diff) => Math.abs(diff) <= 36e5 ? MINUTE / 2 : HOUR / 2) {\n\tconst [now, update] = createDateNow(typeof updateInterval === \"function\" ? () => updateInterval(diff()) : updateInterval);\n\tconst [diff, { to: target }] = createTimeDifference(now, to);\n\treturn [diff, {\n\t\tupdate,\n\t\ttarget,\n\t\tnow\n\t}];\n}\n/**\n* Provides a reactive, formatted, autoupdating date difference in relation to **now**.\n*\n* @param to a target timestamp `number` | date `string` | `Date` instance;\n* *May be a reactive signal*\n* @param options\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/date#createTimeAgo\n*\n* @example\n* ```ts\n* const [myDate, setMyDate] = createDate('Jun 28, 2021')\n* const [timeago, { target, now, update, difference }] = createTimeAgo(myDate);\n*\n* timeago() // => 5 months ago\n* difference() // T: number\n* target() // T: Date\n* now() // T: Date\n* // manual update (automatic one can be disabled by passing false)\n* update()\n* ```\n*/\nfunction createTimeAgo(to, options = {}) {\n\tconst { min = MINUTE, max = Infinity, dateFormatter = formatDate, messages, relativeFormatter = (a, b, diff) => formatDateRelative(diff, messages) } = options;\n\tconst [difference, extra] = createTimeDifferenceFromNow(to, options.interval);\n\treturn [createMemo(() => {\n\t\tconst absDiff = Math.abs(difference());\n\t\tif (absDiff < min) return messages?.justNow ?? DEFAULT_MESSAGES.justNow;\n\t\tif (absDiff > max) return dateFormatter(extra.target());\n\t\treturn relativeFormatter(extra.now(), extra.target(), difference());\n\t}), {\n\t\t...extra,\n\t\tdifference\n\t}];\n}\nfunction createCountdown(a, b) {\n\tlet difference;\n\tif (b !== void 0) difference = createTimeDifference(a, b)[0];\n\telse difference = a;\n\tconst [countdown, setCountdown] = createStore(getCountdown(difference()));\n\tcreateRenderEffect(() => difference(), (diff) => setCountdown(() => getCountdown(diff)));\n\treturn countdown;\n}\n/**\n* Provides a reactive, autoupdating *(from **now**)*, broken down \"time remaining\" as a Store.\n* @param to a target timestamp `number` | date `string` | `Date`;\n* *May be a reactive signal*\n* @param updateInterval number or a function returning a number of ms to wait before updating the **now**. Defaults to one second.\n*\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/date#createCountdownFromNow\n* @example\n* // target date may be reactive\n* const [to, setTo] = createSignal(1641408329089)\n* const [countdown, { now, target, update }] = createCountdownFromNow(to, 500)\n*\n* countdown.minutes // e.g. 5\n* countdown.hours // e.g. 1\n* countdown.seconds // e.g. 48\n*\n* target() // T: Date\n* now() // T: Date\n* // manual update (automatic one can be disabled by passing false)\n* update()\n*/\nfunction createCountdownFromNow(to, updateInterval = 1e3) {\n\tconst [difference, extra] = createTimeDifferenceFromNow(to, updateInterval);\n\treturn [createCountdown(difference), extra];\n}\n//#endregion\nexport { createCountdown, createCountdownFromNow, createDate, createDateNow, createTimeAgo, createTimeDifference, createTimeDifferenceFromNow };\n"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/lifecycle",
+      "version": "1.0.0-next.2",
+      "files": [
+        "dist/index.js"
+      ],
+      "exports": {
+        "createIsMounted": {
+          "browser": {
+            "returns": "accessor"
+          },
+          "node": {
+            "inert": true
+          }
+        }
+      },
+      "basis": "reviewed-source-assumption",
+      "pins": [
+        {
+          "package": "@solid-primitives/lifecycle",
+          "version": "1.0.0-next.2",
+          "digest": "sha256:d1673f9922af97e345ca6aed5b983b37a1d652d6dbf65b9ad51800f53f63f963"
+        },
+        {
+          "package": "@solidjs/signals",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:fe7fa5926d31d0f04bf3b21ee422c941169e8135bb71e6e8e748e927730bcb38"
+        },
+        {
+          "package": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:820fbdc0f948af1f0d3d5460014840108ef223ed54c66a7805b71e1a1af8b733"
+        },
+        {
+          "package": "csstype",
+          "version": "3.2.3",
+          "digest": "sha256:e727fb358ad5eff811a3519483e64a21b379fb267aa0e15fa084f0d7bdefa846"
+        },
+        {
+          "package": "seroval-plugins",
+          "version": "1.6.7",
+          "digest": "sha256:ec7f47473636c41bb837a6870523d84156c02fbcef8426e5910325a60604d081"
+        },
+        {
+          "package": "seroval",
+          "version": "1.6.7",
+          "digest": "sha256:7e84a675b9a7d7d3dd236c8e8ced36131d02a9048c5c91ce41f1c22f08b3db95"
+        },
+        {
+          "package": "solid-js",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:e245cdebb5fb4d60f64fcf7eec433808a8099e90a2b28c2465a59467c0cebc52"
+        }
+      ],
+      "sourceReferences": [
+        {
+          "path": "dist/index.js",
+          "sha256": "sha256:4faaec6291d7695dba1712b8167953f3e93ed18649d72734933a7c52b15676e5",
+          "source": "/* @ts-self-types=\"./index.d.ts\" */\nimport { createSignal, getObserver, onCleanup, onSettled, sharedConfig } from \"solid-js\";\nimport { isServer } from \"@solidjs/web\";\n//#region src/index.ts\n/**\n* @returns a signal accessor that will return a `false` initially,\n* and then update to `true` once the owner is mounted.\n* @example\n* ```tsx\n* let ref: HTMLElement\n* const isMounted = createIsMounted();\n* const windowWidth = createMemo(() => isMounted() ? ref.offsetWidth : 0)\n* <div ref={ref}>{windowWidth()}</div>\n* ```\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/lifecycle#createIsMounted\n*/\nfunction createIsMounted() {\n\tif (isServer) return () => false;\n\tconst [isMounted, setIsMounted] = createSignal(false);\n\tonSettled(() => {\n\t\tsetIsMounted(true);\n\t});\n\treturn isMounted;\n}\n/**\n* @returns a `boolean` value representing if the hydration process of the current owner is complete.\n*\n* - `false` during SSR\n* - `false` on the client if the component evaluation is during a hydration process.\n* - `true` on the client if the component evaluates after hydration or during clinet-side rendering.\n*\n* Switching from `false` to `true` will trigger the signal to update.\n*\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/lifecycle#isHydrated\n*/\nconst isHydrated = () => !isServer && (!sharedConfig.hydrating || !!getObserver() && createIsMounted()());\n/**\n* Calls the {@link fn} callback when the {@link el} is connected to the DOM.\n* @param el target element\n* @param fn callback\n* @example\n* ```tsx\n* <div ref={el => {\n*   el.isConnected // => often false\n*   onMount(() => {\n*     el.isConnected // => often true\n*   })\n*   onConnect(el, () => {\n*     el.isConnected // => always true\n*   })\n* }} />\n* ```\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/lifecycle#onConnect\n*/\nfunction onElementConnect(el, fn) {\n\tif (isServer) return;\n\tif (el.isConnected) return fn();\n\tconst observer = new ResizeObserver(() => el.isConnected && (observer.disconnect(), fn()));\n\tobserver.observe(el);\n\tonCleanup(() => observer.disconnect());\n}\n//#endregion\nexport { createIsMounted, isHydrated, onElementConnect };\n"
+        }
+      ]
+    },
+    {
+      "package": "@solid-primitives/memo",
+      "version": "2.0.0-next.2",
+      "files": [
+        "dist/index.js"
+      ],
+      "exports": {
+        "createLazyMemo": {
+          "browser": {
+            "returns": "accessor",
+            "trackedCallback": 0
+          },
+          "node": {
+            "inert": true
+          }
+        },
+        "createReducer": {
+          "browser": {
+            "returns": "tuple0"
+          }
+        },
+        "createPureReaction": {
+          "browser": {
+            "owner": "cleanup"
+          },
+          "node": {
+            "inert": true
+          }
+        }
+      },
+      "basis": "reviewed-source-assumption",
+      "pins": [
+        {
+          "package": "@solid-primitives/memo",
+          "version": "2.0.0-next.2",
+          "digest": "sha256:7bc8a6108bcdf2c30a06895fdd260c12544b449f4b095a920c9cca02c9024fb7"
+        },
+        {
+          "package": "@solid-primitives/utils",
+          "version": "7.0.0-next.4",
+          "digest": "sha256:246a859068b05ffef36addf54b3f3690822da5070b61151c72fb49b311aff4f0"
+        },
+        {
+          "package": "@solidjs/signals",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:fe7fa5926d31d0f04bf3b21ee422c941169e8135bb71e6e8e748e927730bcb38"
+        },
+        {
+          "package": "@solidjs/web",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:820fbdc0f948af1f0d3d5460014840108ef223ed54c66a7805b71e1a1af8b733"
+        },
+        {
+          "package": "csstype",
+          "version": "3.2.3",
+          "digest": "sha256:e727fb358ad5eff811a3519483e64a21b379fb267aa0e15fa084f0d7bdefa846"
+        },
+        {
+          "package": "seroval-plugins",
+          "version": "1.6.7",
+          "digest": "sha256:ec7f47473636c41bb837a6870523d84156c02fbcef8426e5910325a60604d081"
+        },
+        {
+          "package": "seroval",
+          "version": "1.6.7",
+          "digest": "sha256:7e84a675b9a7d7d3dd236c8e8ced36131d02a9048c5c91ce41f1c22f08b3db95"
+        },
+        {
+          "package": "solid-js",
+          "version": "2.0.0-rc.9",
+          "digest": "sha256:e245cdebb5fb4d60f64fcf7eec433808a8099e90a2b28c2465a59467c0cebc52"
+        }
+      ],
+      "sourceReferences": [
+        {
+          "path": "dist/index.js",
+          "sha256": "sha256:b43dc0d99980d5d552ad010f95b504459e7d18bda2af2c4b1676203c48601445",
+          "source": "/* @ts-self-types=\"./index.d.ts\" */\nimport { DEV, createMemo, createReaction, createSignal, getOwner, onCleanup, runWithOwner, untrack } from \"solid-js\";\nimport { isServer } from \"@solidjs/web\";\nimport { EQUALS_FALSE_OPTIONS } from \"@solid-primitives/utils\";\n//#region src/index.ts\nconst callbackWith = (fn, v) => fn.length > 0 ? () => fn(untrack(v)) : fn;\n/**\n* Solid's `createReaction` that is based on pure computation *(runs before render, and is non-batching)*\n*\n* @param onInvalidate callback that runs when the tracked sources trigger update\n* @param options set computation name for debugging pourposes\n* - `options.initial` — an array of functions to be run initially and tracked. *(useful for runing code before other pure computations)*\n* @returns track() function\n*\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/memo#createPureReaction\n*\n* @example\n* const [count, setCount] = createSignal(0);\n* const track = createPureReaction(() => {...});\n* track(count);\n* setCount(1); // triggers callback\n*\n* // sources need to be re-tracked every time\n* setCount(2); // doesn't trigger callback\n*/\nfunction createPureReaction(onInvalidate, options) {\n\tif (isServer) return () => void 0;\n\tconst owner = getOwner();\n\tlet trackers = 0;\n\tlet disposed = false;\n\tonCleanup(() => {\n\t\tdisposed = true;\n\t});\n\treturn (tracking) => {\n\t\tif (disposed) {\n\t\t\tuntrack(tracking);\n\t\t\treturn;\n\t\t}\n\t\ttrackers++;\n\t\trunWithOwner(owner, () => createReaction(() => {\n\t\t\tif (--trackers === 0) untrack(onInvalidate);\n\t\t}, options))(tracking);\n\t};\n}\n/**\n* A combined memo of multiple sources, last updated source will be the value of the returned signal.\n* @param sources list of reactive calculations/signals/memos\n* @param options signal options\n* @returns signal with value of the last updated source\n* @example\n* const [count, setCount] = createSignal(1);\n* const [text, setText] = createSignal(\"hello\");\n* const lastUpdated = createLatest([count, text]);\n* lastUpdated() // => \"hello\"\n* setCount(4)\n* lastUpdated() // => 4\n*/\nfunction createLatest(sources, options) {\n\tlet index = 0;\n\tconst memos = sources.map((source, i) => createMemo(() => (index = i, source()), DEV ? {\n\t\tname: i + 1 + \". source\",\n\t\tequals: false\n\t} : EQUALS_FALSE_OPTIONS));\n\treturn createMemo(() => memos.map((m) => m())[index], options);\n}\nfunction createLatestMany(sources, options) {\n\tconst memos = sources.map((source, i) => {\n\t\tconst obj = {\n\t\t\tdirty: true,\n\t\t\tget: null\n\t\t};\n\t\tobj.get = createMemo(() => (obj.dirty = true, source()), DEV ? {\n\t\t\tname: i + 1 + \". source\",\n\t\t\tequals: false\n\t\t} : EQUALS_FALSE_OPTIONS);\n\t\treturn obj;\n\t});\n\treturn createLazyMemo(() => memos.reduce((acc, memo) => {\n\t\tconst v = memo.get();\n\t\tif (memo.dirty) {\n\t\t\tmemo.dirty = false;\n\t\t\tacc.push(v);\n\t\t}\n\t\treturn acc;\n\t}, []), void 0, options);\n}\nfunction createWritableMemo(fn, value, options) {\n\tlet combined = () => value;\n\tconst [signal, setSignal] = createSignal(value, {\n\t\tequals: false,\n\t\townedWrite: true\n\t});\n\treturn [combined = createLatest([signal, createMemo(callbackWith(fn, () => combined()), EQUALS_FALSE_OPTIONS)], options), ((setter) => setSignal(() => typeof setter === \"function\" ? setter(untrack(combined)) : setter))];\n}\nfunction createLazyMemo(calc, value, options) {\n\tif (isServer) {\n\t\tlet calculated = false;\n\t\treturn () => {\n\t\t\tif (!calculated) {\n\t\t\t\tcalculated = true;\n\t\t\t\tvalue = calc(value);\n\t\t\t}\n\t\t\treturn value;\n\t\t};\n\t}\n\tlet prevValue = value;\n\treturn createMemo(() => {\n\t\tprevValue = calc(prevValue);\n\t\treturn prevValue;\n\t}, DEV ? {\n\t\tlazy: true,\n\t\tname: options?.name,\n\t\tequals: false\n\t} : {\n\t\tlazy: true,\n\t\tequals: false\n\t});\n}\nfunction createMemoCache(...args) {\n\tconst cache = /* @__PURE__ */ new Map();\n\tconst owner = getOwner();\n\tconst key = typeof args[1] === \"function\" ? args[0] : void 0, calc = typeof args[1] === \"function\" ? args[1] : args[0], options = typeof args[1] === \"object\" ? args[1] : typeof args[2] === \"object\" ? args[2] : {};\n\tconst run = (key) => {\n\t\tif (cache.has(key)) return cache.get(key)();\n\t\tlet prevVal;\n\t\tconst memo = runWithOwner(owner, () => createMemo(() => {\n\t\t\tconst v = calc(key, prevVal);\n\t\t\tprevVal = v;\n\t\t\treturn v;\n\t\t}, options));\n\t\tif (options.size === void 0 || cache.size < options.size) cache.set(key, memo);\n\t\treturn memo();\n\t};\n\treturn key ? () => run(key()) : run;\n}\n/**\n* Primitive for updating signal in a predictable way. SolidJS equivalent of React's [useReducer](https://reactjs.org/docs/hooks-reference.html#usereducer).\n* @see https://github.com/solidjs-community/solid-primitives/tree/main/packages/memo#createReducer\n* @param dispatcher is the reducer, it's 1st parameter always is the current state of the reducer and it returns the new state of the reducer.\n* @param initialValue initial value of the signal\n* @returns\n* ```ts\n* [accessor: Accessor<State>, dispatch: (...args: ActionData) => void]\n* ```\n* - `accessor` can be used as you use a normal signal: `accessor()`. It contains the state of the reducer.\n* - `dispatch` is the action of the reducer, it is a sort of `setSignal` that does NOT receive the new state, but instructions to create it from the current state.\n*/\nfunction createReducer(dispatcher, initialValue, options) {\n\tconst [state, setState] = createSignal(initialValue, {\n\t\townedWrite: true,\n\t\t...options\n\t});\n\treturn [state, (...args) => void setState((state) => dispatcher(state, ...args))];\n}\n//#endregion\nexport { createLatest, createLatestMany, createLazyMemo, createMemoCache, createPureReaction, createReducer, createWritableMemo };\n"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "161629b907f36781116bfe5fa76de4b6f3449904b257588be4a79e718616f6d1",
+            "path": "./dist/esm/index.js",
+            "sha256": "cf4320017aac1e5c1ca8d1591eb63742288f5cf7b91aa21ad01f49708d73de20"
+          },
+          "declarations": {
+            "path": "./dist/esm/index.d.ts",
+            "sha256": "d4f5c91e08f1501b5ee81b72524106e0b5825bd4f5bdfc1fff8d03985c9563d0"
+          },
+          "exports": {
+            "Virtualizer": "authored-Virtualizer",
+            "_resetIOSDetectionForTests": "open-callable",
+            "approxEqual": "open-callable",
+            "debounce": "open-callable",
+            "defaultKeyExtractor": "open-callable",
+            "defaultRangeExtractor": "open-callable",
+            "elementScroll": "open-callable",
+            "measureElement": "open-callable",
+            "memo": "open-callable",
+            "notUndefined": "open-callable",
+            "observeElementOffset": "open-callable",
+            "observeElementRect": "open-callable",
+            "observeWindowOffset": "open-callable",
+            "observeWindowRect": "open-callable",
+            "windowScroll": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-BfEvehNpOT75r5Ksc5xW6NZuXujTfb7nlSEyVu4XHG3gdxNg1KqXruWbDewXOUaUYIo4oRbSfkjIajz4MAT8tA==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "fbae301342385d66db721db46f080153498cd15c942b067f5c68fba397ce1870"
+    },
+    "name": "@tanstack/virtual-core",
+    "version": "3.17.8"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-Virtualizer": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "options-get"
+          }
+        ],
+        "operations": [
+          {
+            "id": "options-get",
+            "kind": "invoke",
+            "protocol": "get-enumerable-string-values",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "count": {
+              "scope": "call",
+              "min": 1,
+              "max": 1
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

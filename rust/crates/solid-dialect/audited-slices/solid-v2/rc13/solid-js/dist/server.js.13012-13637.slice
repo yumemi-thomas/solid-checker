@@ -1,0 +1,19 @@
+function createSignal(first, second) {
+  if (typeof first === "function") {
+    const hasLoadingValue = second != null && "loadingValue" in second;
+    const opts = second?.deferStream || second?.ssrSource || hasLoadingValue ? {
+      deferStream: second?.deferStream,
+      ssrSource: second?.ssrSource,
+      ...(hasLoadingValue ? {
+        loadingValue: second.loadingValue
+      } : {})
+    } : undefined;
+    const memo = createMemo(prev => first(prev), opts);
+    return [memo, () => {
+      return undefined;
+    }];
+  }
+  return [() => first, v => {
+    return first = typeof v === "function" ? v(first) : v;
+  }];
+}

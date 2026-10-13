@@ -1,0 +1,14 @@
+{
+  "name": "destructured-return-slot",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "solid-js": "2.0.0-rc.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    }
+  }
+}

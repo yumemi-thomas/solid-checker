@@ -1,0 +1,448 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "62acd7b37bf218d2233e949dc98ebf53f06ebc9b06a2cfe4c1a34a9265817e74",
+            "path": "./dist/index.js",
+            "sha256": "be3eea8c1f62c888d2d25c2b71fa88a96c4c63b6103f041d1cdf34dfc60b2189"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "56d62e52af1cf99dac4c5dd0d25a8c4f3beccb8beeb46ceb9f9d6703d9a589e1"
+          },
+          "exports": {
+            "createAudio": "authored-createAudio",
+            "makeAudio": "open-callable",
+            "makeAudioPlayer": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-QBVDCk8lAZ5JkSQwFI4t2hSh4t+I0110rx/JUkbKALVHbBtnsDgy0okE3mAbfPD0ZAXoK6CqKxySWoWBwbzpAw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "42b7a9a144b3778ac5d924ceb7927b31bd62521f61b51398d0822cbbfcec6cc0"
+    },
+    "name": "@solid-primitives/audio",
+    "version": "3.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createAudio": {
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "create-current-time",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "current-time"
+            ]
+          },
+          {
+            "id": "create-playing",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "playing"
+            ]
+          },
+          {
+            "id": "create-volume",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "volume"
+            ]
+          },
+          {
+            "id": "create-raw-duration",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "raw-duration"
+            ]
+          },
+          {
+            "id": "source-initial",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "source-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "source-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "owner": {
+              "source": "created",
+              "resource": "source-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "source-flush",
+            "kind": "invoke",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            },
+            "owner": {
+              "source": "created",
+              "resource": "source-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "player",
+                  "value": {
+                    "kind": "plain"
+                  }
+                },
+                {
+                  "name": "playing",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "playing"
+                  }
+                },
+                {
+                  "name": "setPlaying",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "volume",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "volume"
+                  }
+                },
+                {
+                  "name": "setVolume",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "currentTime",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "current-time"
+                  }
+                },
+                {
+                  "name": "duration",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "seek",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "creates": [
+          "create-current-time",
+          "create-playing",
+          "create-volume",
+          "create-raw-duration"
+        ],
+        "computations": [
+          "source-effect"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "source-initial"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "source-compute"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "source-flush"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "id": "current-time",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "playing",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "volume",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "raw-duration",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "source-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns",
+          "cleanups"
+        ]
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

@@ -1,0 +1,553 @@
+{
+  "schemaVersion": 1,
+  "authority": false,
+  "certification": false,
+  "population": "41 prior authored consumers without assertions/comparison code, six fresh lineage cases, four runtime/typing boundary checks; no universal accuracy claim",
+  "summary": {
+    "consumers": 41,
+    "targets": 21,
+    "targetsWithWarnings": 18,
+    "targetsWithInformation": 1,
+    "targetsStillOpen": [
+      "warning-accuracy-fresh-serial-identity-result",
+      "warning-accuracy-fresh-concurrent-identity-result"
+    ],
+    "controls": 20,
+    "controlsWithGuidance": 0,
+    "freshLineageTargets": 2,
+    "freshLineageControls": 4,
+    "boundaryChecks": 4
+  },
+  "packages": [
+    {
+      "name": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "metadataSha256": "sha256:153b775ff1e0cbd844c6c3d8396dc03b08573a4bae3a3e55ac86031896c69896"
+    },
+    {
+      "name": "@solid-primitives/map",
+      "version": "1.0.0-next.2",
+      "metadataSha256": "sha256:e36305dd6325b73172014e4bfbfe0362d8cfcca6768e44873b5569c0dfb656dc"
+    },
+    {
+      "name": "@solid-primitives/controlled-signal",
+      "version": "1.0.0-next.3",
+      "metadataSha256": "sha256:809564b7bb18db7d41e5b115878620fca492e294211aaf4e384bcd3d23af307b"
+    }
+  ],
+  "implementation": [
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-browser.mjs",
+      "sha256": "sha256:826d4dcaadb45356e8fcd4b18a885cd5488cc3e4b13e1deb422e24fd6606f629"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-native-hook.mjs",
+      "sha256": "sha256:aa50670f4d2e8c1186c84d23ab461d7a9418871f1d147b8541427e5814fce30c"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-read-runtime.mjs",
+      "sha256": "sha256:a5cfee1ad2cd4eeab9ae29bcec2c806674a2a33444c7ff69cac9b797b8eb0720"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-source-hook.mjs",
+      "sha256": "sha256:a87cbd37170325ed69f2cbe4370da327dd5c68afcb10bbadfb57be741cf56d84"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-read-selector.mjs",
+      "sha256": "sha256:a3b654b5f209af6433d63d33bb4c35c40076e6bf2bda99b643d2b6f3aaabfbb1"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/feedback-assertion-selector.mjs",
+      "sha256": "sha256:502b1b6bc371d2dcc7683ed87245dcf2cca698ed3fc951c14e74cef332382bcf"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/scripts/development-feedback.mjs",
+      "sha256": "sha256:f9dba831fbf2c034e599c82e7d961b40d624afc8942fd1a1ac90d263485d4df4"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/packages/cli/bin/solid-checker.mjs",
+      "sha256": "sha256:0d3938b1c7515abb4d4612354a2c6f45dd3d0087b1eaabf43b3acd1170537575"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/rust/target/local-rc13-checker/rust/target/debug/solid-checker-rust",
+      "sha256": "sha256:26535140f26307d32c7f8abb29e5b4c94372addfb87c9b6538239cc64010d444"
+    },
+    {
+      "path": "/Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts",
+      "sha256": "sha256:ad06b3d0d4b6057283ceaaf8edd9f0913c775f421842429aa13c0dd33757c545"
+    }
+  ],
+  "rows": [
+    {
+      "id": "async-body-return-serial-adopted-child-object-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-serial-reaction-read-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-named-allocation-open",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-identity-control-open",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "1",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-concurrent-adopted-child-object-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-concurrent-reaction-read-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-named-allocation-open",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-identity-control-open",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "1",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-serial-promise-object-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-serial-thenable-read-before-return-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-serial-function-object-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-serial-awaited-child-object-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-serial-constant-object-deferred",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-serial-caught-rejected-promise-deferred",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-serial-caught-throwing-then-getter-deferred",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-concurrent-promise-object-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-concurrent-thenable-read-before-return-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-concurrent-function-object-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-concurrent-awaited-child-object-deferred",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-concurrent-constant-object-deferred",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-concurrent-caught-rejected-promise-deferred",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "async-body-return-concurrent-caught-throwing-then-getter-deferred",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-returned-read",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-returned-branch",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-identity-result",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-discarded-read",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-equal-branches",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-finally-replaces",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-serial-equal-catch",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-returned-read",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-returned-branch",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-identity-result",
+      "role": "target",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-discarded-read",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-equal-branches",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-finally-replaces",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "warning-accuracy-fresh-concurrent-equal-catch",
+      "role": "control",
+      "package": "@solid-primitives/queue",
+      "version": "1.0.0-next.3",
+      "actual": "9",
+      "expected": "9",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "namespace-map-stale",
+      "role": "target",
+      "package": "@solid-primitives/map",
+      "version": "1.0.0-next.2",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 0,
+      "information": 1
+    },
+    {
+      "id": "namespace-map-tracked",
+      "role": "control",
+      "package": "@solid-primitives/map",
+      "version": "1.0.0-next.2",
+      "actual": "2",
+      "expected": "2",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "reexport-controlled-signal-stale",
+      "role": "target",
+      "package": "@solid-primitives/controlled-signal",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    },
+    {
+      "id": "reexport-controlled-signal-tracked",
+      "role": "control",
+      "package": "@solid-primitives/controlled-signal",
+      "version": "1.0.0-next.3",
+      "actual": "2",
+      "expected": "2",
+      "warnings": 0,
+      "information": 0
+    },
+    {
+      "id": "delayed-controlled-signal-stale",
+      "role": "target",
+      "package": "@solid-primitives/controlled-signal",
+      "version": "1.0.0-next.3",
+      "actual": "1",
+      "expected": "2",
+      "warnings": 1,
+      "information": 0
+    }
+  ],
+  "lineage": [
+    {
+      "id": "discarded-inline-queue-result",
+      "role": "control",
+      "actual": "9",
+      "automaticWarnings": 0
+    },
+    {
+      "id": "discarded-inline-reaction-result",
+      "role": "control",
+      "actual": "9",
+      "automaticWarnings": 0
+    },
+    {
+      "id": "discarded-named-queue-result",
+      "role": "control",
+      "actual": "9",
+      "automaticWarnings": 0
+    },
+    {
+      "id": "used-named-queue-result",
+      "role": "target",
+      "actual": "1",
+      "automaticWarnings": 1
+    },
+    {
+      "id": "discarded-method-read-result",
+      "role": "control",
+      "actual": "9",
+      "automaticWarnings": 0
+    },
+    {
+      "id": "used-method-read-result",
+      "role": "target",
+      "actual": "1",
+      "automaticWarnings": 1
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "ordinary-pending-handler",
+      "nativePendingViolations": 0,
+      "nativePendingGaps": 1,
+      "runtimeErrors": 0
+    },
+    {
+      "id": "strict-pending-handler",
+      "runtimeErrors": 1
+    },
+    {
+      "id": "published-typing-exclusion",
+      "typingErrors": 1,
+      "automaticWarnings": 0
+    },
+    {
+      "id": "assertion-and-automatic-without-comparison",
+      "automaticWarnings": 1,
+      "assertionFailures": 1,
+      "comparisonGuidance": 0
+    }
+  ]
+}

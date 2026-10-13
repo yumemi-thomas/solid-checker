@@ -1,0 +1,83 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/event-bus",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-MX58khCyijfCecmlSDQSrwTTFGKE0yTQZaOpbHj/JEJ0Ep+cpWJNQ8DeUaqq8h+1fkFECPT4j3Vu1Rt+LLV9qQ==",
+      "snapshotRoot": "sha256:3cc63800f62ef8159386ad3d221e3c0205c2c3e310a64a4d57b76ef87273a9da",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "c05acff06eee9353be7f38c71ab68a5013e9d5dbedb47fd7fb3653467418d4b3",
+                  "path": "./dist/index.js",
+                  "sha256": "4fc27c1cf9e509e96b2b9ce8d966957135b969721113647e764ab3beede25eb9"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "d1d5f7e40ea5c918e835e11fad16eb204169ba01694597fd61d481ba9eedebf6"
+                },
+                "exports": {
+                  "EmitterCore": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "EventBusCore": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "batchEmits": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+                  "createEmitter": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createEventBus": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createEventHub": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createEventStack": "summary-cbb769333989811ff4a858358bd6ca11edc2d9b3617d23c07897a0dfb0485908",
+                  "createGlobalEmitter": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "once": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "toEffect": "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055",
+                  "toPromise": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-MX58khCyijfCecmlSDQSrwTTFGKE0yTQZaOpbHj/JEJ0Ep+cpWJNQ8DeUaqq8h+1fkFECPT4j3Vu1Rt+LLV9qQ==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "8697f1b4bc91fa3aafc470fa385e5829a144a7433af0b4da2335019b13a95be2"
+          },
+          "name": "@solid-primitives/event-bus",
+          "version": "3.0.0-next.3"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-cbb769333989811ff4a858358bd6ca11edc2d9b3617d23c07897a0dfb0485908": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-87820502c51d3881d38999dec969a1b92c77589b60ef9d5897fd7692971ed055": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

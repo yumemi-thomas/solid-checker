@@ -8,16 +8,14 @@ members = [
   "crates/solid-checker-wasm",
   "crates/napi-build-host-aware",
   "crates/typefacts",
-  "dialects/solid-v1/compiler",
-  "dialects/solid-v1/rules",
   "dialects/solid-v2/compiler",
   "dialects/solid-v2/rules",
 ]
 
 [patch.crates-io]
-# solid-1x-compiler's build.rs still calls napi-build when its optional `node`
-# feature is disabled. The host-aware shim advertises napi-build 2.4.1 for
-# dependency resolution, retains the audited emnapi 1.x WASI link behavior,
+# The Solid compiler fork's build.rs still calls napi-build when its optional
+# `node` feature is disabled. The host-aware shim advertises napi-build 2.4.1
+# for dependency resolution, retains the audited emnapi 1.x WASI link behavior,
 # and suppresses only that invalid WASI cdylib registration edge.
 napi-build = { path = "crates/napi-build-host-aware" }
 
@@ -30,55 +28,13 @@ rust-version = "1.97"
 [workspace.dependencies]
 # Solid 2 compiler facts come from the semantic-only fork of the compiler now
 # owned by solidjs/solid. This exact fork commit is based on upstream `next` at
-# `a10cf1a1` and adds only trace models, output-neutral recording hooks,
-# validation/serialization, and fact tests. Its 358-entry generated-output
+# `5efaf260` and adds only trace models, output-neutral recording hooks,
+# validation/serialization, and fact tests. Its 365-entry generated-output
 # baseline is byte-identical to that exact upstream base. No upstream PR is
 # opened for this fork; compiler behavior fixes remain outside this branch.
 # The producer carries `SEMANTIC_TRACE_VERSION = 3`; the adapter has an
 # independent literal and const assertion so an incompatible pin cannot build.
-solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4", default-features = false }
-# The Solid 1.x compiler: the same crate name from its own repository, kept at
-# differential parity with the Babel compiler Solid 1.x ships. The renamed key
-# is how one workspace holds both; each dialect's compiler crate depends on
-# exactly one of them.
-# Pinned to `main` (the census branch is merged into it): the same fix as
-# above, plus the two upstream correctness fixes that apply to 1.x (the
-# linear deferred JSX pass and the directive-DCE type-only removal).
-# Parity target is babel-plugin-jsx-dom-expressions@0.40.10. Upstream's
-# 0.40.7 -> 0.40.10 delta is four changes: the SSR attribute-position
-# template-quasi escape (an attribute-injection fix), the
-# `omitServerOnlyTemplates` option defaulting to true, `wrapConditionals`
-# applying to SSR component props, and the vendored-oracle bump. Upstream's
-# hydration-id codegen change remains deliberately absent -- none of those four
-# touches hydration-id allocation, so this target does not pull it in.
-# This rev also carries the two census/lowering reconciliation fixes the
-# ecosystem benchmark surfaced (see docs/precision-backlog.md): `style`/
-# `classList` decomposition now follows the same positional spread carve-out
-# lowering uses, and fragment children are classified from a span set instead of
-# a flag that leaked through attribute values. Both are census-only, so emitted
-# output is byte-identical across them.
-# This rev carries `SEMANTIC_TRACE_VERSION = 2` and *removes* the
-# `ownership_sites` / `OwnershipDecision` vocabulary in favor of the additive
-# wrapper facts (`owner_establishments`, `component_render_sites`,
-# `deferred_callback_sites`). The reactive-ownership regions this checker
-# requires are therefore derived in rust/dialects/solid-v1/compiler now — the
-# same rule the producer used to apply, reactive-rerun sites under the default
-# effect wrapper — so that derivation must move with this rev, not after it.
-# The same const assert guards this side: rust/dialects/solid-v1/compiler holds
-# its own `READS_TRACE_VERSION` literal equal to the producer's constant, so a
-# schema bump fails the build rather than being read as if nothing changed.
-# The current rev additionally carries the nested `children`-attribute
-# promotion fixes and retracts trace rows inside every subtree lowering later
-# discards (including static `<noscript>` and hydratable `<head>` paths). The
-# latter is trace-only: emitted JavaScript and `SEMANTIC_TRACE_VERSION = 2`
-# remain unchanged, while file-level exit-2 census gaps are closed.
-# The exact revision additionally matches Babel's native child lowering,
-# including the legacy `keygen` and `menuitem` void tags, preserves the
-# expression-bodied JSX-hole thunk/IIFE output shape, and closes the same
-# template-root shadowed-children reconciliation refusal. Discarded void and
-# `<noscript>` child lists are traced as one `Elided` range; the trace additions
-# do not change generated JavaScript.
-solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "ca3bbfae7d1e00e28ef73f9af58bdb46e248b512", default-features = false }
+solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d", default-features = false }
 # Moved from `3296ec8` for the signature-less `Function`-supertype answer
 # (producer ADR 0021): wire table schema 15, handshake protocol still 2.
 # `Callability::UntypedCallable` is positive runtime-function evidence without
@@ -117,3 +73,9 @@ thiserror = "2"
 inherits = "dev"
 debug = 0
 incremental = false
+
+# Probe certification re-hashes executable images before/after every launch.
+# Keep those checks intact, but do not execute SHA-256's compression loop
+# unoptimized during verification. The checker itself retains debug assertions.
+[profile.verify.package.sha2]
+opt-level = 3

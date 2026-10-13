@@ -1,0 +1,10 @@
+function createSignal(first, second) {
+  if (typeof first === "function") {
+    const node = computed(first, second);
+    node._config &= ~CONFIG_AUTO_DISPOSE;
+    return [accessor(node), setMemo.bind(null, node)];
+  }
+  const node = signal(first, second);
+  registerGraph(node, getOwner());
+  return [accessor(node), setSignal.bind(null, node)];
+}

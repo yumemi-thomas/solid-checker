@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/inferred-host-alias-congruent/src/helper.ts",
+      "start": 72,
+      "end": 85,
+      "fixes": 0
+    }
+  ]
+}

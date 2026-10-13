@@ -1,0 +1,40 @@
+// Hand-authored `reads: []` veto for `@floating-ui/utils@0.2.12`, on the published
+// runtime case `artifact-case:9bc68a12911a31424edd543d041c3f76b21f2b2fdef6813016a8f0bf02379f43`
+// (the ESM `.` case; the ecosystem corpus reaches it from three rows, and the
+// package's second `.` case carries none of these candidates).
+//
+// Not demand-scoped: written because the second scaffold pass (2026-09-13) showed
+// the census can decide this candidate, and one recipe on this dependency node
+// closes the entry in every row that depends on it.
+//
+// `rectToClientRect(rect)` destructures `x`, `y`, `width` and `height` from
+// the caller's object -- four reads, once each -- and returns a fresh object
+// of sums over those primitives. The reads are counted here on owned getters
+// and deliberately not emitted (ADR 0034).
+// What it cannot do: establish the closure. Finite samples only falsify, and
+// the authenticated implementation census remains the proof. It hands the
+// package no `session` and no `harness`.
+import { rectToClientRect } from "@floating-ui/utils";
+
+export async function runProbeSession(_session, harness) {
+  let reads = 0;
+  const ownedRect = {
+    get x() { reads += 1; return 10; },
+    get y() { reads += 1; return 20; },
+    get width() { reads += 1; return 30; },
+    get height() { reads += 1; return 40; }
+  };
+  harness.emit({ marker: "call", kind: "call", phase: "enter" });
+  const answered = rectToClientRect(ownedRect);
+  if (
+    answered.left !== 10 || answered.top !== 20 || answered.right !== 40 || answered.bottom !== 60 ||
+    answered.width !== 30 || answered.height !== 40 || answered.x !== 10 || answered.y !== 20
+  ) {
+    throw new Error(`rectToClientRect answered ${JSON.stringify(answered)}`);
+  }
+  if (reads !== 4) {
+    throw new Error(`expected four reads of the caller's rect, observed ${reads}`);
+  }
+  // No emit: the reads are the caller's under ADR 0034.
+  harness.emit({ marker: "call", kind: "call", phase: "exit" });
+}

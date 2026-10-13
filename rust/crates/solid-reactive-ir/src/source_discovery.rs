@@ -11,11 +11,11 @@ use crate::owners::{
 use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
 use crate::{
     BuildTimings, ContractCallback, ContractReturn, PrimitiveName, ReactiveSourceKind,
-    RuntimeEnvironment, RuntimeRendering, jsx_primitive_name, known_primitive, location,
-    primitive_name,
+    RuntimeEnvironment, RuntimeRendering, call_primitive_name, jsx_primitive_name, known_primitive,
+    location,
 };
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crate::contracts::ResolvedContracts;
 use crate::identity::{SymbolId, symbol_id};
@@ -25,16 +25,6 @@ use solid_dialect::{Dialect, Primitive};
 use solid_facts::core::{SourceHash, SourcePath};
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::{Declaration, Location, ResolvedCallValidity};
-
-/// The provenance stamped on facts read from a bundled contract:
-/// `bundled://<dialect label>#<primitive>`, carrying no span of its own.
-pub(crate) fn bundled_contract_location(dialect: &dyn Dialect, primitive: &str) -> Location {
-    Location {
-        path: format!("bundled://{}#{primitive}", dialect.bundled_contract_label()).into(),
-        start_byte: 0,
-        end_byte: 0,
-    }
-}
 
 pub(crate) fn source_discovery_identity(
     file: &FileFacts,
@@ -131,13 +121,84 @@ fn push_contracted_return_source(
     ));
 }
 
+/// Rebind the exact callback value, never the callback's parameter or its
+/// function identity. This produces the same local read evidence as a direct
+/// factory binding and leaves the caller's execution role untouched.
+fn push_callback_return_sources(
+    result: &mut SourceDiscoveryContribution,
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    entities: &EntitySymbols,
+    resolved_contracts: &ResolvedContracts,
+    returned: crate::callback_return::CallbackReturn<'_>,
+) {
+    for (name, value) in returned.bindings {
+        let Some(symbol) = entities.at(file.path.as_str(), name) else {
+            continue;
+        };
+        let declaration = crate::location(file.path.shared(), name);
+        let display = symbol_id(file.source_text(name).unwrap_or_default());
+        if value.kind == "accessor" {
+            if let Some((export, origin)) = returned.origin {
+                push_contracted_return_source(result, symbol, display, &value, export, origin);
+            } else {
+                result
+                    .accessors
+                    .push((symbol.clone(), (display, declaration)));
+                result
+                    .source_kinds
+                    .push((symbol.clone(), ReactiveSourceKind::Accessor));
+            }
+        } else if value.kind == "setter" {
+            result.setters.push((
+                symbol.clone(),
+                (
+                    display,
+                    declaration,
+                    returned.created.owned_write_option,
+                    ReactiveSourceKind::Accessor,
+                ),
+            ));
+        } else {
+            continue;
+        }
+        result.source_phases.push((symbol.clone(), 1));
+        if let Some(primitive) = returned.primitive {
+            if let Some(spelling) = lookup.dialect.name_of(primitive) {
+                result
+                    .source_primitives
+                    .push((symbol.clone(), spelling.into()));
+            }
+            result
+                .source_owned_write
+                .push((symbol.clone(), returned.created.owned_write_option));
+            let options =
+                async_source_options(file, returned.created, Some(primitive), lookup.dialect);
+            if options != AsyncSourceOptions::default() {
+                result.source_async_options.push((symbol.clone(), options));
+            }
+            if value.kind == "accessor"
+                && returned.created.arguments.first().is_some_and(|argument| {
+                    computation_is_async_with_contracts(
+                        lookup,
+                        file,
+                        argument.span,
+                        &resolved_contracts.by_symbol,
+                    )
+                })
+            {
+                result.async_sources.push(symbol.clone());
+            }
+        }
+    }
+}
+
 struct EffectiveReturnContext<'a> {
     file: &'a FileFacts,
     ast_index: &'a CachedAstFileIndex,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
     resolved_contracts: &'a ResolvedContracts,
-    bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     dialect: &'a dyn Dialect,
 }
 
@@ -147,11 +208,40 @@ fn effective_call_return(
     context: &EffectiveReturnContext<'_>,
     depth: usize,
 ) -> Option<ContractReturn> {
-    if !matches!(returned.kind.as_str(), "argument" | "callback-result") {
-        return Some(returned.clone());
-    }
     if depth == 0 {
         return None;
+    }
+    if returned.kind == "tuple" {
+        return Some(ContractReturn {
+            elements: returned
+                .elements
+                .iter()
+                .map(|element| {
+                    element.as_ref().and_then(|element| {
+                        effective_call_return(element, call, context, depth - 1)
+                    })
+                })
+                .collect(),
+            prototype: None,
+            ..returned.clone()
+        });
+    }
+    if returned.kind == "object" {
+        return Some(ContractReturn {
+            properties: returned
+                .properties
+                .iter()
+                .filter_map(|(name, value)| {
+                    effective_call_return(value, call, context, depth - 1)
+                        .map(|value| (name.clone(), value))
+                })
+                .collect(),
+            prototype: None,
+            ..returned.clone()
+        });
+    }
+    if !matches!(returned.kind.as_str(), "argument" | "callback-result") {
+        return Some(returned.clone());
     }
     let argument = call.arguments.get(returned.parameter?)?;
     if returned.kind == "callback-result" {
@@ -212,16 +302,268 @@ fn effective_call_return(
         }
         return resolved;
     }
-    let inner = context.ast_index.call_by_span(argument.span).or_else(|| {
-        context
-            .file
-            .ast
-            .calls
+    effective_value_return(argument.span, context, depth - 1)
+}
+
+/// A fresh source returned by one exact project function. This is deliberately
+/// separate from structured-return summaries: finding one reactive leaf, or
+/// merging equal kinds, cannot prove that every completion returns one value.
+fn project_returned_source<'a>(
+    lookup: &SemanticLookup<'a>,
+    caller: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    resolved_contracts: &ResolvedContracts,
+) -> Option<(&'a FileFacts, &'a solid_facts::ast::CallFact, Primitive)> {
+    // This first slice only admits straight-line calls, which also excludes
+    // optional invocation and optional receivers. No selected signature is
+    // substituted for a value identity.
+    if call.construct || !caller.ast.straight_line_calls.contains(&call.span) {
+        return None;
+    }
+    let callee = caller.ast.peel_ts_sugar_span(call.callee);
+    let target = if caller.ast.identifiers.iter().any(|id| id.span == callee) {
+        lookup.function_called_at(caller.path.as_str(), callee)
+    } else {
+        lookup.namespace_member_function(caller, callee)
+    };
+    let (file, function) = target?;
+    if function.r#async
+        || function.generator
+        || function.expression_body
+        || function.method_name.is_some()
+        || !lookup.function_value_is_current(file, function)
+    {
+        return None;
+    }
+    let returns = file
+        .ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|owner| owner.span == function.span)
+        })
+        .collect::<Vec<_>>();
+    let mut source = None;
+    let mut sites = Vec::new();
+    for returned in &returns {
+        let value = file.ast.peel_ts_sugar_span(returned.argument?);
+        if !file.ast.identifiers.iter().any(|id| id.span == value) {
+            return None;
+        }
+        let symbol = entities.at(file.path.as_str(), value)?;
+        if source.is_some_and(|prior| prior != symbol) {
+            return None;
+        }
+        source = Some(symbol);
+        sites.push(value);
+    }
+    let source = source?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding
+            .names
             .iter()
-            .filter(|candidate| argument.span.contains(candidate.span))
-            .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+            .any(|name| entities.at(file.path.as_str(), name.span) == Some(source))
     })?;
-    effective_inner_call_return(inner, context, depth - 1)
+    let name = binding
+        .names
+        .iter()
+        .find(|name| entities.at(file.path.as_str(), name.span) == Some(source))?;
+    if !binding.immutable
+        || crate::indexes::binding_written(file, name.span)
+        || crate::value_identity::binding_has_write(file, entities, source)
+        || !containing_ast_function(&file.ast, binding.declaration)
+            .is_some_and(|owner| owner.span == function.span)
+    {
+        return None;
+    }
+    let initializer = file.ast.peel_ts_sugar_span(binding.initializer?);
+    let created = file.ast.call_at(initializer)?;
+    if created.construct
+        || !file.ast.straight_line_calls.contains(&created.span)
+        || returns
+            .iter()
+            .any(|returned| created.span.end > returned.span.start)
+    {
+        return None;
+    }
+    let primitive = known_primitive(&call_primitive_name(
+        file,
+        created,
+        entities,
+        symbol_names,
+        lookup.dialect,
+    ))?;
+    if !lookup.dialect.creates_reactive_source(primitive) {
+        return None;
+    }
+    let context = EffectiveReturnContext {
+        file,
+        ast_index: lookup.ast_file_index(file.path.as_str())?,
+        entities,
+        symbol_names,
+        resolved_contracts,
+        dialect: lookup.dialect,
+    };
+    let returned = effective_value_return(returns.first()?.argument?, &context, 16)?;
+    if !matches!(returned.kind.as_str(), "accessor" | "store-path") {
+        return None;
+    }
+    // No alias or escape of the root: another call could receive it through
+    // an alias not represented by this proof. Only exact returns, member
+    // receivers, and direct accessor invocations use the root here.
+    for reference in file.ast.identifiers.iter().filter(|id| {
+        id.role == solid_facts::ast::IdentifierRole::Reference
+            && (file.ast.reference_declaration(id.span) == Some(name.span)
+                || entities.at(file.path.as_str(), id.span) == Some(source))
+    }) {
+        let at = reference.span;
+        if file.ast.calls.iter().any(|call| {
+            call.arguments
+                .iter()
+                .any(|argument| argument.span.contains(at))
+        }) || !(returns.iter().any(|returned| {
+            returned
+                .argument
+                .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == at)
+        }) || file
+            .ast
+            .members
+            .iter()
+            .any(|member| file.ast.peel_ts_sugar_span(member.object) == at)
+            || (returned.kind == "accessor"
+                && file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == at)))
+        {
+            return None;
+        }
+    }
+    (solid_facts::ast::completion_return_cover(
+        std::path::Path::new(file.path.as_str()),
+        &file.source,
+        function.body,
+        &sites,
+    ) == Some(true))
+    .then_some((file, created, primitive))
+}
+
+/// Follow an exact immutable identity into a proved source-producing call.
+/// Nested/default/rest binding slots carry no direct-value identity fact.
+fn effective_value_return(
+    span: solid_facts::core::Span,
+    context: &EffectiveReturnContext<'_>,
+    depth: usize,
+) -> Option<ContractReturn> {
+    if depth == 0 {
+        return None;
+    }
+    let span = context.file.ast.peel_ts_sugar_span(span);
+    if let Some(call) = context.ast_index.call_by_span(span) {
+        return effective_inner_call_return(call, context, depth - 1);
+    }
+    if !context
+        .file
+        .ast
+        .identifiers
+        .iter()
+        .any(|id| id.span == span)
+    {
+        return None;
+    }
+    let symbol = context.entities.at(context.file.path.as_str(), span)?;
+    if crate::value_identity::binding_has_write(context.file, context.entities, symbol) {
+        return None;
+    }
+    let binding = context.file.ast.bindings.iter().find(|binding| {
+        binding
+            .names
+            .iter()
+            .any(|name| context.entities.at(context.file.path.as_str(), name.span) == Some(symbol))
+    })?;
+    let initializer = binding.initializer?;
+    let returned = effective_value_return(initializer, context, depth - 1)?;
+    match binding.shape {
+        solid_facts::ast::BindingShape::Identifier => {
+            if matches!(returned.kind.as_str(), "tuple" | "object")
+                && !crate::value_identity::structural_binding_is_stable(
+                    context.file,
+                    context.entities,
+                    symbol,
+                    &returned,
+                )
+            {
+                return None;
+            }
+            Some(returned)
+        }
+        solid_facts::ast::BindingShape::Array if returned.kind == "tuple" => {
+            let index = binding.array_slots.iter().position(|slot| {
+                slot.as_ref().is_some_and(|name| {
+                    context.entities.at(context.file.path.as_str(), name.span) == Some(symbol)
+                })
+            })?;
+            returned.elements.get(index)?.clone()
+        }
+        solid_facts::ast::BindingShape::Object if returned.kind == "object" => {
+            let slot = binding.object_slots.iter().find(|slot| {
+                context
+                    .entities
+                    .at(context.file.path.as_str(), slot.local.span)
+                    == Some(symbol)
+            })?;
+            returned.properties.get(slot.property.as_str()).cloned()
+        }
+        _ => None,
+    }
+}
+
+/// A declared member type cannot restore a container identity invalidated by
+/// runtime writes/escape. Contracted containers use their explicit value flow
+/// instead of the generic typed-accessor fallback, including direct aliases.
+fn is_contracted_container_value(
+    file: &FileFacts,
+    entities: &EntitySymbols,
+    contracts: &ResolvedContracts,
+    span: solid_facts::core::Span,
+    depth: usize,
+) -> bool {
+    if depth == 0 {
+        return true;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if let Some(call) = file.ast.calls.iter().find(|call| call.span == span) {
+        return entities
+            .at(file.path.as_str(), call.callee)
+            .and_then(|symbol| contracts.by_symbol.get(symbol))
+            .and_then(|contract| contract.summary.returns.known())
+            .and_then(Option::as_ref)
+            .is_some_and(|value| {
+                matches!(
+                    value.kind.as_str(),
+                    "tuple" | "object" | crate::contracts::RETURNED_CALLABLE
+                )
+            });
+    }
+    let Some(symbol) = entities.at(file.path.as_str(), span) else {
+        return false;
+    };
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && entities.at(file.path.as_str(), binding.names[0].span) == Some(symbol)
+        })
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| {
+            is_contracted_container_value(file, entities, contracts, initializer, depth - 1)
+        })
 }
 
 fn effective_inner_call_return(
@@ -238,40 +580,38 @@ fn effective_inner_call_return(
     {
         return effective_call_return(contracted, inner, context, depth);
     }
-    let primitive = primitive_name(
-        context.file.path.as_str(),
-        inner.callee,
-        inner.static_callee(&context.file.source),
+    let primitive = call_primitive_name(
+        context.file,
+        inner,
         context.entities,
         context.symbol_names,
         context.dialect,
     );
-    if let Some(returned) = primitive
-        .as_deref()
-        .and_then(|primitive| context.bundled_returns.get(primitive))
-    {
-        return Some(returned.clone());
-    }
     let primitive = known_primitive(&primitive)?;
     let kind = if context.dialect.returns_store(primitive) {
         "store-path"
     } else {
         "accessor"
     };
-    if matches!(
-        primitive,
-        Primitive::CreateSignal | Primitive::CreateStore | Primitive::CreateResource
-    ) {
+    // The dialect's own tuple list. This was a hardcoded
+    // `CreateSignal | CreateStore | CreateResource`, which is neither
+    // dialect's: `createResource` does not exist in 2.0, and 2.0's
+    // `createOptimistic` and `createOptimisticStore` -- both declared to
+    // return two-slot tuples -- were missing, so a read traced through either
+    // was told the call returns the store itself.
+    if context.dialect.returns_reactive_tuple(primitive) {
         return Some(ContractReturn {
             kind: "tuple".into(),
             elements: vec![
                 Some(ContractReturn {
                     kind: kind.into(),
                     label: "wrapped reactive value".into(),
+                    prototype: None,
                     ..ContractReturn::default()
                 }),
                 None,
             ],
+            prototype: None,
             ..ContractReturn::default()
         });
     }
@@ -281,6 +621,7 @@ fn effective_inner_call_return(
         .then(|| ContractReturn {
             kind: kind.into(),
             label: "wrapped reactive value".into(),
+            prototype: None,
             ..ContractReturn::default()
         })
 }
@@ -325,6 +666,7 @@ fn effective_returned_callable_call(
     let relation = ContractReturn {
         kind: "callback-result".into(),
         parameter: returned.parameter,
+        prototype: None,
         ..ContractReturn::default()
     };
     effective_call_return(&relation, factory_call, context, depth - 1).map(|returned| {
@@ -451,12 +793,19 @@ pub(crate) fn async_source_options(
     }
 }
 
-/// The `@solidjs/web` exports whose import proves the project server-renders
-/// (or hydrates server-rendered HTML). A bare `ssrSource: "client"` source is
-/// only a runtime error on the server path. Named imports prove that path;
-/// their absence leaves the rendering mode unresolved because the server
-/// entry may live outside the analyzed project. The export names come from
-/// the bundled `@solidjs/web` contract.
+/// The exports whose import proves the project server-renders (or hydrates
+/// server-rendered HTML). A bare `ssrSource: "client"` source is only a
+/// runtime error on the server path. Named imports prove that path; their
+/// absence leaves the rendering mode unresolved because the server entry may
+/// live outside the analyzed project. The export names come from the
+/// historical `@solidjs/web` audit; no contract is read during analysis.
+///
+/// **Not asked of the dialect, and it could not answer.** Five of these six
+/// are not primitives — only `hydrate` is in the vocabulary — so
+/// `export_modules` returns nothing for them and a seam question keyed on the
+/// name would silence the rule rather than generalize it. Which exports prove
+/// server rendering is this rule's own subject; which *module* they may come
+/// from is the dialect's, and that half is asked below.
 const SERVER_RENDER_IMPORTS: [&str; 6] = [
     "renderToStream",
     "renderToString",
@@ -519,17 +868,22 @@ impl ServerRenderingPremise {
 
 /// Whether the analyzed project server-renders: an explicit rendering
 /// selector when there is one, otherwise whether any analyzed file imports a
-/// server rendering entry point from `@solidjs/web` (or one of its subpaths).
+/// server rendering entry point from a module this dialect owns.
 pub(crate) fn project_server_rendering(
     facts: &ProjectFacts,
     environment: &RuntimeEnvironment,
+    dialect: &dyn solid_dialect::Dialect,
 ) -> ServerRenderingPremise {
     if let Some(rendering) = environment.rendering {
         return ServerRenderingPremise::select(Some(rendering), false);
     }
     let imports_server_entry = facts.files.iter().any(|file| {
         file.ast.imports.iter().any(|import| {
-            (import.module == "@solidjs/web" || import.module.starts_with("@solidjs/web/"))
+            // `@solidjs/web` and its subpaths, spelled by the dialect rather
+            // than by this module. `modules()` already enumerates them, so a
+            // dialect that publishes its render entries from somewhere else
+            // says so once instead of being matched against a literal here.
+            dialect.owns_module(import.module.as_str())
                 && !import.type_only
                 && import.bindings.iter().any(|binding| {
                     !binding.type_only
@@ -621,7 +975,6 @@ pub(crate) fn discover_file_sources(
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     resolved_contracts: &ResolvedContracts,
-    bundled_returns: &HashMap<SymbolId, ContractReturn>,
 ) -> SourceDiscoveryContribution {
     let mut result = SourceDiscoveryContribution::default();
     for binding in &file.ast.bindings {
@@ -631,6 +984,19 @@ pub(crate) fn discover_file_sources(
         let Some(call) = ast_index.call_by_span(initializer) else {
             continue;
         };
+        if crate::callback_return::callback_slot(lookup, file, call).is_some() {
+            if let Some(returned) = crate::callback_return::resolve(lookup, file, call) {
+                push_callback_return_sources(
+                    &mut result,
+                    lookup,
+                    file,
+                    entities,
+                    resolved_contracts,
+                    returned,
+                );
+            }
+            continue;
+        }
         let contracted = entities
             .get(&location(file.path.shared(), call.callee))
             .and_then(|symbol| resolved_contracts.by_symbol.get(symbol));
@@ -644,7 +1010,6 @@ pub(crate) fn discover_file_sources(
                 entities,
                 symbol_names,
                 resolved_contracts,
-                bundled_returns,
                 dialect: lookup.dialect,
             };
             let effective_return = effective_call_return(contracted_return, call, &context, 16);
@@ -713,6 +1078,14 @@ pub(crate) fn discover_file_sources(
                         .first()
                         .and_then(|name| entities.at(file.path.as_str(), name.span));
                     if let Some(root_symbol) = root {
+                        if !crate::value_identity::structural_binding_is_stable(
+                            file,
+                            entities,
+                            root_symbol,
+                            contracted_return,
+                        ) {
+                            continue;
+                        }
                         for member in &file.ast.members {
                             // Exact receiver identity only. A same-spelled
                             // member elsewhere in the file -- a shadowing
@@ -753,7 +1126,6 @@ pub(crate) fn discover_file_sources(
             entities,
             symbol_names,
             resolved_contracts,
-            bundled_returns,
             dialect: lookup.dialect,
         };
         if let Some((returned, export_name, contract_location)) =
@@ -772,15 +1144,74 @@ pub(crate) fn discover_file_sources(
             );
             continue;
         }
-        let primitive = primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            lookup.dialect,
-        );
+        let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect);
         let resolved = known_primitive(&primitive);
+        if resolved.is_none()
+            && binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == call.span)
+            && let Some(name) = binding.names.first()
+            && !crate::indexes::binding_written(file, name.span)
+            && let Some(symbol) = entities.at(file.path.as_str(), name.span)
+            && let Some((origin_file, created, primitive)) = project_returned_source(
+                lookup,
+                file,
+                call,
+                entities,
+                symbol_names,
+                resolved_contracts,
+            )
+        {
+            // The caller binding is this call's source, never the callee's
+            // declaration symbol. Separate calls keep separate identities.
+            let declaration = location(file.path.shared(), name.span);
+            result.accessors.push((
+                symbol.clone(),
+                (
+                    symbol_id(file.source_text(name.span).unwrap_or_default()),
+                    declaration,
+                ),
+            ));
+            result.source_kinds.push((
+                symbol.clone(),
+                if lookup.dialect.returns_store(primitive) {
+                    ReactiveSourceKind::Store
+                } else {
+                    ReactiveSourceKind::Accessor
+                },
+            ));
+            result.source_phases.push((symbol.clone(), 1));
+            if let Some(spelling) = lookup.dialect.name_of(primitive) {
+                result
+                    .source_primitives
+                    .push((symbol.clone(), spelling.into()));
+            }
+            result
+                .source_owned_write
+                .push((symbol.clone(), created.owned_write_option));
+            if store_is_value_form(created, Some(primitive)) {
+                result.value_form_stores.push(symbol.clone());
+            }
+            let options =
+                async_source_options(origin_file, created, Some(primitive), lookup.dialect);
+            if options != AsyncSourceOptions::default() {
+                result.source_async_options.push((symbol.clone(), options));
+            }
+            if created.arguments.first().is_some_and(|argument| {
+                computation_is_async_with_contracts(
+                    lookup,
+                    origin_file,
+                    argument.span,
+                    &resolved_contracts.by_symbol,
+                )
+            }) {
+                result.async_sources.push(symbol.clone());
+            }
+            continue;
+        }
         if resolved == Some(Primitive::Action) {
             if let Some(name) = binding.names.first() {
                 let location = location(file.path.shared(), name.span);
@@ -820,20 +1251,13 @@ pub(crate) fn discover_file_sources(
         if !matches!(
             resolved,
             Some(primitive) if lookup.dialect.creates_reactive_source(primitive)
-        ) && !primitive
-            .as_deref()
-            .is_some_and(|primitive| bundled_returns.contains_key(primitive))
-        {
+        ) {
             continue;
         }
-        let source_kind = if primitive
-            .as_deref()
-            .and_then(|primitive| bundled_returns.get(primitive))
-            .is_some_and(|returned| returned.kind == "store-path")
-            || matches!(
-                resolved,
-                Some(primitive) if lookup.dialect.returns_store(primitive)
-            ) {
+        let source_kind = if matches!(
+            resolved,
+            Some(primitive) if lookup.dialect.returns_store(primitive)
+        ) {
             ReactiveSourceKind::Store
         } else {
             ReactiveSourceKind::Accessor
@@ -853,19 +1277,21 @@ pub(crate) fn discover_file_sources(
                         declaration,
                     ),
                 ));
+                // `Dialect::returns_reactive_tuple`, not a list: the list here
+                // was 1.x's (`createResource` is 1.x-only) and so missed 2.0's
+                // `createOptimistic` and `createOptimisticStore` entirely. That
+                // method's own documentation names this as the thing it exists
+                // to replace -- "shared code carried one hardcoded list that
+                // was neither dialect's".
                 let go_returned_source = binding.shape == solid_facts::ast::BindingShape::Array
-                    && matches!(
-                        resolved,
-                        Some(
-                            Primitive::CreateSignal
-                                | Primitive::CreateStore
-                                | Primitive::CreateResource
-                        )
-                    )
+                    && resolved
+                        .is_some_and(|primitive| lookup.dialect.returns_reactive_tuple(primitive))
                     && binding_returns_reactive_source(binding, call);
                 result.source_phases.push((
                     symbol.clone(),
-                    if go_returned_source && resolved == Some(Primitive::CreateStore) {
+                    if go_returned_source
+                        && resolved.is_some_and(|primitive| lookup.dialect.returns_store(primitive))
+                    {
                         2
                     } else if go_returned_source {
                         0
@@ -876,25 +1302,6 @@ pub(crate) fn discover_file_sources(
                 if go_returned_source {
                     result.returned_source_symbols.push(symbol.clone());
                     result.summary_source_symbols.push(symbol.clone());
-                }
-                if binding.shape != solid_facts::ast::BindingShape::Array
-                    && primitive
-                        .as_deref()
-                        .is_some_and(|primitive| bundled_returns.contains_key(primitive))
-                {
-                    result.summary_source_symbols.push(symbol.clone());
-                }
-                if let Some(primitive) = primitive.as_deref()
-                    && let Some(returned) = bundled_returns.get(primitive)
-                {
-                    result.accessor_origins.push((
-                        symbol.clone(),
-                        (
-                            symbol_id(&returned.label),
-                            primitive.into(),
-                            bundled_contract_location(lookup.dialect, primitive),
-                        ),
-                    ));
                 }
                 result.source_kinds.push((symbol.clone(), source_kind));
                 if let Some(primitive) = primitive.as_deref() {
@@ -942,9 +1349,18 @@ pub(crate) fn discover_file_sources(
                         source_kind,
                     ),
                 ));
+                if let Some(primitive) = primitive.as_deref() {
+                    result
+                        .source_primitives
+                        .push((symbol.clone(), primitive.into()));
+                }
             }
         }
     }
+    result.accessors.retain(|(symbol, _)| {
+        !result.contracted_accessor_symbols.contains(symbol)
+            || !crate::value_identity::binding_has_write(file, entities, symbol)
+    });
     for assignment in &file.ast.assignments {
         let (Some(initializer), Some(name)) = (
             assignment.call_initializer,
@@ -977,30 +1393,22 @@ pub(crate) fn discover_file_sources(
             );
             continue;
         }
-        let primitive = primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            lookup.dialect,
-        );
+        let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect);
         let resolved = known_primitive(&primitive);
-        if !matches!(
-            resolved,
-            Some(Primitive::CreateSignal | Primitive::CreateStore | Primitive::CreateResource)
-        ) {
+        // Same seam as above, and the same reason.
+        if !resolved.is_some_and(|primitive| lookup.dialect.returns_reactive_tuple(primitive)) {
             continue;
         }
         let Some(symbol) = symbol else {
             continue;
         };
         let declaration = location(file.path.shared(), name);
-        let source_kind = if resolved == Some(Primitive::CreateStore) {
-            ReactiveSourceKind::Store
-        } else {
-            ReactiveSourceKind::Accessor
-        };
+        let source_kind =
+            if resolved.is_some_and(|primitive| lookup.dialect.returns_store(primitive)) {
+                ReactiveSourceKind::Store
+            } else {
+                ReactiveSourceKind::Accessor
+            };
         result.accessors.push((
             symbol.clone(),
             (
@@ -1023,16 +1431,6 @@ pub(crate) fn discover_file_sources(
             result
                 .source_primitives
                 .push((symbol.clone(), primitive.into()));
-            if let Some(returned) = bundled_returns.get(primitive) {
-                result.accessor_origins.push((
-                    symbol.clone(),
-                    (
-                        symbol_id(&returned.label),
-                        primitive.into(),
-                        bundled_contract_location(lookup.dialect, primitive),
-                    ),
-                ));
-            }
         }
         if store_is_value_form(call, resolved) {
             result.value_form_stores.push(symbol.clone());
@@ -1052,6 +1450,11 @@ pub(crate) fn discover_file_sources(
                     source_kind,
                 ),
             ));
+            if let Some(primitive) = primitive.as_deref() {
+                result
+                    .source_primitives
+                    .push((setter_symbol.clone(), primitive.into()));
+            }
         }
     }
     for member in &file.ast.members {
@@ -1277,6 +1680,11 @@ pub(crate) struct SourceDiscovery {
     pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) actions: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
+    /// The dialect primitive (canonical spelling) that created each reactive
+    /// source, and, for a setter bound from the same tuple, the primitive that
+    /// returned it: an owned-scope write guard can depend on which primitive
+    /// made the setter (`Dialect::optimistic_store_setter_guarded`). A setter
+    /// found only by its type has no entry.
     pub(crate) source_primitives: HashMap<SymbolId, SymbolId>,
     pub(crate) source_phases: HashMap<SymbolId, u8>,
     pub(crate) returned_source_symbols: HashSet<SymbolId>,
@@ -1290,8 +1698,8 @@ pub(crate) struct SourceDiscovery {
     /// `INVALID_REFRESH_TARGET` in dev (probed, rc.0). A store whose
     /// construction form is unknown is absent, keeping refresh acceptance.
     pub(crate) value_form_stores: HashSet<SymbolId>,
-    pub(crate) contract_reads: HashMap<SymbolId, Vec<(String, String, Location, String)>>,
-    pub(crate) contract_parameter_reads: HashMap<SymbolId, Vec<(usize, String, String, Location)>>,
+    pub(crate) contract_reads: HashMap<SymbolId, Vec<crate::ContractReadSite>>,
+    pub(crate) contract_parameter_reads: HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
     pub(crate) contract_callbacks: HashMap<SymbolId, Vec<ContractCallback>>,
     pub(crate) contract_returns: HashMap<SymbolId, (ContractReturn, Location)>,
     pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
@@ -1305,7 +1713,6 @@ pub(crate) struct SourceDiscovery {
     /// `Reactive` everywhere) for dialects that keep the upstream
     /// over-approximation.
     pub(crate) props_reactivity: PropsReactivityIndex,
-    pub(crate) bundled_returns: HashMap<SymbolId, ContractReturn>,
     pub(crate) retained_source_paths: HashSet<String>,
     pub(crate) changed_source_symbols: HashSet<SymbolId>,
 }
@@ -1322,8 +1729,54 @@ pub(crate) struct StageContext<'a> {
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
     pub(crate) resolved_contracts: &'a ResolvedContracts,
-    pub(crate) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(crate) runtime: &'a crate::RuntimeEnvironment,
+}
+
+/// The spans of the function expressions that are `element`'s children value:
+/// a `{...}` child expression container holding exactly one function (after
+/// parentheses and type wrappers), or a `children={...}` attribute value.
+/// Anything else lexically inside the element -- an attribute handler, a ref
+/// callback, a nested element's own callbacks -- is not the children callback.
+fn jsx_children_function_spans(
+    file: &FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Vec<solid_facts::core::Span> {
+    let mut candidates = Vec::new();
+    for child in &element.children {
+        let Some(text) = file.source_text(*child) else {
+            continue;
+        };
+        let Some(inner) = text
+            .strip_prefix('{')
+            .and_then(|rest| rest.strip_suffix('}'))
+        else {
+            continue;
+        };
+        let (Ok(leading), Ok(trailing)) = (
+            u32::try_from(inner.len() - inner.trim_start().len()),
+            u32::try_from(inner.len() - inner.trim_end().len()),
+        ) else {
+            continue;
+        };
+        let start = child.start + 1 + leading;
+        let end = child.end - 1 - trailing;
+        if start < end {
+            candidates.push(solid_facts::core::Span::new(start, end));
+        }
+    }
+    for attribute in &element.attributes {
+        if attribute.namespace.is_none()
+            && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+            && file.source_text(attribute.name) == Some("children")
+            && let Some(expression) = attribute.expression
+        {
+            candidates.push(expression);
+        }
+    }
+    candidates
+        .into_iter()
+        .map(|candidate| file.ast.peel_ts_sugar_span(candidate))
+        .collect()
 }
 
 /// Classifies a non-literal `keyed` attribute value.
@@ -1399,12 +1852,10 @@ pub(crate) fn discover_sources(
         symbol_names,
         semantic_lookup,
         resolved_contracts,
-        bundled_returns,
         runtime,
     } = *ctx;
     let mut clock = StageClock::new(emit_timings);
     let mut accessors = HashMap::<SymbolId, (SymbolId, Location)>::new();
-    let bundled_returns = bundled_returns.clone();
     let mut accessor_origins = HashMap::<SymbolId, (SymbolId, SymbolId, Location)>::new();
     let mut setters = HashMap::<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>::new();
     let mut actions = HashMap::<SymbolId, (SymbolId, Location)>::new();
@@ -1417,9 +1868,9 @@ pub(crate) fn discover_sources(
     let mut async_sources = HashSet::<SymbolId>::new();
     let mut source_async_options = HashMap::<SymbolId, AsyncSourceOptions>::new();
     let mut value_form_stores = HashSet::<SymbolId>::new();
-    let mut contract_reads = HashMap::<SymbolId, Vec<(String, String, Location, String)>>::new();
+    let mut contract_reads = HashMap::<SymbolId, Vec<crate::ContractReadSite>>::new();
     let mut contract_parameter_reads =
-        HashMap::<SymbolId, Vec<(usize, String, String, Location)>>::new();
+        HashMap::<SymbolId, Vec<crate::ContractParameterReadSite>>::new();
     let mut contract_callbacks = HashMap::<SymbolId, Vec<ContractCallback>>::new();
     let mut contract_returns = HashMap::<SymbolId, (ContractReturn, Location)>::new();
     let mut contracted_accessor_symbols = HashSet::<SymbolId>::new();
@@ -1438,6 +1889,7 @@ pub(crate) fn discover_sources(
                     contracted.local_name.clone(),
                     contracted.contract_location.clone(),
                     read.kind.clone(),
+                    read.execution.clone(),
                 )
             })
             .collect::<Vec<_>>();
@@ -1457,6 +1909,7 @@ pub(crate) fn discover_sources(
                         format!("{}.{}", contracted.package_name, contracted.imported_name),
                         contracted.local_name.clone(),
                         contracted.contract_location.clone(),
+                        read.execution.clone(),
                     )
                 })
             })
@@ -1464,8 +1917,26 @@ pub(crate) fn discover_sources(
         if !parameter_reads.is_empty() {
             contract_parameter_reads.insert(contracted.symbol.clone(), parameter_reads);
         }
+        // Callable rows and explicit value enumerations only. An enumeration
+        // is retained for the occurrence Get consumer, never as a callable:
+        // a non-call row (`ContractCallback::is_invocation`) is no
+        // graph edge, no invoked parameter, no wrapper and no re-pushed row. A
+        // member-path row is kept and every reader resolves the member it
+        // calls before folding anything (`contract_callback_invoked_value`,
+        // item B of ways-to-improve § 3.3). The key is still
+        // inserted for a known enumeration holding none, because its presence
+        // is the "callbacks known" fact the interprocedural pass reads.
         if let Some(callbacks) = contracted.summary.callbacks.known() {
-            contract_callbacks.insert(contracted.symbol.clone(), callbacks.clone());
+            contract_callbacks.insert(
+                contracted.symbol.clone(),
+                callbacks
+                    .iter()
+                    .filter(|callback| {
+                        callback.is_invocation() || callback.protocol.is_value_enumeration()
+                    })
+                    .cloned()
+                    .collect(),
+            );
         }
         if let Some(returned) = contracted.summary.returns.known().and_then(Option::as_ref) {
             contract_returns.insert(
@@ -1498,7 +1969,6 @@ pub(crate) fn discover_sources(
                     entities,
                     symbol_names,
                     resolved_contracts,
-                    &bundled_returns,
                 )
             });
             let mut aggregate = SourceDiscoveryAggregate::default();
@@ -1536,6 +2006,9 @@ pub(crate) fn discover_sources(
                     cache
                         .get(file.path.as_str())
                         .is_some_and(|cached| {
+                            // A returned-source proof's callee syntax is bound
+                            // by `cross_file_proof_digest` (ADR 0222); its
+                            // symbol resolution by the per-file delta.
                             source_discovery_identity_matches(
                                 &cached.identity,
                                 file.path.as_str(),
@@ -1566,7 +2039,6 @@ pub(crate) fn discover_sources(
                         entities,
                         symbol_names,
                         resolved_contracts,
-                        &bundled_returns,
                     ),
                 )
             });
@@ -1628,6 +2100,10 @@ pub(crate) fn discover_sources(
         }
     }
     clock.finish(build_timings, ReactiveIrStage::SourceDiscovery);
+    // Source construction/accepted-return facts collected above, before the
+    // type-only fallback. A published Accessor/Store annotation alone cannot
+    // witness a runtime reactive Get in an incoming prop expression.
+    let mut runtime_sources = accessors.keys().cloned().collect::<HashSet<_>>();
     for entity in facts.typescript.entities() {
         let Some(descriptor) = &entity.type_descriptor else {
             continue;
@@ -1661,6 +2137,64 @@ pub(crate) fn discover_sources(
             role,
             solid_dialect::TypeRole::Component | solid_dialect::TypeRole::Owner
         ) {
+            continue;
+        }
+        if semantic_lookup
+            .file_by_path(entity.location.path.as_ref())
+            .is_some_and(|file| {
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(entity.location.start_byte),
+                    u32::try_from(entity.location.end_byte),
+                ) else {
+                    return true;
+                };
+                crate::callback_return::binding_is_callback_result(
+                    semantic_lookup,
+                    file,
+                    solid_facts::core::Span::new(start, end),
+                )
+            })
+        {
+            continue;
+        }
+        // ADR 0172: a tuple containing an accessor is not itself an accessor.
+        // Demanded member/call spans may carry the member's type beside a
+        // receiver symbol. Only an exact value's own callable type can
+        // introduce the typed root; a member must also resolve separately
+        // from its receiver. Nested alias declarations cannot do so.
+        if matches!(
+            role,
+            solid_dialect::TypeRole::Accessor | solid_dialect::TypeRole::Signal
+        ) && (entity.callability != Some(typefacts::Callability::Callable)
+            || semantic_lookup
+                .file_by_path(entity.location.path.as_ref())
+                .is_some_and(|file| {
+                    crate::value_identity::binding_has_write(file, entities, symbol)
+                })
+            || !semantic_lookup
+                .file_by_path(entity.location.path.as_ref())
+                .is_some_and(|file| {
+                    file.ast.identifiers.iter().any(|identifier| {
+                        u64::from(identifier.span.start) == entity.location.start_byte
+                            && u64::from(identifier.span.end) == entity.location.end_byte
+                    }) || file.ast.members.iter().any(|member| {
+                        ((u64::from(member.span.start) == entity.location.start_byte
+                            && u64::from(member.span.end) == entity.location.end_byte)
+                            || (u64::from(member.property.start) == entity.location.start_byte
+                                && u64::from(member.property.end) == entity.location.end_byte))
+                            && !file.ast.computed_members.contains(&member.span)
+                            && entities.at(file.path.as_str(), member.property) == Some(symbol)
+                            && entities.at(file.path.as_str(), member.object) != Some(symbol)
+                            && !is_contracted_container_value(
+                                file,
+                                entities,
+                                resolved_contracts,
+                                member.object,
+                                16,
+                            )
+                    })
+                }))
+        {
             continue;
         }
         let declaration = source_declarations.get(symbol);
@@ -1739,14 +2273,19 @@ pub(crate) fn discover_sources(
             if parameter_indices.is_empty() {
                 continue;
             }
-            for function in file.ast.functions.iter().filter(|function| {
-                element.span.contains(function.span)
-                    && !file.ast.functions.iter().any(|outer| {
-                        outer.span != function.span
-                            && element.span.contains(outer.span)
-                            && outer.span.contains(function.span)
-                    })
-            }) {
+            // The accessor parameters belong to the function that IS this
+            // element's children value -- the sole `{...}` child expression
+            // or a `children={...}` attribute -- and to no other function that
+            // happens to sit lexically inside the element (a `<For>` row
+            // callback, an event handler, or a ref callback are plain-value
+            // callbacks of their own).
+            let children_functions = jsx_children_function_spans(file, element);
+            for function in file
+                .ast
+                .functions
+                .iter()
+                .filter(|function| children_functions.contains(&function.span))
+            {
                 for index in parameter_indices {
                     let Some(parameter) = function
                         .parameters
@@ -1757,6 +2296,7 @@ pub(crate) fn discover_sources(
                     };
                     let declaration = location(file.path.shared(), parameter.span);
                     if let Some(symbol) = entities.get(&declaration) {
+                        runtime_sources.insert(symbol.clone());
                         accessors.entry(symbol.clone()).or_insert((
                             symbol_id(file.source_text(parameter.span).unwrap_or_default()),
                             declaration,
@@ -1776,12 +2316,26 @@ pub(crate) fn discover_sources(
                 && let Some(callbacks) = contract_callbacks.get(symbol)
             {
                 for callback in callbacks {
-                    let Some(argument) = call.arguments.get(callback.parameter) else {
+                    // The function the row invokes: the argument itself, or
+                    // for a member-path row (item B) the member the call's own
+                    // literal names -- never the argument when it is only the
+                    // container of the invoked member.
+                    let Some((_, Some(invoked))) =
+                        crate::interproc::contract_callback_invoked_value(
+                            file,
+                            semantic_lookup,
+                            call,
+                            callback,
+                        )
+                    else {
                         continue;
                     };
-                    let Some(function) = file.ast.functions.iter().find(|function| {
-                        function.span == file.ast.peel_ts_sugar_span(argument.span)
-                    }) else {
+                    let Some(function) = file
+                        .ast
+                        .functions
+                        .iter()
+                        .find(|function| function.span == file.ast.peel_ts_sugar_span(invoked))
+                    else {
                         continue;
                     };
                     for (parameter_index, descriptor) in callback.arguments.iter().enumerate() {
@@ -1800,6 +2354,7 @@ pub(crate) fn discover_sources(
                         };
                         let declaration = location(file.path.shared(), parameter.span);
                         if let Some(parameter_symbol) = entities.get(&declaration) {
+                            runtime_sources.insert(parameter_symbol.clone());
                             accessors.entry(parameter_symbol.clone()).or_insert((
                                 symbol_id(file.source_text(parameter.span).unwrap_or_default()),
                                 declaration,
@@ -1808,16 +2363,11 @@ pub(crate) fn discover_sources(
                     }
                 }
             }
-            let Some(primitive) = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-                semantic_lookup.dialect,
-            )
-            .as_ref()
-            .and_then(PrimitiveName::primitive) else {
+            let Some(primitive) =
+                call_primitive_name(file, call, entities, symbol_names, semantic_lookup.dialect)
+                    .as_ref()
+                    .and_then(PrimitiveName::primitive)
+            else {
                 continue;
             };
             for (argument_index, argument) in call.arguments.iter().enumerate() {
@@ -1845,6 +2395,7 @@ pub(crate) fn discover_sources(
                     };
                     let declaration = location(file.path.shared(), parameter.span);
                     if let Some(symbol) = entities.get(&declaration) {
+                        runtime_sources.insert(symbol.clone());
                         accessors.entry(symbol.clone()).or_insert((
                             symbol_id(file.source_text(parameter.span).unwrap_or_default()),
                             declaration,
@@ -1856,22 +2407,16 @@ pub(crate) fn discover_sources(
     }
     for file in &facts.files {
         for call in &file.ast.calls {
-            if !primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-                semantic_lookup.dialect,
-            )
-            .as_ref()
-            .and_then(PrimitiveName::primitive)
-            .is_some_and(|primitive| {
-                matches!(
-                    primitive,
-                    Primitive::CreateEffect | Primitive::CreateRenderEffect
-                )
-            }) {
+            if !call_primitive_name(file, call, entities, symbol_names, semantic_lookup.dialect)
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| {
+                    matches!(
+                        primitive,
+                        Primitive::CreateEffect | Primitive::CreateRenderEffect
+                    )
+                })
+            {
                 continue;
             }
             let Some(compute) = call.arguments.first().and_then(|argument| {
@@ -1910,13 +2455,16 @@ pub(crate) fn discover_sources(
                                 })
                         })
                 })
-                .filter(|symbol| {
-                    source_kinds.get(*symbol) == Some(&ReactiveSourceKind::Store)
-                        || matches!(
-                            source_primitives.get(*symbol).map(SymbolId::as_str),
-                            Some("createStore" | "createOptimisticStore")
-                        )
-                })
+                // The second half of this test used to name `createStore` and
+                // `createOptimisticStore`, and it could never change the
+                // answer. `source_kinds` and `source_primitives` are written
+                // together wherever a reactive source is discovered (the
+                // `creates_reactive_source` path above and the tuple-binding
+                // path), and the kind recorded there is `Store` exactly when
+                // `returns_store` holds for that same primitive. So "the
+                // primitive returns a store" implies "the kind is Store", for
+                // any dialect, and only the kind is worth asking.
+                .filter(|symbol| source_kinds.get(*symbol) == Some(&ReactiveSourceKind::Store))
             else {
                 continue;
             };
@@ -2060,15 +2608,23 @@ pub(crate) fn discover_sources(
                     .or_else(|| {
                         let initializer = binding.call_initializer?;
                         let call = file.ast.call_at(initializer)?;
-                        let primitive = primitive_name(
-                            file.path.as_str(),
-                            call.callee,
-                            call.static_callee(&file.source),
+                        let primitive = call_primitive_name(
+                            file,
+                            call,
                             entities,
                             symbol_names,
                             semantic_lookup.dialect,
                         );
-                        if known_primitive(&primitive) != Some(Primitive::Merge) {
+                        // The dialect names its own merge. This was a
+                        // literal `"merge"` before the dialect seam existed,
+                        // and the extraction translated the string to
+                        // `Primitive::Merge` rather than to a row -- so the
+                        // propagation answered for 2.0's spelling and was
+                        // silent for 1.x's `mergeProps`, which is the same
+                        // primitive under the other dialect's vocabulary.
+                        if !known_primitive(&primitive).is_some_and(|primitive| {
+                            semantic_lookup.dialect.merges_props_reactivity(primitive)
+                        }) {
                             return None;
                         }
                         call.arguments.iter().find_map(|argument| {
@@ -2107,6 +2663,17 @@ pub(crate) fn discover_sources(
             break;
         }
     }
+    runtime_sources.retain(|symbol| {
+        !facts.files.iter().any(|file| {
+            crate::value_identity::binding_has_write(file, entities, symbol)
+                || file.ast.iteration_targets.iter().any(|target| {
+                    file.ast.identifiers.iter().any(|identifier| {
+                        target.contains(identifier.span)
+                            && entities.at(file.path.as_str(), identifier.span) == Some(symbol)
+                    })
+                })
+        })
+    });
     let props_reactivity = classify_component_props(
         runtime,
         facts,
@@ -2115,6 +2682,7 @@ pub(crate) fn discover_sources(
         &accessors,
         &source_kinds,
         &prop_sources,
+        &runtime_sources,
     );
     clock.finish(
         build_timings,
@@ -2142,7 +2710,6 @@ pub(crate) fn discover_sources(
         prop_sources,
         uncertain_prop_sources,
         props_reactivity,
-        bundled_returns,
         retained_source_paths,
         changed_source_symbols,
     }
@@ -2237,30 +2804,11 @@ impl PropsReactivityIndex {
         if !self.caller_proof {
             return PropUse::Reactive;
         }
-        match self.by_declaration.get(declaration) {
-            None => PropUse::Unknown,
-            // Witnessed reactive survives the escape; nothing else does.
-            Some(PropsReactivity::Escaping { reactive, .. }) => {
-                if reactive.contains(name) {
-                    PropUse::Reactive
-                } else {
-                    PropUse::Unknown
-                }
-            }
-            Some(PropsReactivity::Enumerated {
-                reactive,
-                unresolved,
-                ..
-            }) => {
-                if reactive.contains(name) {
-                    PropUse::Reactive
-                } else if unresolved.contains(name) {
-                    PropUse::Unknown
-                } else {
-                    PropUse::Static
-                }
-            }
-        }
+        self.by_declaration
+            .get(declaration)
+            .map_or(PropUse::Unknown, |classification| {
+                classification_use(classification, name)
+            })
     }
 
     /// The classification of a whole-object use (aliasing, spreading, or
@@ -2346,6 +2894,7 @@ impl PropsReactivityIndex {
 /// Builds [`PropsReactivityIndex`] from the proven components' JSX call
 /// sites. Empty (answering [`PropUse::Reactive`] everywhere) when the dialect
 /// keeps the upstream over-approximation.
+#[allow(clippy::too_many_arguments)]
 fn classify_component_props(
     runtime: &crate::RuntimeEnvironment,
     facts: &ProjectFacts,
@@ -2354,6 +2903,7 @@ fn classify_component_props(
     accessors: &HashMap<SymbolId, (SymbolId, Location)>,
     source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
     prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    runtime_sources: &HashSet<SymbolId>,
 ) -> PropsReactivityIndex {
     if !lookup.dialect.props_require_caller_proof() {
         return PropsReactivityIndex::default();
@@ -2372,6 +2922,7 @@ fn classify_component_props(
         }
     }
     let mut by_declaration = HashMap::new();
+    let mut pending = Vec::new();
     for file in &facts.files {
         for function in &file.ast.functions {
             let Some(parameter) = function.parameters.first() else {
@@ -2380,7 +2931,7 @@ fn classify_component_props(
             if function.parameters.len() > 1 || !lookup.function_may_be_component(file, function) {
                 continue;
             }
-            let classification = classify_one_component(
+            let (classification, forwarded) = classify_one_component(
                 runtime,
                 facts,
                 lookup,
@@ -2388,10 +2939,18 @@ fn classify_component_props(
                 accessors,
                 source_kinds,
                 prop_sources,
+                runtime_sources,
                 &uses,
                 file,
                 function,
             );
+            pending.push((
+                location(file.path.shared(), parameter.pattern),
+                forwarded.clone(),
+            ));
+            if let Some(name) = parameter.names.first() {
+                pending.push((location(file.path.shared(), name.span), forwarded));
+            }
             by_declaration.insert(
                 location(file.path.shared(), parameter.pattern),
                 classification.clone(),
@@ -2401,9 +2960,98 @@ fn classify_component_props(
             }
         }
     }
+    resolve_forwarded_props(&mut by_declaration, &pending);
     PropsReactivityIndex {
         caller_proof: true,
         by_declaration,
+    }
+}
+
+/// What one component's classification says about the prop `name`.
+fn classification_use(classification: &PropsReactivity, name: &str) -> PropUse {
+    match classification {
+        // Witnessed reactive survives the escape; nothing else does.
+        PropsReactivity::Escaping { reactive, .. } => {
+            if reactive.contains(name) {
+                PropUse::Reactive
+            } else {
+                PropUse::Unknown
+            }
+        }
+        PropsReactivity::Enumerated {
+            reactive,
+            unresolved,
+            ..
+        } => {
+            if reactive.contains(name) {
+                PropUse::Reactive
+            } else if unresolved.contains(name) {
+                PropUse::Unknown
+            } else {
+                PropUse::Static
+            }
+        }
+    }
+}
+
+/// Settles forwarded props (`<Inner value={props.value} />`): the receiving
+/// prop is reactive when the forwarded parent prop is, unresolved when that is
+/// unresolved or unknown, and otherwise contributes nothing. This is the least
+/// fixpoint from "contributes nothing", so a prop is proven static only when
+/// no chain of forwards reaches a reactive or unresolved value. A forward into
+/// a component whose own classification has no entry is unknown.
+fn resolve_forwarded_props(
+    by_declaration: &mut HashMap<Location, PropsReactivity>,
+    pending: &[(Location, ForwardedProps)],
+) {
+    loop {
+        let mut changed = false;
+        for (declaration, forwarded) in pending {
+            for (name, sources) in forwarded {
+                let mut verdict = PropUse::Static;
+                for (source, prop, exact) in sources {
+                    let source_use = match by_declaration
+                        .get(source)
+                        .map_or(PropUse::Unknown, |classification| {
+                            classification_use(classification, prop)
+                        }) {
+                        // A static head says nothing about the rest of a
+                        // longer chain (`props.a.b` with `a` a store or an
+                        // object with getters).
+                        PropUse::Static if !exact => PropUse::Unknown,
+                        other => other,
+                    };
+                    verdict = match (verdict, source_use) {
+                        (PropUse::Reactive, _) | (_, PropUse::Reactive) => PropUse::Reactive,
+                        (PropUse::Unknown, _) | (_, PropUse::Unknown) => PropUse::Unknown,
+                        _ => PropUse::Static,
+                    };
+                }
+                let Some(classification) = by_declaration.get_mut(declaration) else {
+                    continue;
+                };
+                changed |= match (classification, verdict) {
+                    (_, PropUse::Static) => false,
+                    (
+                        PropsReactivity::Enumerated { reactive, .. }
+                        | PropsReactivity::Escaping { reactive, .. },
+                        PropUse::Reactive,
+                    ) => reactive.insert(name.clone()),
+                    (
+                        PropsReactivity::Enumerated {
+                            unresolved,
+                            reactive,
+                            ..
+                        },
+                        PropUse::Unknown,
+                    ) => !reactive.contains(name) && unresolved.insert(name.clone()),
+                    (PropsReactivity::Escaping { .. }, PropUse::Unknown) => false,
+                };
+            }
+        }
+        if !changed {
+            break;
+        }
     }
 }
 
@@ -2416,21 +3064,26 @@ fn classify_one_component(
     accessors: &HashMap<SymbolId, (SymbolId, Location)>,
     source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
     prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    runtime_sources: &HashSet<SymbolId>,
     uses: &HashMap<(&str, solid_facts::core::Span), Vec<(usize, usize)>>,
     file: &FileFacts,
     function: &solid_facts::ast::FunctionFact,
-) -> PropsReactivity {
+) -> (PropsReactivity, ForwardedProps) {
     use solid_facts::core::Span;
+    let mut forwarded = ForwardedProps::new();
     let name = crate::owners::component_binding_name(file, function).or(function.name.as_ref());
     let Some(symbol) = name.and_then(|name| entities.get(&location(file.path.shared(), name.span)))
     else {
         // An anonymous component value (a HOC argument, say) has no symbol to
         // enumerate references through, so there are no call sites to witness
         // either way.
-        return PropsReactivity::Escaping {
-            reactive: BTreeSet::new(),
-            accessor_values: BTreeSet::new(),
-        };
+        return (
+            PropsReactivity::Escaping {
+                reactive: BTreeSet::new(),
+                accessor_values: BTreeSet::new(),
+            },
+            forwarded,
+        );
     };
     // Escape hatches below only forfeit the *static* half of the proof. Each
     // one sets this flag and keeps scanning, because the JSX call sites that
@@ -2534,8 +3187,10 @@ fn classify_one_component(
                                 accessors,
                                 source_kinds,
                                 prop_sources,
+                                runtime_sources,
                                 use_file,
                                 expression,
+                                forwarded.entry(attribute_name.to_owned()).or_default(),
                             ),
                             None => PropUse::Unknown,
                         }
@@ -2560,16 +3215,43 @@ fn classify_one_component(
                 }
             }
         }
+        // Several children compile to an array whose dynamic entries are memo
+        // accessors: reading `props.children` reads none of them. Only a
+        // single child is the getter's own expression.
+        let several = element
+            .children
+            .iter()
+            .filter(|child| {
+                use_file
+                    .source_text(**child)
+                    .is_some_and(|text| !text.trim().is_empty())
+            })
+            .count()
+            > 1;
         for child in &element.children {
-            match classify_passed_expression(
+            let mut child_forwards = Vec::new();
+            let child_use = classify_passed_expression(
                 lookup,
                 entities,
                 accessors,
                 source_kinds,
                 prop_sources,
+                runtime_sources,
                 use_file,
                 *child,
-            ) {
+                &mut child_forwards,
+            );
+            if several {
+                if child_use != PropUse::Static || !child_forwards.is_empty() {
+                    unresolved.insert("children".to_owned());
+                }
+                continue;
+            }
+            forwarded
+                .entry("children".to_owned())
+                .or_default()
+                .extend(child_forwards);
+            match child_use {
                 PropUse::Static => {}
                 PropUse::Reactive => {
                     reactive.insert("children".to_owned());
@@ -2585,17 +3267,33 @@ fn classify_one_component(
         // every prop that is not a proven reactive witness is unresolved
         // anyway, so recording the distinction would only invite a reader to
         // treat the complement as static.
-        return PropsReactivity::Escaping {
+        return (
+            PropsReactivity::Escaping {
+                reactive,
+                accessor_values,
+            },
+            forwarded,
+        );
+    }
+    (
+        PropsReactivity::Enumerated {
             reactive,
+            unresolved,
             accessor_values,
-        };
-    }
-    PropsReactivity::Enumerated {
-        reactive,
-        unresolved,
-        accessor_values,
-    }
+        },
+        forwarded,
+    )
 }
+
+/// Per prop name, the parent props a call site forwards into it
+/// (`<Inner value={props.value} />` inside `Outer`): the parent's props
+/// declaration and the prop name read there.
+type ForwardedProps = BTreeMap<String, Vec<Forward>>;
+
+/// One forwarded parent prop: the parent's props declaration, the prop name
+/// at the head of the forwarded chain, and whether the chain is exactly that
+/// one member (`props.a`, not `props.a.b`).
+type Forward = (Location, String, bool);
 
 fn passed_expression_is_accessor(
     lookup: &SemanticLookup<'_>,
@@ -2674,17 +3372,22 @@ fn component_symbol_is_exported(
 /// whose bodies run later, not in the getter). Anything unresolvable, any
 /// call the engine cannot classify, and JSX evaluated inside the getter stay
 /// unknown.
+#[allow(clippy::too_many_arguments)]
 fn classify_passed_expression(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
     accessors: &HashMap<SymbolId, (SymbolId, Location)>,
     source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
     prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    runtime_sources: &HashSet<SymbolId>,
     file: &FileFacts,
     expression: solid_facts::core::Span,
+    forwards: &mut Vec<Forward>,
 ) -> PropUse {
     use solid_facts::core::Span;
     let expression = file.ast.peel_ts_sugar_span(expression);
+    // Identifiers that are a member chain's root; the chain decides them.
+    let mut chain_roots = Vec::new();
     let nested_functions: Vec<Span> = file
         .ast
         .functions_within(expression)
@@ -2712,14 +3415,18 @@ fn classify_passed_expression(
             continue;
         }
         let mut root = member.object;
+        let mut head = member;
         while let Some(inner) = file
             .ast
             .members
             .iter()
-            .find(|candidate| candidate.span == root)
+            .find(|candidate| candidate.span == file.ast.peel_ts_sugar_span(root))
         {
+            head = inner;
             root = inner.object;
         }
+        let root = file.ast.peel_ts_sugar_span(root);
+        chain_roots.push(root);
         let symbol = entities
             .get(&location(file.path.shared(), root))
             .cloned()
@@ -2730,11 +3437,58 @@ fn classify_passed_expression(
                     .map(|(_, _, symbol)| symbol)
             });
         match symbol {
-            Some(symbol)
-                if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store)
-                    || prop_sources.contains_key(&symbol) =>
-            {
-                return PropUse::Reactive;
+            Some(symbol) if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) => {
+                let key = if file.ast.computed_members.binary_search(&head.span).is_ok() {
+                    file.ast
+                        .literal_computed_members
+                        .iter()
+                        .find(|literal| literal.span == head.span)
+                        .map(|literal| literal.key.as_ref())
+                } else {
+                    file.source_text(head.property)
+                };
+                if runtime_sources.contains(&symbol)
+                    && key.is_some_and(|key| lookup.dialect.store_key_warns_strict_read(key))
+                {
+                    return PropUse::Reactive;
+                }
+                result = PropUse::Unknown;
+            }
+            // A parent's prop forwarded is exactly as reactive as that prop is
+            // in the parent: decided once every component is classified.
+            Some(symbol) if prop_sources.contains_key(&symbol) => {
+                let (_, declaration) = &prop_sources[&symbol];
+                // Only the props parameter itself: a `merge` result or a
+                // destructured binding attached to it is a view whose keys
+                // this does not map back to the parent's props.
+                if entities.get(declaration) != Some(&symbol)
+                    || !crate::local_access::props_root_is_current(
+                        file,
+                        declaration,
+                        &symbol,
+                        entities,
+                    )
+                    || prop_sources
+                        .iter()
+                        .any(|(other, (_, attached))| other != &symbol && attached == declaration)
+                {
+                    result = PropUse::Unknown;
+                    continue;
+                }
+                let exact = head.span == member.span;
+                let name = if file.ast.computed_members.binary_search(&head.span).is_ok() {
+                    file.ast
+                        .literal_computed_members
+                        .iter()
+                        .find(|literal| literal.span == head.span)
+                        .map(|literal| literal.key.to_string())
+                } else {
+                    file.source_text(head.property).map(str::to_owned)
+                };
+                match name {
+                    Some(name) => forwards.push((declaration.clone(), name, exact)),
+                    None => result = PropUse::Unknown,
+                }
             }
             Some(_) => {}
             None => result = PropUse::Unknown,
@@ -2745,7 +3499,9 @@ fn classify_passed_expression(
             continue;
         }
         let callee = entities.get(&location(file.path.shared(), call.callee));
-        if callee.is_some_and(|symbol| accessors.contains_key(symbol)) {
+        if callee.is_some_and(|symbol| {
+            accessors.contains_key(symbol) && runtime_sources.contains(symbol)
+        }) {
             return PropUse::Reactive;
         }
         // Any other call may read reactive state each time the compiled
@@ -2767,6 +3523,7 @@ fn classify_passed_expression(
     for identifier in file.ast.identifiers_within(expression) {
         if identifier.role != solid_facts::ast::IdentifierRole::Reference
             || inside_nested(identifier.span)
+            || chain_roots.contains(&identifier.span)
         {
             continue;
         }
@@ -2779,14 +3536,15 @@ fn classify_passed_expression(
                     .map(|(_, _, symbol)| symbol)
             });
         match symbol {
-            Some(symbol)
-                if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store)
-                    || prop_sources.contains_key(&symbol) =>
-            {
-                // A store or props object passed whole stays a live proxy in
-                // the receiver.
-                return PropUse::Reactive;
+            // A store passed whole is a reference: reading the prop hands over
+            // the proxy and reads no key. The receiver's own key reads are
+            // what is reactive, and this classification does not follow them.
+            Some(symbol) if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) => {
+                result = PropUse::Unknown;
             }
+            // A props object passed whole forwards every prop; which ones the
+            // receiver reads, and whether they are live, is not followed.
+            Some(symbol) if prop_sources.contains_key(&symbol) => result = PropUse::Unknown,
             Some(_) => {}
             None => result = PropUse::Unknown,
         }

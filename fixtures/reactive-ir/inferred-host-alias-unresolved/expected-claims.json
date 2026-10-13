@@ -1,0 +1,12 @@
+{
+  "status": "hand-stated, unrun; compare before recording a findings snapshot",
+  "browserUpgrade": false,
+  "violations": [],
+  "noTarget": [
+    "All static imports must be loadable before module evaluation; unknown and provably-unloadable requests preserve baseline, including callees reached only through this module."
+  ],
+  "explicitTarget": null,
+  "rule": "missing-owner",
+  "code": "SC4001",
+  "kind": "violation"
+}

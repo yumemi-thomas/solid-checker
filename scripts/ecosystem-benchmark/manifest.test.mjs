@@ -46,7 +46,7 @@ function validManifest() {
     generatedAt: "2026-08-21T00:00:00.000Z",
     registry: "https://registry.npmjs.org",
     auditedSolid1: "1.9.14",
-    auditedSolid2: "2.0.0-rc.3",
+    auditedSolid2: "2.0.0-rc.9",
     solidReleases: {
       "solid-js": {
         distTags: { latest: "1.9.14", next: "2.0.0-rc.1" },

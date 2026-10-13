@@ -1,0 +1,441 @@
+{
+  "package": "@solid-primitives/promise",
+  "version": "2.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "until": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/promise-until-write-in-tracked-callback/node_modules/@solid-primitives/promise/dist/index.js:55-70 \u2014 Creates one root with optional parent (present parent must accept children), an eager condition memo and one split effect under that root. condition is invoked only tracked under the memo, first then on flush. memo read is tracked under the created effect. Root registers rejection cleanup unconditionally; outer getOwner() cleanup is optional and requires cleanup only if owner exists. Returns exactly the native Promise object augmented with own opaque dispose; disposal/read of arbitrary returned callable values stays outside this constructor claim. P1 native Promise prototype/resolve/reject are platform behavior; fulfillment values are not claimed plain or inert. Draft only; promises/thenables or callable condition-result composition is not newly certified.",
+      "rule": "reactive-write-in-owned-scope",
+      "call": {
+        "operations": [
+          {
+            "id": "condition-first",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "condition-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "condition-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "condition-flush",
+            "kind": "invoke",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "condition-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "condition-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "until-root-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "until-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "until-memo-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "resources": [
+              "until-memo",
+              "condition-owner"
+            ]
+          },
+          {
+            "id": "until-effect-production",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "resources": [
+              "until-effect-owner"
+            ]
+          },
+          {
+            "id": "until-memo-first-read",
+            "kind": "read",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "until-memo"
+              }
+            ]
+          },
+          {
+            "id": "until-memo-flush-read",
+            "kind": "read",
+            "trigger": {
+              "event": "flush"
+            },
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "until-memo"
+              }
+            ]
+          },
+          {
+            "id": "until-rejection-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "until-root",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "until-root",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "until-parent-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "dispose",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "condition-first"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "condition-flush"
+          }
+        ],
+        "resources": [
+          {
+            "id": "condition-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "until-root",
+            "kind": "owner"
+          },
+          {
+            "id": "until-memo",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "until-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "creates": [
+          "until-root-production",
+          "until-memo-production",
+          "until-effect-production"
+        ],
+        "reads": [
+          "until-memo-first-read",
+          "until-memo-flush-read"
+        ],
+        "cleanups": [
+          "until-rejection-cleanup",
+          "until-parent-cleanup"
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/promise-until-write-in-tracked-callback/node_modules/@solid-primitives/promise/dist/index.js:55-70 \u2014 Creates one root with optional parent (present parent must accept children), an eager condition memo and one split effect under that root. condition is invoked only tracked under the memo, first then on flush. memo read is tracked under the created effect. Root registers rejection cleanup unconditionally; outer getOwner() cleanup is optional and requires cleanup only if owner exists. Returns exactly the native Promise object augmented with own opaque dispose; disposal/read of arbitrary returned callable values stays outside this constructor claim. P1 native Promise prototype/resolve/reject are platform behavior; fulfillment values are not claimed plain or inert.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/promise-until-write-in-tracked-callback/node_modules/@solid-primitives/promise/dist/index.js:55-70 \u2014 Creates one root with optional parent (present parent must accept children), an eager condition memo and one split effect under that root. condition is invoked only tracked under the memo, first then on flush. memo read is tracked under the created effect. Root registers rejection cleanup unconditionally; outer getOwner() cleanup is optional and requires cleanup only if owner exists. Returns exactly the native Promise object augmented with own opaque dispose; disposal/read of arbitrary returned callable values stays outside this constructor claim. P1 native Promise prototype/resolve/reject are platform behavior; fulfillment values are not claimed plain or inert.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/promise-until-write-in-tracked-callback/node_modules/@solid-primitives/promise/dist/index.js:55-70 \u2014 Creates one root with optional parent (present parent must accept children), an eager condition memo and one split effect under that root. condition is invoked only tracked under the memo, first then on flush. memo read is tracked under the created effect. Root registers rejection cleanup unconditionally; outer getOwner() cleanup is optional and requires cleanup only if owner exists. Returns exactly the native Promise object augmented with own opaque dispose; disposal/read of arbitrary returned callable values stays outside this constructor claim. P1 native Promise prototype/resolve/reject are platform behavior; fulfillment values are not claimed plain or inert. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/promise-until-write-in-tracked-callback/node_modules/@solidjs/signals/dist/dev-shared.js:3403-3440 \u2014 Root tolerates missing parent but rejects leaf parent; creates a children/cleanup-capable owner.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/promise-until-write-in-tracked-callback/node_modules/@solid-primitives/promise/dist/index.js:55-71 \u2014 Only condition is a caller callable: initial createMemo computation then its later recomputations. resolve/reject/dispose are package/runtime-defined. /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/promise-until-write-in-tracked-callback/node_modules/@solid-primitives/promise/dist/index.js:55-70 \u2014 Creates one root with optional parent (present parent must accept children), an eager condition memo and one split effect under that root. condition is invoked only tracked under the memo, first then on flush. memo read is tracked under the created effect. Root registers rejection cleanup unconditionally; outer getOwner() cleanup is optional and requires cleanup only if owner exists. Returns exactly the native Promise object augmented with own opaque dispose; disposal/read of arbitrary returned callable values stays outside this constructor claim. P1 native Promise prototype/resolve/reject are platform behavior; fulfillment values are not claimed plain or inert."
+      },
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "flush",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Drive a still-false condition to recompute and attempt the write in its tracked callback.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "leaf-constructor",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "An until root created inside an onSettled leaf violates child-owner restrictions. Correct creates until in the component, not the leaf."
+        }
+      ]
+    }
+  }
+}

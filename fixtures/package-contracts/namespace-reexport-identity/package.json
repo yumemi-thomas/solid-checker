@@ -1,0 +1,14 @@
+{
+  "name": "namespace-reexport-identity",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./named": "./named.ts",
+    "./star": "./star.ts",
+    "./renamed": "./renamed.ts",
+    "./shadowed": "./shadowed.ts",
+    "./shadowed-value": "./shadowed-value.ts",
+    "./unresolved": "./unresolved.ts"
+  }
+}

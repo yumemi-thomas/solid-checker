@@ -59,7 +59,7 @@ marked, and `Isolated` stays certified:
   written. Same answer as `./closed`; the child changes nothing, because what
   the escape test needed was the closing tag's name.
 - `./shadowed` — the rendered helper is named `Show`, which is also the spelling
-  of a Solid 1.x control-flow built-in *in the dialect vocabulary this project
+  of a Solid control-flow built-in *in the dialect vocabulary this project
   analyzes with*. Resolution is by symbol, not by spelling: `Show` here is the
   project function `show.jsx` declares, it gets the edge, and the dialect entry
   of the same name never enters the decision. (The arm does not import
@@ -133,26 +133,32 @@ reason. `declaration-sibling-reach` is where that shape is pinned.
 
 ## Faithfulness of the `solid-js` stub
 
-`node_modules/solid-js/` selects the Solid 1.x dialect (version `1.9.14`) and
-supplies the typings `./builtin` and `./shadowed` make claims about. It used to
-carry no typings at all — a `.js` module exporting only `createSignal` — so
+`node_modules/solid-js/` selects the Solid 2.0 dialect (version `2.0.0-rc.3`)
+and supplies the typings `./builtin` and `./shadowed` make claims about. It used
+to carry no typings at all — a `.js` module exporting only `createSignal` — so
 `import { For } from "solid-js"` was an untyped `any` and the two arms' *stated
 reasons* were untested even though their outcomes were right.
 
-`index.d.ts` is transcribed from solid-js@1.9.14. `For` and both `Show`
-overloads (with `RequiredParameter`), `Accessor`, `Setter`, `Signal`,
-`createSignal`, and `JSX.Element` are byte-faithful to the published
-declarations (`types/render/flow.d.ts`, `types/reactive/signal.d.ts`,
-`types/jsx.d.ts`). Three things are deliberate *subsets*, never supersets:
-`SignalOptions` inlines the two members its real inheritance chain contributes,
-`JSX.HTMLAttributes` carries three of the real interface's members, and
-`JSX.IntrinsicElements` lists the three tags the fixture writes. A stub narrower
-than the package cannot manufacture a finding; a looser one can, which is why
+`index.d.ts` is transcribed from solid-js@2.0.0-rc.3
+(`types/client/flow.d.ts`, `types/types.d.ts`). Two 2.0 shapes this fixture
+actually meets are kept whole: `For` has **three** overloads, of which only
+`keyed?: true` keeps 1.x's raw `(item, index: Accessor<number>)` children —
+`keyed: false` hands the callback an accessor and a plain number, and the
+predicate form hands it accessors for both — and `For`/`Show` return `Element`
+from `solid-js`' own `types.js` rather than `JSX.Element`, because 2.0 moved
+`namespace JSX` out of `solid-js` into `@solidjs/web`. This stub therefore
+declares no JSX namespace at all: nothing here resolves one, and inventing one
+would be *wider* than the package. `Element`'s `RenderedElement` member is
+replaced by `unknown` because no arm inspects a rendered node; every other
+member is exact. A stub narrower than the package cannot manufacture a finding;
+a looser one can, which is why
 nothing here is widened.
 
-`JSX` is an `export namespace` inside the module, exactly as solid-js declares
-it — the published package contributes no *global* `JSX`, which is why a real
-Solid project sets `jsxImportSource: "solid-js"`. The stable-v1 package
+`JSX` is an `export namespace` inside a module rather than a global one, which
+is why a real Solid project sets `jsxImportSource`. Under 2.0 that namespace
+lives in `@solidjs/web`, not `solid-js`, so the source is
+`jsxImportSource: "@solidjs/web"` and this fixture's `solid-js` stub declares no
+`JSX` at all. The stable-v1 package
 producer writes an isolated analysis config with `jsx: "preserve"` and no
 `jsxImportSource`, so during generation no `JSX` namespace is in scope at all.
 Two consequences, both recorded rather than papered over:
@@ -161,10 +167,14 @@ Two consequences, both recorded rather than papered over:
   name is an intrinsic element name and is never looked up in the value scope —
   which holds whether or not `JSX.IntrinsicElements` exists. The arm does not
   depend on intrinsic-element typing, and would give the same answer if it did:
-  verified against the published typings under `jsxImportSource: "solid-js"`.
-- `builtin.jsx` reports `TS2741` (`For`'s required `children` is missing) under
-  the generator's tsconfig, because without `JSX.ElementChildrenAttribute` in
-  scope TypeScript cannot map a JSX child onto the `children` prop. That
+  verified against the published typings under
+  `jsxImportSource: "@solidjs/web"`.
+- `builtin.jsx` reports `TS2769` (no `For` overload matches, each because
+  `children` is missing) under the generator's tsconfig, because without
+  `JSX.ElementChildrenAttribute` in scope TypeScript cannot map a JSX child onto
+  the `children` prop. Under 1.x this was `TS2741`; the code is different only
+  because 2.0's `For` has three overloads rather than one, so TypeScript reports
+  an overload-resolution failure instead of a single missing property. The
   diagnostic is *identical with the real published package installed*, so it is
   a property of the generator's tsconfig and not of this stub; see
   docs/precision-backlog.md. It changes no claim in the generated contract.
@@ -175,9 +185,18 @@ check was silently vacuous before):
 
 | typings | tsconfig | result |
 | --- | --- | --- |
-| this stub | generator's (no `jsxImportSource`) | `builtin.jsx` TS2741, nothing else |
-| real solid-js@1.9.14 | generator's (no `jsxImportSource`) | the same TS2741, nothing else |
-| real solid-js@1.9.14 | `jsxImportSource: "solid-js"` | clean |
+| this stub | generator's (no `jsxImportSource`) | `builtin.jsx` TS2769, nothing else |
+| real solid-js@2.0.0-rc.3 | generator's (no `jsxImportSource`) | the same TS2769, nothing else |
+| real solid-js@2.0.0-rc.3 | `jsxImportSource: "@solidjs/web"` | clean |
+
+## Ported to Solid 2.0 unchanged (2026-09-17)
+
+This fixture was deleted with the Solid 1.x dialect and restored against 2.0.
+**Every one of its 24 entrypoint/export rows is byte-identical to the 1.x
+original**, which is the fixture's own evidence that its claim — the call
+graph's answer is fail-closed or exact — never depended on a dialect. Only the
+manifest's dependency and the `node_modules/solid-js` stub were 1.x-bound; the
+thirty `.js`/`.jsx` sources are unchanged.
 
 The third row is the one the absolute rule cares about: against the real
 published typings in the configuration a Solid project actually uses, every arm

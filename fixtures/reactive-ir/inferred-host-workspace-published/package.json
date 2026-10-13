@@ -1,0 +1,8 @@
+{
+  "name": "inferred-host-workspace-published",
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "exports": "./dist/index.js"
+}

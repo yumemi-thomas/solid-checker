@@ -1,0 +1,31 @@
+{
+  "@solid-primitives/memo|createWritableMemo": {
+    "projects": [
+      "corvu__packages__drawer"
+    ],
+    "sites": 1
+  },
+  "esbuild-plugin-solid|solidPlugin": {
+    "projects": [
+      "corvu__packages__accordion",
+      "corvu__packages__calendar",
+      "corvu__packages__corvu",
+      "corvu__packages__dialog",
+      "corvu__packages__disclosure",
+      "corvu__packages__drawer",
+      "corvu__packages__otp-field",
+      "corvu__packages__popover",
+      "corvu__packages__resizable",
+      "corvu__packages__solid-dismissible",
+      "corvu__packages__solid-focus-trap",
+      "corvu__packages__solid-list",
+      "corvu__packages__solid-persistent",
+      "corvu__packages__solid-presence",
+      "corvu__packages__solid-prevent-scroll",
+      "corvu__packages__solid-transition-size",
+      "corvu__packages__tooltip",
+      "corvu__packages__utils"
+    ],
+    "sites": 18
+  }
+}

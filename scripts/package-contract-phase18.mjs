@@ -14,6 +14,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { loadDialectManifests } from "./dialect-manifests.mjs";
+
 export const MAIN_FORMAT = "solid-reactivity-contract";
 export const MAIN_SCHEMA_VERSION = 1;
 export const SEMANTIC_MODEL_VERSION = 1;
@@ -34,7 +36,8 @@ const VERSIONED_FORMATS = new Map([
   ["solid-checker-runtime-probe-request", { field: "schemaVersion", version: 2 }],
   ["solid-checker-runtime-probe-plan", { field: "schemaVersion", version: 2 }],
   ["solid-checker-runtime-probe-runs", { field: "schemaVersion", version: 2 }],
-  ["solid-checker-runtime-probe-evaluation", { field: "schemaVersion", version: 2 }]
+  ["solid-checker-runtime-probe-evaluation", { field: "schemaVersion", version: 2 }],
+  ["solid-checker-module-emission-cases", { field: "casesVersion", version: 1 }]
 ]);
 
 const ACTIVE_JSON_PREFIXES = [
@@ -49,16 +52,24 @@ const ACTIVE_JSON_PREFIXES = [
   "schema/"
 ];
 
+// Each dialect contributes two documents to the inventory: its assembly
+// manifest and the rule manifest that manifest names. Read from
+// `rust/dialects/*/dialect.json` rather than listed, because a second dialect
+// whose documents this gate did not inventory would be *unchecked* here and
+// nothing would say so.
+const DIALECT_JSON_FILES = loadDialectManifests().flatMap((manifest) => [
+  manifest.source,
+  manifest.ruleManifest
+]);
+
 const ACTIVE_JSON_FILES = new Set([
+  "fixtures/module-emission/cases.json",
   "fixtures/ownership-cases/cases.json",
   "fixtures/ownership-cases/migration-ledger.json",
   "fixtures/tsc-oracle/packages.json",
   "fixtures/tsc-oracle/rule-cases.json",
-  "packages/cli/lib/rules-solid-v1.json",
-  "packages/cli/lib/rules-solid-v2.json",
-  "rust/dialects/solid-v1/dialect.json",
-  "rust/dialects/solid-v2/dialect.json",
-  "scripts/ecosystem-benchmark/manifest.json"
+  "scripts/ecosystem-benchmark/manifest.json",
+  ...DIALECT_JSON_FILES
 ]);
 
 const FORBIDDEN_ACTIVE_PATHS = [
@@ -137,12 +148,17 @@ const SOURCE_OWNERS = [
     markers: ["const SCHEMA_VERSION: u16 = 2;", "contract_document::decode("]
   },
   {
+    // `contract_document::decode(` until 2026-09-17, when the Solid 1 authority
+    // replay -- the only raw decode in this file -- was deleted with the 1.x
+    // artifacts. The file still owns stable-v1 bundle loading; it now reaches
+    // it through the interface that decodes, so the marker follows the role
+    // rather than the call it used to make.
     path: "rust/crates/solid-facts-backend/src/first_party_bundles.rs",
-    markers: ["contract_document::decode("]
+    markers: ["load_receipt_issued_embedded_contract("]
   },
   {
     path: "rust/crates/solid-checker-wasm/src/lib.rs",
-    markers: ["accepted_contracts: Vec<HostAcceptedContract>", "load_accepted_contract_index("]
+    markers: ["accepted_contracts: Vec<HostAcceptedContract>", "load_external_contract_index("]
   },
   {
     path: "packages/cli/scripts/generate-package-contract.mjs",
@@ -184,19 +200,22 @@ const STABLE_BOUNDARY_TESTS = [
   }
 ];
 
+// Per-dialect documents again, for the same reason: a rule manifest or
+// assembly manifest whose version this gate never asserted would be outside
+// the namespace separation the gate exists to hold.
 const INDEPENDENT_JSON_VERSIONS = [
-  ["packages/cli/lib/rules-solid-v1.json", "schemaVersion", 1],
-  ["packages/cli/lib/rules-solid-v2.json", "schemaVersion", 1],
   ["scripts/ecosystem-benchmark/manifest.json", "schemaVersion", 1],
   ["fixtures/ownership-cases/cases.json", "schemaVersion", 1],
   ["fixtures/ownership-cases/migration-ledger.json", "schemaVersion", 1],
-  ["rust/dialects/solid-v1/dialect.json", "schemaVersion", 2],
-  ["rust/dialects/solid-v2/dialect.json", "schemaVersion", 2]
+  ...loadDialectManifests().flatMap((manifest) => [
+    [manifest.ruleManifest, "schemaVersion", 1],
+    [manifest.source, "schemaVersion", 2]
+  ])
 ];
 
 const INDEPENDENT_SOURCE_VERSIONS = [
   ["rust/crates/solid-facts-backend/src/main.rs", "if document.schema_version != 1"],
-  ["packages/cli/scripts/generate-package-contract.mjs", "{\"schemaVersion\":1,\"resolutions\":[]}"],
+  ["packages/cli/scripts/generate-package-contract.mjs", "const RUNTIME_MODULE_RESOLUTIONS_SCHEMA_VERSION = 1;"],
   ["scripts/lib/gate-cache.mjs", "export const CACHE_FORMAT_VERSION = 3;"],
   ["scripts/check-contract-pins.mjs", "export const MEMO_FORMAT_VERSION = 3;"],
   ["rust/crates/solid-reactive-ir/src/contract_semantics.rs", "pub const SEMANTIC_MODEL_VERSION: u16 = 1;"],
@@ -375,6 +394,7 @@ function auditSourceInventory(root) {
   const allowedReaders = [
     "scripts/check-bundled-contracts.mjs",
     "scripts/contract-corpus.mjs",
+    "scripts/ecosystem-benchmark/lib/certified-coverage.mjs",
     "scripts/ecosystem-benchmark/lib/contract-content.mjs",
     "scripts/package-contract-phase18.mjs",
     "scripts/solid-recharts-performance.mjs"

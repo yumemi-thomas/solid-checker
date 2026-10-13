@@ -1,0 +1,263 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "10944b050e9e51046bed934ee63cdcf577c4875fafb904edfe13af1b35750653",
+            "path": "./dist/index.js",
+            "sha256": "e1418b8d082b8ff858891b929b65e2439de92bf2185cd66e3782727084aed6dd"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "e41e8c1e82e98f8a53bbed7dfd999d09c38fc42752d6dc58b43d678e25c9d3ba"
+          },
+          "exports": {
+            "createUndoHistory": "authored-createUndoHistory"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-bSigepNsLx1M30c+pCdjgamlOuwJoeGROvQJS9nk+TykeR8cmklzfQ9l4J/zFxpaI8KDW6trEZ2hgj/HcSQsYQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "dd0cb273176c7b6b7de9b4194b3618ce50fd072a10560671a681c738483f500e"
+    },
+    "name": "@solid-primitives/history",
+    "version": "1.0.0-next.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createUndoHistory": {
+      "call": {
+        "closed": [
+          "returns"
+        ],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "canUndo",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "canRedo",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "undo",
+                  "value": {
+                    "kind": "callable"
+                  }
+                },
+                {
+                  "name": "redo",
+                  "value": {
+                    "kind": "callable"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "source-memos",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "history-state",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "resources": [
+              "history-state"
+            ]
+          },
+          {
+            "id": "history-source",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "source-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "source-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "restore-history-result",
+            "kind": "invoke",
+            "trigger": {
+              "event": "result-access"
+            },
+            "at": {
+              "event": "result-access",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "source-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "history-state",
+            "kind": "reactive-source"
+          }
+        ],
+        "computations": [
+          "source-memos"
+        ],
+        "creates": [
+          "history-state"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "history-source"
+          },
+          {
+            "from": {
+              "operation": "history-source",
+              "path": []
+            },
+            "operation": "restore-history-result"
+          }
+        ],
+        "edges": [
+          {
+            "kind": "data",
+            "from": "history-source",
+            "to": "restore-history-result"
+          }
+        ],
+        "callbackResults": [
+          {
+            "producer": "history-source",
+            "shape": "unknown",
+            "uses": [
+              "restore-history-result"
+            ],
+            "closed": [
+              "uses"
+            ]
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

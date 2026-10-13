@@ -1,0 +1,6 @@
+{
+  "name": "late-types-condition",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": { ".": { "import": "./index.mjs", "types": "./index.d.ts" } }
+}

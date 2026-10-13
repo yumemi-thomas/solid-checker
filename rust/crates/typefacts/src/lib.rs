@@ -20,8 +20,8 @@ pub mod v3;
 pub use invocation::*;
 pub use retained_table::{FactTable, Symbol};
 pub use session::{
-    AnalysisDemand, Cancellation, DemandGroup, ExchangeTimings, Producer, Session, SessionError,
-    TableChanges, UpdateTimings,
+    AnalysisDemand, Cancellation, CloseOutcome, DemandGroup, ExchangeTimings, Producer, Session,
+    SessionError, TableChanges, UpdateTimings,
 };
 
 pub const MAX_MESSAGE_BYTES: usize = 64 << 20;
@@ -1729,6 +1729,7 @@ mod tests {
             module_graph: None,
             invocation_demands: Vec::new(),
             export_value_demands: Vec::new(),
+            host_constants: Vec::new(),
         };
         assert_eq!(
             encode_sidecar_request(&request).unwrap(),

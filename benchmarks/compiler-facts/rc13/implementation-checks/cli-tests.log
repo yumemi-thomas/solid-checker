@@ -1,0 +1,10 @@
+$ bun ./node_modules/vitest/vitest.mjs run --config vitest.config.mjs test/*.test.mjs && bun ./node_modules/typescript/bin/tsc -p test/types/tsconfig.json
+
+ RUN  v4.1.11 /Users/thomas/Documents/Github/solid-checker/packages/cli
+
+
+ Test Files  8 passed (8)
+      Tests  294 passed (294)
+   Start at  13:46:16
+   Duration  4.03s (transform 343ms, setup 0ms, import 817ms, tests 6.87s, environment 1ms)
+

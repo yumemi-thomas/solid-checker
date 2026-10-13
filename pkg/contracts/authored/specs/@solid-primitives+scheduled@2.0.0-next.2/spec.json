@@ -1,0 +1,778 @@
+{
+  "package": "@solid-primitives/scheduled",
+  "version": "2.0.0-next.2",
+  "identity": "identity.json",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "exports": {
+    "debounce": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-33 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler is enumerated independently of invocation effects; captured callback identity and optional external dispatch are stated in the returned graph; timer state remains OPEN.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "cleanups": [
+          "debounce-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "debounce-dispatch"
+          }
+        ],
+        "operations": [
+          {
+            "id": "debounce-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "debounce-dispatch",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "returned-callable",
+              "call": {
+                "closed": [
+                  "reads",
+                  "creates",
+                  "returns",
+                  "callbacks"
+                ],
+                "reads": [],
+                "creates": [],
+                "returns": [
+                  "debounce-returned-return"
+                ],
+                "operations": [
+                  {
+                    "id": "debounce-captured-dispatch",
+                    "kind": "invoke",
+                    "trigger": {
+                      "event": "external-event"
+                    },
+                    "at": {
+                      "event": "external-event",
+                      "schedule": "external"
+                    },
+                    "tracking": "untracked",
+                    "owner": {
+                      "source": "none"
+                    },
+                    "count": {
+                      "min": 0,
+                      "max": 1,
+                      "scope": "call"
+                    }
+                  },
+                  {
+                    "id": "debounce-returned-return",
+                    "kind": "return",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "untracked",
+                    "count": {
+                      "min": 0,
+                      "max": "many",
+                      "scope": "call"
+                    },
+                    "output": "undefined"
+                  }
+                ],
+                "captures": [
+                  {
+                    "id": "callback",
+                    "from": {
+                      "arg": 0,
+                      "path": []
+                    }
+                  }
+                ],
+                "callbacks": [
+                  {
+                    "from": {
+                      "capture": "callback",
+                      "path": []
+                    },
+                    "operation": "debounce-captured-dispatch"
+                  }
+                ]
+              },
+              "members": [
+                {
+                  "name": "clear",
+                  "value": {
+                    "kind": "effectful-callable",
+                    "call": {
+                      "closed": [
+                        "callbacks",
+                        "reads",
+                        "creates",
+                        "returns"
+                      ],
+                      "callbacks": [],
+                      "reads": [],
+                      "creates": [],
+                      "returns": [
+                        "debounce-clear-return"
+                      ],
+                      "operations": [
+                        {
+                          "id": "debounce-clear-return",
+                          "kind": "return",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "untracked",
+                          "count": {
+                            "min": 0,
+                            "max": "many",
+                            "scope": "call"
+                          },
+                          "output": "undefined"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-33 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler is enumerated independently of invocation effects; captured callback identity and optional external dispatch are stated in the returned graph; timer state remains OPEN.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-33 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler is enumerated independently of invocation effects; captured callback identity and optional external dispatch are stated in the returned graph; timer state remains OPEN.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-33 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler is enumerated independently of invocation effects; captured callback identity and optional external dispatch are stated in the returned graph; timer state remains OPEN.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-33 \u2014 Browser has one whole function return with clear. Enumeration is independent of invoking it; captured callback identity and optional external dispatch are stated separately. Timer state, callback argument forwarding and writes remain open."
+      },
+      "probes": [
+        {
+          "label": "dispatch",
+          "rule": "missing-owner",
+          "why": "Actual native timer/idle dispatch loses the component owner; correct restores its captured owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "returned-clear",
+          "rule": "missing-owner",
+          "why": "Returned clear cancellation: only the misuse permits a native callback to run onCleanup without an owner. The correct twin calls the exact returned clear before dispatch. New shape and source-pair bytes require fresh recorded admission digests.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "captured-dispatch",
+          "rule": "missing-owner",
+          "why": "Exact const factory callback capture, followed by an exact returned call: timer invocation has no owner; the correct twin restores its saved owner inside that callback. Fresh capture-bound probe digests are required.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "returnedClosures": {
+        "return": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-34 \u2014 Returned wrapper has no direct reactive read or reactive allocation and normally returns undefined. The retained factory callback is enumerated separately with optional external dispatch; timer state, arbitrary argument forwarding and writes remain OPEN.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-34 \u2014 Returned wrapper has no direct reactive read or reactive allocation and normally returns undefined. The retained factory callback is enumerated separately with optional external dispatch; timer state, arbitrary argument forwarding and writes remain OPEN.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-34 \u2014 Returned wrapper has no direct reactive read or reactive allocation and normally returns undefined. The retained factory callback is enumerated separately with optional external dispatch; timer state, arbitrary argument forwarding and writes remain OPEN.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-34 \u2014 Each returned invocation may cause at most one trailing timer call of its retained callback with no owner or observer. clear/disposal/cancellation or later scheduling can suppress it. Native setTimeout is P1; arbitrary callback argument forwarding remains unbound when a consumer needs those values."
+        }
+      },
+      "memberClosures": {
+        "return.clear": {
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:26 \u2014 Native clearTimeout under P1; no caller callback, reactive read or reactive allocation; normally returns undefined. Private throttle state is ordinary data; writes remains open (no write-policy claim).",
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:26 \u2014 Native clearTimeout under P1; no caller callback, reactive read or reactive allocation; normally returns undefined. Private throttle state is ordinary data; writes remains open (no write-policy claim).",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:26 \u2014 Native clearTimeout under P1; no caller callback, reactive read or reactive allocation; normally returns undefined. Private throttle state is ordinary data; writes remains open (no write-policy claim).",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:26 \u2014 Native clearTimeout under P1; no caller callback, reactive read or reactive allocation; normally returns undefined. Private throttle state is ordinary data; writes remains open (no write-policy claim)."
+        }
+      },
+      "captureClosures": {
+        "return.callback": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:23-34 \u2014 The returned wrapper retains the factory callback value by identity. It never selects its callback from invocation arguments. Timer dispatch is conditional and cancellable; no positive lower bound or private timer-state proof is claimed."
+      }
+    },
+    "throttle": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler is enumerated independently of invocation effects; captured callback identity and optional external dispatch are stated in the returned graph; timer state remains OPEN.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks",
+          "returns"
+        ],
+        "reads": [],
+        "creates": [],
+        "cleanups": [
+          "throttle-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "throttle-dispatch"
+          }
+        ],
+        "operations": [
+          {
+            "id": "throttle-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "throttle-dispatch",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "returned-callable",
+              "call": {
+                "closed": [
+                  "reads",
+                  "creates",
+                  "returns",
+                  "callbacks"
+                ],
+                "reads": [],
+                "creates": [],
+                "returns": [
+                  "throttle-returned-return"
+                ],
+                "operations": [
+                  {
+                    "id": "throttle-captured-dispatch",
+                    "kind": "invoke",
+                    "trigger": {
+                      "event": "external-event"
+                    },
+                    "at": {
+                      "event": "external-event",
+                      "schedule": "external"
+                    },
+                    "tracking": "untracked",
+                    "owner": {
+                      "source": "none"
+                    },
+                    "count": {
+                      "min": 0,
+                      "max": 1,
+                      "scope": "call"
+                    }
+                  },
+                  {
+                    "id": "throttle-returned-return",
+                    "kind": "return",
+                    "trigger": {
+                      "event": "call"
+                    },
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "tracking": "untracked",
+                    "count": {
+                      "min": 0,
+                      "max": "many",
+                      "scope": "call"
+                    },
+                    "output": "undefined"
+                  }
+                ],
+                "captures": [
+                  {
+                    "id": "callback",
+                    "from": {
+                      "arg": 0,
+                      "path": []
+                    }
+                  }
+                ],
+                "callbacks": [
+                  {
+                    "from": {
+                      "capture": "callback",
+                      "path": []
+                    },
+                    "operation": "throttle-captured-dispatch"
+                  }
+                ]
+              },
+              "members": [
+                {
+                  "name": "clear",
+                  "value": {
+                    "kind": "effectful-callable",
+                    "call": {
+                      "closed": [
+                        "callbacks",
+                        "reads",
+                        "creates",
+                        "returns"
+                      ],
+                      "callbacks": [],
+                      "reads": [],
+                      "creates": [],
+                      "returns": [
+                        "throttle-clear-return"
+                      ],
+                      "operations": [
+                        {
+                          "id": "throttle-clear-return",
+                          "kind": "return",
+                          "trigger": {
+                            "event": "call"
+                          },
+                          "at": {
+                            "event": "call",
+                            "schedule": "same-stack"
+                          },
+                          "tracking": "untracked",
+                          "count": {
+                            "min": 0,
+                            "max": "many",
+                            "scope": "call"
+                          },
+                          "output": "undefined"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler is enumerated independently of invocation effects; captured callback identity and optional external dispatch are stated in the returned graph; timer state remains OPEN.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler is enumerated independently of invocation effects; captured callback identity and optional external dispatch are stated in the returned graph; timer state remains OPEN.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler is enumerated independently of invocation effects; captured callback identity and optional external dispatch are stated in the returned graph; timer state remains OPEN.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 Browser has one whole function return with clear. Enumeration is independent of invoking it; captured callback identity and optional external dispatch are stated separately. Timer state, callback argument forwarding and writes remain open."
+      },
+      "probes": [
+        {
+          "label": "dispatch",
+          "rule": "missing-owner",
+          "why": "Actual native timer/idle dispatch loses the component owner; correct restores its captured owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "returned-clear",
+          "rule": "missing-owner",
+          "why": "Returned clear cancellation: only the misuse permits a native callback to run onCleanup without an owner. The correct twin calls the exact returned clear before dispatch. New shape and source-pair bytes require fresh recorded admission digests.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "captured-dispatch",
+          "rule": "missing-owner",
+          "why": "Exact const factory callback capture, followed by an exact returned call: timer invocation has no owner; the correct twin restores its saved owner inside that callback. Fresh capture-bound probe digests are required.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "returnedClosures": {
+        "return": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 Returned wrapper has no direct reactive read or reactive allocation and normally returns undefined. The retained factory callback is enumerated separately with optional external dispatch; timer state, arbitrary argument forwarding and writes remain OPEN.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 Returned wrapper has no direct reactive read or reactive allocation and normally returns undefined. The retained factory callback is enumerated separately with optional external dispatch; timer state, arbitrary argument forwarding and writes remain OPEN.",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 Returned wrapper has no direct reactive read or reactive allocation and normally returns undefined. The retained factory callback is enumerated separately with optional external dispatch; timer state, arbitrary argument forwarding and writes remain OPEN.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 Each returned invocation may cause at most one trailing timer call of its retained callback with no owner or observer. clear/disposal/cancellation or later scheduling can suppress it. Native setTimeout is P1; arbitrary callback argument forwarding remains unbound when a consumer needs those values."
+        }
+      },
+      "memberClosures": {
+        "return.clear": {
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:65-68 \u2014 Native clearTimeout under P1; no caller callback, reactive read or reactive allocation; normally returns undefined. Private throttle state is ordinary data; writes remains open (no write-policy claim).",
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:65-68 \u2014 Native clearTimeout under P1; no caller callback, reactive read or reactive allocation; normally returns undefined. Private throttle state is ordinary data; writes remains open (no write-policy claim).",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:65-68 \u2014 Native clearTimeout under P1; no caller callback, reactive read or reactive allocation; normally returns undefined. Private throttle state is ordinary data; writes remains open (no write-policy claim).",
+          "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:65-68 \u2014 Native clearTimeout under P1; no caller callback, reactive read or reactive allocation; normally returns undefined. Private throttle state is ordinary data; writes remains open (no write-policy claim)."
+        }
+      },
+      "captureClosures": {
+        "return.callback": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:52-70 \u2014 The returned wrapper retains the factory callback value by identity. It never selects its callback from invocation arguments. Timer dispatch is conditional and cancellable; no positive lower bound or private timer-state proof is claimed."
+      }
+    },
+    "scheduleIdle": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:91-108 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler and clear are stateful; returns stays OPEN.",
+      "rule": "leaf-owner-forbidden-call",
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "cleanups": [
+          "scheduleIdle-cleanup"
+        ],
+        "returns": [
+          "return"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "scheduleIdle-dispatch"
+          }
+        ],
+        "operations": [
+          {
+            "id": "scheduleIdle-cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "unconstrained",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "scheduleIdle-dispatch",
+            "kind": "invoke",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:91-108 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler and clear are stateful; returns stays OPEN.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:91-108 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler and clear are stateful; returns stays OPEN.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:91-108 \u2014 Browser native timer/idle registration under P1; cleanup is conditional on getOwner. The returned scheduler and clear are stateful; returns stays OPEN."
+      },
+      "probes": [
+        {
+          "label": "dispatch",
+          "rule": "missing-owner",
+          "why": "Actual native timer/idle dispatch loses the component owner; correct restores its captured owner.",
+          "scenario": [
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    },
+    "createScheduled": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:223-246 \u2014 Constructor creates one ownedWrite signal and invokes schedule synchronously in the caller context. It returns a stateful function: a synchronous schedule can make isDirty true before its first read; calls may register cleanup under an observer. No accessor return is asserted.",
+      "rule": "strict-read-untracked",
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
+        "creates": [
+          "create-track"
+        ],
+        "resources": [
+          {
+            "id": "track",
+            "kind": "reactive-source"
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "schedule-factory"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "operations": [
+          {
+            "id": "create-track",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "track"
+            ]
+          },
+          {
+            "id": "schedule-factory",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "callable"
+            }
+          }
+        ]
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:223-246 \u2014 Constructor creates one ownedWrite signal and invokes schedule synchronously in the caller context. It returns a stateful function: a synchronous schedule can make isDirty true before its first read; calls may register cleanup under an observer. No accessor return is asserted.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/scheduled-createScheduled-top-level-read/node_modules/@solid-primitives/scheduled/dist/index.js:223-246 \u2014 Constructor creates one ownedWrite signal and invokes schedule synchronously in the caller context. It returns a stateful function: a synchronous schedule can make isDirty true before its first read; calls may register cleanup under an observer. No accessor return is asserted."
+      },
+      "probes": [
+        {
+          "label": "schedule-context",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The schedule factory inherits the caller memo's observer and owner. The internal ownedWrite signal is not the caller signal whose misuse write throws."
+        }
+      ]
+    }
+  }
+}

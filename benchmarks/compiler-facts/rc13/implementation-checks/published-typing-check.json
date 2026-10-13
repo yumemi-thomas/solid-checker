@@ -1,0 +1,13 @@
+{
+  "typescript": "5.9.3",
+  "versions": {
+    "solid-js": "2.0.0-rc.9",
+    "@solidjs/signals": "2.0.0-rc.9",
+    "@solidjs/web": "2.0.0-rc.9"
+  },
+  "files": [
+    "/Users/thomas/Documents/Github/solid-checker/fixtures/reactive-ir/callee-callback-timing/Async.tsx",
+    "/Users/thomas/Documents/Github/solid-checker/fixtures/reactive-ir/callee-callback-timing/helpers.ts"
+  ],
+  "errors": []
+}

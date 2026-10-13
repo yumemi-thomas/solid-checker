@@ -1,5 +1,21 @@
 # Design-review remediation plan
 
+> **Historical (2026-08-12). Read as a record, not a backlog.**
+>
+> Its subject was two live catalogs. Solid 1.x was retired in 2026-09
+> ([ADR 0110](adr/0110-the-checker-analyzes-solid-2-only.md)), so every
+> `rust/dialects/solid-v1/...` citation below names a file that no longer
+> exists, "both catalogs" now means one, and the `dialect-solid-1x` /
+> `dialect-solid-2` fixture pair the closing section relies on went with the
+> dialect. The gate line below is also stale: `scripts/parity.mjs` was removed
+> with the parity corpus, and `make verify` is the handoff authority (AGENTS.md
+> has the current table).
+>
+> Nothing here is re-cited, deliberately. The document's value is the reasoning
+> of a full-catalog review at a point in time; rewriting its line numbers would
+> make it look current without making it true. Items still worth doing live in
+> `docs/precision-backlog.md`.
+
 Source: full-catalog design review of main @ fdd9c045 (2026-08-12), three passes —
 Solid 1.x catalog (41 rules), Solid 2.0 catalog (37 rules), and repo
 composability. Verdict: 29/38 v1 rules and 28/34 v2 rules clean; the failures

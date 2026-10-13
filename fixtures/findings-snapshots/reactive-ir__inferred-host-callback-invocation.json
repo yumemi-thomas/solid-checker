@@ -1,0 +1,55 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/inferred-host-callback-invocation/src/main.tsx",
+      "start": 2519,
+      "end": 2530,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/inferred-host-callback-invocation/src/main.tsx",
+      "start": 2810,
+      "end": 2858,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/inferred-host-callback-invocation/src/main.tsx",
+      "start": 3715,
+      "end": 3724,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/inferred-host-callback-invocation/src/main.tsx",
+      "start": 5475,
+      "end": 5484,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/inferred-host-callback-invocation/src/main.tsx",
+      "start": 5625,
+      "end": 5634,
+      "fixes": 0
+    }
+  ]
+}

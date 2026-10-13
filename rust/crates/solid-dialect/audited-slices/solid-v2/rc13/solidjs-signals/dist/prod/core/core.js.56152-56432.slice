@@ -1,0 +1,11 @@
+ */ function untrack(e, n) {
+    if (GlobalQueue.jn === null && !tracking && true) return e();
+    const t = tracking;
+    tracking = false;
+    try {
+        if (GlobalQueue.jn !== null) return GlobalQueue.jn(e);
+        return e();
+    } finally {
+        tracking = t;
+    }
+}

@@ -1,0 +1,11 @@
+[package]
+name = "research-solid-v2-current-compiler"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+solid-facts = { path = "../../../../rust/crates/solid-facts" }
+solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "16f0988e0313c9ce1a06ed479799b45262eaca43", default-features = false }
+serde_json = "1"
+

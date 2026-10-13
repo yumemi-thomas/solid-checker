@@ -1,0 +1,5752 @@
+{
+  "diagnostic": true,
+  "baseReportDigest": "sha256:78d8577fa3023472ad85aa6c46fc50ba3ac19de52401f4497de23b88ac835a95",
+  "afterReportDigest": "sha256:15c947a5de23f032c8bc7d6a73e2e15010669aa2371e9966bc7be222dd423bae",
+  "rows": [
+    {
+      "probeId": "@corvu-next/accordion@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/calendar@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/dialog@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/disclosure@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/dismissible@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/drawer@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/focus-trap@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/list@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/otp-field@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/persistent@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/presence@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/prevent-scroll@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/resizable@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/tooltip@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/transition-size@0.1.5|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu-next/utils@0.1.5|solid2|only",
+      "beforeCases": 34,
+      "afterCases": 34,
+      "identicalClaimSets": 34,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/accordion@0.2.5|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "c9f26e785f3c79dc30817e820901743aab81a96c846d6925485f16c6561e5463",
+              "path": "./dist/index.jsx",
+              "sha256": "ae04d991dfd345637c1c23fade7f378864154f600f2e3c6afe88860da6c16d68"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "8ce95f2a5370c27da2ddaacc6ab6dd7eccdf5a14b0440b3aec8ec1f74b8bd614"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./solid",
+              "typesBranch": "/exports/./types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "bde4021c4398a9bb2e875b730ea2f78b184f61a0e1bb06140c218df1f99f1fff",
+              "path": "./dist/index.jsx",
+              "sha256": "ae04d991dfd345637c1c23fade7f378864154f600f2e3c6afe88860da6c16d68"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "8ce95f2a5370c27da2ddaacc6ab6dd7eccdf5a14b0440b3aec8ec1f74b8bd614"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./solid",
+              "typesBranch": "/exports/./types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "ca8e2679de7b2fe637522a59f9b4ac14cc3d4076f3e57238ec79b01a85a75402",
+              "path": "./dist/index.js",
+              "sha256": "325d1598f10456f55cc84bc585142ef9d8bb96cbdbc75d1e31467f3aff92e2f4"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "8ce95f2a5370c27da2ddaacc6ab6dd7eccdf5a14b0440b3aec8ec1f74b8bd614"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./default",
+              "typesBranch": "/exports/./types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "e3165685d98279a7796fdca65d01dfcc64e98a6591432940e8c26e7290a3b62a",
+              "path": "./dist/index.js",
+              "sha256": "325d1598f10456f55cc84bc585142ef9d8bb96cbdbc75d1e31467f3aff92e2f4"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "8ce95f2a5370c27da2ddaacc6ab6dd7eccdf5a14b0440b3aec8ec1f74b8bd614"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./default",
+              "typesBranch": "/exports/./types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@corvu/calendar@0.1.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/dialog@0.2.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/disclosure@0.2.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/drawer@0.2.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "4989d6f0714f91aa3f4c43608b3d137b412df2de7077ca18322a16f70d53f4ef",
+              "path": "./dist/index.jsx",
+              "sha256": "0282e1963414aff5201d806b57b56576e7f832978f3431f4e6db78703bfe57eb"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "ba8786598db00710d818e30ec3eaf605f3990f008961623ae147c0e689f9f5e9"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./solid",
+              "typesBranch": "/exports/./types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "bdd2b4155ce4996ff6f1240d5a069f7b53e467ff396d1bcf0f7c4791d10dc5ee",
+              "path": "./dist/index.jsx",
+              "sha256": "0282e1963414aff5201d806b57b56576e7f832978f3431f4e6db78703bfe57eb"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "ba8786598db00710d818e30ec3eaf605f3990f008961623ae147c0e689f9f5e9"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./solid",
+              "typesBranch": "/exports/./types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "1095373afc30d1a9f2886f293a701f611aeb83377739dfc0681ab8f1da775c15",
+              "path": "./dist/index.js",
+              "sha256": "8b6e4bfdb7220d14f0bee5a205914e4e982f4eaa29f45d45766ceaa4e12617da"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "ba8786598db00710d818e30ec3eaf605f3990f008961623ae147c0e689f9f5e9"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./default",
+              "typesBranch": "/exports/./types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "0aa18c4235010e103c739efed85d49ead2ae76ea4c56159bb3953251199d0d95",
+              "path": "./dist/index.js",
+              "sha256": "8b6e4bfdb7220d14f0bee5a205914e4e982f4eaa29f45d45766ceaa4e12617da"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "ba8786598db00710d818e30ec3eaf605f3990f008961623ae147c0e689f9f5e9"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./default",
+              "typesBranch": "/exports/./types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@corvu/otp-field@0.1.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/resizable@0.2.5|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/tooltip@0.2.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@corvu/utils@0.4.2|solid1|only",
+      "beforeCases": 34,
+      "afterCases": 34,
+      "identicalClaimSets": 34,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@kobalte/core@0.13.13|solid1|only",
+      "beforeCases": 577,
+      "afterCases": 577,
+      "identicalClaimSets": 577,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "beforeCases": 122,
+      "afterCases": 122,
+      "identicalClaimSets": 122,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": "./i18n",
+          "before": {
+            "artifact": {
+              "closureSha256": "edd4b5189c798ec7c160f5f1cab3731fea992d6876185b687705a135e73924ba",
+              "path": "./dist/i18n/index.js",
+              "sha256": "174d583ea84aeb8f6075bb4d9032b57c57bf8f1d597a3e7fe4fc16610d149626"
+            },
+            "declarations": {
+              "path": "./dist/i18n/index.d.ts",
+              "sha256": "4b29a7e675a603e3029d1a9237cda54c863f71f705653e8faafd354dbe5d2f3e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1*/default",
+              "typesBranch": "/exports/.~1*/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "7acb8227a56fe82a81d8f4fba767f8a2ad7ed43887ed121377ce72f791598451",
+              "path": "./dist/i18n/index.js",
+              "sha256": "174d583ea84aeb8f6075bb4d9032b57c57bf8f1d597a3e7fe4fc16610d149626"
+            },
+            "declarations": {
+              "path": "./dist/i18n/index.d.ts",
+              "sha256": "4b29a7e675a603e3029d1a9237cda54c863f71f705653e8faafd354dbe5d2f3e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1*/default",
+              "typesBranch": "/exports/.~1*/types"
+            }
+          }
+        },
+        {
+          "entrypoint": "./i18n",
+          "before": {
+            "artifact": {
+              "closureSha256": "6a9d8f87a00e0970bc371a40765bab91b55f99bbc688d14eeb7873225c36eb3b",
+              "path": "./dist/i18n/index.jsx",
+              "sha256": "2722073511a3610c4deaa393eef892c4db24ecd40b1e5089f8afb3b1b1e6482c"
+            },
+            "declarations": {
+              "path": "./dist/i18n/index.d.ts",
+              "sha256": "4b29a7e675a603e3029d1a9237cda54c863f71f705653e8faafd354dbe5d2f3e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1*/solid",
+              "typesBranch": "/exports/.~1*/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "1d601a8c51b12851d28a96ea427b0312f9cf5efc990f7597323aa3e155b2d025",
+              "path": "./dist/i18n/index.jsx",
+              "sha256": "2722073511a3610c4deaa393eef892c4db24ecd40b1e5089f8afb3b1b1e6482c"
+            },
+            "declarations": {
+              "path": "./dist/i18n/index.d.ts",
+              "sha256": "4b29a7e675a603e3029d1a9237cda54c863f71f705653e8faafd354dbe5d2f3e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1*/solid",
+              "typesBranch": "/exports/.~1*/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@kobalte/solidbase@0.6.13|solid1|only",
+      "beforeCases": 66,
+      "afterCases": 66,
+      "identicalClaimSets": 66,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@kobalte/utils@0.9.2|solid1|only",
+      "beforeCases": 23,
+      "afterCases": 23,
+      "identicalClaimSets": 23,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "04f07ba44ca4d236f9137a4914bd73287edc8da8dd8c02b35e4397e302157fd7",
+              "path": "./dist/index.js",
+              "sha256": "2117628a30cfb91851cf8751e3a35147776e3671eee52bd790dc74607d5a3eb8"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "7db4b9b4aa3f3384f68ea6c4ecedf09113fc6e226c32856a42f875b557f491c0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "b3728204a407b85a571fccf283c0636e4aa07da14455a832d1eac4fe38516e24",
+              "path": "./dist/index.js",
+              "sha256": "2117628a30cfb91851cf8751e3a35147776e3671eee52bd790dc74607d5a3eb8"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "7db4b9b4aa3f3384f68ea6c4ecedf09113fc6e226c32856a42f875b557f491c0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "04f07ba44ca4d236f9137a4914bd73287edc8da8dd8c02b35e4397e302157fd7",
+              "path": "./dist/index.js",
+              "sha256": "2117628a30cfb91851cf8751e3a35147776e3671eee52bd790dc74607d5a3eb8"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "7db4b9b4aa3f3384f68ea6c4ecedf09113fc6e226c32856a42f875b557f491c0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./solid",
+              "typesBranch": "/exports/./types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "b3728204a407b85a571fccf283c0636e4aa07da14455a832d1eac4fe38516e24",
+              "path": "./dist/index.js",
+              "sha256": "2117628a30cfb91851cf8751e3a35147776e3671eee52bd790dc74607d5a3eb8"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "7db4b9b4aa3f3384f68ea6c4ecedf09113fc6e226c32856a42f875b557f491c0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./solid",
+              "typesBranch": "/exports/./types"
+            }
+          }
+        },
+        {
+          "entrypoint": "./src/create-generate-id.ts",
+          "before": {
+            "artifact": {
+              "closureSha256": "5d99469ea0b99823f2dc551aaf804700c96cbc30419f2ac4e439172029f1a9a7",
+              "path": "./src/create-generate-id.ts",
+              "sha256": "1e76c11841000c405b54d0022c46983a04bebe72503b1278feb9d55439e2ba33"
+            },
+            "declarations": {
+              "path": "./src/create-generate-id.ts",
+              "sha256": "1e76c11841000c405b54d0022c46983a04bebe72503b1278feb9d55439e2ba33"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "827887b886bc451857da3abdfb29ef623b8bb8286b28c82de7f97f937480254d",
+              "path": "./src/create-generate-id.ts",
+              "sha256": "1e76c11841000c405b54d0022c46983a04bebe72503b1278feb9d55439e2ba33"
+            },
+            "declarations": {
+              "path": "./src/create-generate-id.ts",
+              "sha256": "1e76c11841000c405b54d0022c46983a04bebe72503b1278feb9d55439e2ba33"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          }
+        },
+        {
+          "entrypoint": "./src/create-global-listeners.ts",
+          "before": {
+            "artifact": {
+              "closureSha256": "032cc24f9c4c6d9efa2dd94fb9c17964d43df8a9c68f4bcb2b0e57975f31da85",
+              "path": "./src/create-global-listeners.ts",
+              "sha256": "83f1550feb018147849a71a0ab37bf2b768f068cec28eb12bb8b05a3a0d53340"
+            },
+            "declarations": {
+              "path": "./src/create-global-listeners.ts",
+              "sha256": "83f1550feb018147849a71a0ab37bf2b768f068cec28eb12bb8b05a3a0d53340"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "938b591a82d0daf84248c448e14f4f34550d7efe0f48adbd9ff5c4e2a5d4a85f",
+              "path": "./src/create-global-listeners.ts",
+              "sha256": "83f1550feb018147849a71a0ab37bf2b768f068cec28eb12bb8b05a3a0d53340"
+            },
+            "declarations": {
+              "path": "./src/create-global-listeners.ts",
+              "sha256": "83f1550feb018147849a71a0ab37bf2b768f068cec28eb12bb8b05a3a0d53340"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          }
+        },
+        {
+          "entrypoint": "./src/events.ts",
+          "before": {
+            "artifact": {
+              "closureSha256": "21a7efbdc3f3d89c675afd5b16168ee573da93ba77ef816e78805fe6bfbb580c",
+              "path": "./src/events.ts",
+              "sha256": "a0669c788d953bc0f17617d73555b08784600eb2dfedca7aeb3e7dd6bc7f3458"
+            },
+            "declarations": {
+              "path": "./src/events.ts",
+              "sha256": "a0669c788d953bc0f17617d73555b08784600eb2dfedca7aeb3e7dd6bc7f3458"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "f2aec2836247cc91bf34be08e9c056240de8321a993581faab99f049dad3187c",
+              "path": "./src/events.ts",
+              "sha256": "a0669c788d953bc0f17617d73555b08784600eb2dfedca7aeb3e7dd6bc7f3458"
+            },
+            "declarations": {
+              "path": "./src/events.ts",
+              "sha256": "a0669c788d953bc0f17617d73555b08784600eb2dfedca7aeb3e7dd6bc7f3458"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          }
+        },
+        {
+          "entrypoint": "./src/external.ts",
+          "before": {
+            "artifact": {
+              "closureSha256": "b7024b52bd212d6d544eff63a3c6c161ee200bee95dd7a6ed81045b3d43f2799",
+              "path": "./src/external.ts",
+              "sha256": "3b28138531bc8b49887991c4e9e69c2fc25e31cf6d87922042d0d71b513d05f1"
+            },
+            "declarations": {
+              "path": "./src/external.ts",
+              "sha256": "3b28138531bc8b49887991c4e9e69c2fc25e31cf6d87922042d0d71b513d05f1"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "c343e3c64ed1bb44a9e61751593dcefdd7df7c81cff9ce5edd6063b38b521055",
+              "path": "./src/external.ts",
+              "sha256": "3b28138531bc8b49887991c4e9e69c2fc25e31cf6d87922042d0d71b513d05f1"
+            },
+            "declarations": {
+              "path": "./src/external.ts",
+              "sha256": "3b28138531bc8b49887991c4e9e69c2fc25e31cf6d87922042d0d71b513d05f1"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          }
+        },
+        {
+          "entrypoint": "./src/focus-manager.ts",
+          "before": {
+            "artifact": {
+              "closureSha256": "87dd39f40737e1181fb0b9a272a67984fabe4afe0d5024b14a7a4d34514c7acc",
+              "path": "./src/focus-manager.ts",
+              "sha256": "ef1263bb74fd368823d258211cc95e69a945fffebc95d1e3920a5e5063162f88"
+            },
+            "declarations": {
+              "path": "./src/focus-manager.ts",
+              "sha256": "ef1263bb74fd368823d258211cc95e69a945fffebc95d1e3920a5e5063162f88"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "da00d44b5709d140a82d45975d12582a2d9fffb8e7b52f46ef0250c64d4bad5a",
+              "path": "./src/focus-manager.ts",
+              "sha256": "ef1263bb74fd368823d258211cc95e69a945fffebc95d1e3920a5e5063162f88"
+            },
+            "declarations": {
+              "path": "./src/focus-manager.ts",
+              "sha256": "ef1263bb74fd368823d258211cc95e69a945fffebc95d1e3920a5e5063162f88"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          }
+        },
+        {
+          "entrypoint": "./src/index.ts",
+          "before": {
+            "artifact": {
+              "closureSha256": "ced098f653182818bab4aa040782d559d1f06c55cc23d32ddf590013aea8b39d",
+              "path": "./src/index.ts",
+              "sha256": "53b85124a36daa93cf490ba94e0762e1e6a3b97b958694d4245b8004b67ab75c"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "53b85124a36daa93cf490ba94e0762e1e6a3b97b958694d4245b8004b67ab75c"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "70c3acb43d6e374da1dcb604f399fdab2af6b0be3c7c8b7a3506f135c0c9f49b",
+              "path": "./src/index.ts",
+              "sha256": "53b85124a36daa93cf490ba94e0762e1e6a3b97b958694d4245b8004b67ab75c"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "53b85124a36daa93cf490ba94e0762e1e6a3b97b958694d4245b8004b67ab75c"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          }
+        },
+        {
+          "entrypoint": "./src/props.ts",
+          "before": {
+            "artifact": {
+              "closureSha256": "a1d0bde7ec04bd6f4c78e5bd43b57db55345ca859f472ed991d976b2eb75e571",
+              "path": "./src/props.ts",
+              "sha256": "3c6b1e2d493aea30fa343cd7a41b306a34accc63fca94b434959de1b7e7b53fb"
+            },
+            "declarations": {
+              "path": "./src/props.ts",
+              "sha256": "3c6b1e2d493aea30fa343cd7a41b306a34accc63fca94b434959de1b7e7b53fb"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "79b7de61b59de214aa60f7231935cf8395cadd7b320c802a3907afc37bd6c803",
+              "path": "./src/props.ts",
+              "sha256": "3c6b1e2d493aea30fa343cd7a41b306a34accc63fca94b434959de1b7e7b53fb"
+            },
+            "declarations": {
+              "path": "./src/props.ts",
+              "sha256": "3c6b1e2d493aea30fa343cd7a41b306a34accc63fca94b434959de1b7e7b53fb"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          }
+        },
+        {
+          "entrypoint": "./src/styles.ts",
+          "before": {
+            "artifact": {
+              "closureSha256": "6616617830827591c1584fed2f5375316971f03200f901f7d465de68a45fd730",
+              "path": "./src/styles.ts",
+              "sha256": "0620899b417a91daed87b9a4359a4eac01e32f0afee21a3aea35d3cfa241ba1c"
+            },
+            "declarations": {
+              "path": "./src/styles.ts",
+              "sha256": "0620899b417a91daed87b9a4359a4eac01e32f0afee21a3aea35d3cfa241ba1c"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "5913b5216a79b260b0fa8d22982662f7544720b9907b5bd2cb0759ddd2116276",
+              "path": "./src/styles.ts",
+              "sha256": "0620899b417a91daed87b9a4359a4eac01e32f0afee21a3aea35d3cfa241ba1c"
+            },
+            "declarations": {
+              "path": "./src/styles.ts",
+              "sha256": "0620899b417a91daed87b9a4359a4eac01e32f0afee21a3aea35d3cfa241ba1c"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1src~1*",
+              "typesBranch": "/exports/.~1src~1*"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@kobalte/utils@2.0.0-alpha.0|solid2|only",
+      "beforeCases": 8,
+      "afterCases": 8,
+      "identicalClaimSets": 8,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/debugger@0.28.1|solid1|only",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/extension-adapter@0.12.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/frontend@0.15.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/locator@0.16.7|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/logger@0.9.11|solid1|only",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/overlay@0.33.5|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/shared@0.20.0|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/transform@0.10.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-devtools/ui@0.10.3|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/a11y@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/a11y@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/active-element@2.1.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/active-element@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/active-element@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/analytics@0.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/analytics@2.0.0-next.2|solid2|floor",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/analytics@2.0.0-next.2|solid2|head",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/async@0.0.101-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/async@0.0.101-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/audio@1.4.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/audio@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/audio@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/autofocus@0.1.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/bounds@0.1.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/bounds@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/bounds@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/broadcast-channel@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/broadcast-channel@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/broadcast-channel@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/clipboard@1.6.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/clipboard@2.0.0-next.17|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/clipboard@2.0.0-next.17|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/connectivity@0.4.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/connectivity@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/connectivity@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/context@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/context@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/controlled-props@0.1.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies@0.0.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cookies-store@1.1.11|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/countdown@1.0.9|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cursor@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cursor@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/cursor@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/date@2.1.8|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/date@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/date@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/date-difference@1.0.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/db-store@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/debounce@1.3.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/deep@0.3.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/deep@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/deep@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/destructure@0.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/destructure@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/destructure@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/devices@1.3.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/devices@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/devices@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-bus@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-bus@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-bus@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-dispatcher@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-listener@2.4.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-listener@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-listener@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-props@0.3.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-props@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/event-props@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/fetch@2.5.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/filesystem@1.3.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/filesystem@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/filesystem@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/flux-store@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/focus@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/focus@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/form@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/form@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/fullscreen@1.3.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/fullscreen@2.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/fullscreen@2.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/geolocation@1.5.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/geolocation@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/geolocation@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/gestures@1.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/gestures@3.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/gestures@3.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/graphql@3.0.0-next.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/history@0.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/history@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/history@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@2.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/i18n@3.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/idle@0.2.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/idle@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/idle@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/immutable@2.0.0-next.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/input-mask@0.3.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/input-mask@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/input-mask@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/interaction@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/interaction@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/intersection-observer@2.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-parser@0.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-tokenizer@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyboard@1.3.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyboard@2.0.0-next.5|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyboard@2.0.0-next.5|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyed@1.5.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyed@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/keyed@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/lifecycle@0.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/lifecycle@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/lifecycle@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list@0.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list-state@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/list-state@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/map@0.7.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/map@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/map@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@0.2.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/marker@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/masonry@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/masonry@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/masonry@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/match@0.0.100|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/match@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/match@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/media@2.3.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/media@4.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/media@4.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mediastream@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mediastream@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/memo@1.5.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/memo@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/memo@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mouse@2.1.7|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mouse@4.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mouse@4.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutable@1.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutable@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutable@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutation-observer@1.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutation-observer@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/mutation-observer@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/notification@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/notification@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/orientation@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/orientation@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/page-utilities@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/page-utilities@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/page-visibility@2.1.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pagination@0.5.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pagination@1.0.0-next.6|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pagination@1.0.0-next.6|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/permission@1.3.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/permission@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/permission@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/platform@0.2.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/platform@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/platform@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pointer@0.3.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pointer@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/pointer@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/presence@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/presence@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/presence@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/promise@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/promise@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/promise@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/props@3.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/props@4.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/props@4.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/queue@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/queue@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/raf@2.3.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/raf@4.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/raf@4.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/range@0.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/range@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/range@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/reducer@0.0.101|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/refs@1.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/refs@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/refs@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/resize-observer@2.2.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/resize-observer@4.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/resize-observer@4.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/resource@0.4.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/rootless@1.5.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/rootless@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/rootless@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scheduled@1.5.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scheduled@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scheduled@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/script-loader@2.3.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/script-loader@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/script-loader@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scroll@2.1.6|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scroll@3.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/scroll@3.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/selection@0.1.3|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/selection@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/selection@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sensors@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sensors@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/set@0.7.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/set@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/set@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/share@2.2.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/share@4.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/share@4.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/signal-builders@0.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/signal-builders@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/signal-builders@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sortable@1.0.0-next.0|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sortable@1.0.0-next.0|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/spring@0.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/spring@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/spring@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sse@0.0.103|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "ff835a0b82af470ae8f0002f060c23045b4272da5686ba3dffc88e8c6b61dfbb",
+              "path": "./dist/index.js",
+              "sha256": "44b27adf95413469ff18821f1e9e6ca2b2aa764754a41e56334e883a047b137f"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "15d5630dfcd107d18de0dea37df1451f7c0817227008624a5fe5f0019966457c"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "e0f8f966a5ee34458e397f40f0e9891bc596bfac9407775079618512ee8867ad",
+              "path": "./dist/index.js",
+              "sha256": "44b27adf95413469ff18821f1e9e6ca2b2aa764754a41e56334e883a047b137f"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "15d5630dfcd107d18de0dea37df1451f7c0817227008624a5fe5f0019966457c"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          }
+        },
+        {
+          "entrypoint": "./worker",
+          "before": {
+            "artifact": {
+              "closureSha256": "42d42bbcb921ed065877e70ebb9e57a35b8a4b38fb42c0b8d03cb000bdc73d97",
+              "path": "./dist/worker.js",
+              "sha256": "26001aed451648c324c67802c447046d9d69750bfc2074cf0c1407bd41ceecb8"
+            },
+            "declarations": {
+              "path": "./dist/worker.d.ts",
+              "sha256": "9b35e6e5560ce0a8307edb6ddea09d87115081c18496906d8fab5fb14b6cf1cf"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1worker/import/default",
+              "typesBranch": "/exports/.~1worker/import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "48c97ae74f93c86b1bf4733a707d5bdff612b321d5c11dcacc08f9b5155f9d5d",
+              "path": "./dist/worker.js",
+              "sha256": "26001aed451648c324c67802c447046d9d69750bfc2074cf0c1407bd41ceecb8"
+            },
+            "declarations": {
+              "path": "./dist/worker.d.ts",
+              "sha256": "9b35e6e5560ce0a8307edb6ddea09d87115081c18496906d8fab5fb14b6cf1cf"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1worker/import/default",
+              "typesBranch": "/exports/.~1worker/import/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/sse@1.0.0-next.2|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/start@0.0.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/state-machine@0.1.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/state-machine@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/state-machine@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/static-store@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/static-store@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/static-store@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/storage@4.4.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/storage@5.0.0-next.4|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/storage@5.0.0-next.4|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/stream@0.7.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/styles@0.1.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/styles@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/styles@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/throttle@1.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/timer@1.4.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/timer@1.4.5-next.1|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/timer@1.4.5-next.1|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/transition-group@1.1.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/transition-group@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/transition-group@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/trigger@1.2.4|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/trigger@3.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/trigger@3.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/tween@1.4.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/tween@2.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/tween@2.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/upload@0.1.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/upload@1.0.0-next.4|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/upload@1.0.0-next.4|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/url@0.2.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/url@0.2.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@6.4.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "821a66e5d87867d288435e5b187a5f3053f976d52911c1cb23d7ae3ef2366fd6",
+              "path": "./dist/index.js",
+              "sha256": "e899c544004dc1eea92cdfbd35b073e02f57eed58f300a1c8b3e70e6668d974b"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "279478ddd50b8163a97b7c221664edda7ed83bb47829b8dbb75f3b00d4d84e2d"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "f3dcf44bab3dbeba8ebd167b993a8687ff5bb273c4db124dddf3f78d161423a5",
+              "path": "./dist/index.js",
+              "sha256": "e899c544004dc1eea92cdfbd35b073e02f57eed58f300a1c8b3e70e6668d974b"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "279478ddd50b8163a97b7c221664edda7ed83bb47829b8dbb75f3b00d4d84e2d"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          }
+        },
+        {
+          "entrypoint": "./immutable",
+          "before": {
+            "artifact": {
+              "closureSha256": "a026084fba655665ecb3a325957c8184730a8ef575a9ffa0a501a486c0c05641",
+              "path": "./dist/immutable/index.js",
+              "sha256": "603f6152a0b62abc4de854caaf6e2d54eacff2bbc37df2eea0a1603001627b3d"
+            },
+            "declarations": {
+              "path": "./dist/immutable/index.d.ts",
+              "sha256": "603f6152a0b62abc4de854caaf6e2d54eacff2bbc37df2eea0a1603001627b3d"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1immutable/import/default",
+              "typesBranch": "/exports/.~1immutable/import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "ad800ea20ab30555180bcde47b7abf71f42dd4b6a6e4835904ce7020df2b09dd",
+              "path": "./dist/immutable/index.js",
+              "sha256": "603f6152a0b62abc4de854caaf6e2d54eacff2bbc37df2eea0a1603001627b3d"
+            },
+            "declarations": {
+              "path": "./dist/immutable/index.d.ts",
+              "sha256": "603f6152a0b62abc4de854caaf6e2d54eacff2bbc37df2eea0a1603001627b3d"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1immutable/import/default",
+              "typesBranch": "/exports/.~1immutable/import/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@solid-primitives/utils@7.0.0-next.4|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/utils@7.0.0-next.4|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/vibrate@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/vibrate@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/video@1.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/video@1.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/virtual@0.2.5|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/visibility-observer@2.0.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/websocket@1.4.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/websocket@2.0.0-next.3|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/websocket@2.0.0-next.3|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/workers@2.0.1-next.1|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solid-primitives/workers@2.0.1-next.1|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/diagnostics@2.0.0-rc.3|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/element@2.0.0-rc.3|solid2|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/h@2.0.0-rc.3|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/html@2.0.0-rc.3|solid2|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/image@0.1.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/meta@0.29.4|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/meta@1.0.0-next.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/meta@1.0.0-next.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/router@1.0.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/router@2.0.0-next.18|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/signals@2.0.0-rc.3|solid2|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/start@2.0.3|solid1|only",
+      "beforeCases": 10,
+      "afterCases": 10,
+      "identicalClaimSets": 9,
+      "missing": [],
+      "changed": [
+        {
+          "entrypoint": "./fns/client",
+          "selection": {
+            "artifact": {
+              "closureSha256": "fb2044d7e10c7487dee515384a56fbb4efc3afa66c82200b9630f5979a467a48",
+              "path": "./dist/fns/client.js",
+              "sha256": "c0fc36414d02ba15fdb7ce1dccd1d76ca4cc7184aeda7c14221201bcd7e76400"
+            },
+            "declarations": {
+              "path": "./dist/fns/client.d.ts",
+              "sha256": "2cff89cd1149a3e3486b758d66a27f3cc0fd35481d0e9e2b303472f34dfdd6db"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1fns~1client",
+              "typesBranch": "/exports/.~1fns~1client"
+            }
+          },
+          "before": {
+            "cloneServerReference": {
+              "call": {},
+              "shape": "callable"
+            },
+            "createClientReference": {
+              "call": {},
+              "shape": "callable"
+            }
+          },
+          "after": {
+            "cloneServerReference": {
+              "call": {},
+              "shape": "callable"
+            },
+            "createClientReference": {
+              "call": {
+                "operations": [
+                  {
+                    "at": {
+                      "event": "call",
+                      "schedule": "same-stack"
+                    },
+                    "count": {
+                      "max": "many",
+                      "min": 0,
+                      "scope": "call"
+                    },
+                    "id": "return",
+                    "kind": "return",
+                    "output": {
+                      "index": 0,
+                      "kind": "parameter",
+                      "path": []
+                    },
+                    "tracking": "untracked",
+                    "trigger": {
+                      "event": "call"
+                    }
+                  }
+                ],
+                "returns": [
+                  "return"
+                ]
+              },
+              "shape": "callable"
+            }
+          }
+        }
+      ],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/start-devtools@1.0.0-next.4|solid2|floor",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/start-devtools@1.0.0-next.4|solid2|head",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/universal@2.0.0-rc.3|solid2|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/vite-plugin@3.0.0-next.34|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/vite-plugin@3.0.0-next.34|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@solidjs/web@2.0.0-rc.3|solid2|only",
+      "beforeCases": 22,
+      "afterCases": 26,
+      "identicalClaimSets": 22,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/ai-devtools-core@0.5.8|solid1|only",
+      "beforeCases": 10,
+      "afterCases": 10,
+      "identicalClaimSets": 10,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/charts@0.15.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/devtools@0.14.2|solid1|only",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "identicalClaimSets": 5,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/devtools-a11y@0.2.2|solid1|only",
+      "beforeCases": 4,
+      "afterCases": 4,
+      "identicalClaimSets": 4,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/devtools-ui@0.7.1|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/devtools-utils@0.7.0|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/form-devtools@1.0.0-alpha.2|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/hotkeys-devtools@0.9.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/pacer-devtools@1.4.0|solid1|only",
+      "beforeCases": 8,
+      "afterCases": 8,
+      "identicalClaimSets": 8,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-ai-devtools@0.2.71|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-charts@0.15.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-devtools@0.8.12|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-form@2.0.0-alpha.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "13cfabc14bac4bd738dd43599bc5817e251ed4198cd5ca90e37a05aeee795959",
+              "path": "./dist/index.js",
+              "sha256": "038d19932bfa2f851247b3d3259b9837bb92541321627986659da43c1e25c270"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "bfc97dbc486989bf6aa5e99c5258dfc82d8b71858ea84cee1a4b084cd4fabe47"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.",
+              "typesBranch": "/exports/."
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "643a621155703ee618977358e90af1e6e869618cca3434482fe3d50790077bc6",
+              "path": "./dist/index.js",
+              "sha256": "038d19932bfa2f851247b3d3259b9837bb92541321627986659da43c1e25c270"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "bfc97dbc486989bf6aa5e99c5258dfc82d8b71858ea84cee1a4b084cd4fabe47"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.",
+              "typesBranch": "/exports/."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-hotkeys@0.10.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "b3b7ba705adde07f8f0915ce6cadf27f9884b2cc0f1e57d5f0bf0200995980fd",
+              "path": "./dist/index.js",
+              "sha256": "cde449f86f2800c69dcf5ee5a1ce0ffa855eb92d28bba90d577a608c44ab23d3"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "9c7da3350b1a4194d7919c8f61d947beb8d999904567e9f80fa0b88210446c25"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "903b94e7e8c3e4052e71f082f604755130424ddf0db08a364bbae452a5c73da5",
+              "path": "./dist/index.js",
+              "sha256": "cde449f86f2800c69dcf5ee5a1ce0ffa855eb92d28bba90d577a608c44ab23d3"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "9c7da3350b1a4194d7919c8f61d947beb8d999904567e9f80fa0b88210446c25"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./import"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-hotkeys-devtools@0.7.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-pacer@0.22.0|solid1|only",
+      "beforeCases": 13,
+      "afterCases": 13,
+      "identicalClaimSets": 13,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "7884c32e94f9b0054030e1b040cd4ec17f59c6b2a38e888996128b70e23de2bd",
+              "path": "./dist/index.js",
+              "sha256": "8997629a9d44d2a2bd61fdc99719fb2e5ed9e3c1011910ec3a315366f7519595"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "ba701e47868b7292ef97abbd923c6bee0dcbfd0abfabec5cbc122e2dc98774ee"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "e9de7620c31815bb20bede1068414f67d150508393f952604840355373bce379",
+              "path": "./dist/index.js",
+              "sha256": "8997629a9d44d2a2bd61fdc99719fb2e5ed9e3c1011910ec3a315366f7519595"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "ba701e47868b7292ef97abbd923c6bee0dcbfd0abfabec5cbc122e2dc98774ee"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./async-batcher",
+          "before": {
+            "artifact": {
+              "closureSha256": "6edb4dd8f6cc1911b16a82bb42d684eb44c4d254294df1d725f3774c91349fba",
+              "path": "./dist/async-batcher/index.js",
+              "sha256": "44871158c94ca3ab7539f59eecdf94e5294c74c49ce67282c777e2cbcb0a0998"
+            },
+            "declarations": {
+              "path": "./dist/async-batcher/index.d.ts",
+              "sha256": "ce6ca7428d30a134566c1930b954d0c2d115b6954ccfb1d9110971075e8f880a"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-batcher/import",
+              "typesBranch": "/exports/.~1async-batcher/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "07c3d9f03e760da065c53001560713a83fec8301179168de94148e2f30b6dfa9",
+              "path": "./dist/async-batcher/index.js",
+              "sha256": "44871158c94ca3ab7539f59eecdf94e5294c74c49ce67282c777e2cbcb0a0998"
+            },
+            "declarations": {
+              "path": "./dist/async-batcher/index.d.ts",
+              "sha256": "ce6ca7428d30a134566c1930b954d0c2d115b6954ccfb1d9110971075e8f880a"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-batcher/import",
+              "typesBranch": "/exports/.~1async-batcher/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./async-debouncer",
+          "before": {
+            "artifact": {
+              "closureSha256": "becefa1dd4efca96b84cd9f63300bceac11bea4b0a2931f037e36be85d1eae88",
+              "path": "./dist/async-debouncer/index.js",
+              "sha256": "c844b4032e30b1cfc8a683680bb4224cd1823ce9a843590990da36f5f232693e"
+            },
+            "declarations": {
+              "path": "./dist/async-debouncer/index.d.ts",
+              "sha256": "bf26b87b961824817050267769686ef4a905514e5a6e31b18cee83f8cac65b38"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-debouncer/import",
+              "typesBranch": "/exports/.~1async-debouncer/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "8e02af60f6386bec1e6ed5a823822f75659a317dbd8533257ae51771b834628a",
+              "path": "./dist/async-debouncer/index.js",
+              "sha256": "c844b4032e30b1cfc8a683680bb4224cd1823ce9a843590990da36f5f232693e"
+            },
+            "declarations": {
+              "path": "./dist/async-debouncer/index.d.ts",
+              "sha256": "bf26b87b961824817050267769686ef4a905514e5a6e31b18cee83f8cac65b38"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-debouncer/import",
+              "typesBranch": "/exports/.~1async-debouncer/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./async-queuer",
+          "before": {
+            "artifact": {
+              "closureSha256": "fd21c5b63a765b102ccf074697b06bc15a16772835bbb36fd067df5ef6449b4e",
+              "path": "./dist/async-queuer/index.js",
+              "sha256": "175c8e371443ad92ff13b46e4d108c1547e4aa0ddc220843ad52ed2294a3b3a7"
+            },
+            "declarations": {
+              "path": "./dist/async-queuer/index.d.ts",
+              "sha256": "20b51b421f8aa9d6432b6af4395c39b8181663b13132246f321873d581e536ff"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-queuer/import",
+              "typesBranch": "/exports/.~1async-queuer/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "4d812acf7de05fbae6c44ff95625df0990d9ee003148a39e0c4c7383a2cf14e7",
+              "path": "./dist/async-queuer/index.js",
+              "sha256": "175c8e371443ad92ff13b46e4d108c1547e4aa0ddc220843ad52ed2294a3b3a7"
+            },
+            "declarations": {
+              "path": "./dist/async-queuer/index.d.ts",
+              "sha256": "20b51b421f8aa9d6432b6af4395c39b8181663b13132246f321873d581e536ff"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-queuer/import",
+              "typesBranch": "/exports/.~1async-queuer/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./async-rate-limiter",
+          "before": {
+            "artifact": {
+              "closureSha256": "904610e8c779a573b4b23876cb0d46c45733452492674090b031563c208ee662",
+              "path": "./dist/async-rate-limiter/index.js",
+              "sha256": "293fd03fb9b89b9287861ba8a2cda1b1ab8493881eb0e79eca067e53e922dd6d"
+            },
+            "declarations": {
+              "path": "./dist/async-rate-limiter/index.d.ts",
+              "sha256": "35b8105cf515601c44851b148850aa485b1836365106b394e78ad10304b3c0d5"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-rate-limiter/import",
+              "typesBranch": "/exports/.~1async-rate-limiter/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "24d9b00762beac2d72ac52b6147997295c4393676801b6414eb8c11542f6e553",
+              "path": "./dist/async-rate-limiter/index.js",
+              "sha256": "293fd03fb9b89b9287861ba8a2cda1b1ab8493881eb0e79eca067e53e922dd6d"
+            },
+            "declarations": {
+              "path": "./dist/async-rate-limiter/index.d.ts",
+              "sha256": "35b8105cf515601c44851b148850aa485b1836365106b394e78ad10304b3c0d5"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-rate-limiter/import",
+              "typesBranch": "/exports/.~1async-rate-limiter/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./async-throttler",
+          "before": {
+            "artifact": {
+              "closureSha256": "d0b28e5f6691622f98d253d5f6da1e6a616d5f9f5aef58adaa7044a0f412d163",
+              "path": "./dist/async-throttler/index.js",
+              "sha256": "0443343115d313e1cf4ca7f5fd14fd4671f2ced2374ffcfcc853ff749c3bba09"
+            },
+            "declarations": {
+              "path": "./dist/async-throttler/index.d.ts",
+              "sha256": "1cac236b4e64a54d5b862734441bfbf9a05cd25ab7995a85d9b6608802baf7b1"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-throttler/import",
+              "typesBranch": "/exports/.~1async-throttler/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "268535bd65410caea000a999562cac0c96a1e14b8c61c139712288b1a28c953f",
+              "path": "./dist/async-throttler/index.js",
+              "sha256": "0443343115d313e1cf4ca7f5fd14fd4671f2ced2374ffcfcc853ff749c3bba09"
+            },
+            "declarations": {
+              "path": "./dist/async-throttler/index.d.ts",
+              "sha256": "1cac236b4e64a54d5b862734441bfbf9a05cd25ab7995a85d9b6608802baf7b1"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1async-throttler/import",
+              "typesBranch": "/exports/.~1async-throttler/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./batcher",
+          "before": {
+            "artifact": {
+              "closureSha256": "86182f2eb020cbc1b7b68848d673598ec26a2c0ecfa895c32730a8f9f0562254",
+              "path": "./dist/batcher/index.js",
+              "sha256": "7a2f52f8bd804f3aa75d39d7af864e63051a2de7f26eec71b4414d0e27836ed0"
+            },
+            "declarations": {
+              "path": "./dist/batcher/index.d.ts",
+              "sha256": "2f43b0fd9cfb447aed98bad6993bb9128737c41ab1db994cbe8c4fa383051ccb"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1batcher/import",
+              "typesBranch": "/exports/.~1batcher/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "5d0ab452c51b7a4f5341221255351ebb91ca45a645f7daafc35e8e5c46f2631b",
+              "path": "./dist/batcher/index.js",
+              "sha256": "7a2f52f8bd804f3aa75d39d7af864e63051a2de7f26eec71b4414d0e27836ed0"
+            },
+            "declarations": {
+              "path": "./dist/batcher/index.d.ts",
+              "sha256": "2f43b0fd9cfb447aed98bad6993bb9128737c41ab1db994cbe8c4fa383051ccb"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1batcher/import",
+              "typesBranch": "/exports/.~1batcher/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./debouncer",
+          "before": {
+            "artifact": {
+              "closureSha256": "4b62382c2ac04042356fe1819a355ee5c6012d75f985c7ce0b650b5577fcdf16",
+              "path": "./dist/debouncer/index.js",
+              "sha256": "3ebe2182b5c1d6466d8bdb363db9b204a746ce04e43d53ff6739e2d2133fca1b"
+            },
+            "declarations": {
+              "path": "./dist/debouncer/index.d.ts",
+              "sha256": "6397cfab0ddae15bebeb0b619e802c141c111cd8a7d1036ad34f9f2f37cbe6f2"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1debouncer/import",
+              "typesBranch": "/exports/.~1debouncer/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "7ae153658b94aee090a19190104a53c4c2e052888f60d2d97c5c705e7397b434",
+              "path": "./dist/debouncer/index.js",
+              "sha256": "3ebe2182b5c1d6466d8bdb363db9b204a746ce04e43d53ff6739e2d2133fca1b"
+            },
+            "declarations": {
+              "path": "./dist/debouncer/index.d.ts",
+              "sha256": "6397cfab0ddae15bebeb0b619e802c141c111cd8a7d1036ad34f9f2f37cbe6f2"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1debouncer/import",
+              "typesBranch": "/exports/.~1debouncer/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./provider",
+          "before": {
+            "artifact": {
+              "closureSha256": "3fca1d1ae74fd059609f2dedea90d01af9236906c8e90deefd4e70494a3c32e8",
+              "path": "./dist/provider/index.js",
+              "sha256": "fe44afa9c16125032b7f2b2de136bdf206245e24964f0c907d9aad2a84950756"
+            },
+            "declarations": {
+              "path": "./dist/provider/index.d.ts",
+              "sha256": "d17fb13284be8871a49748ed4eaea78f98ae4c87f00c97f5e17db53335a93847"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1provider/import",
+              "typesBranch": "/exports/.~1provider/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "2b7bb92813b1ec9d744fedd8689cbc86fe147ec61e36a58033410e6f5e35a4de",
+              "path": "./dist/provider/index.js",
+              "sha256": "fe44afa9c16125032b7f2b2de136bdf206245e24964f0c907d9aad2a84950756"
+            },
+            "declarations": {
+              "path": "./dist/provider/index.d.ts",
+              "sha256": "d17fb13284be8871a49748ed4eaea78f98ae4c87f00c97f5e17db53335a93847"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1provider/import",
+              "typesBranch": "/exports/.~1provider/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./queuer",
+          "before": {
+            "artifact": {
+              "closureSha256": "7cd5929f5ce93d6ca41d13413814431cda73d59244884b443979b4c9db3c1853",
+              "path": "./dist/queuer/index.js",
+              "sha256": "7e48a728b52de1cd61ebe221d4eec01345f4f793e7ec29b1517a560ba30bea5b"
+            },
+            "declarations": {
+              "path": "./dist/queuer/index.d.ts",
+              "sha256": "03ecb0109c23eda1ecf4e8acfd4820b14122d212293448b569e22ea4009c310a"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1queuer/import",
+              "typesBranch": "/exports/.~1queuer/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "d87553423a3218eb4703b874c29af621b21e854bbf09382e2b10fadb5c286211",
+              "path": "./dist/queuer/index.js",
+              "sha256": "7e48a728b52de1cd61ebe221d4eec01345f4f793e7ec29b1517a560ba30bea5b"
+            },
+            "declarations": {
+              "path": "./dist/queuer/index.d.ts",
+              "sha256": "03ecb0109c23eda1ecf4e8acfd4820b14122d212293448b569e22ea4009c310a"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1queuer/import",
+              "typesBranch": "/exports/.~1queuer/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./rate-limiter",
+          "before": {
+            "artifact": {
+              "closureSha256": "9c3db366470615c8c55dbe13f06a7232632b5bb687f6b455f17303a9117c4164",
+              "path": "./dist/rate-limiter/index.js",
+              "sha256": "442a5389ada39a34ac7f7aae601d8bf2d8b2de2342733de528f663947add149b"
+            },
+            "declarations": {
+              "path": "./dist/rate-limiter/index.d.ts",
+              "sha256": "0c2c398e1d15504d97d07795cc222b1e602b76c829a9707a370a76095cbe9a8c"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1rate-limiter/import",
+              "typesBranch": "/exports/.~1rate-limiter/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "12fcd394fc7a5d8dd2d9ab61a165a95a86d0526232fa2569bdc8efc6b7bfdad4",
+              "path": "./dist/rate-limiter/index.js",
+              "sha256": "442a5389ada39a34ac7f7aae601d8bf2d8b2de2342733de528f663947add149b"
+            },
+            "declarations": {
+              "path": "./dist/rate-limiter/index.d.ts",
+              "sha256": "0c2c398e1d15504d97d07795cc222b1e602b76c829a9707a370a76095cbe9a8c"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1rate-limiter/import",
+              "typesBranch": "/exports/.~1rate-limiter/import"
+            }
+          }
+        },
+        {
+          "entrypoint": "./throttler",
+          "before": {
+            "artifact": {
+              "closureSha256": "e24f416092bea9a47e15e47d982a3a8df7fd9c7df8d623b56b91f93bb1134161",
+              "path": "./dist/throttler/index.js",
+              "sha256": "c8b49b9af8fbc7a36e71a967775f8a082ccc008738fce7a20e34abbc97b9bfad"
+            },
+            "declarations": {
+              "path": "./dist/throttler/index.d.ts",
+              "sha256": "d2fc7ff4635ae072b4ec460c3af2ff0bc25504e5ea6edeef379f4da626bab0d6"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1throttler/import",
+              "typesBranch": "/exports/.~1throttler/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "cf3643d657a5d2a9e1afd618e469cf92c7658d78409dfaf4eb13b9bd1361ebed",
+              "path": "./dist/throttler/index.js",
+              "sha256": "c8b49b9af8fbc7a36e71a967775f8a082ccc008738fce7a20e34abbc97b9bfad"
+            },
+            "declarations": {
+              "path": "./dist/throttler/index.d.ts",
+              "sha256": "d2fc7ff4635ae072b4ec460c3af2ff0bc25504e5ea6edeef379f4da626bab0d6"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1throttler/import",
+              "typesBranch": "/exports/.~1throttler/import"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-pacer-devtools@0.14.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query@5.102.5|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "26cdd7442645e56ee622e03236b3472a0f9ce2da431024763d7b7d36da58e38e",
+              "path": "./build/index.js",
+              "sha256": "df5de3673eb8ae6b5179ab696af5e5792d1250ca8b4414dfe2d213b1bdfd575d"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "90179e308d61e0bbde4eb0674fc3440cfb5738a54a7303b8e77c9159a564b325"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "0479ed53f06e330860368f977fe0360df0542bdfe7053fe976eea1167b3d4534",
+              "path": "./build/index.js",
+              "sha256": "df5de3673eb8ae6b5179ab696af5e5792d1250ca8b4414dfe2d213b1bdfd575d"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "90179e308d61e0bbde4eb0674fc3440cfb5738a54a7303b8e77c9159a564b325"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "9a6f710963cb2976faa71993aa04df38420c01b3489110aacab8f259bda2e2dc",
+              "path": "./build/dev.js",
+              "sha256": "38f7219eb4bcf68b521ff46f25f21d4e76370c6b75f8ab1f09997ec1b2b1a3b0"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "90179e308d61e0bbde4eb0674fc3440cfb5738a54a7303b8e77c9159a564b325"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "49c4bdf0e20de2c9c5fa53fd14daea7df7c89a1be632b4e48ef3f38c92cd4493",
+              "path": "./build/dev.js",
+              "sha256": "38f7219eb4bcf68b521ff46f25f21d4e76370c6b75f8ab1f09997ec1b2b1a3b0"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "90179e308d61e0bbde4eb0674fc3440cfb5738a54a7303b8e77c9159a564b325"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "c32b87ad202e6eb9b423c58ac5d0ee3cba736eecd6acedc44ecd99bcbddc33c7",
+              "path": "./src/index.ts",
+              "sha256": "d48f7691dad60f327e55224613f48e128fbf58671004ca5330e8abcd85b0d7b2"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "d48f7691dad60f327e55224613f48e128fbf58671004ca5330e8abcd85b0d7b2"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "faf7204efa1d3183df573b95acabd335c37bd1391b851129dfd7940e62922df9",
+              "path": "./src/index.ts",
+              "sha256": "d48f7691dad60f327e55224613f48e128fbf58671004ca5330e8abcd85b0d7b2"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "d48f7691dad60f327e55224613f48e128fbf58671004ca5330e8abcd85b0d7b2"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-query@6.0.0-rc.0|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "653955ef6f6557b973cd6efbc90f25dac7b599d8080719f5d9445e9cd5130017",
+              "path": "./build/dev.js",
+              "sha256": "39ead57d8ef661b515d1bb9429d8964fe0ae619957bbd3378cfdba0a4d46cbb3"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "3e6e3ba705186a112e9c99b12d795a9209aac7cbc084206dfd4bab66df5c919a",
+              "path": "./build/dev.js",
+              "sha256": "39ead57d8ef661b515d1bb9429d8964fe0ae619957bbd3378cfdba0a4d46cbb3"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "868fea3c1333f24a2af0a5fd61f63ed06e845c296986baaeb4d0a0184b4b59eb",
+              "path": "./src/index.ts",
+              "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "8e55001cb5059c2190e6343f13edc35d5ab0f082655abf62e17ed41ececaa1c6",
+              "path": "./src/index.ts",
+              "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "27d2e7f16d13de15ba32c06eb97a4fc344baee2f9d4d1df91ff8c0b0e797e949",
+              "path": "./build/index.js",
+              "sha256": "968cef629cf8b542d1c124a855dabeec60b99cd3a418302411477a2d31e43cd2"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "de16ba577cfb40e656df3174e22a87938ce2eb7c352c3ee293c386ac62b11192",
+              "path": "./build/index.js",
+              "sha256": "968cef629cf8b542d1c124a855dabeec60b99cd3a418302411477a2d31e43cd2"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-query@6.0.0-rc.0|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "31cf0c11de18f9d846d44b12d6694702ddfa93f5f1b27029dec5fb7e1d9bc025",
+              "path": "./src/index.ts",
+              "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "08870f2a4a4c7a4b0a9a3a15a37867db8f81afdaf10b76d1331bf615ad7de29b",
+              "path": "./src/index.ts",
+              "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "bd2eb73d3c08b9422ae3f0742a4097cb14b57c7f7dbae7976cf3d57f60b7ae92",
+              "path": "./build/index.js",
+              "sha256": "968cef629cf8b542d1c124a855dabeec60b99cd3a418302411477a2d31e43cd2"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "dcaa88b2cd0514755d4a444fbe46f531325f465b37d8cd49c6be2389f1f09f2a",
+              "path": "./build/index.js",
+              "sha256": "968cef629cf8b542d1c124a855dabeec60b99cd3a418302411477a2d31e43cd2"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "d681e3219b1c2a72a1f2e853b5896d3fb026971908e7fd700357a2b4bd31368d",
+              "path": "./build/dev.js",
+              "sha256": "39ead57d8ef661b515d1bb9429d8964fe0ae619957bbd3378cfdba0a4d46cbb3"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "468a9397c6b691fc7adb845ee34af1ff7f2ccfef8ca49b3c94ac56e45c334654",
+              "path": "./build/dev.js",
+              "sha256": "39ead57d8ef661b515d1bb9429d8964fe0ae619957bbd3378cfdba0a4d46cbb3"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "554a92b6567fb328c3120eb055f29231141abd4804b60bed1b571fa2883dc548"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-query-devtools@5.102.5|solid1|only",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "identicalClaimSets": 5,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|floor",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "identicalClaimSets": 5,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|head",
+      "beforeCases": 5,
+      "afterCases": 5,
+      "identicalClaimSets": 5,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-query-persist-client@5.102.5|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "b76871ac2bd7380e9e2e20d9f0603b94524aa0b75c1e5b2c54ed33ab0aa64c16",
+              "path": "./build/dev.js",
+              "sha256": "7fd27388b3a81cea134db5a8f59b2f31844d0d3b3026b2f6dc8bff0cf113f0e2"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "3946ff0119780c4a0593399843031b667a32309f83820252551259fbb74fd7dd"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "86d43e05df268431b7d3a44d235366f9b548ffa0077c90be9516e08eee2f96c2",
+              "path": "./build/dev.js",
+              "sha256": "7fd27388b3a81cea134db5a8f59b2f31844d0d3b3026b2f6dc8bff0cf113f0e2"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "3946ff0119780c4a0593399843031b667a32309f83820252551259fbb74fd7dd"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "ab10c8be0d5eb3b50df748d43f75cad1405efba449050000b1d19f045da8ae43",
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "6e7bc241096e328fad349ecd7d40dae13dd2541f30c5cb0b48e1aaf32c9deefb",
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "9c5e2ed9c3dc4e963bba85901bd375e1bf4293b5a43b9ec3522b81aa4fb0536e",
+              "path": "./build/index.js",
+              "sha256": "96e5a95cf4a1b7ae82053cc02b8179b1ad0f9ce981395e7cb89a99e8faca7abb"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "3946ff0119780c4a0593399843031b667a32309f83820252551259fbb74fd7dd"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "d4d4eab93ec66089833111050dbe26f5bdea321ed6e6fcc6ebe68eb726e01871",
+              "path": "./build/index.js",
+              "sha256": "96e5a95cf4a1b7ae82053cc02b8179b1ad0f9ce981395e7cb89a99e8faca7abb"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "3946ff0119780c4a0593399843031b667a32309f83820252551259fbb74fd7dd"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "7e0b423516a40552993ca0c8de873ff764e10e56d755ca1b51656cfe7e55ef4f",
+              "path": "./build/dev.js",
+              "sha256": "b1c5326cddf2ee8e087ba6b42b7dddc3c144e954d0b57db99982c4b45a63450b"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "b353bbe9aa18e66d1c998a0ef686456e8fca1cf1653ee6e2d34ad3ca489d2027"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "3eecafe30cffd3357b7f8f962708516086c9468076bc512bfe8a0c9b80b2b7c5",
+              "path": "./build/dev.js",
+              "sha256": "b1c5326cddf2ee8e087ba6b42b7dddc3c144e954d0b57db99982c4b45a63450b"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "b353bbe9aa18e66d1c998a0ef686456e8fca1cf1653ee6e2d34ad3ca489d2027"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "43a3c941373320c17508abd3aaa6ac183539cc5866949e3588574631eb1ca8f2",
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "82227be3ba9bc8d56fa56f756361b3629a9ebb2f6cc78120d04fd272b55dc867",
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "37af059e824915d9c1fc8425f98223f673d220451eb48b47e34c824c102bb107",
+              "path": "./build/index.js",
+              "sha256": "b1c5326cddf2ee8e087ba6b42b7dddc3c144e954d0b57db99982c4b45a63450b"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "b353bbe9aa18e66d1c998a0ef686456e8fca1cf1653ee6e2d34ad3ca489d2027"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "7b9b35b6fb7ce4c914006877d3bea60f2b8b96c76615b4414700c0f91e8f8809",
+              "path": "./build/index.js",
+              "sha256": "b1c5326cddf2ee8e087ba6b42b7dddc3c144e954d0b57db99982c4b45a63450b"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "b353bbe9aa18e66d1c998a0ef686456e8fca1cf1653ee6e2d34ad3ca489d2027"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "032a5919bcfeedc554f0067ddd82ff742b3f1807ea93a9f5d0263017e66e304e",
+              "path": "./build/index.js",
+              "sha256": "b1c5326cddf2ee8e087ba6b42b7dddc3c144e954d0b57db99982c4b45a63450b"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "b353bbe9aa18e66d1c998a0ef686456e8fca1cf1653ee6e2d34ad3ca489d2027"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "e770191130f807a80606f0902f652cbc867d1e5b4b92a7d4a5762213ec1e8c9c",
+              "path": "./build/index.js",
+              "sha256": "b1c5326cddf2ee8e087ba6b42b7dddc3c144e954d0b57db99982c4b45a63450b"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "b353bbe9aa18e66d1c998a0ef686456e8fca1cf1653ee6e2d34ad3ca489d2027"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "44c05910173df5cecc48cc2dec214624555d9e2c57319b775d31ff447a62076e",
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "fc6e05358fd374fa9b745ad2be5a245853cd1092941d1c9a0ca20cc200e570b8",
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "declarations": {
+              "path": "./src/index.ts",
+              "sha256": "67f20b64c93d1117ff68c5930bb6465ddf44a56ff2b1a87fd7caf507d72521e0"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+              "typesBranch": "/exports/./@tanstack~1custom-condition"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "600f5ccdece365987a23bb29f55a9588b137638ac1406bebe17a57d61a946d19",
+              "path": "./build/dev.js",
+              "sha256": "b1c5326cddf2ee8e087ba6b42b7dddc3c144e954d0b57db99982c4b45a63450b"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "b353bbe9aa18e66d1c998a0ef686456e8fca1cf1653ee6e2d34ad3ca489d2027"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "80fe883310a133184465ecf30bd8495c415757ba2781791db37e0e6f24a58de8",
+              "path": "./build/dev.js",
+              "sha256": "b1c5326cddf2ee8e087ba6b42b7dddc3c144e954d0b57db99982c4b45a63450b"
+            },
+            "declarations": {
+              "path": "./build/index.d.ts",
+              "sha256": "b353bbe9aa18e66d1c998a0ef686456e8fca1cf1653ee6e2d34ad3ca489d2027"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./development/import/default",
+              "typesBranch": "/exports/./development/import/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-router@1.170.30|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router@2.0.0-rc.2|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@1.167.1|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|head",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@1.167.2-pre.0|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start@1.168.47|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start@2.0.0-rc.2|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@1.168.29|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@2.0.0-rc.2|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-client@2.0.0-rc.2|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-start-config@1.120.20|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-store@0.11.1|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "5f04c87d6809f454be9e10c28d882aa77385f382fd49f24997506b5454b97c7e",
+              "path": "./dist/index.js",
+              "sha256": "38debf3e88a7c88e1fdc0c86f8cc5c9a76689881c344684183dd0fd401ced30c"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "df5a66fa6bcab7153b1b03a02d93f82a2d5db5fb67565fce8376816da39cd37a"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "8424bd894861a55a600d01f98912d3c23c6ac3d2a10cdd11f7f310ab9a5eb595",
+              "path": "./dist/index.js",
+              "sha256": "38debf3e88a7c88e1fdc0c86f8cc5c9a76689881c344684183dd0fd401ced30c"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "df5a66fa6bcab7153b1b03a02d93f82a2d5db5fb67565fce8376816da39cd37a"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./import"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-table@9.1.2|solid1|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "4d8f14d2f33517c73b8d252694b56147a100c356819b1df36eaf79c27e80b7ab",
+              "path": "./dist/index.js",
+              "sha256": "5ec4c94a05ce3e9f2323fd047cb94d4d114a2e967a52f5c30d71f3939b23beef"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "a863a66ba2245903f65e86717b34c0c9c5f44a0101ff879c0c286634f06dcc2f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "4f13d75e80504e5f771075b4d6dcc9ef087bc586831de0b0c24f78f7021243cd",
+              "path": "./dist/index.js",
+              "sha256": "5ec4c94a05ce3e9f2323fd047cb94d4d114a2e967a52f5c30d71f3939b23beef"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "a863a66ba2245903f65e86717b34c0c9c5f44a0101ff879c0c286634f06dcc2f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./import"
+            }
+          }
+        },
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "4d8f14d2f33517c73b8d252694b56147a100c356819b1df36eaf79c27e80b7ab",
+              "path": "./dist/index.js",
+              "sha256": "5ec4c94a05ce3e9f2323fd047cb94d4d114a2e967a52f5c30d71f3939b23beef"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "a863a66ba2245903f65e86717b34c0c9c5f44a0101ff879c0c286634f06dcc2f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./solid",
+              "typesBranch": "/exports/./solid"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "4f13d75e80504e5f771075b4d6dcc9ef087bc586831de0b0c24f78f7021243cd",
+              "path": "./dist/index.js",
+              "sha256": "5ec4c94a05ce3e9f2323fd047cb94d4d114a2e967a52f5c30d71f3939b23beef"
+            },
+            "declarations": {
+              "path": "./dist/index.d.ts",
+              "sha256": "a863a66ba2245903f65e86717b34c0c9c5f44a0101ff879c0c286634f06dcc2f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./solid",
+              "typesBranch": "/exports/./solid"
+            }
+          }
+        },
+        {
+          "entrypoint": "./flex-render",
+          "before": {
+            "artifact": {
+              "closureSha256": "e80629c49003238dbbe43b410ea3ed25d10ed7c7f5b293a6831bdd7597b245d7",
+              "path": "./dist/flex-render.js",
+              "sha256": "b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+            },
+            "declarations": {
+              "path": "./dist/flex-render.d.ts",
+              "sha256": "4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1flex-render/solid",
+              "typesBranch": "/exports/.~1flex-render/solid"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "d865f44f3abf6a412675af2c8aae7c18f289eca21cb6c8d0fe5e23269141af04",
+              "path": "./dist/flex-render.js",
+              "sha256": "b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+            },
+            "declarations": {
+              "path": "./dist/flex-render.d.ts",
+              "sha256": "4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1flex-render/solid",
+              "typesBranch": "/exports/.~1flex-render/solid"
+            }
+          }
+        },
+        {
+          "entrypoint": "./flex-render",
+          "before": {
+            "artifact": {
+              "closureSha256": "e80629c49003238dbbe43b410ea3ed25d10ed7c7f5b293a6831bdd7597b245d7",
+              "path": "./dist/flex-render.js",
+              "sha256": "b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+            },
+            "declarations": {
+              "path": "./dist/flex-render.d.ts",
+              "sha256": "4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1flex-render/import",
+              "typesBranch": "/exports/.~1flex-render/import"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "d865f44f3abf6a412675af2c8aae7c18f289eca21cb6c8d0fe5e23269141af04",
+              "path": "./dist/flex-render.js",
+              "sha256": "b8f4e550c4f5253ec130d89bb2116ba05dec0a831babc3351b39677a172b409e"
+            },
+            "declarations": {
+              "path": "./dist/flex-render.d.ts",
+              "sha256": "4ba4208f556960fda3e6933e52f1e50c37c0fecf368eb714333423b5199e8ed9"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1flex-render/import",
+              "typesBranch": "/exports/.~1flex-render/import"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/solid-table-devtools@9.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "@tanstack/solid-virtual@3.13.37|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "94f5b87474d78b5eea1c7676a3cebe924a4544ec84d75e2238e921a5689b5035",
+              "path": "./dist/esm/index.js",
+              "sha256": "81b0dd026afe9c3eff51c73a9f2ce2ab3dc6f424ed4db1a6d3902d56b9c7329b"
+            },
+            "declarations": {
+              "path": "./dist/esm/index.d.ts",
+              "sha256": "f6cb9ee3ff8dd47760f39de28782c8806aa5b8e05a4a74d96e8981e5a6409502"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "a4c07ca1230ec1b4f827ea23f2c61f266275ba435c3288ea2ff9bde0822f5d04",
+              "path": "./dist/esm/index.js",
+              "sha256": "81b0dd026afe9c3eff51c73a9f2ce2ab3dc6f424ed4db1a6d3902d56b9c7329b"
+            },
+            "declarations": {
+              "path": "./dist/esm/index.d.ts",
+              "sha256": "f6cb9ee3ff8dd47760f39de28782c8806aa5b8e05a4a74d96e8981e5a6409502"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import/default",
+              "typesBranch": "/exports/./import/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "@tanstack/table-devtools@9.2.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "motion-solidjs@0.6.0|solid1|only",
+      "beforeCases": 2,
+      "afterCases": 2,
+      "identicalClaimSets": 2,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "e31f0ede9d241f72e9d07c9fdd05cb54f86b8d6cc8b4a97ada7133a3906f3087",
+              "path": "./dist/v1/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v1/index.d.mts",
+              "sha256": "a72dad3ea078fb6b72ee9f083b2e5b4e86a4f09dc2ff872861226912a7e5bdc1"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "bc126c26317e2a283921143d0b4f0e4db37b8ed81a25d8c5ccf765396befdc43",
+              "path": "./dist/v1/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v1/index.d.mts",
+              "sha256": "a72dad3ea078fb6b72ee9f083b2e5b4e86a4f09dc2ff872861226912a7e5bdc1"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./types"
+            }
+          }
+        },
+        {
+          "entrypoint": "./v1",
+          "before": {
+            "artifact": {
+              "closureSha256": "e31f0ede9d241f72e9d07c9fdd05cb54f86b8d6cc8b4a97ada7133a3906f3087",
+              "path": "./dist/v1/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v1/index.d.mts",
+              "sha256": "a72dad3ea078fb6b72ee9f083b2e5b4e86a4f09dc2ff872861226912a7e5bdc1"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1v1/import",
+              "typesBranch": "/exports/.~1v1/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "bc126c26317e2a283921143d0b4f0e4db37b8ed81a25d8c5ccf765396befdc43",
+              "path": "./dist/v1/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v1/index.d.mts",
+              "sha256": "a72dad3ea078fb6b72ee9f083b2e5b4e86a4f09dc2ff872861226912a7e5bdc1"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1v1/import",
+              "typesBranch": "/exports/.~1v1/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|floor",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "49db2017b5511002f60fbe8dc0eebca8dfb90424c599c986467f9d580e98d5ab",
+              "path": "./dist/v2/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v2/index.d.mts",
+              "sha256": "01fc006a4933e6b084b152285f59a41017f7c5ffe6249f0d94d64bac5735711e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "46df8e246a9d51f0f90e878c89334a27bba6aadf0296a82bd67a9557c67a1ab9",
+              "path": "./dist/v2/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v2/index.d.mts",
+              "sha256": "01fc006a4933e6b084b152285f59a41017f7c5ffe6249f0d94d64bac5735711e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./types"
+            }
+          }
+        },
+        {
+          "entrypoint": "./m",
+          "before": {
+            "artifact": {
+              "closureSha256": "e5701d587d2219dd92d6ba94b7091434616c9bd8061e4d4f14a3534053c5a376",
+              "path": "./dist/v2/m.mjs",
+              "sha256": "6a4b2ab445bc9aae161d6dba35c090b518d0533c5f794e5c6d37342b3cd24a8a"
+            },
+            "declarations": {
+              "path": "./dist/v2/m.d.mts",
+              "sha256": "ce1092603e825395617502553983efb2ccbb2149ec53ba85523f5ab631784d7f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1m/import",
+              "typesBranch": "/exports/.~1m/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "387aebaa35fdd6046b960fa5e2116ecd3618f80d25f3a44f572294cb941ac689",
+              "path": "./dist/v2/m.mjs",
+              "sha256": "6a4b2ab445bc9aae161d6dba35c090b518d0533c5f794e5c6d37342b3cd24a8a"
+            },
+            "declarations": {
+              "path": "./dist/v2/m.d.mts",
+              "sha256": "ce1092603e825395617502553983efb2ccbb2149ec53ba85523f5ab631784d7f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1m/import",
+              "typesBranch": "/exports/.~1m/types"
+            }
+          }
+        },
+        {
+          "entrypoint": "./v2",
+          "before": {
+            "artifact": {
+              "closureSha256": "49db2017b5511002f60fbe8dc0eebca8dfb90424c599c986467f9d580e98d5ab",
+              "path": "./dist/v2/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v2/index.d.mts",
+              "sha256": "01fc006a4933e6b084b152285f59a41017f7c5ffe6249f0d94d64bac5735711e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1v2/import",
+              "typesBranch": "/exports/.~1v2/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "46df8e246a9d51f0f90e878c89334a27bba6aadf0296a82bd67a9557c67a1ab9",
+              "path": "./dist/v2/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v2/index.d.mts",
+              "sha256": "01fc006a4933e6b084b152285f59a41017f7c5ffe6249f0d94d64bac5735711e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1v2/import",
+              "typesBranch": "/exports/.~1v2/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|head",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": [
+        {
+          "entrypoint": ".",
+          "before": {
+            "artifact": {
+              "closureSha256": "f1fa4adb99ef6b47d201daefba4613a5ace3eff8ab7986ef03f867d7cf0ada34",
+              "path": "./dist/v2/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v2/index.d.mts",
+              "sha256": "01fc006a4933e6b084b152285f59a41017f7c5ffe6249f0d94d64bac5735711e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "047fda9331c2b13c7d37357f9cbd94317f6e578f7c8260d247d21abef197b991",
+              "path": "./dist/v2/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v2/index.d.mts",
+              "sha256": "01fc006a4933e6b084b152285f59a41017f7c5ffe6249f0d94d64bac5735711e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/./import",
+              "typesBranch": "/exports/./types"
+            }
+          }
+        },
+        {
+          "entrypoint": "./m",
+          "before": {
+            "artifact": {
+              "closureSha256": "658d755bc38fc956047a40ff47df06ea615e0fcd3e3fe36082b77bb9607ccceb",
+              "path": "./dist/v2/m.mjs",
+              "sha256": "6a4b2ab445bc9aae161d6dba35c090b518d0533c5f794e5c6d37342b3cd24a8a"
+            },
+            "declarations": {
+              "path": "./dist/v2/m.d.mts",
+              "sha256": "ce1092603e825395617502553983efb2ccbb2149ec53ba85523f5ab631784d7f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1m/import",
+              "typesBranch": "/exports/.~1m/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "c1b0d5365f1e314a0e9a87b94482d375c5c7a3487f594175d60d67b3d1479266",
+              "path": "./dist/v2/m.mjs",
+              "sha256": "6a4b2ab445bc9aae161d6dba35c090b518d0533c5f794e5c6d37342b3cd24a8a"
+            },
+            "declarations": {
+              "path": "./dist/v2/m.d.mts",
+              "sha256": "ce1092603e825395617502553983efb2ccbb2149ec53ba85523f5ab631784d7f"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1m/import",
+              "typesBranch": "/exports/.~1m/types"
+            }
+          }
+        },
+        {
+          "entrypoint": "./v2",
+          "before": {
+            "artifact": {
+              "closureSha256": "f1fa4adb99ef6b47d201daefba4613a5ace3eff8ab7986ef03f867d7cf0ada34",
+              "path": "./dist/v2/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v2/index.d.mts",
+              "sha256": "01fc006a4933e6b084b152285f59a41017f7c5ffe6249f0d94d64bac5735711e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1v2/import",
+              "typesBranch": "/exports/.~1v2/types"
+            }
+          },
+          "after": {
+            "artifact": {
+              "closureSha256": "047fda9331c2b13c7d37357f9cbd94317f6e578f7c8260d247d21abef197b991",
+              "path": "./dist/v2/index.mjs",
+              "sha256": "df074aed506a5b4f7d97e79e7108eac89f9a1f682eaa8648b44b296338292e9d"
+            },
+            "declarations": {
+              "path": "./dist/v2/index.d.mts",
+              "sha256": "01fc006a4933e6b084b152285f59a41017f7c5ffe6249f0d94d64bac5735711e"
+            },
+            "resolution": {
+              "runtimeBranch": "/exports/.~1v2/import",
+              "typesBranch": "/exports/.~1v2/types"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "probeId": "solid-devtools@0.34.5|solid1|only",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-js@1.9.14|solid1|only",
+      "beforeCases": 29,
+      "afterCases": 39,
+      "identicalClaimSets": 29,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-js@2.0.0-rc.3|solid2|only",
+      "beforeCases": 6,
+      "afterCases": 6,
+      "identicalClaimSets": 6,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-recharts@1.0.1|solid1|only",
+      "beforeCases": 3,
+      "afterCases": 3,
+      "identicalClaimSets": 3,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-recharts@2.0.0-beta.1|solid2|floor",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    },
+    {
+      "probeId": "solid-recharts@2.0.0-beta.1|solid2|head",
+      "beforeCases": 1,
+      "afterCases": 1,
+      "identicalClaimSets": 1,
+      "missing": [],
+      "changed": [],
+      "closureTransitions": []
+    }
+  ],
+  "totalBefore": 1496,
+  "totalAfter": 1510,
+  "physicalSelectionsAndClaimsPreserved": false,
+  "exactClosureIdentitiesPreserved": false,
+  "metricChanged": false
+}

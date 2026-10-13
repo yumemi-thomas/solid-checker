@@ -1,0 +1,294 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "d71c6b68d4af63d0576c11d378b92a2971c4cd6f905f98912088b1efd13ce60d",
+            "path": "./src/index.ts",
+            "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+          },
+          "declarations": {
+            "path": "./src/index.ts",
+            "sha256": "d95872975cfaabdc64e2fbcf9fadf26ee1446093e803af4fc4af08706d230d58"
+          },
+          "exports": {
+            "CancelledError": "open-callable",
+            "InfiniteQueryObserver": "open-callable",
+            "IsRestoringContext": "open-callable",
+            "Mutation": "open-callable",
+            "MutationCache": "open-callable",
+            "MutationObserver": "open-callable",
+            "QueriesObserver": "open-callable",
+            "Query": "open-callable",
+            "QueryCache": "open-callable",
+            "QueryClient": "open-callable",
+            "QueryClientContext": "open-callable",
+            "QueryClientProvider": "open-callable",
+            "QueryObserver": "open-callable",
+            "createInfiniteQuery": "open-callable",
+            "createIsFetching": "open-callable",
+            "createIsMutating": "open-callable",
+            "createMutation": "open-callable",
+            "createMutationState": "open-callable",
+            "createQueries": "open-callable",
+            "createQuery": "open-callable",
+            "dataTagErrorSymbol": "open-plain",
+            "dataTagSymbol": "open-plain",
+            "defaultScheduler": "open-callable",
+            "defaultShouldDehydrateMutation": "open-callable",
+            "defaultShouldDehydrateQuery": "open-callable",
+            "dehydrate": "open-callable",
+            "environmentManager": "open-plain",
+            "experimental_streamedQuery": "open-callable",
+            "focusManager": "open-plain",
+            "hashKey": "open-callable",
+            "hydrate": "open-callable",
+            "infiniteQueryOptions": "open-callable",
+            "isCancelledError": "open-callable",
+            "isServer": "open-plain",
+            "keepPreviousData": "open-callable",
+            "matchMutation": "open-callable",
+            "matchQuery": "open-callable",
+            "mutationOptions": "open-callable",
+            "noop": "open-callable",
+            "notifyManager": "open-plain",
+            "onlineManager": "open-plain",
+            "partialMatchKey": "open-callable",
+            "queryOptions": "open-callable",
+            "replaceEqualDeep": "open-callable",
+            "shouldThrowError": "open-callable",
+            "skipToken": "open-plain",
+            "timeoutManager": "open-plain",
+            "unsetMarker": "open-plain",
+            "useInfiniteQuery": "authored-useInfiniteQuery",
+            "useIsFetching": "open-callable",
+            "useIsMutating": "open-callable",
+            "useIsRestoring": "open-callable",
+            "useMutation": "authored-useMutation",
+            "useMutationState": "open-callable",
+            "useQueries": "open-callable",
+            "useQuery": "authored-useQuery",
+            "useQueryClient": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./@tanstack~1custom-condition",
+            "typesBranch": "/exports/./@tanstack~1custom-condition"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-v6U7OWYAI9DAPrmDjizCJ90/RrJU+F2Uvu9s/xfwsnOVHQeEC15T2Jsmn1dqCHm4XpuUv21t1SNgLqB+zzzsJQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "1273ce53618efac340cf02ab1e587afce21a820656a8f7a2efa6305c2f2e177a"
+    },
+    "name": "@tanstack/solid-query",
+    "version": "6.0.0-rc.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "open-plain": {
+      "call": {},
+      "shape": "plain"
+    },
+    "authored-useInfiniteQuery": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "callback-0-owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "callback-0-owner"
+                  },
+                  "resource": "callback-0-owner"
+                }
+              ],
+              "resource": "callback-0-owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "callback-0-owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "callback-0-owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useMutation": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "authored-useQuery": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": {
+                "kind": "owner",
+                "resource": "callback-0-owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "callback-0-owner"
+                  },
+                  "resource": "callback-0-owner"
+                }
+              ],
+              "resource": "callback-0-owner",
+              "source": "created"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "resources": [
+          {
+            "id": "callback-0-owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "callback-0-owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

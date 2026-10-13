@@ -1,0 +1,16 @@
+{
+  "package": {
+    "name": "seroval",
+    "version": "1.5.6"
+  },
+  "status": "certified",
+  "withheldClosures": [
+    {
+      "artifactCase": "artifact-case:f6c68044fe9f010a5420013066e261cdf012288d8f98348f33212cafc5915dde",
+      "domain": "creates",
+      "export": "resolvePlugins",
+      "reason": "census refused: creates census refuses an uncensused invoking form: coercion (BinaryExpression) at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-89916-2/node_modules/seroval/dist/esm/development/index.mjs:42397..42404, reach unknown; parameterPremiseRefusal at /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-typefacts-project-89916-2/node_modules/seroval/dist/esm/development/index.mjs:42314..42603 (depth 1): parameter 1 types differ: twin \"any[]\", premised \"Plugin<any, any>[]\"",
+      "semanticClaimId": "claim:v1:sha256:427e415c9017c8e8032ee53a25d55c25ceeda6ec6be5b34f6c6962edddcd3a98"
+    }
+  ]
+}

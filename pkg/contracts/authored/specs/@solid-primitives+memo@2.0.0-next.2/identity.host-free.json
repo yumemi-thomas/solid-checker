@@ -1,0 +1,79 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "specifier": "@solid-primitives/memo",
+      "requestedEntrypoint": ".",
+      "exportConditions": [
+        "import"
+      ],
+      "runtimeTarget": "dist/index.js",
+      "declarationTarget": "dist/index.d.ts",
+      "packageIntegrity": "sha512-ybYxnf+rR1voO5C4ok5bSarmiee/XBDHOsikcmhW7K0QxJKI0H2PiHu4qLnv1Z03T6/5kDT1LBizgHGWNYy6jA==",
+      "snapshotRoot": "sha256:27feea2004d657d0b8ede247826e85affeb97200de118e8bc9fed280f6af0c07",
+      "identityDocument": {
+        "entrypoints": {
+          ".": {
+            "cases": [
+              {
+                "artifact": {
+                  "closureSha256": "a4c4f162abfbfabfb6dff39d030ddc84463a2946eb4b86d9845c3fe31c15de27",
+                  "path": "./dist/index.js",
+                  "sha256": "b43dc0d99980d5d552ad010f95b504459e7d18bda2af2c4b1676203c48601445"
+                },
+                "declarations": {
+                  "path": "./dist/index.d.ts",
+                  "sha256": "5dfc52cfdc913531804d85f202eb2f8ad2f31c75798d38e22f7e4d1c148168e8"
+                },
+                "exports": {
+                  "createLatest": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "createLatestMany": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "createLazyMemo": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+                  "createMemoCache": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createPureReaction": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+                  "createReducer": "summary-733345fca3eac5e3790bdfa73831a12c199b5c43f4a0373a0eb53b0ba56f30fc",
+                  "createWritableMemo": "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8"
+                },
+                "resolution": {
+                  "runtimeBranch": "/exports/./import/default",
+                  "typesBranch": "/exports/./import/types"
+                }
+              }
+            ]
+          }
+        },
+        "format": "solid-reactivity-contract",
+        "package": {
+          "integrity": "sha512-ybYxnf+rR1voO5C4ok5bSarmiee/XBDHOsikcmhW7K0QxJKI0H2PiHu4qLnv1Z03T6/5kDT1LBizgHGWNYy6jA==",
+          "manifest": {
+            "path": "./package.json",
+            "sha256": "291e8baa6852d6039a6f2baa79d091e54f4ddcf9a22a39e35a69b95fc72a5c1c"
+          },
+          "name": "@solid-primitives/memo",
+          "version": "2.0.0-next.2"
+        },
+        "schemaVersion": 1,
+        "semanticModelVersion": 1,
+        "sidecars": {},
+        "summaries": {
+          "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-733345fca3eac5e3790bdfa73831a12c199b5c43f4a0373a0eb53b0ba56f30fc": {
+            "call": {},
+            "shape": "callable"
+          },
+          "summary-7bec97a442c90f94af6aca2b523500806eb13e56896e64bc2d10089e8f4978f8": {
+            "call": {},
+            "shape": "callable"
+          }
+        }
+      }
+    }
+  ]
+}

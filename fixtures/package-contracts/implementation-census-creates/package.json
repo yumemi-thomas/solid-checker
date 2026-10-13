@@ -1,0 +1,14 @@
+{
+  "name": "implementation-census-creates-package",
+  "version": "1.0.0",
+  "type": "module",
+  "peerDependencies": {
+    "solid-js": "^2.0.0-rc.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

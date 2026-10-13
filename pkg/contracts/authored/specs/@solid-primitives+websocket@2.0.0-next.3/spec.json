@@ -1,0 +1,170 @@
+{
+  "package": "@solid-primitives/websocket",
+  "version": "2.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createWSState": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 OwnedWrite permits internal updates but does not bypass strict reads. Browser draft; Chrome probes pending, not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "socket-state"
+            }
+          },
+          {
+            "id": "create-state",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "socket-state"
+            ]
+          }
+        ],
+        "resources": [
+          {
+            "id": "socket-state",
+            "kind": "reactive-source"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-state"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "callbacks": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 One eager ownedWrite signal, returned accessor, native open/close handlers and a close wrapper. No cleanup, computation, caller callback or private reactive read. P1 applies to native WebSocket platform fields/methods; P2 to protocol data. Returned setter policy is not claimed.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 One eager ownedWrite signal, returned accessor, native open/close handlers and a close wrapper. No cleanup, computation, caller callback or private reactive read. P1 applies to native WebSocket platform fields/methods; P2 to protocol data. Returned setter policy is not claimed.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 One eager ownedWrite signal, returned accessor, native open/close handlers and a close wrapper. No cleanup, computation, caller callback or private reactive read. P1 applies to native WebSocket platform fields/methods; P2 to protocol data. Returned setter policy is not claimed.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:52-62 \u2014 One eager ownedWrite signal, returned accessor, native open/close handlers and a close wrapper. No cleanup, computation, caller callback or private reactive read. P1 applies to native WebSocket platform fields/methods; P2 to protocol data. Returned setter policy is not claimed."
+      },
+      "rule": "strict-read-untracked"
+    },
+    "createReconnectingWS": {
+      "hostFree": {
+        "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23,97-148. Identical socket wrapper construction and no package reactive source on both builds. Only direct onCleanup differs: the server skips registration without an owner. Native WebSocket operations use P1; no transport success, server WebSocket availability, return domain or throw closure is asserted. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939. ",
+        "minZero": [
+          "cleanup"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23,97-148. Identical socket wrapper construction and no package reactive source on both builds. Only direct onCleanup differs: the server skips registration without an owner. Native WebSocket operations use P1; no transport success, server WebSocket availability, return domain or throw closure is asserted. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain reads: Only the browser-enumerated package-owned reads remain; parameter/host reads retain P1/P2, and the cited server path introduces no additional package source read in this closed domain.",
+          "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23,97-148. Identical socket wrapper construction and no package reactive source on both builds. Only direct onCleanup differs: the server skips registration without an owner. Native WebSocket operations use P1; no transport success, server WebSocket availability, return domain or throw closure is asserted. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain creates: Only the browser-enumerated package source/owner productions remain possible; the cited server path introduces no other package production at the call. Opaque returned-function and caller-code work is not certified by this domain.",
+          "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23,97-148. Identical socket wrapper construction and no package reactive source on both builds. Only direct onCleanup differs: the server skips registration without an owner. Native WebSocket operations use P1; no transport success, server WebSocket availability, return domain or throw closure is asserted. Runtime selection: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/package.json:31-90 (browser/client and node/worker/deno server conditional exports). Installed server behavior: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/dist/server.js:67-141,217-220,381-395,469-487,488-582,998-1058,1789-1791; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/solid-js/dist/server.dev.js:135-197,211-217,292-295,467-477,565-585,586-679,1115-1177,1937-1939.  Domain callbacks: The server path adds no caller invocation beyond the browser list and preserves the listed invocation context; skipped invocations already have a zero lower bound. No call effects of opaque returned controls are inferred."
+        }
+      },
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:97-148 \u2014 Returned dynamic WebSocket facade cannot have its complete shape closed here. Browser draft; Chrome probes pending, not shipping evidence.",
+      "call": {
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          }
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "closed": [
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:97-148; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23 \u2014 Native socket construction and retry/send bookkeeping contain no own reactive read, reactive construction or direct caller callable invocation. One direct onCleanup registers wrapper.close. P1 native WebSocket; P2 options/protocol/queue data.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:97-148; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23 \u2014 Native socket construction and retry/send bookkeeping contain no own reactive read, reactive construction or direct caller callable invocation. One direct onCleanup registers wrapper.close. P1 native WebSocket; P2 options/protocol/queue data.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:97-148; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/websocket-createReconnectingWS-module-scope/node_modules/@solid-primitives/websocket/dist/index.js:15-23 \u2014 Native socket construction and retry/send bookkeeping contain no own reactive read, reactive construction or direct caller callable invocation. One direct onCleanup registers wrapper.close. P1 native WebSocket; P2 options/protocol/queue data."
+      },
+      "rule": "missing-owner",
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "A present owner-backed onSettled leaf forbids the memo/effect or onCleanup; ordinary component construction accepts it."
+        }
+      ]
+    }
+  }
+}

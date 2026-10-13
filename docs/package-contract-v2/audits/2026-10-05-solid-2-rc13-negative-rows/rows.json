@@ -1,0 +1,1948 @@
+[
+  {
+    "package": "@solidjs/signals",
+    "export": "action",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Wrapper frames are rc.9's plus module counters; no read entry point reachable in any build with rc.9's cuts; drains are the registrants'.",
+    "section": "### 1. `action` — `reads` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 1. `action` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/action.js",
+        "file_sha256": "9c553efe4bd52f7250f5657589680b042ab5ac25e006cf50d8c35b8841f3e907",
+        "start_byte": 4429,
+        "end_byte": 7642,
+        "slice_sha256": "e12ad95406313eadf1c98f2981feebd6d14a2ad8e568ca978b2492febb8ad2a6"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 94506,
+        "end_byte": 99299,
+        "slice_sha256": "dace43abb94b3bc3e1b147243818b3f67d8f7b402647e90b21a8bd7f7557afeb"
+      },
+      {
+        "archive_path": "dist/observe/core/action.js",
+        "file_sha256": "5893c76f573aa9bd6cb71e4f13645c4ebddff8174577f1b79d31ac58731b735d",
+        "start_byte": 4502,
+        "end_byte": 8183,
+        "slice_sha256": "e2ecc7ade034ed0e609d41dee4da36f44ee72c799fd121d22af9ba6aff029a9c"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "action",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Host reaches are the returned Promise, queueMicrotask, console, and dev/observe-only WeakRef/FinalizationRegistry bookkeeping; none registers a version-1 resource.",
+    "section": "### 2. `action` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 2. `action` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/action.js",
+        "file_sha256": "9c553efe4bd52f7250f5657589680b042ab5ac25e006cf50d8c35b8841f3e907",
+        "start_byte": 4429,
+        "end_byte": 7642,
+        "slice_sha256": "e12ad95406313eadf1c98f2981feebd6d14a2ad8e568ca978b2492febb8ad2a6"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 94506,
+        "end_byte": 99299,
+        "slice_sha256": "dace43abb94b3bc3e1b147243818b3f67d8f7b402647e90b21a8bd7f7557afeb"
+      },
+      {
+        "archive_path": "dist/observe/core/action.js",
+        "file_sha256": "5893c76f573aa9bd6cb71e4f13645c4ebddff8174577f1b79d31ac58731b735d",
+        "start_byte": 4502,
+        "end_byte": 8183,
+        "slice_sha256": "e2ecc7ade034ed0e609d41dee4da36f44ee72c799fd121d22af9ba6aff029a9c"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createMemo",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Export slices byte-identical; changed frames (computed, setupComputedNode, recompute, handleAsync) add no read entry point; external-source hook line unchanged.",
+    "section": "### 3. `createMemo` — `reads` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 1. `createMemo` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 3341,
+        "end_byte": 3408,
+        "slice_sha256": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 105095,
+        "end_byte": 105184,
+        "slice_sha256": "46130d23b4ce3e9a8bfbe79e6ea1920b95f064c446f61e65327e08305592e3f0"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 3423,
+        "end_byte": 3490,
+        "slice_sha256": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createMemo",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Signals archive has no handle on a document or server runtime (§ 0.3); closure host reaches are microtasks, console and dev bookkeeping.",
+    "section": "### 4. `createMemo` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 2. `createMemo` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 3341,
+        "end_byte": 3408,
+        "slice_sha256": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 105095,
+        "end_byte": 105184,
+        "slice_sha256": "46130d23b4ce3e9a8bfbe79e6ea1920b95f064c446f61e65327e08305592e3f0"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 3423,
+        "end_byte": 3490,
+        "slice_sha256": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createOptimistic",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "dev/observe slices identical, prod differs by one mangled field; engine install and node constructors identical; neither the call nor the setter closure reaches a read entry point.",
+    "section": "### 5. `createOptimistic` — `reads` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 3. `createOptimistic` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 26797,
+        "end_byte": 27344,
+        "slice_sha256": "e79b75e3d7d2700ab665f566f53fd92fa47d3286f059a3e117bef3edc31a7658"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 129870,
+        "end_byte": 130478,
+        "slice_sha256": "9180aeea6599b0c64fdfb3859e8c1802ace64c405e0d05ff952bc44e63ad7be3"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 26879,
+        "end_byte": 27460,
+        "slice_sha256": "760ee92d8393a3d2102625aadc0c31e9378285b46bc98c4af9b2e0fa85697fe1"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createOptimistic",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Node allocation and engine slots; host reaches are microtasks and console.",
+    "section": "### 6. `createOptimistic` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 4. `createOptimistic` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 26797,
+        "end_byte": 27344,
+        "slice_sha256": "e79b75e3d7d2700ab665f566f53fd92fa47d3286f059a3e117bef3edc31a7658"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 129870,
+        "end_byte": 130478,
+        "slice_sha256": "9180aeea6599b0c64fdfb3859e8c1802ace64c405e0d05ff952bc44e63ad7be3"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 26879,
+        "end_byte": 27460,
+        "slice_sha256": "760ee92d8393a3d2102625aadc0c31e9378285b46bc98c4af9b2e0fa85697fe1"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createOptimisticStore",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Only code change in the export is dev/observe nameStore (an attribution-only map write); closure stays inside the archive.",
+    "section": "### 7. `createOptimisticStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 6. `createOptimisticStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/store/next/optimistic.js",
+        "file_sha256": "fbae7c359a93f4940d251c284d8cf05ad70955d8fe8f565d6a9dac5e016e4cfa",
+        "start_byte": 8804,
+        "end_byte": 15708,
+        "slice_sha256": "cea4b77a869b73bcc2f8a32893b205e830ff4408c1fd2571b7dc0e647ccaa53d"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 375116,
+        "end_byte": 382179,
+        "slice_sha256": "c85e5378ff687e08f8c8ca1b1e1a8b0acd32406baae6327b8731a52edc6d3f23"
+      },
+      {
+        "archive_path": "dist/observe/store/next/optimistic.js",
+        "file_sha256": "61c20fac25f7bd50f91c42a9e5e5a61a89f1d38316d8ca25382eaf491810e108",
+        "start_byte": 8844,
+        "end_byte": 15856,
+        "slice_sha256": "7ace8b58aec6b4a9487bbc5d0b8be7873a77edf2bf89168baff222504ca82191"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createProjection",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Export slices byte-identical; changed projection internals stay inside the archive.",
+    "section": "### 8. `createProjection` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 2. `createProjection` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/store/next/projection.js",
+        "file_sha256": "07d68dc9532ec1e5508e479dc5d909a0b7bcdcfab020d0825f2357429cb6c5e5",
+        "start_byte": 7013,
+        "end_byte": 7111,
+        "slice_sha256": "bcbe84ac16a3f08d0d7aca97559146257937d7387ca7a0d10af5096c18e045d7"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 363258,
+        "end_byte": 363374,
+        "slice_sha256": "e1264ce5581a8fe3610fd0f676925fcb8f30fc2bc21983c0a5b712952b220e32"
+      },
+      {
+        "archive_path": "dist/observe/store/next/projection.js",
+        "file_sha256": "d27cc4daa45913843b16614d5ec7bc40befcdb7338221e93acdde773d47972eb",
+        "start_byte": 7176,
+        "end_byte": 7274,
+        "slice_sha256": "bcbe84ac16a3f08d0d7aca97559146257937d7387ca7a0d10af5096c18e045d7"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createRoot",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "dev/observe slices identical, prod locals renamed; createOwner adds a dev/observe-only weak root registry (module FinalizationRegistry), judged not a create (owner flag O1).",
+    "section": "### 9. `createRoot` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 3. `createRoot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_SIGNALS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/owner.js",
+        "file_sha256": "343b48001cd23d8b120a582a9cdfada999c808a60786af9920e6e01aa3a2912a",
+        "start_byte": 14172,
+        "end_byte": 14292,
+        "slice_sha256": "d266035c22be8514767dbee4fe3aa0c947336ad4da585e24b09ee1722d916259"
+      },
+      {
+        "archive_path": "dist/dev-shared.js",
+        "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+        "start_byte": 162084,
+        "end_byte": 162226,
+        "slice_sha256": "9a66667de7c1a48f5a90e9901d994ba532da603ac763dc460c16fb8e60496fa5"
+      },
+      {
+        "archive_path": "dist/observe/core/owner.js",
+        "file_sha256": "1dfaba9a87a3626bfcd5f119d4d02ed62f3df0af7e95840f847088e87c814617",
+        "start_byte": 14337,
+        "end_byte": 14457,
+        "slice_sha256": "d266035c22be8514767dbee4fe3aa0c947336ad4da585e24b09ee1722d916259"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createSignal",
+    "domain": "reads",
+    "scope": "RowScope::Arguments(ArgumentScope { primitive_slots: &[], callable_or_primitive_slots: &[0], invoked_slots: &[], delegates: &[], })",
+    "verdict": "granted",
+    "reason": "dev/observe slices identical, prod one mangled field; plain path signal/accessor identical; function path is createMemo's clean closure; probes 16/16 per build.",
+    "section": "### 10. `createSignal` — `reads`, argument scope — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 5. `createSignal` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_READS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 3060,
+        "end_byte": 3340,
+        "slice_sha256": "fb6ef2e6f9d4932e0fe5d637daedf25207c1471b42357b528e783a2332b9d1e8"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 104746,
+        "end_byte": 105095,
+        "slice_sha256": "d1292c1a9d7a916d932b8e2ae27b22c592daf612cc51ddf7848ecf64f63cd504"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 3108,
+        "end_byte": 3422,
+        "slice_sha256": "0366fccdf03f70ca98cd1678d74800abeed9109c5499c65c626ee6868e6f565f"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createSignal",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Same node constructors; host reaches are microtasks and console.",
+    "section": "### 11. `createSignal` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 1. `createSignal` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 3060,
+        "end_byte": 3340,
+        "slice_sha256": "fb6ef2e6f9d4932e0fe5d637daedf25207c1471b42357b528e783a2332b9d1e8"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 104746,
+        "end_byte": 105095,
+        "slice_sha256": "d1292c1a9d7a916d932b8e2ae27b22c592daf612cc51ddf7848ecf64f63cd504"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 3108,
+        "end_byte": 3422,
+        "slice_sha256": "0366fccdf03f70ca98cd1678d74800abeed9109c5499c65c626ee6868e6f565f"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createStore",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "prod slice identical; dev/observe add nameStore (attribution map write); closure stays inside the archive.",
+    "section": "### 12. `createStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 1. `createStore` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/store/index.js",
+        "file_sha256": "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+        "start_byte": 525,
+        "end_byte": 676,
+        "slice_sha256": "5ccb92725a12c3fe4c8eacf07bc49e364f976718010a237a995e0794377c7ff4"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 403906,
+        "end_byte": 404183,
+        "slice_sha256": "0303d53fb85615e9c957a4d05e062951d7c3206792193c77477d67369a4c3b12"
+      },
+      {
+        "archive_path": "dist/observe/store/index.js",
+        "file_sha256": "54de3c6d2552dd2a99abc25f2ed02b75fb4c71af00bea23ba85bb82dbed15d9d",
+        "start_byte": 562,
+        "end_byte": 796,
+        "slice_sha256": "db153fc0bb96a41d329fe581a8ef762664921f79ac1ffcbcec2d37eb08084a44"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createTrackedEffect",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Export slices, trackedEffect and enqueueSub byte-identical; no read entry point reachable.",
+    "section": "### 13. `createTrackedEffect` — `reads` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 3. `createTrackedEffect` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 10004,
+        "end_byte": 10072,
+        "slice_sha256": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 112377,
+        "end_byte": 112463,
+        "slice_sha256": "59effb18726430b691223730bbeffeb8cb7c60f6b546261051389e4ee557154e"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 10086,
+        "end_byte": 10154,
+        "slice_sha256": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "createTrackedEffect",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Same closure; host reaches are microtasks and console; server body registers nothing.",
+    "section": "### 14. `createTrackedEffect` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 4. `createTrackedEffect` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 10004,
+        "end_byte": 10072,
+        "slice_sha256": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 112377,
+        "end_byte": 112463,
+        "slice_sha256": "59effb18726430b691223730bbeffeb8cb7c60f6b546261051389e4ee557154e"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 10086,
+        "end_byte": 10154,
+        "slice_sha256": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "flush",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "flush adds only an attribution hook; GlobalQueue.flush's new boundary re-arm/judge calls are boundary-queue methods (drain); no read entry point with rc.9's cuts.",
+    "section": "### 15. `flush` — `reads` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 7. `flush` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/scheduler.js",
+        "file_sha256": "d68a86371c1895d53d6e7d14ade3ca9c2d71a005db7d4f12c9e60a456c15b10a",
+        "start_byte": 65269,
+        "end_byte": 66739,
+        "slice_sha256": "d9935f43d0d020b93711a1a2169d3938cf7f46012b47c7bbed205174d8708220"
+      },
+      {
+        "archive_path": "dist/dev-shared.js",
+        "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+        "start_byte": 125237,
+        "end_byte": 129517,
+        "slice_sha256": "ac0e1253703995d11781d18388bdf8c1296a8678c7ab4b944628d78c2802fa66"
+      },
+      {
+        "archive_path": "dist/observe/core/scheduler.js",
+        "file_sha256": "dd4ad3a7780c852e58f257d732e9246f4197cdb654ffeb37207c33787eb73d7e",
+        "start_byte": 65893,
+        "end_byte": 68238,
+        "slice_sha256": "15af13372a3ea04723f667a2664dd97d538363276f5a1b0ea67533090d165a56"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "flush",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Drain stays inside the archive; host reaches are microtasks, console and haltReactivity's reportError.",
+    "section": "### 16. `flush` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 8. `flush` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/scheduler.js",
+        "file_sha256": "d68a86371c1895d53d6e7d14ade3ca9c2d71a005db7d4f12c9e60a456c15b10a",
+        "start_byte": 65269,
+        "end_byte": 66739,
+        "slice_sha256": "d9935f43d0d020b93711a1a2169d3938cf7f46012b47c7bbed205174d8708220"
+      },
+      {
+        "archive_path": "dist/dev-shared.js",
+        "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+        "start_byte": 125237,
+        "end_byte": 129517,
+        "slice_sha256": "ac0e1253703995d11781d18388bdf8c1296a8678c7ab4b944628d78c2802fa66"
+      },
+      {
+        "archive_path": "dist/observe/core/scheduler.js",
+        "file_sha256": "dd4ad3a7780c852e58f257d732e9246f4197cdb654ffeb37207c33787eb73d7e",
+        "start_byte": 65893,
+        "end_byte": 68238,
+        "slice_sha256": "15af13372a3ea04723f667a2664dd97d538363276f5a1b0ea67533090d165a56"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "getOwner",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "All three slices byte-identical (return context); no call.",
+    "section": "### 17. `getOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 1. `getOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_READS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/owner.js",
+        "file_sha256": "343b48001cd23d8b120a582a9cdfada999c808a60786af9920e6e01aa3a2912a",
+        "start_byte": 10593,
+        "end_byte": 10641,
+        "slice_sha256": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2"
+      },
+      {
+        "archive_path": "dist/dev-shared.js",
+        "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+        "start_byte": 157883,
+        "end_byte": 157925,
+        "slice_sha256": "e8cb95b765807fa14a97032551f4bbced263cc3d7837fc1258f156ffc71ba8bb"
+      },
+      {
+        "archive_path": "dist/observe/core/owner.js",
+        "file_sha256": "1dfaba9a87a3626bfcd5f119d4d02ed62f3df0af7e95840f847088e87c814617",
+        "start_byte": 10710,
+        "end_byte": 10758,
+        "slice_sha256": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "getOwner",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "All three slices byte-identical; no helper.",
+    "section": "### 18. `getOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 1. `getOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_SIGNALS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/owner.js",
+        "file_sha256": "343b48001cd23d8b120a582a9cdfada999c808a60786af9920e6e01aa3a2912a",
+        "start_byte": 10593,
+        "end_byte": 10641,
+        "slice_sha256": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2"
+      },
+      {
+        "archive_path": "dist/dev-shared.js",
+        "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+        "start_byte": 157883,
+        "end_byte": 157925,
+        "slice_sha256": "e8cb95b765807fa14a97032551f4bbced263cc3d7837fc1258f156ffc71ba8bb"
+      },
+      {
+        "archive_path": "dist/observe/core/owner.js",
+        "file_sha256": "1dfaba9a87a3626bfcd5f119d4d02ed62f3df0af7e95840f847088e87c814617",
+        "start_byte": 10710,
+        "end_byte": 10758,
+        "slice_sha256": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "omit",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Closure is store/utils view code, built-ins and caller values only; the rc.13 changes (one-symbol record lookup, re-homed accessors on the copy path) call nothing new.",
+    "section": "### 19. `omit` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "## 1. `omit` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_MERGE_OMIT_MEMO_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/store/utils.js",
+        "file_sha256": "4c0a349e53eb94ea1d68fd0407b78e78c5fb35b00fa0dc0231b990b613e28040",
+        "start_byte": 43043,
+        "end_byte": 45186,
+        "slice_sha256": "32992411ce661ee0c6948183ffcb32ff660c6d4796c5e6d789822a9b06ef6833"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 201577,
+        "end_byte": 203849,
+        "slice_sha256": "c30db00b1292f96c94704743f877848501dfee2ece0a6fda87f6f41ce0c4b326"
+      },
+      {
+        "archive_path": "dist/observe/store/utils.js",
+        "file_sha256": "513b407fa6fb25af9c583c1fd91074e60c04d2378691fdb0d07c871d26971d40",
+        "start_byte": 43069,
+        "end_byte": 45212,
+        "slice_sha256": "32992411ce661ee0c6948183ffcb32ff660c6d4796c5e6d789822a9b06ef6833"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "onCleanup",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "All three slices byte-identical; dev closure is the same 8 functions, two of them diagnostic code with no read.",
+    "section": "### 20. `onCleanup` — `reads` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 2. `onCleanup` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_READS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 2911,
+        "end_byte": 2964,
+        "slice_sha256": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 103785,
+        "end_byte": 104646,
+        "slice_sha256": "5f8d40b1c3165f17bc00846b5063eb55f8bdd0a6b49dceba4a60f5aeb6570e44"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 2959,
+        "end_byte": 3012,
+        "slice_sha256": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "onCleanup",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Slices identical; dev diagnostics only.",
+    "section": "### 21. `onCleanup` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 2. `onCleanup` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_SIGNALS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 2911,
+        "end_byte": 2964,
+        "slice_sha256": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 103785,
+        "end_byte": 104646,
+        "slice_sha256": "5f8d40b1c3165f17bc00846b5063eb55f8bdd0a6b49dceba4a60f5aeb6570e44"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 2959,
+        "end_byte": 3012,
+        "slice_sha256": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "onSettled",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "dev slice identical, prod/observe mangled fields only; no read entry point reachable.",
+    "section": "### 22. `onSettled` — `reads` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 5. `onSettled` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 31224,
+        "end_byte": 32392,
+        "slice_sha256": "f1e430679468af832adf704b7f90a6e31fc0ea1ac6f007df0605e28cc4edce12"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 134361,
+        "end_byte": 136156,
+        "slice_sha256": "add35758c224c4e5339e7e89db7000bce0b2b92ba37a28df5042414a2719547e"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 31340,
+        "end_byte": 32532,
+        "slice_sha256": "8461deec634a0716375424e0b8bf2fca348f48f8ffabaf62bea5812907acd29f"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "onSettled",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Both arms reduce to trackedEffect or Queue.enqueue + schedule.",
+    "section": "### 23. `onSettled` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 6. `onSettled` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/signals.js",
+        "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+        "start_byte": 31224,
+        "end_byte": 32392,
+        "slice_sha256": "f1e430679468af832adf704b7f90a6e31fc0ea1ac6f007df0605e28cc4edce12"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 134361,
+        "end_byte": 136156,
+        "slice_sha256": "add35758c224c4e5339e7e89db7000bce0b2b92ba37a28df5042414a2719547e"
+      },
+      {
+        "archive_path": "dist/observe/signals.js",
+        "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+        "start_byte": 31340,
+        "end_byte": 32532,
+        "slice_sha256": "8461deec634a0716375424e0b8bf2fca348f48f8ffabaf62bea5812907acd29f"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "reconcile",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "withheld",
+    "reason": "rc.13 applyAdopt composes the optimistic view through readerOverride -> nodeValue -> serve, an engine read-path call the rc.9 grant said did not exist in the closure; reachable unless every application runs under authoritativeServe(), which was not established.",
+    "section": "### 24. `reconcile` — `reads` — archive `@solidjs/signals@2.0.0-rc.13` — **WITHHOLD**",
+    "rc9_section": "### 7. `reconcile` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": []
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "reconcile",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Application performs adoption writes, setSignal and schedule; the new serve path can only enter a transaction (schedule -> queueMicrotask).",
+    "section": "### 25. `reconcile` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 8. `reconcile` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/store/index.js",
+        "file_sha256": "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+        "start_byte": 678,
+        "end_byte": 758,
+        "slice_sha256": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 404184,
+        "end_byte": 404282,
+        "slice_sha256": "572cd0645c23a657a2116f3609d220d042405d28255c1fefb439573572dbfc9c"
+      },
+      {
+        "archive_path": "dist/observe/store/index.js",
+        "file_sha256": "54de3c6d2552dd2a99abc25f2ed02b75fb4c71af00bea23ba85bb82dbed15d9d",
+        "start_byte": 798,
+        "end_byte": 878,
+        "slice_sha256": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "runWithOwner",
+    "domain": "reads",
+    "scope": "RowScope::Arguments(ArgumentScope { primitive_slots: &[], callable_or_primitive_slots: &[], invoked_slots: &[1], delegates: &[], })",
+    "verdict": "granted",
+    "reason": "dev/observe slices identical, prod locals renamed; the only invocation is fn; probes as rc.9.",
+    "section": "### 26. `runWithOwner` — `reads`, argument scope — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 3. `runWithOwner` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_READS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/core.js",
+        "file_sha256": "0c33a6ea8562cbc8a68d959ab7e3b590db57bc60d3fb9c77cdda4859223adb89",
+        "start_byte": 102384,
+        "end_byte": 102596,
+        "slice_sha256": "edcf5f33372c979731c0d5ce2f7bddf0aff822d92b11ae75af6178a000a482a0"
+      },
+      {
+        "archive_path": "dist/dev-shared.js",
+        "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+        "start_byte": 331544,
+        "end_byte": 332252,
+        "slice_sha256": "332a218ceec024a1d0c3464213b7d043d4a902c529b5f02a7d6ae0467070a11c"
+      },
+      {
+        "archive_path": "dist/observe/core/core.js",
+        "file_sha256": "1c011bd18d46f62cb6bdf6d3df449ac9ee29172ac9791620f8669ac10566ed85",
+        "start_byte": 104299,
+        "end_byte": 104511,
+        "slice_sha256": "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "runWithOwner",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Saves/restores context and tracking around fn; dev diagnostic only.",
+    "section": "### 27. `runWithOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 5. `runWithOwner` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_SIGNALS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/core.js",
+        "file_sha256": "0c33a6ea8562cbc8a68d959ab7e3b590db57bc60d3fb9c77cdda4859223adb89",
+        "start_byte": 102384,
+        "end_byte": 102596,
+        "slice_sha256": "edcf5f33372c979731c0d5ce2f7bddf0aff822d92b11ae75af6178a000a482a0"
+      },
+      {
+        "archive_path": "dist/dev-shared.js",
+        "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+        "start_byte": 331544,
+        "end_byte": 332252,
+        "slice_sha256": "332a218ceec024a1d0c3464213b7d043d4a902c529b5f02a7d6ae0467070a11c"
+      },
+      {
+        "archive_path": "dist/observe/core/core.js",
+        "file_sha256": "1c011bd18d46f62cb6bdf6d3df449ac9ee29172ac9791620f8669ac10566ed85",
+        "start_byte": 104299,
+        "end_byte": 104511,
+        "slice_sha256": "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "snapshot",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Slices identical; snapshotWalk's reach is still the archive's own flush microtask.",
+    "section": "### 28. `snapshot` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 3. `snapshot` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_PARITY_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/store/index.js",
+        "file_sha256": "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+        "start_byte": 760,
+        "end_byte": 813,
+        "slice_sha256": "3bb31686d1eba591133042dd4c7c95515074c440f6d532da34f25cbf6c05bfd2"
+      },
+      {
+        "archive_path": "dist/dev.js",
+        "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+        "start_byte": 404283,
+        "end_byte": 404342,
+        "slice_sha256": "eebc4206bc3509952fd02519f13f9b58ed00bc63da5658c90322c97bd221d6be"
+      },
+      {
+        "archive_path": "dist/observe/store/index.js",
+        "file_sha256": "54de3c6d2552dd2a99abc25f2ed02b75fb4c71af00bea23ba85bb82dbed15d9d",
+        "start_byte": 880,
+        "end_byte": 933,
+        "slice_sha256": "3bb31686d1eba591133042dd4c7c95515074c440f6d532da34f25cbf6c05bfd2"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "untrack",
+    "domain": "reads",
+    "scope": "RowScope::Arguments(ArgumentScope { primitive_slots: &[], callable_or_primitive_slots: &[], invoked_slots: &[0], delegates: &[], })",
+    "verdict": "granted",
+    "reason": "prod/observe differ only in the hook slot's mangled name; dev adds a counter and a fast-path condition; the only invocation is fn or the external-source hook.",
+    "section": "### 29. `untrack` — `reads`, argument scope — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 4. `untrack` — `reads` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_READS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/core.js",
+        "file_sha256": "0c33a6ea8562cbc8a68d959ab7e3b590db57bc60d3fb9c77cdda4859223adb89",
+        "start_byte": 56152,
+        "end_byte": 56432,
+        "slice_sha256": "0fd615f97eec22ed61c5e13caadfcffa01e1a9db357577116d899559201da786"
+      },
+      {
+        "archive_path": "dist/dev-shared.js",
+        "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+        "start_byte": 278820,
+        "end_byte": 279412,
+        "slice_sha256": "a32fa71b267c22f271dfcb5ae86f7502dceca97942230649833183141d382b4d"
+      },
+      {
+        "archive_path": "dist/observe/core/core.js",
+        "file_sha256": "1c011bd18d46f62cb6bdf6d3df449ac9ee29172ac9791620f8669ac10566ed85",
+        "start_byte": 57931,
+        "end_byte": 58211,
+        "slice_sha256": "2dadaf6243bbfde3d0ae1f249d570bf7bc8f60d3ab744db34483488acebbc76b"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/signals",
+    "export": "untrack",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Flag toggles and counters around fn; no helper call.",
+    "section": "### 30. `untrack` — `creates` — archive `@solidjs/signals@2.0.0-rc.13`",
+    "rc9_section": "### 4. `untrack` — `creates` — archive `@solidjs/signals@2.0.0-rc.9`",
+    "rc9_audit": "RC9_SIGNALS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/prod/core/core.js",
+        "file_sha256": "0c33a6ea8562cbc8a68d959ab7e3b590db57bc60d3fb9c77cdda4859223adb89",
+        "start_byte": 56152,
+        "end_byte": 56432,
+        "slice_sha256": "0fd615f97eec22ed61c5e13caadfcffa01e1a9db357577116d899559201da786"
+      },
+      {
+        "archive_path": "dist/dev-shared.js",
+        "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+        "start_byte": 278820,
+        "end_byte": 279412,
+        "slice_sha256": "a32fa71b267c22f271dfcb5ae86f7502dceca97942230649833183141d382b4d"
+      },
+      {
+        "archive_path": "dist/observe/core/core.js",
+        "file_sha256": "1c011bd18d46f62cb6bdf6d3df449ac9ee29172ac9791620f8669ac10566ed85",
+        "start_byte": 57931,
+        "end_byte": 58211,
+        "slice_sha256": "2dadaf6243bbfde3d0ae1f249d570bf7bc8f60d3ab744db34483488acebbc76b"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/web",
+    "export": "clientOnly",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "All six slices identical; call-event closure (solid-js createSignal plain path, loadClientOnly) identical; returned component is F3.",
+    "section": "### 31. `clientOnly` — `reads` — archive `@solidjs/web@2.0.0-rc.13`",
+    "rc9_section": "### 15. `clientOnly` — `reads` — archive `@solidjs/web@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/web.js",
+        "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+        "start_byte": 77253,
+        "end_byte": 78091,
+        "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b"
+      },
+      {
+        "archive_path": "dist/web.dev.js",
+        "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+        "start_byte": 88866,
+        "end_byte": 89704,
+        "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b"
+      },
+      {
+        "archive_path": "dist/web.observe.js",
+        "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+        "start_byte": 78976,
+        "end_byte": 79814,
+        "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+        "start_byte": 147221,
+        "end_byte": 147402,
+        "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+        "start_byte": 166831,
+        "end_byte": 167012,
+        "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+        "start_byte": 152298,
+        "end_byte": 152479,
+        "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/web",
+    "export": "clientOnly",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Nothing registers at the call in any build; server preload registration is inside the returned component (F3).",
+    "section": "### 32. `clientOnly` — `creates` — archive `@solidjs/web@2.0.0-rc.13`",
+    "rc9_section": "### 16. `clientOnly` — `creates` — archive `@solidjs/web@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/web.js",
+        "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+        "start_byte": 77253,
+        "end_byte": 78091,
+        "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b"
+      },
+      {
+        "archive_path": "dist/web.dev.js",
+        "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+        "start_byte": 88866,
+        "end_byte": 89704,
+        "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b"
+      },
+      {
+        "archive_path": "dist/web.observe.js",
+        "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+        "start_byte": 78976,
+        "end_byte": 79814,
+        "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+        "start_byte": 147221,
+        "end_byte": 147402,
+        "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+        "start_byte": 166831,
+        "end_byte": 167012,
+        "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+        "start_byte": 152298,
+        "end_byte": 152479,
+        "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/web",
+    "export": "httpHeader",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Slices identical; getRequestEvent now also looks the request event up through a realm-global WeakMap of render roots; no reactive source.",
+    "section": "### 33. `httpHeader` — `reads` — archive `@solidjs/web@2.0.0-rc.13`",
+    "rc9_section": "### 17. `httpHeader` — `reads` — archive `@solidjs/web@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/web.js",
+        "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+        "start_byte": 78129,
+        "end_byte": 78176,
+        "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42"
+      },
+      {
+        "archive_path": "dist/web.dev.js",
+        "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+        "start_byte": 89742,
+        "end_byte": 89789,
+        "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42"
+      },
+      {
+        "archive_path": "dist/web.observe.js",
+        "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+        "start_byte": 79852,
+        "end_byte": 79899,
+        "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+        "start_byte": 148537,
+        "end_byte": 149937,
+        "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+        "start_byte": 168147,
+        "end_byte": 169547,
+        "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+        "start_byte": 153614,
+        "end_byte": 155014,
+        "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/web",
+    "export": "httpHeader",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Writes to an existing response plus a retracting cleanup; owner flag carried from rc.9.",
+    "section": "### 34. `httpHeader` — `creates` — archive `@solidjs/web@2.0.0-rc.13`",
+    "rc9_section": "### 18. `httpHeader` — `creates` — archive `@solidjs/web@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/web.js",
+        "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+        "start_byte": 78129,
+        "end_byte": 78176,
+        "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42"
+      },
+      {
+        "archive_path": "dist/web.dev.js",
+        "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+        "start_byte": 89742,
+        "end_byte": 89789,
+        "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42"
+      },
+      {
+        "archive_path": "dist/web.observe.js",
+        "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+        "start_byte": 79852,
+        "end_byte": 79899,
+        "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+        "start_byte": 148537,
+        "end_byte": 149937,
+        "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+        "start_byte": 168147,
+        "end_byte": 169547,
+        "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+        "start_byte": 153614,
+        "end_byte": 155014,
+        "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/web",
+    "export": "httpStatus",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "As httpHeader.",
+    "section": "### 35. `httpStatus` — `reads` — archive `@solidjs/web@2.0.0-rc.13`",
+    "rc9_section": "### 19. `httpStatus` — `reads` — archive `@solidjs/web@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/web.js",
+        "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+        "start_byte": 78092,
+        "end_byte": 78128,
+        "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b"
+      },
+      {
+        "archive_path": "dist/web.dev.js",
+        "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+        "start_byte": 89705,
+        "end_byte": 89741,
+        "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b"
+      },
+      {
+        "archive_path": "dist/web.observe.js",
+        "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+        "start_byte": 79815,
+        "end_byte": 79851,
+        "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+        "start_byte": 147507,
+        "end_byte": 148536,
+        "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+        "start_byte": 167117,
+        "end_byte": 168146,
+        "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+        "start_byte": 152584,
+        "end_byte": 153613,
+        "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7"
+      }
+    ]
+  },
+  {
+    "package": "@solidjs/web",
+    "export": "httpStatus",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "As httpHeader.",
+    "section": "### 36. `httpStatus` — `creates` — archive `@solidjs/web@2.0.0-rc.13`",
+    "rc9_section": "### 20. `httpStatus` — `creates` — archive `@solidjs/web@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/web.js",
+        "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+        "start_byte": 78092,
+        "end_byte": 78128,
+        "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b"
+      },
+      {
+        "archive_path": "dist/web.dev.js",
+        "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+        "start_byte": 89705,
+        "end_byte": 89741,
+        "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b"
+      },
+      {
+        "archive_path": "dist/web.observe.js",
+        "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+        "start_byte": 79815,
+        "end_byte": 79851,
+        "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+        "start_byte": 147507,
+        "end_byte": 148536,
+        "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+        "start_byte": 167117,
+        "end_byte": 168146,
+        "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+        "start_byte": 152584,
+        "end_byte": 153613,
+        "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "For",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Six slices identical; signals mapArray identical and updateKeyedMap changes only route its row writes; server mapArray changes an id read.",
+    "section": "### 37. `For` — `reads` — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 1. `For` — `reads` — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 43257,
+        "end_byte": 43682,
+        "slice_sha256": "3f85ecafbe4729ce5c20deac5622cf43aed0153bf0154f5b1fa27513f3aeb065"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 46422,
+        "end_byte": 46873,
+        "slice_sha256": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 44079,
+        "end_byte": 44530,
+        "slice_sha256": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 72325,
+        "end_byte": 72547,
+        "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 83707,
+        "end_byte": 83929,
+        "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 77301,
+        "end_byte": 77523,
+        "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "For",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Client stays inside the signals archive; server createSyncMemo never reaches processResult.",
+    "section": "### 38. `For` — `creates` — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 2. `For` — `creates` — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 43257,
+        "end_byte": 43682,
+        "slice_sha256": "3f85ecafbe4729ce5c20deac5622cf43aed0153bf0154f5b1fa27513f3aeb065"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 46422,
+        "end_byte": 46873,
+        "slice_sha256": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 44079,
+        "end_byte": 44530,
+        "slice_sha256": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 72325,
+        "end_byte": 72547,
+        "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 83707,
+        "end_byte": 83929,
+        "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 77301,
+        "end_byte": 77523,
+        "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "Match",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "function Match(props) { return props; } identical in all six builds.",
+    "section": "### 39. `Match` — `reads` — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 5. `Match` — `reads` — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 45973,
+        "end_byte": 46014,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 49388,
+        "end_byte": 49429,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 47035,
+        "end_byte": 47076,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 74357,
+        "end_byte": 74398,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 85739,
+        "end_byte": 85780,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 79333,
+        "end_byte": 79374,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "Match",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Same body.",
+    "section": "### 40. `Match` — `creates` — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 6. `Match` — `creates` — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 45973,
+        "end_byte": 46014,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 49388,
+        "end_byte": 49429,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 47035,
+        "end_byte": 47076,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 74357,
+        "end_byte": 74398,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 85739,
+        "end_byte": 85780,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 79333,
+        "end_byte": 79374,
+        "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "Repeat",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Six slices identical; signals repeat/updateRepeat identical in dev; server repeat changes an id read.",
+    "section": "### 41. `Repeat` — `reads` — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 3. `Repeat` — `reads` — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 43683,
+        "end_byte": 43964,
+        "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 46874,
+        "end_byte": 47184,
+        "slice_sha256": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 44531,
+        "end_byte": 44841,
+        "slice_sha256": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 72548,
+        "end_byte": 72829,
+        "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 83930,
+        "end_byte": 84211,
+        "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 77524,
+        "end_byte": 77805,
+        "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "Repeat",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "As For.",
+    "section": "### 42. `Repeat` — `creates` — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 4. `Repeat` — `creates` — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 43683,
+        "end_byte": 43964,
+        "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 46874,
+        "end_byte": 47184,
+        "slice_sha256": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 44531,
+        "end_byte": 44841,
+        "slice_sha256": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 72548,
+        "end_byte": 72829,
+        "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 83930,
+        "end_byte": 84211,
+        "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 77524,
+        "end_byte": 77805,
+        "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "createContext",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Six slices identical; the call's only callee is Symbol(); provider is defined, not invoked.",
+    "section": "### 43. `createContext` — `creates` — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 10. `createContext` — `creates` — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 1295,
+        "end_byte": 1634,
+        "slice_sha256": "c3be410a00e4ddc5fd5150138223a341e6280d8489dc94d2e6ac6560665d899f"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 1342,
+        "end_byte": 1681,
+        "slice_sha256": "c3be410a00e4ddc5fd5150138223a341e6280d8489dc94d2e6ac6560665d899f"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 1317,
+        "end_byte": 1656,
+        "slice_sha256": "c3be410a00e4ddc5fd5150138223a341e6280d8489dc94d2e6ac6560665d899f"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 56336,
+        "end_byte": 56673,
+        "slice_sha256": "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 62593,
+        "end_byte": 62930,
+        "slice_sha256": "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 58894,
+        "end_byte": 59231,
+        "slice_sha256": "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "createMemo",
+    "domain": "creates",
+    "scope": "RowScope::HostTarget(HostTargetScope { condition: HostTargetCondition::Browser, runtime: &[ \"dist/solid.dev.js\", \"dist/solid.js\", \"dist/solid.observe.js\", ], delegates: &[ (\"@solidjs/signals\", \"createMemo\", CallClaimDomain::Creates), (\"@solidjs/signals\", \"createSignal\", CallClaimDomain::Creates), (\"@solidjs/signals\", \"getOwner\", CallClaimDomain::Creates), ], })",
+    "verdict": "granted",
+    "reason": "Wrapper identical; browser closure (40 definitions, identical across the three builds) reaches only the same five signals imports, module state, a restored fetch/Promise swap and microtasks; delegates granted on rc.13 signals.",
+    "section": "### 44. `createMemo` — `creates`, `browser` host target — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "## 4. `createMemo` — `creates`, `browser` host target — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_MERGE_OMIT_MEMO_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 29607,
+        "end_byte": 29692,
+        "slice_sha256": "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 31810,
+        "end_byte": 31895,
+        "slice_sha256": "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 29927,
+        "end_byte": 30012,
+        "slice_sha256": "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "createSignal",
+    "domain": "reads",
+    "scope": "RowScope::Arguments(ArgumentScope { primitive_slots: &[0], callable_or_primitive_slots: &[], invoked_slots: &[], delegates: &[(\"@solidjs/signals\", \"createSignal\", CallClaimDomain::Reads)], })",
+    "verdict": "granted",
+    "reason": "Wrapper, hydratedCreateSignal and all three server bodies identical; a primitive first argument reaches only the signals plain path (delegate granted).",
+    "section": "### 45. `createSignal` — `reads`, argument scope — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 6. `createSignal` — `reads`, argument scope — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_READS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 29693,
+        "end_byte": 29784,
+        "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 31896,
+        "end_byte": 31987,
+        "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 30013,
+        "end_byte": 30104,
+        "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 13012,
+        "end_byte": 13637,
+        "slice_sha256": "38028a6c27dec146a1e4eb81e2e9bdfce1f1e90ce2d2701fe21c1d460148cf39"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 17518,
+        "end_byte": 18207,
+        "slice_sha256": "6002fc5a126d938f9e23b7d284d707d2448bf56a65da3e428bb02167efe9c979"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 14665,
+        "end_byte": 15290,
+        "slice_sha256": "38028a6c27dec146a1e4eb81e2e9bdfce1f1e90ce2d2701fe21c1d460148cf39"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "createSignal",
+    "domain": "creates",
+    "scope": "RowScope::HostTarget(HostTargetScope { condition: HostTargetCondition::Browser, runtime: &[ \"dist/solid.dev.js\", \"dist/solid.js\", \"dist/solid.observe.js\", ], delegates: &[ (\"@solidjs/signals\", \"createSignal\", CallClaimDomain::Creates), (\"@solidjs/signals\", \"getOwner\", CallClaimDomain::Creates), ], })",
+    "verdict": "granted",
+    "reason": "As createMemo browser: wrapper identical, closure 40 definitions identical across builds, delegates granted on rc.13 signals.",
+    "section": "### 46. `createSignal` — `creates`, `browser` host target — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 13. `createSignal` — `creates`, `browser` host target — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 29693,
+        "end_byte": 29784,
+        "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 31896,
+        "end_byte": 31987,
+        "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 30013,
+        "end_byte": 30104,
+        "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "useContext",
+    "domain": "reads",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Six slices identical; signals getContext identical in dev and differs by one mangled field in prod/observe; server getContext identical.",
+    "section": "### 47. `useContext` — `reads` — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 7. `useContext` — `reads` — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_READS_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 1635,
+        "end_byte": 1697,
+        "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 1682,
+        "end_byte": 1744,
+        "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 1657,
+        "end_byte": 1719,
+        "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 56674,
+        "end_byte": 56930,
+        "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 62931,
+        "end_byte": 63187,
+        "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 59232,
+        "end_byte": 59488,
+        "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f"
+      }
+    ]
+  },
+  {
+    "package": "solid-js",
+    "export": "useContext",
+    "domain": "creates",
+    "scope": "RowScope::EveryCondition",
+    "verdict": "granted",
+    "reason": "Same bytes; a context-map read that may construct and throw an Error.",
+    "section": "### 48. `useContext` — `creates` — archive `solid-js@2.0.0-rc.13`",
+    "rc9_section": "### 11. `useContext` — `creates` — archive `solid-js@2.0.0-rc.9`",
+    "rc9_audit": "RC9_CORE_WEB_AUDIT",
+    "citations": [
+      {
+        "archive_path": "dist/solid.js",
+        "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+        "start_byte": 1635,
+        "end_byte": 1697,
+        "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618"
+      },
+      {
+        "archive_path": "dist/solid.dev.js",
+        "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+        "start_byte": 1682,
+        "end_byte": 1744,
+        "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618"
+      },
+      {
+        "archive_path": "dist/solid.observe.js",
+        "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+        "start_byte": 1657,
+        "end_byte": 1719,
+        "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618"
+      },
+      {
+        "archive_path": "dist/server.js",
+        "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+        "start_byte": 56674,
+        "end_byte": 56930,
+        "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f"
+      },
+      {
+        "archive_path": "dist/server.dev.js",
+        "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+        "start_byte": 62931,
+        "end_byte": 63187,
+        "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f"
+      },
+      {
+        "archive_path": "dist/server.observe.js",
+        "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+        "start_byte": 59232,
+        "end_byte": 59488,
+        "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f"
+      }
+    ]
+  }
+]

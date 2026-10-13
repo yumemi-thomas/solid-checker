@@ -1,0 +1,680 @@
+{
+  "package": "@solid-primitives/intersection-observer",
+  "version": "3.0.0-next.3",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "createIntersectionObserver": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Complete constructor/private deferred read census; existing probes apply. Research draft pending admission.",
+      "call": {
+        "operations": [
+          {
+            "id": "create-entries",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "entries"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "elements-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "elements-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "options-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "tuple",
+              "closed": [
+                "items"
+              ],
+              "items": [
+                {
+                  "kind": "store",
+                  "resource": "entries"
+                },
+                {
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "elements",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "elements-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "elements-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-initial",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "options-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "options-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "options-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "is-visible-entries-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "inputs": [
+              {
+                "kind": "store",
+                "resource": "entries"
+              }
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-entries"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "computations": [
+          "elements-effect",
+          "options-effect"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "elements"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "options-initial"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "options-compute"
+          }
+        ],
+        "resources": [
+          {
+            "id": "entries",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "elements-effect-owner",
+            "kind": "owner"
+          },
+          {
+            "id": "options-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups",
+          "reads"
+        ],
+        "reads": [
+          "is-visible-entries-read"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque; its private store reads are separately enumerated as deferred in the reads census.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque; its private store reads are separately enumerated as deferred in the reads census.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque; its private store reads are separately enumerated as deferred in the reads census.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — Exact store/isVisible tuple, native observer cleanup, always one elements effect, callable-options effect, initial untracked access(options), and tracked effect callbacks. isVisible remains opaque; its private store reads are separately enumerated as deferred in the reads census.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:53-92; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88,231-248 — No package-owned store read at construction. access(options) is the existing untracked caller invocation, elements/options computes are existing tracked invocations, native entry copies and mutation draft are host/plain mutation data under P1/P2. The returned isVisible function reads entries only when later called; opaque member remains an obligation."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        },
+        {
+          "label": "elements-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Tracked effect compute invokes the caller; options first runs once in untrack, so only its second invocation attempts the forbidden write."
+        },
+        {
+          "label": "options-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Tracked effect compute invokes the caller; options first runs once in untrack, so only its second invocation attempts the forbidden write."
+        },
+        {
+          "label": "options-initial-owner",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Initial access(options) occurs before constructor cleanup and preserves the ambient owner through untrack; onCleanup inside it rejects a leaf."
+        },
+        {
+          "label": "entries-read",
+          "rule": "strict-read-untracked",
+          "why": "The returned array is a real Solid store. rc.13 dev.js:6652-6676 warns on untracked length even before a tracked observer creates a per-key signal."
+        }
+      ]
+    },
+    "createVisibilityObserver": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 — Complete constructor/private deferred read census; existing probes apply. Research draft pending admission.",
+      "call": {
+        "operations": [
+          {
+            "id": "create-visible",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "visible"
+            ]
+          },
+          {
+            "id": "visibility-cleanups",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 2,
+              "max": 2,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "element-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "element-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "visible"
+            }
+          },
+          {
+            "id": "element-compute",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "element-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "element-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "visible-result-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "visible"
+              }
+            ],
+            "owner": {
+              "source": "ambient-at-execution"
+            }
+          },
+          {
+            "id": "previous-visible-read",
+            "kind": "read",
+            "trigger": {
+              "event": "external-event"
+            },
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "trigger"
+            },
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor",
+                "resource": "visible"
+              }
+            ],
+            "owner": {
+              "source": "none"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-visible"
+        ],
+        "cleanups": [
+          "visibility-cleanups"
+        ],
+        "computations": [
+          "element-effect"
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "element-compute"
+          }
+        ],
+        "resources": [
+          {
+            "id": "visible",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "element-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "closed": [
+          "returns",
+          "creates",
+          "cleanups",
+          "reads"
+        ],
+        "reads": [
+          "visible-result-read",
+          "previous-visible-read"
+        ]
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 — One ownedWrite signal, two direct cleanup registrations, and one effect only for the callable element path permitted by the published Element|Accessor types. Browser always returns the visible signal wrapper; initial sentinel may throw NotReadyError.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 — One ownedWrite signal, two direct cleanup registrations, and one effect only for the callable element path permitted by the published Element|Accessor types. Browser always returns the visible signal wrapper; initial sentinel may throw NotReadyError.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createIntersectionObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198 — One ownedWrite signal, two direct cleanup registrations, and one effect only for the callable element path permitted by the published Element|Accessor types. Browser always returns the visible signal wrapper; initial sentinel may throw NotReadyError.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/intersection-observer/dist/index.js:166-198; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/intersection-observer-createVisibilityObserver-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 — No package-private reactive source is read during construction. rawVisible() in the returned wrapper runs on later result use; previous rawVisible is explicitly untracked on native event delivery when a custom setter exists. Setter factory/element reads belong to caller-code execution, not private source reads. P1/P2 cover native observer/options data."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "Present leaf owner rejects onCleanup or child computation; ordinary component construction accepts it."
+        },
+        {
+          "label": "visible-read",
+          "rule": "strict-read-untracked",
+          "why": "Returned signal read in the component strict-read window versus the same read in JSX."
+        },
+        {
+          "label": "element-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "Callable element executes in tracked effect compute."
+        }
+      ]
+    }
+  }
+}

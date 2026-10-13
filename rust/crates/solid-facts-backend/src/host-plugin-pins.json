@@ -1,0 +1,732 @@
+[
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.28",
+    "digest": "762ae940dfc9a5f818362e7a214822224391143676332e1ed7fcedaa4b309353"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.28",
+    "digest": "cb0463daba13666d961b51b2fde4836b8d296ccb35684462730fe95a230ef187"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.34",
+    "digest": "583bfdf6c65758bb2762ef56871beeceb26272c8b03b8dc8108ba636e2dde261"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.34",
+    "digest": "58778b1628b5be98505ea204ab3c83f2152a3fbc01813316e68f6a77288f2822"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.35",
+    "digest": "410617e52572bcd45a0a3ecbb1328d14b25e5b409a057145344247741ca45dc7"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.35",
+    "digest": "5ff4f5901920036e02b8f76ed470881024eb4f7613f3688bdd3e778ab75bcd61"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.35",
+    "digest": "d7b6c9cbbb3247dc7016bd15c12e4e1d951ed0743e678eb607072abb659e0239"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.36",
+    "digest": "4574e03accadcf54e4e708b837907a3bb7a47cb6b76bc07e871fe7c1a41d68c0"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.36",
+    "digest": "7130548d989f2e79b57e7fe2f22ba7ebdad46f5854bd4550d813f80a0368e081"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.38",
+    "digest": "2e1f43af92de9635c929311234d6019afabb5bbc67834e32f90d7ab9ac1bf85f"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.38",
+    "digest": "8a640275660decde7c4e43169fd3273307ff711b800e3bf6d2a2a72dd5233379"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.38",
+    "digest": "8bfbc38b2362b4ce25d57508425e0316b08b12793fa0d31b6d23d73719a3b118"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.38",
+    "digest": "972392c77e052cb54211ea13a8555200ba9f8445a7f175339b260ece0f4cbf83"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.39",
+    "digest": "3e09496387334d33b97b9f755b31a93af10c846bda5a7d527130d96463afec3c"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.39",
+    "digest": "8d53eb84d65dffcc3a6d235ae610109b099340bb1a2f6f0cbcbfdbf349229b64"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.39",
+    "digest": "f606911aef4e26a9d1cd28a27190f31a8db8563bddb2245bc11b0e3c39ace207"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.40",
+    "digest": "7312036067a2f256d6be9129bbf32461dcec6bfb1048f358ea6b82d91cb30662"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.42",
+    "digest": "471f1b26d7fce6c70855c6fd2e179fdb327e9e65946128eef07d3f510242a613"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.42",
+    "digest": "7a7508f5c20aec53eb023a705be17fc2122c05027dfba47ec5dd9ec101c839a7"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.43",
+    "digest": "7c8724d81d44196238de74d245a86c3f53c2854297f522e1362a359ace26d35e"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.43",
+    "digest": "fe26e1f2d01bedb7b08e623790ba1458d83401473aaca9b2ecfa05a287e75934"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.43",
+    "digest": "ff7c80d08495846a31d546636a35bd4f32178bb5ee5f0adfffdeb45007042a8c"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.44",
+    "digest": "14f8ad92e1170050c54ea45c419d4a06993af39d31d9d4ae6b8ecbf8c24c7683"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.44",
+    "digest": "60ae40d870526103a13ac41ba6f104927cb7b8623da4350c7cf519fa793a5f36"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.44",
+    "digest": "790d4af0c8fa96b59773390dc553fd6afcb95b40a69566ed8925c64b906f1c8f"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.44",
+    "digest": "876dd74a69e8d1cf1ce29efb06e44716bb041bee3cdd016bf657aa0cd4dc1933"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.44",
+    "digest": "e7f062a6481ff47ae264be6b4e6e0c8ac9af271b7c98e5f65ca0821b0a0ba2c9"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.44",
+    "digest": "edb6908f0301e23e39b0fd2ce6418ff062a0e24b78d26da9d81206d99ae43451"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.44",
+    "digest": "fdff61326a05f0df7721c22be48814a7e97d8fbed9af9b9d15b97779664391e7"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.0",
+    "digest": "b3ce4d652ef02e7b01a7854830a58a9b00bd9279297cd0bca91efbb8660ad466"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.0",
+    "digest": "ba99dd49e74b315b62ebe9f35f07c433a4124cbbc7c5e691a0edd9ae8c0c057c"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.1",
+    "digest": "4e5ff4e3e03b6525a430a0c94852f14802c0b00b3cfff968166906193551a5e3"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "0cabf1c00ed914832ceba90a9d8e8d9f0d89020b442c325ea50419f73a494aec"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "20273a77d34c98cbcb2036212027d8562b0285fb17c6eb3cede3319a58cfab26"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "247a6f59938e0d8548a588666dc032952a8c217131be07156769d2092bbcd210"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "393b483fc9be0621981b6dc5828ece0642e5b26f2e870da40bf836588dfcb1f9"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "39678c8c0fda6bc885c545e40cceb547882f1145021ffbd1552627238c82e4a7"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "44c35378068c089ff2e6e20fe090e59a3211ce992fe00e1a862c91ee640c7614"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "4d88e77f9f0d07bfa8f4625b51c01ceb3acfd53e2eb65ee3c0d602553aa6df88"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "70a0d95cac87b84d662aa0cae178d94dd8b989d2ce61317059a59da47e96837b"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "7300a969e692fac4ea774dbfe4affcb1db2aef270e8e7aaa6fe0959ae325db91"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "9209ea59dd75484d2025cc7f36d1728b279a2a8f4a3eb6662df493642ba5d698"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "96d38d3735f35813dcedd71d560e5037cf7ea7d0053ce2672cc3e55d55665f47"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "9f4c85888b8d01ef234918d9a3f67b63a01805233ffefaac78a02aab8e433db0"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "a3fb41205fbbc23065398a7f1e8e9e4e0d9037e7b444f71f7c3f74baf0470e44"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "a682ab3bb9c6f641198defc46c22e7332361914cd37e9d79f5df68e7b062b89e"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "ac24905cef54d6fafc8dd41b886343571551a2d6ae1a012affa1aa67d632b6c9"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "bdee1899050bd7fdd6d7ad46a4e6e8ed5765f083fec8c904dd8f41399c0e8537"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "c553873bcea98096319a29ea19a7d083ec4b92156e52ad111deed0a4a904535b"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "e1a9450519b103a40a3c0007fd8dcba10bc8aa230bdee698bea7434d0c37d9e4"
+  },
+  {
+    "name": "@tailwindcss/vite",
+    "version": "4.3.3",
+    "digest": "f1deeadc096146869a7fef2b4ef442bae09cfaaa626b3b2d84e7b4b95a4685bd"
+  },
+  {
+    "name": "@tanstack/router-plugin",
+    "version": "1.168.11",
+    "digest": "2b913621ce6ddfcf6f56857c6dd793bab42c47e8c4cc8d33d1f11325c1dd5e62"
+  },
+  {
+    "name": "@tanstack/router-plugin",
+    "version": "1.168.23",
+    "digest": "e050babb47681efdc0aa326b0e54e14d33f9851f7bfa5c985bc3a459aada94a5"
+  },
+  {
+    "name": "@tanstack/router-plugin",
+    "version": "1.168.24",
+    "digest": "d3ac584c18b4062ec88ef43cc8251670df5bcd690a8f9e025435d7149290564d"
+  },
+  {
+    "name": "@tanstack/router-plugin",
+    "version": "1.168.40",
+    "digest": "b4b150292714fce7f4b137a89a5d27344c108d310b23423d2c52ec074c589c67"
+  },
+  {
+    "name": "@unocss/vite",
+    "version": "66.6.8",
+    "digest": "390faa1f099d132e1416f06470763a318a89e3d93bc511f6fea672ee7aa4a7d8"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.2.1",
+    "digest": "10ec1e9f07d560a5447e7118bb181573e250fb81e34183a50bb001664f2a8d59"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.2.1",
+    "digest": "79be27ee0ff49129c1f0ba575cf2cd601bd4d1c824fe6b3965a2726557e56938"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.2.1",
+    "digest": "96b35aa8a7a03c2c11d0014260bfc528394289ace32adfa25deb8f304bf2fbd0"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.2.1",
+    "digest": "afa53395202b459668df2490476a7d840d2f005007a4d1d5905fe698cd0f2405"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.2.1",
+    "digest": "c7b2f2a037ddd25103738767277b5cafc63e4dbfc8747f9a8ff35f0fe0540efa"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.2.1",
+    "digest": "d12ba33a4f7deaecb3b19d95d29ef0ea71ab507b8606a996ba8ea195f9b68e74"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.2.1",
+    "digest": "d36f7f057ed6e06b2f479ef55cba8129cf3721026db4195cf098f1d7698b6941"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.2.1",
+    "digest": "de17de7d77122a3d6eb979a12abb96ec31ac8f602e43072c001f4337d6e231f5"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.2.1",
+    "digest": "fccbb06f54f55360a8d3eb541be078f8bbf2889b9269bac5105bb121685a91a6"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.3.0",
+    "digest": "eae0ab0cc55a377d90fe1d7f3a80f14d5ad1088c3492df5b65a5c8b4f5fa62a0"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.3.1",
+    "digest": "791a1742c740aa0dee225c84b2773e1d4555e635f84cd9ef2e26d26711cdcc97"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.3.1",
+    "digest": "84e7ba3345beb85f4fd8eb7b3349eb4394a4560687b17c97abad7d37d83b78c0"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.3.1",
+    "digest": "88113a0889aeefa62354cf4ac20545aefbdf978604233c246c6181a405f3b34a"
+  },
+  {
+    "name": "filesystem-routing",
+    "version": "0.3.1",
+    "digest": "a1a8fd58fd87b849699df0258160ac3056024fb09eaa38ea0b23ee1c5740aae3"
+  },
+  {
+    "name": "unocss",
+    "version": "66.8.1",
+    "digest": "eed94134ce4e5c0faebb6358e87605154237cdd29e9484911a393b2916074edf"
+  },
+  {
+    "name": "unplugin-icons",
+    "version": "23.0.1",
+    "digest": "c97ae41fedc3730333f7173b39975f022330b1f8998a0b1125c4b68abc89eb2a"
+  },
+  {
+    "name": "unplugin-icons",
+    "version": "24.0.0",
+    "digest": "52396e8dfba034c2a7a29d8318f99e343107e1c07c40da6d8e89987c5088ff82"
+  },
+  {
+    "name": "vite",
+    "version": "6.4.3",
+    "digest": "673a72680e3717fa7b8da8a4ebf440f8a08e14c77702512c526a51e5bc1a6a94"
+  },
+  {
+    "name": "vite",
+    "version": "7.3.1",
+    "digest": "d7ecdaf3054742b3b21087414adf7a40312e657b7da97f4d6735dbcdea9c3e85"
+  },
+  {
+    "name": "vite",
+    "version": "7.3.6",
+    "digest": "f6ce017f039986c08747196c82d59624d801506e45d0839dbe18e610a12b4035"
+  },
+  {
+    "name": "vite",
+    "version": "8.0.13",
+    "digest": "459bc1aa6bcc2fbc2946cb35b4af80398a582d49776f449a2da8dc2e0d0dc7f3"
+  },
+  {
+    "name": "vite",
+    "version": "8.0.14",
+    "digest": "2bf1bd50e2f30ad063ac35bbe877790de75a082754c05139430bfc906f90bc70"
+  },
+  {
+    "name": "vite",
+    "version": "8.1.3",
+    "digest": "1a02595d3eaf24d4c74dc094046ca55a218571bc1c22c4549d22a9654810a19e"
+  },
+  {
+    "name": "vite",
+    "version": "8.1.5",
+    "digest": "287aff8142acc3f7c9db6657473f8f9a1b440539906989ee1fbe90516579695e"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.0",
+    "digest": "6ad46bea2e538ec673dcddac5579b4e2928cc5cf719312f9719efe827a52888e"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.0",
+    "digest": "e01d88e99cf9b7beef26a74f9dc738115f5221851c004a051ec1ba08b3d4b942"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.1",
+    "digest": "107ee666b6014cfcf1c085c0907a571fd1b44549fba492f1790516fde4e0b840"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "098b23764cf49048994f21c5c32b0a631eb0e5a9e063c78e776a96e0f0ef4d61"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "4fba9faebb755a03493c9493e128ea8302abfa12004ee1d3dcb8d22bb8adac4b"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "53b7ee436897abe43226a0fffd2d653a832304d8814927ff69a508b90075c08b"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "843c6bac1025398a17c3097c275181cb63d532fccd113f731f1cce72fe40292a"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "90de0214f9484789170d267226d2e8e5aca07eea2f1a98080d0596555aa2ac15"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "98dcf4954c7ebd1450c7ba4ca93979095dece75bc998955092f67712ae147767"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "a23226c2d745e45b6812329ef4f6c328c921f930b9aa51d1628596624ed83b18"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "af99ed1263b778a78ee9e63d0d80b238db9cfa68d0efb471b345b5e7b20b1242"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "be15c76dbb74693f1864ec3c8e7ded108d843e09383eeeec4e6e227c31cb9aaf"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "c6d76a95f5c7360f051f8ac967e13fe2bea7d97be9cb0925baad8d1c2703c65d"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "c7e0f623832ff9a5a0a8ac2aae7e0f2b384c90d615e317547eed8752f4ce3840"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "e7160899e81dc81b101b3fb8d10830bd95df5724f58b741bd21253f83dacc156"
+  },
+  {
+    "name": "vite",
+    "version": "8.2.2",
+    "digest": "e99f2a4d4f2332f77bdaf22fae89d31f7d9102681ce3cecb97b59a6095f7516d"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "0c1fe39e0c4b4516d94abc0a993bd93c68cd8a2e4a4d37e3c5788275003dd9ec"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "1e1dc86c91794fcd51e3fb82701f36aaa5ff54c1b1c6c235aeb4597d5e2eb2b6"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "31855efdc7eb6a646e549a9e434bb9dfe7a2908e7e6753683c78b1620b25286a"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "56650680c50e807f0c5f58fed0045b6fd7a67cc4b10a0e747561e73eed01feab"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "638f011b11b4cfca6c09c05d6cecfb0dd9e1b21168afa4b330df6607ff37a83c"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "9350a3a29a881a12da63bb52654a43d0d241e10f400bafba09b613fcf3bfa533"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "a42a8a1967cde81e6427b39f489de3736bef6e3204e18a26ea34fe3e93bdb4ee"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "b20b52f08d06526e9fe7b2971cde4dc63bf226acadb03f6f621c230813eaee0a"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "bbc65033ec236c0fb21f8574c1eeec4b05b24ae43f24d7d02a266ff5862b5902"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "ca73024c2f967696a1355c3a7933f1fc39a4e7c3ae8ac1005f0e902bb9943c0b"
+  },
+  {
+    "name": "vite",
+    "version": "8.3.0",
+    "digest": "e9d649379d04740d33e69b32eccd153e01323b25eb08e37795615ec2079773dd"
+  },
+  {
+    "name": "vite-plugin-pwa",
+    "version": "1.3.0",
+    "digest": "4269ff05dacdd5e2927da738eae66bdd68f9eea40ee20e86af262611a7898d0c"
+  },
+  {
+    "name": "vite-plugin-pwa",
+    "version": "1.3.0",
+    "digest": "6d569f4c2b893eab58abb64105bbd96f3eca317d111e1d16fce7f918315bedff"
+  },
+  {
+    "name": "vite-plugin-pwa",
+    "version": "1.3.0",
+    "digest": "ca5ce9998b1b16d43776e9ebda302a62cbe8e75e03c6832e9cff21000e433fe1"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "2.11.14",
+    "digest": "e1023d635e73d503129aac055fd6708a9f4baad7732217bafaa450c1635e541d"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "1f49c5ebad5798330df748ae714cf779f02e95d0271fb02de8c23729ff5e57c8"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "25f532ee75236bfd6536bd810feb12c5fc756da5d2b37915e792dfba37caf97d"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "287fa4d1543ef3f1f22cbd23f67d06edc844956643e559bfb1fec77b7af99a8e"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "2e40a23a262802db933ca5d08e2b070cd3680695be659d2fa76fa4968dae77bd"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "426604d818b75ab95c47dbb981fb21a2d55c54bd8e0967a3271cb502247b8815"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "604c6d6d23552ff5c5783253a4b92c43e5db4814bf67ae9a201bc5189263d708"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "a3d870559b239bb4b6f452ed6f9714fde1132c752af4df970fb361b7ff8ad212"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "c1b12b642b57006b3b74f359cb59b7ac3da8cd76a594bee0f133d25c946cf808"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "d86a1a776282822f6891cfa7f869e0e3523f48843a07e4672c908b429657057b"
+  },
+  {
+    "name": "vite-plugin-solid",
+    "version": "3.0.0-next.5",
+    "digest": "77e89c29493a81a3906a6d8b8f60a918dfb8ccf59d0d53d520ab7212cc802e83"
+  },
+  {
+    "name": "vite-plugin-solid-svg",
+    "version": "0.8.1",
+    "digest": "28ed51300d83e9782369b7fe7d78b755d5296290abe4d1735e9910f5b28ea8a0"
+  },
+  {
+    "name": "vite-plugin-solid-svg",
+    "version": "0.8.1",
+    "digest": "cf96d9723e65fd07eea4f3371b5219a3b080ab4d430badfaacb21572e5cc2911"
+  },
+  {
+    "name": "vite-tsconfig-paths",
+    "version": "6.1.1",
+    "digest": "438976d7e7030cc127bc308fc83b033e29400b79d60d7e428cfa9fc65a77e365"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.10",
+    "digest": "2fa0af4932e01861e2440635921c1039ffe3af2fe888da60fec75730e1611efa"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.10",
+    "digest": "9504083f9f0481631113f69ba91877f5bc55bcea3ec41f717fbfd0c7e595a1c5"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.10",
+    "digest": "9fcd86b296fa9fadc4a760c2b53c2eb79a867f0563c19ee71fd555abac2b5fe5"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.11",
+    "digest": "3b0816a79776cc0e9f0e1b53c3fb196794b382701214aa06e4875b9ef38980a8"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.11",
+    "digest": "6b32713c3b4ee4bf9a402b67212a44291cc6ac4b6367fee1adf8158aaed3e2f7"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.11",
+    "digest": "7748d25819e1aa057a78b824e808a00fe91c759358804a6bc238a6bba3b5a850"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.11",
+    "digest": "7d4a7302659a0a986f36addab303694e690ffb469a3dd205cfeb35da34526042"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.11",
+    "digest": "9745e4c3f2af1fa29a5c25b99f0e185cabf249bf07eecd1ba31c2d0c2def9044"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.11",
+    "digest": "a8059833f468322c9668c8974a54dbabb167acc644af2726fd647eb5f92c9e8a"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.11",
+    "digest": "b73fceeca27925b9b9b3a6e29386f149e90f970543fe09388c07255b723d3ff5"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.11",
+    "digest": "c697f746bbeca83d233612ee989909fa6072e4681fd7b7049a8d9271c9f13760"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.6",
+    "digest": "ab2e22ea525a7c3a35b2dbde96b1f7e62f419f8b68fc22a15ad7bc9c14147db3"
+  },
+  {
+    "name": "vitest",
+    "version": "4.1.7",
+    "digest": "3b517f16a6d62d5d35cc9cf25c5c8ee818f73746f178d80edf0c62456674894f"
+  },
+  {
+    "name": "vitest",
+    "version": "5.0.0",
+    "digest": "2691f4fce211e2463778ad7f9e581f9444315f1bcad673a3f0531535baa10286"
+  },
+  {
+    "name": "vitest",
+    "version": "5.0.0",
+    "digest": "753e815a4915dc7cf28b1cfd6b84b75e28716b5b934a9636335e382e2e620f8c"
+  },
+  {
+    "name": "vitest",
+    "version": "5.0.0",
+    "digest": "7d284e7d669c57b1cf6283d5ec166196bdd72f96f6b7e4c618787ef1299f753a"
+  },
+  {
+    "name": "vitest",
+    "version": "5.0.0",
+    "digest": "c12151fda02c5c8ad790e3a9b19a1a29a5b4b8a9ffd9625581b0031848970ec2"
+  },
+  {
+    "name": "vitest",
+    "version": "5.0.0",
+    "digest": "c926d425b6ee9503fec3222e4b84d34eeb3ac1b0d143222dc2a0164aeb831a43"
+  },
+  {
+    "name": "vitest",
+    "version": "5.0.1",
+    "digest": "057603efd94837c62fa10a430ce6197f5aaf0aef3bff98eb1279e4e21e25fe7b"
+  },
+  {
+    "name": "vitest",
+    "version": "5.0.1",
+    "digest": "45c005949fdb634749feb45550153e513d6d0bfdad3422838549cb2866cc2721"
+  },
+  {
+    "name": "vitest",
+    "version": "5.0.1",
+    "digest": "53617d0c424268eb0d3356835353379126243c553e102f85a938b1987ad74559"
+  },
+  {
+    "name": "vitest",
+    "version": "5.0.1",
+    "digest": "bbfb581a1ac8bd77548c82965cbf13be4db4a43fd836c9d3109cba45643a7d21"
+  }
+]

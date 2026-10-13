@@ -1,0 +1,56 @@
+{
+  "@kobalte/solidbase/client|SolidBaseRoot": {
+    "projects": [
+      "kobalte__apps__docs"
+    ],
+    "sites": 1
+  },
+  "@kobalte/solidbase/default-theme/Layout.jsx|default": {
+    "projects": [
+      "kobalte__apps__docs"
+    ],
+    "sites": 1
+  },
+  "@kobalte/solidbase/default-theme/components/Footer.jsx|default": {
+    "projects": [
+      "kobalte__apps__docs"
+    ],
+    "sites": 1
+  },
+  "@kobalte/solidbase/default-theme/context.jsx|DefaultThemeComponentsProvider": {
+    "projects": [
+      "kobalte__apps__docs"
+    ],
+    "sites": 1
+  },
+  "@kobalte/solidbase/server|getHtmlProps": {
+    "projects": [
+      "kobalte__apps__docs"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/a11y|createFormControl": {
+    "projects": [
+      "kobalte__packages__core"
+    ],
+    "sites": 1
+  },
+  "@solid-primitives/keyboard|createShortcut": {
+    "projects": [
+      "kobalte__packages__core"
+    ],
+    "sites": 1
+  },
+  "@solidjs/start/router|FileRoutes": {
+    "projects": [
+      "kobalte__apps__docs"
+    ],
+    "sites": 1
+  },
+  "vite-plugin-solid|default": {
+    "projects": [
+      "kobalte__packages__core"
+    ],
+    "sites": 1
+  }
+}

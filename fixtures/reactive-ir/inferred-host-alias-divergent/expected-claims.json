@@ -1,0 +1,12 @@
+{
+  "status": "hand-stated, unrun; compare before recording snapshots",
+  "kind": "violation versus uncertifiable",
+  "browserSource": "src/helper.ts",
+  "browserViolation": false,
+  "certifyInferred": false,
+  "browserUpgrade": false,
+  "violations": [],
+  "noTarget": [
+    "All static imports must be loadable before module evaluation; unknown and provably-unloadable requests preserve baseline, including callees reached only through this module."
+  ]
+}

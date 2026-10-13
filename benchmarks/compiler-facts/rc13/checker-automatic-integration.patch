@@ -1,0 +1,2972 @@
+diff --git a/THIRD_PARTY_NOTICES.md b/THIRD_PARTY_NOTICES.md
+index a7137cd9a..1e9205786 100644
+--- a/THIRD_PARTY_NOTICES.md
++++ b/THIRD_PARTY_NOTICES.md
+@@ -6,11 +6,11 @@ whose original notices remain applicable.
+ ## Solid 2 compiler
+ 
+ - Upstream: https://github.com/solidjs/solid
+-- Upstream base: `a10cf1a147209d8da50697896742d2b1d4afad75`
+-- Consumed semantic-only fork: https://github.com/yumemi-thomas/solid
+-- Semantic implementation revision: `7f4e1135943c1fb01231d1bda707b4a1856a5607`
+-- Pinned distribution revision: `9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4`
+-- Fork branch: `solid-checker/compiler-facts-v3`
++- Upstream base: `5efaf260becb32293f2bcb4d32f8be72be6de674`
++- Consumed semantic-only fork: local RC.13 candidate, preserved in the saved Git bundle
++- Semantic implementation revision: `c04c48779812d3d87166da3741c625748458c62f`
++- Pinned distribution revision: `3ad4bbec37ae30f325a803cdb4271a71c86a2a2d`
++- Fork branch: `codex/compiler-facts-rc13` (local; unpublished)
+ - License: MIT
+ 
+ The `solidjs-compiler` crate under `packages/compiler` is consumed as a pinned
+diff --git a/docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json b/docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json
+index 55aa89b98..01117359e 100644
+--- a/docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json
++++ b/docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json
+@@ -1,74 +1,39 @@
+ {
+   "schemaVersion": 1,
+   "documentKind": "solid-compiler-semantic-facts-bootstrap-conformance",
+-  "capturedAt": "2026-08-27",
++  "capturedAt": "2026-10-03",
+   "upstream": {
+     "repository": "https://github.com/solidjs/solid",
+-    "revision": "a10cf1a147209d8da50697896742d2b1d4afad75",
++    "revision": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+     "branch": "next"
+   },
+   "fork": {
+-    "repository": "https://github.com/yumemi-thomas/solid",
+-    "revision": "1d81e67fd393d12c74b13aa7d3fb492f3d85353b",
+-    "branch": "solid-checker/compiler-facts-v2",
+-    "upstreamPullRequest": false,
+-    "scope": "semantic facts only"
++    "repository": "@COMPILER_REPOSITORY_URI@",
++    "revision": "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d",
++    "implementationRevision": "c04c48779812d3d87166da3741c625748458c62f",
++    "branch": "codex/compiler-facts-rc13",
++    "scope": "semantic facts only",
++    "upstreamPullRequest": false
+   },
+   "trace": {
+-    "version": 2,
+-    "baselineEntries": 358,
+-    "baselineBytes": 955562,
+-    "baselineSha256": "2f7f2b9a9d8a8cf3eb1d60a0cc35ee4a97142a9ff027fdcb2079f741ed00b92b",
++    "version": 3,
++    "baselineEntries": 365,
+     "independentlyGeneratedUpstreamBaselineMatched": true,
+     "javascriptSourceMapDiagnosticNeutrality": true
+   },
+   "checker": {
+     "dependency": "solidjs-compiler",
+-    "compilerFactsProtocol": 1,
+-    "findingsBefore": 558,
+-    "findingsAfter": 557,
+-    "reviewedFindingDelta": "one stale uncertifiable SC1001 removed because current Solid positively reports the source child as tracked",
+-    "otherFindingChanges": 0
++    "compilerFactsProtocol": 2,
++    "status": "passed local whole-checker make verify; development evidence"
+   },
+   "checks": {
+-    "compilerRustDefaultFeatures": "passed",
+-    "compilerRustNoDefaultFeatures": "passed",
+-    "compilerJavaScript": {
+-      "testFiles": 28,
+-      "tests": 3933,
++    "producerRust": "passed",
++    "producerJavaScript": {
++      "testFiles": 41,
++      "tests": 5938,
+       "status": "passed"
+     },
+-    "adapterSolid2": {
+-      "tests": 9,
+-      "status": "passed"
+-    },
+-    "adapterSolid1AndSelection": {
+-      "tests": 7,
+-      "status": "passed"
+-    },
+-    "contractProcess": {
+-      "tests": 57,
+-      "status": "passed"
+-    },
+-    "dialectProcess": {
+-      "tests": 37,
+-      "status": "passed"
+-    },
+-    "coverage": {
+-      "projects": 94,
+-      "findings": 557,
+-      "status": "passed"
+-    },
+-    "ownershipGate": {
+-      "cases": 289,
+-      "ledgerRows": 465,
+-      "pending": 0,
+-      "status": "passed"
+-    },
+-    "makeVerify": {
+-      "elapsedSeconds": 42.83,
+-      "status": "passed"
+-    }
++    "localChecker": "pending"
+   },
+   "knownInheritedGate": {
+     "command": "cargo clippy --manifest-path packages/compiler/Cargo.toml --no-default-features --all-targets --locked -- -D warnings",
+diff --git a/docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md b/docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md
+index a8a70ac3f..1a6ee3603 100644
+--- a/docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md
++++ b/docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md
+@@ -1,5 +1,12 @@
+ # Phase 4 completion report: compiler execution facts
+ 
++Local RC.13 integration overlay (2026-10-03): this isolated checkout reads
++upstream `5efaf260becb32293f2bcb4d32f8be72be6de674`, implementation
++`c04c48779812d3d87166da3741c625748458c62f` and distribution
++`3ad4bbec37ae30f325a803cdb4271a71c86a2a2d` from a local Git dependency. Its
++branch is `codex/compiler-facts-rc13`; no remote publication occurred. The
++historical prose below is not a new production-adoption certificate.
++
+ Date: 2026-08-27
+ 
+ ## Outcome
+@@ -13,10 +20,10 @@ request was opened against upstream Solid.
+ 
+ | Role | Identity |
+ | --- | --- |
+-| Official upstream base | `solidjs/solid@a10cf1a147209d8da50697896742d2b1d4afad75` |
++| Official upstream base | `solidjs/solid@5efaf260becb32293f2bcb4d32f8be72be6de674` |
+ | Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-v3` |
+-| Semantic implementation | `7f4e1135943c1fb01231d1bda707b4a1856a5607` |
+-| Identity-only distribution commit | `9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4` |
++| Semantic implementation | `c04c48779812d3d87166da3741c625748458c62f` |
++| Identity-only distribution commit | `3ad4bbec37ae30f325a803cdb4271a71c86a2a2d` |
+ | Solid 2 trace | version 3 |
+ | Checker compiler-facts | protocol 2 |
+ | Solid 1 producer | `yumemi-thomas/solid-1x-compiler@ca3bbfae7d1e00e28ef73f9af58bdb46e248b512`, trace 2 |
+diff --git a/docs/package-contract-v2/phase4/compiler-identity.json b/docs/package-contract-v2/phase4/compiler-identity.json
+index 61a1e11f8..6b08992ca 100644
+--- a/docs/package-contract-v2/phase4/compiler-identity.json
++++ b/docs/package-contract-v2/phase4/compiler-identity.json
+@@ -1,11 +1,11 @@
+ {
+   "format": 1,
+   "documentKind": "solid-checker-solid2-compiler-facts-identity",
+-  "repository": "https://github.com/yumemi-thomas/solid",
+-  "branch": "solid-checker/compiler-facts-v3",
+-  "upstreamRevision": "a10cf1a147209d8da50697896742d2b1d4afad75",
+-  "implementationRevision": "7f4e1135943c1fb01231d1bda707b4a1856a5607",
+-  "distributionRevision": "9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4",
++  "repository": "@COMPILER_REPOSITORY_URI@",
++  "branch": "codex/compiler-facts-rc13",
++  "upstreamRevision": "5efaf260becb32293f2bcb4d32f8be72be6de674",
++  "implementationRevision": "c04c48779812d3d87166da3741c625748458c62f",
++  "distributionRevision": "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d",
+   "semanticTraceVersion": 3,
+   "compilerFactsProtocol": 2
+ }
+diff --git a/docs/precision-backlog.md b/docs/precision-backlog.md
+index 070a23cdd..b7bc80d81 100644
+--- a/docs/precision-backlog.md
++++ b/docs/precision-backlog.md
+@@ -1,5 +1,29 @@
+ # Precision backlog
+ 
++## First development-feedback implementation (2026-10-03)
++
++The CLI now runs native analysis and admits input-bound development captures.
++Proven findings, native gaps and recorded observations have separate fields;
++untracked reads stay informational because reactive intent remains open.
++TypeScript errors suppress additional capture guidance. Eighteen focused tests
++cover capture admission, stale inputs, event grouping and native result/status
++preservation. Browser collection and package source inference remain unported.
++
++Eight real published-typing applications expose a lost uncertainty fact in
++SC5001: unknown pending-handler callbacks were classified as proven throws.
++AsyncRead now preserves callee callback timing, and native isPending accessor
++probes suppress the strict pending-read guard. The fixture distinguishes two
++open callbacks, four proven reads, namespace/native probes and shadowing;
++all new cases pass the published rc.9 types. Reanalysis changes eight claimed
++violations into native gaps, with zero typing errors and eight informational
++observations. This is not an improvement to the historical warning selector's
++target/control accuracy. See [development feedback](development-feedback.md).
++
++The RC.13 candidate passes whole-checker verification in a local integration
++checkout. Production compiler Git pins and the runtime package audit remain
++unchanged. The obsolete keygen fixture case now lives in a separate rejection
++regression against both the candidate and the actual published RC.13 compiler.
++
+ ## Fresh fixed structural return proof (2026-09-30)
+ 
+ Status: **implemented, source verified, tier authenticated and checkpoint
+diff --git a/docs/rules/pending-async-unsuspendable-read.md b/docs/rules/pending-async-unsuspendable-read.md
+index 611d15abb..6ef9fe170 100644
+--- a/docs/rules/pending-async-unsuspendable-read.md
++++ b/docs/rules/pending-async-unsuspendable-read.md
+@@ -28,6 +28,25 @@ body's strict-read window it throws `PENDING_ASYNC_UNTRACKED_READ` in dev, and
+ invoked later it throws a plain `NotReadyError` (probed on rc.3 and rc.9), and
+ the checker does not prove which.
+ 
++A callback stored by assignment inside a component also has an open invocation
++context. Lexical nesting alone does not prove it runs during the component's
++strict-read window. These reads are uncertifiable; their wording does not
++assert a runtime exception. Retained local callbacks remain negative controls.
++
++The same uncertainty applies when a project or unknown external helper receives
++the callback. Unless its exact body or an accepted contract proves invocation
++during the call, the checker cannot prove the callback runs in the lexical
++scope or leaves pending values unhandled. Such results are uncertifiable and
++their wording identifies the open callback context. Exact cross-file and
++namespace helpers that invoke the parameter directly retain the violation.
++
++Native `isPending(() => accessor())` suppresses the strict pending-accessor
++safeguard, so it has no `SC5001` error. This exemption resolves the exact
++primitive and its direct callback: shadowed functions do not inherit it.
++Subscription findings retain their own facts, and an ordinary `NotReadyError`
++may still propagate as graph suspension. Store proxy reads follow a different
++runtime path and do not inherit this accessor exemption.
++
+ ## Examples
+ 
+ Incorrect:
+diff --git a/fixtures/findings-snapshots/reactive-ir__callee-callback-timing.json b/fixtures/findings-snapshots/reactive-ir__callee-callback-timing.json
+index 5e676d54b..0e8919450 100644
+--- a/fixtures/findings-snapshots/reactive-ir__callee-callback-timing.json
++++ b/fixtures/findings-snapshots/reactive-ir__callee-callback-timing.json
+@@ -91,6 +91,96 @@
+       "end": 2578,
+       "fixes": 0
+     },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "uncertifiable",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 387,
++      "end": 395,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "uncertifiable",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 564,
++      "end": 572,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "violation",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 727,
++      "end": 735,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "violation",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 905,
++      "end": 913,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "violation",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 988,
++      "end": 996,
++      "fixes": 0
++    },
++    {
++      "rule": "strict-read-untracked",
++      "code": "SC1001",
++      "kind": "violation",
++      "severity": "warning",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 1174,
++      "end": 1182,
++      "fixes": 0
++    },
++    {
++      "rule": "strict-read-untracked",
++      "code": "SC1001",
++      "kind": "violation",
++      "severity": "warning",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 1246,
++      "end": 1254,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "violation",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 1487,
++      "end": 1495,
++      "fixes": 0
++    },
++    {
++      "rule": "pending-async-unsuspendable-read",
++      "code": "SC5001",
++      "kind": "uncertifiable",
++      "severity": "error",
++      "path": "fixtures/reactive-ir/callee-callback-timing/Async.tsx",
++      "start": 1735,
++      "end": 1743,
++      "fixes": 0
++    },
+     {
+       "rule": "strict-read-untracked",
+       "code": "SC1001",
+diff --git a/fixtures/findings-snapshots/reactive-ir__jsx-void-child-divergence-solid-2.json b/fixtures/findings-snapshots/reactive-ir__jsx-void-child-divergence-solid-2.json
+index d3f9bbdab..c67f13718 100644
+--- a/fixtures/findings-snapshots/reactive-ir__jsx-void-child-divergence-solid-2.json
++++ b/fixtures/findings-snapshots/reactive-ir__jsx-void-child-divergence-solid-2.json
+@@ -7,8 +7,8 @@
+       "kind": "violation",
+       "severity": "warning",
+       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx",
+-      "start": 2497,
+-      "end": 2506,
++      "start": 2312,
++      "end": 2321,
+       "fixes": 0,
+       "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
+       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component."
+diff --git a/fixtures/reactive-ir/callee-callback-timing/README.md b/fixtures/reactive-ir/callee-callback-timing/README.md
+index b2a17c5aa..404a48452 100644
+--- a/fixtures/reactive-ir/callee-callback-timing/README.md
++++ b/fixtures/reactive-ir/callee-callback-timing/README.md
+@@ -44,7 +44,32 @@ with `render(() => createComponent(...))`:
+ Remaining approximations: a literal stored in a local array or object
+ (`const arr = [() => n()]`, `const obj = { f: () => n() }`) is not an argument
+ and keeps its lexical role; writes in such literals keep theirs too (the flag is
+-a read hole), and so do pending async reads (`SC5001`).
++a read hole).
++
++`Async.tsx` pins the same invocation uncertainty for pending reads (`SC5001`):
++an unknown member's pending handler and a deferred cross-file callback are
++uncertifiable. A component-body read and callbacks invoked by the exact
++cross-file/namespace helper remain violations. Native `isPending`, including a
++namespace import, has no pending-read error; a shadowed local function with
++the same name remains a violation. Subscription rules retain their own facts.
++The pending-read wording must identify the unproven callback context and must
++not assert a runtime exception. The added memo overload and probe signature
++come from the published rc.9 declarations; these cases pass no memo options.
++The new async cases and cross-file helpers pass TypeScript 5.9.3 with the real
++audited `solid-js`, signals and web rc.9 installs (`strict`, `noEmit`,
++`skipLibCheck`, and the published JSX runtime declarations): zero errors.
++
++An assignment of a pending-reading callback to an object member now carries
++an explicit invocation-context hole. Its lexical placement in a component
++does not prove execution during the strict-read window. A retained local
++callback is a negative control with no proven pending exception. This fixes
++the ordinary button-handler overclaim found by live browser execution;
++the pending exception from an explicitly created component remains observable.
++
++With `--feedback-facts`, native development models identify the exact memo
++callback through direct and namespace imports and bind every file to its
++source digest. `Feedback.ts` checks that a parameter named `createMemo` supplies
++no derived origin. These models are instrumentation inputs, not findings.
+ 
+ **Stub.** `solid-js.d.ts` holds `createSignal` verbatim from the rc.9 typings,
+ as its header lists. `App.tsx` and `helpers.ts` type-check cleanly against the
+diff --git a/fixtures/reactive-ir/callee-callback-timing/solid-js.d.ts b/fixtures/reactive-ir/callee-callback-timing/solid-js.d.ts
+index 567aaeff5..8500d62cf 100644
+--- a/fixtures/reactive-ir/callee-callback-timing/solid-js.d.ts
++++ b/fixtures/reactive-ir/callee-callback-timing/solid-js.d.ts
+@@ -36,4 +36,20 @@ declare module "solid-js" {
+     unobserved?: () => void;
+   }
+   export function createSignal<T>(value: Exclude<T, Function>, options?: SignalOptions<T>): Signal<T>;
++  // rc.9 signals.d.ts: the overload without a required loadingValue. These
++  // cases pass no options; the omitted overload cannot affect their claims.
++  export type NoInfer<T extends any> = [T][T extends any ? 0 : never];
++  export type ComputeFunction<Prev, Next extends Prev = Prev> = (v: Prev) => PromiseLike<Next> | AsyncIterable<Next> | Next;
++  export interface MemoOptions<T> {
++    id?: string;
++    name?: string;
++    transparent?: boolean;
++    equals?: false | ((prev: T, next: T) => boolean);
++    unobserved?: () => void;
++    lazy?: boolean;
++    sync?: boolean;
++    loadingValue?: T;
++  }
++  export function createMemo<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, options?: MemoOptions<T>): SourceAccessor<T>;
++  export function isPending(fn: () => any): boolean;
+ }
+diff --git a/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx b/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx
+index a9d9651cb..3b2469d77 100644
+--- a/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx
++++ b/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/App.tsx
+@@ -35,14 +35,8 @@ function NestedNoscriptOffTheFastPath() {
+   return <div><noscript id={tag()}>{body()}</noscript></div>;
+ }
+ 
+-// Dialect-specific controls. Solid 1.x treats these legacy tags as void and
+-// reports their child lists discarded; Solid 2 treats them as non-void and
+-// reports their reads tracked. Both outcomes are certified and silent.
+-function NestedKeygenChild() {
+-  const [keyed] = createSignal(0);
+-  return <div><keygen>{keyed()}</keygen></div>;
+-}
+-
++// RC.13 accepts menuitem as ordinary child-bearing markup. Its HTML validator
++// rejects keygen markup; the separate compiler refusal regression covers it.
+ function RootMenuitemChild() {
+   const [item] = createSignal(0);
+   return <menuitem>{item()}</menuitem>;
+@@ -81,7 +75,6 @@ export function Root() {
+       <AdjacentTrackedChildStaysCertified />
+       <RootNoscriptChild />
+       <NestedNoscriptOffTheFastPath />
+-      <NestedKeygenChild />
+       <RootMenuitemChild />
+       <ShadowedJsxValuedChildrenReconciles />
+     </div>
+diff --git a/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/README.md b/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/README.md
+index e1c687c96..6b8c781e5 100644
+--- a/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/README.md
++++ b/fixtures/reactive-ir/jsx-void-child-divergence-solid-2/README.md
+@@ -1,16 +1,17 @@
+ # JSX discarded-child coverage — Solid 2
+ 
+-This fixture revalidates discarded child-content behavior at
+-`dom-expressions#next`
+-`26e744fb4feb973a3652bfc45a8c3938ece667f0`.
++This local integration fixture revalidates discarded child-content behavior at
++published Solid RC.13 `5efaf260becb32293f2bcb4d32f8be72be6de674`.
+ 
+-Its source is byte-identical to the Solid 1.x sibling. Ordinary HTML void and
++Ordinary HTML void and
+ `<noscript>` child expressions are not checker-maintained transform
+ divergences at this pin. Template-root void child lists are explicit discarded
+ regions; nested void children remain live under Ryan's authoritative `next`
+ semantics and are tracked. A surviving source expression with no execution
+ entry remains an ordinary census gap.
+ 
+-Unlike Solid 1.x, Solid 2 has no parity-target-only void tags. `<keygen>` and
+-`<menuitem>` children are therefore certified from the producer trace and
+-remain silent. The module-scope cleanup is the proven missing-owner control.
++`<menuitem>` children are classified from the producer trace and remain silent.
++RC.13 rejects the removed `<keygen>` case as malformed HTML, so it cannot be
++included in a fixture whose claim requires successful compiler facts. The
++separate compiler-refusal check preserves that boundary. The module-scope
++cleanup is the proven missing-owner control.
+diff --git a/packages/cli/README.md b/packages/cli/README.md
+index 21f237b23..052055cc1 100644
+--- a/packages/cli/README.md
++++ b/packages/cli/README.md
+@@ -12,6 +12,37 @@ bun add --dev solid-checker
+ 
+ Then run `solid-checker --certify`.
+ 
++## Development feedback
++
++The experimental feedback command combines native findings with recorded
++application observations:
++
++```sh
++solid-checker feedback --project tsconfig.json
++solid-checker feedback manifest --project tsconfig.json > capture.json
++solid-checker feedback --project tsconfig.json --capture capture.json
++solid-checker feedback run --project tsconfig.json --scenario scenario.json --browser /absolute/path/chromium
++```
++
++The manifest starts an input-bound capture. A collector fills its `events` and
++`runtimeInputs` before the final command. Source, configuration, resolution and
++runtime changes refuse stale captures. Native findings keep their original
++violation/uncertifiable classification; recorded untracked reads are information
++because snapshot intent is open. Runtime exceptions and failed application
++assertions can be supplied as separate observations. `feedback run` now collects
++live native read observations and conditional automatic warnings from native
++source models. Scenarios can contain interactions without assertions or
++comparison code. Discarded reads, competing returns and unresolved result
++relevance stay open. The automatic notes do not prove stale output or intent.
++The command also executes supplied browser assertions. Add
++`--compare-project /absolute/path/comparison/tsconfig.json` to measure the same
++assertions in a separate checkout: failed assertions that pass there receive
++informational debugging guidance; passing originals stay quiet. The collector
++uses a reviewed RC.9 native-reader profile. Automatic source proposals and
++package behavior inference remain unavailable.
++
++See [the capture format and current limits](../../docs/development-feedback.md).
++
+ Library maintainers can generate an unaccepted stable-v1 proposal from one
+ exact installed package without writing semantic JSON:
+ 
+diff --git a/packages/cli/bin/solid-checker.mjs b/packages/cli/bin/solid-checker.mjs
+index 86626a2b3..c6d6d85b9 100755
+--- a/packages/cli/bin/solid-checker.mjs
++++ b/packages/cli/bin/solid-checker.mjs
+@@ -2,7 +2,15 @@
+ 
+ import { launch, runNative } from "./launcher.mjs";
+ 
+-if (process.argv[2] === "contract") {
++if (process.argv[2] === "feedback") {
++  try {
++    const { developmentFeedback } = await import("../scripts/development-feedback.mjs");
++    await developmentFeedback(process.argv.slice(3));
++  } catch (error) {
++    console.error(`solid-checker: ${error instanceof Error ? error.message : error}`);
++    process.exitCode = 2;
++  }
++} else if (process.argv[2] === "contract") {
+   try {
+     const { generatePackageContract, packageContractHelp } = await import(
+       "../scripts/generate-package-contract.mjs"
+diff --git a/rust/Cargo.lock b/rust/Cargo.lock
+index 1b73afa68..4a3120f55 100644
+--- a/rust/Cargo.lock
++++ b/rust/Cargo.lock
+@@ -1696,7 +1696,7 @@ dependencies = [
+ [[package]]
+ name = "solidjs-compiler"
+ version = "0.0.0"
+-source = "git+https://github.com/yumemi-thomas/solid?rev=9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4#9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4"
++source = "git+@COMPILER_REPOSITORY_URI@?rev=3ad4bbec37ae30f325a803cdb4271a71c86a2a2d#3ad4bbec37ae30f325a803cdb4271a71c86a2a2d"
+ dependencies = [
+  "html5ever",
+  "htmlize",
+diff --git a/rust/Cargo.toml b/rust/Cargo.toml
+index 8830c7284..fa785401a 100644
+--- a/rust/Cargo.toml
++++ b/rust/Cargo.toml
+@@ -28,13 +28,13 @@ rust-version = "1.97"
+ [workspace.dependencies]
+ # Solid 2 compiler facts come from the semantic-only fork of the compiler now
+ # owned by solidjs/solid. This exact fork commit is based on upstream `next` at
+-# `a10cf1a1` and adds only trace models, output-neutral recording hooks,
+-# validation/serialization, and fact tests. Its 358-entry generated-output
++# `5efaf260` and adds only trace models, output-neutral recording hooks,
++# validation/serialization, and fact tests. Its 365-entry generated-output
+ # baseline is byte-identical to that exact upstream base. No upstream PR is
+ # opened for this fork; compiler behavior fixes remain outside this branch.
+ # The producer carries `SEMANTIC_TRACE_VERSION = 3`; the adapter has an
+ # independent literal and const assertion so an incompatible pin cannot build.
+-solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4", default-features = false }
++solidjs-compiler = { git = "@COMPILER_REPOSITORY_URI@", rev = "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d", default-features = false }
+ # Moved from `3296ec8` for the signature-less `Function`-supertype answer
+ # (producer ADR 0021): wire table schema 15, handshake protocol still 2.
+ # `Callability::UntypedCallable` is positive runtime-function evidence without
+diff --git a/rust/crates/solid-dialect/src/lib.rs b/rust/crates/solid-dialect/src/lib.rs
+index 352f3be7a..bdfafdb3b 100644
+--- a/rust/crates/solid-dialect/src/lib.rs
++++ b/rust/crates/solid-dialect/src/lib.rs
+@@ -1981,6 +1981,14 @@ pub trait Dialect: Sync {
+     /// and stop reporting reads inside it.
+     fn runs_callback_deferred(&self, primitive: Primitive) -> bool;
+ 
++    /// Whether this callback suppresses the strict pending-accessor safeguard.
++    /// Ordinary NotReadyError can still propagate as graph suspension. This
++    /// says nothing about store proxy reads or subscription: their runtime
++    /// paths can differ.
++    fn callback_handles_pending_accessor_read(&self, _primitive: Primitive, _index: usize) -> bool {
++        false
++    }
++
+     /// Whether this primitive clears tracking around a callback it nonetheless
+     /// runs **before its own call returns**.
+     ///
+diff --git a/rust/crates/solid-dialect/src/solid_2.rs b/rust/crates/solid-dialect/src/solid_2.rs
+index 70da7a313..55fa1dfa5 100644
+--- a/rust/crates/solid-dialect/src/solid_2.rs
++++ b/rust/crates/solid-dialect/src/solid_2.rs
+@@ -4782,6 +4782,13 @@ static NEGATIVE_AUTHORITY: DialectNegativeAuthority = DialectNegativeAuthority {
+ };
+ 
+ impl Dialect for Solid2 {
++    // rc.9 dev-shared.js core read() explicitly excludes pendingCheckActive
++    // from the strict pending-read safeguard; verdict.isPending supplies it.
++    // Store proxy traps have a different guard, so this is accessor-only.
++    fn callback_handles_pending_accessor_read(&self, primitive: Primitive, index: usize) -> bool {
++        primitive == Primitive::IsPending && index == 0
++    }
++
+     fn version(&self) -> Version {
+         Version::V2
+     }
+diff --git a/rust/crates/solid-facts-backend/src/daemon.rs b/rust/crates/solid-facts-backend/src/daemon.rs
+index 2fec46ab1..2509eaddc 100644
+--- a/rust/crates/solid-facts-backend/src/daemon.rs
++++ b/rust/crates/solid-facts-backend/src/daemon.rs
+@@ -651,6 +651,7 @@ fn answer(
+             presets: &check.presets,
+             rules: &check.enable_rules,
+             runtime: check.runtime.clone(),
++            feedback_facts: false,
+         },
+     )?;
+     state
+@@ -714,6 +715,7 @@ fn answer(
+                 presets: &check.presets,
+                 rules: &check.enable_rules,
+                 runtime: check.runtime.clone(),
++                feedback_facts: false,
+             },
+         )?
+         .0;
+diff --git a/rust/crates/solid-facts-backend/src/diagnostics.rs b/rust/crates/solid-facts-backend/src/diagnostics.rs
+index 1502d755d..7183c01a6 100644
+--- a/rust/crates/solid-facts-backend/src/diagnostics.rs
++++ b/rust/crates/solid-facts-backend/src/diagnostics.rs
+@@ -20,6 +20,8 @@ use crate::{BackendError, SemanticDemandOptions, SourceFile};
+ #[derive(Clone, Debug, Deserialize, Serialize)]
+ #[serde(rename_all = "camelCase")]
+ pub struct Snapshot {
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
++    pub feedback_facts: Vec<solid_reactive_ir::DevelopmentFile>,
+     pub status: String,
+     pub findings: Vec<SnapshotFinding>,
+     pub package_summaries: Vec<PackageSummary>,
+@@ -128,6 +130,7 @@ pub struct RequestedRuleEnablement<'a> {
+     pub presets: &'a [String],
+     pub rules: &'a [String],
+     pub runtime: RuntimeEnvironment,
++    pub feedback_facts: bool,
+ }
+ 
+ #[derive(Clone, Debug, Eq, PartialEq)]
+@@ -217,6 +220,7 @@ impl DiagnosticSession {
+             .validate()
+             .map_err(BackendError::Contract)?;
+         rule_options.runtime = enablement.runtime;
++        rule_options.development_feedback = enablement.feedback_facts;
+         // Scoped to this generation's facts: a gap about named exports is due
+         // only where the project reaches one (`release_scope`), so the answer
+         // moves with the sources as well as the install.
+@@ -259,12 +263,13 @@ impl DiagnosticSession {
+             findings.push(unaudited_release_finding(notice));
+         }
+         let metrics = analysis_metrics(facts, &program, contracts);
+-        let snapshot = snapshot_with_package_summaries(
++        let mut snapshot = snapshot_with_package_summaries(
+             sources,
+             accepted_package_summaries(facts, contracts),
+             metrics,
+             findings,
+         );
++        snapshot.feedback_facts = program.development_feedback.clone();
+         let analysis = Arc::new(DiagnosticAnalysis { program, snapshot });
+         self.retained = Some(RetainedDiagnostic {
+             identity,
+@@ -573,6 +578,7 @@ pub fn unsupported_runtime_snapshot(
+         ),
+     };
+     Snapshot {
++        feedback_facts: Vec::new(),
+         status: "uncertifiable".into(),
+         findings: vec![SnapshotFinding {
+             id: dialect::UNSUPPORTED_RUNTIME_CODE.into(),
+@@ -680,6 +686,7 @@ fn snapshot_with_package_summaries(
+         })
+         .collect();
+     Snapshot {
++        feedback_facts: Vec::new(),
+         status: status.into(),
+         findings,
+         package_summaries,
+@@ -4480,6 +4487,7 @@ mod tests {
+                     presets: &["preferences".into()],
+                     rules: &[],
+                     runtime: RuntimeEnvironment::default(),
++                    feedback_facts: false,
+                 },
+             )
+             .unwrap();
+@@ -4493,6 +4501,7 @@ mod tests {
+                     presets: &["preferences".into(), "preferences".into()],
+                     rules: &[],
+                     runtime: RuntimeEnvironment::default(),
++                    feedback_facts: false,
+                 },
+             )
+             .unwrap();
+@@ -4506,6 +4515,7 @@ mod tests {
+                     presets: &[],
+                     rules: &["prefer-show".into()],
+                     runtime: RuntimeEnvironment::default(),
++                    feedback_facts: false,
+                 },
+             )
+             .unwrap();
+diff --git a/rust/crates/solid-facts-backend/src/dialect.rs b/rust/crates/solid-facts-backend/src/dialect.rs
+index e39c702eb..6ce1e835d 100644
+--- a/rust/crates/solid-facts-backend/src/dialect.rs
++++ b/rust/crates/solid-facts-backend/src/dialect.rs
+@@ -1127,6 +1127,8 @@ mod tests {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
++                invocation_context_unproven: false,
+             }],
+             static_defects: defect_kinds
+                 .into_iter()
+diff --git a/rust/crates/solid-facts-backend/src/main.rs b/rust/crates/solid-facts-backend/src/main.rs
+index dfa9da579..756ed653f 100644
+--- a/rust/crates/solid-facts-backend/src/main.rs
++++ b/rust/crates/solid-facts-backend/src/main.rs
+@@ -64,6 +64,8 @@ struct Request {
+     #[serde(default)]
+     certify: bool,
+     #[serde(default)]
++    feedback_facts: bool,
++    #[serde(default)]
+     check_contracts: bool,
+     /// Whether the contracts compiled into this checker may be applied to this
+     /// project. On by default: a project that installed the exact artifact one
+@@ -3509,6 +3511,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
+         presets: &request.presets,
+         rules: &request.enable_rules,
+         runtime: request.runtime.clone(),
++        feedback_facts: request.feedback_facts,
+     };
+     let mut semantic_demand_options = if diagnostics {
+         semantic_demand_options_for_enablement(
+@@ -4203,6 +4206,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
+     let mut enable_rules = Vec::new();
+     let mut format = "default".to_owned();
+     let mut certify = false;
++    let mut feedback_facts = false;
+     let mut check_contracts = false;
+     let mut bundled_contracts = true;
+     let mut validate_contract_paths = Vec::new();
+@@ -4459,6 +4463,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
+             }
+             "--format" => format = args.next().ok_or("--format needs a value")?,
+             "--certify" => certify = true,
++            "--feedback-facts" => feedback_facts = true,
+             "--check-contracts" => check_contracts = true,
+             "--no-bundled-contracts" => bundled_contracts = false,
+             "--serve" => serve = true,
+@@ -4647,6 +4652,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
+         enable_rules,
+         format,
+         certify,
++        feedback_facts,
+         check_contracts,
+         bundled_contracts,
+         validate_contract_paths,
+diff --git a/rust/crates/solid-facts-backend/src/snapshot_emission.rs b/rust/crates/solid-facts-backend/src/snapshot_emission.rs
+index 71d446fe5..8d19d0624 100644
+--- a/rust/crates/solid-facts-backend/src/snapshot_emission.rs
++++ b/rust/crates/solid-facts-backend/src/snapshot_emission.rs
+@@ -206,6 +206,7 @@ mod tests {
+ 
+     fn snapshot(status: &str) -> Snapshot {
+         Snapshot {
++            feedback_facts: Vec::new(),
+             status: status.into(),
+             findings: Vec::new(),
+             package_summaries: Vec::new(),
+diff --git a/rust/crates/solid-facts-backend/tests/contract_interface.rs b/rust/crates/solid-facts-backend/tests/contract_interface.rs
+index aa7c323bf..5c4b42fb2 100644
+--- a/rust/crates/solid-facts-backend/tests/contract_interface.rs
++++ b/rust/crates/solid-facts-backend/tests/contract_interface.rs
+@@ -305,11 +305,11 @@ fn compiler_certification_child_binds_the_live_pid_request_and_materialized_outp
+         assert_eq!(response["nonce"], nonce);
+         assert_eq!(
+             response["compilerIdentity"],
+-            "solid-v2:trace3:7f4e1135943c1fb01231d1bda707b4a1856a5607"
++            "solid-v2:trace3:c04c48779812d3d87166da3741c625748458c62f"
+         );
+         assert_eq!(
+             response["compilerSourceManifestSha256"],
+-            "sha256:613049ba60fa514c662bd9350adb4b0ed9c3031e4f80f2bd1ecb23d56846fde0"
++            "sha256:35f4874f646f9482d0549fdf052f0d37bd02ec47b5c024d5732b6d9796423a9a"
+         );
+         let map: ExecutionMap = serde_json::from_value(response["executionMap"].clone()).unwrap();
+         assert!(map.semantic_model.source_operations_complete);
+diff --git a/rust/crates/solid-facts-backend/tests/diagnostics_process.rs b/rust/crates/solid-facts-backend/tests/diagnostics_process.rs
+index 0e0656fd7..0d7938044 100644
+--- a/rust/crates/solid-facts-backend/tests/diagnostics_process.rs
++++ b/rust/crates/solid-facts-backend/tests/diagnostics_process.rs
+@@ -424,6 +424,117 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
+     );
+ }
+ 
++#[test]
++fn pending_callback_reads_preserve_callee_invocation_uncertainty() {
++    let Some(findings) = diagnostic_fixture("callee-callback-timing") else {
++        return;
++    };
++    let pending = findings_for_rule(&findings, "pending-async-unsuspendable-read");
++    assert_eq!(pending.len(), 7, "{pending:#?}");
++    assert_eq!(
++        pending
++            .iter()
++            .filter(|finding| finding["kind"] == "violation")
++            .count(),
++        4,
++        "{pending:#?}"
++    );
++    let open = pending
++        .iter()
++        .filter(|finding| finding["kind"] == "uncertifiable")
++        .collect::<Vec<_>>();
++    assert_eq!(open.len(), 3, "{pending:#?}");
++    assert!(
++        open.iter().all(|finding| {
++            finding["message"].as_str().is_some_and(|message| {
++                (message.contains("pending handling are unproven")
++                    || message.contains("strict-read window is unproven"))
++                    && !message.contains("throws PENDING_ASYNC_UNTRACKED_READ")
++            })
++        }),
++        "{open:#?}"
++    );
++}
++
++#[test]
++fn development_models_bind_exact_sources_and_primitive_symbols() {
++    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
++        return;
++    };
++    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
++    let fixture = root.join("fixtures/reactive-ir/callee-callback-timing");
++    let output = std::process::Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
++        .env("SOLID_TYPEFACTS_BIN", typefacts)
++        .args(["--format", "json", "--feedback-facts", "--project"])
++        .arg(fixture.join("tsconfig.json"))
++        .output()
++        .expect("run development model analysis");
++    assert!(
++        output.status.success(),
++        "{}",
++        String::from_utf8_lossy(&output.stderr)
++    );
++    let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
++    let models = snapshot["feedbackFacts"]
++        .as_array()
++        .expect("requested source models");
++    let source = models
++        .iter()
++        .find(|model| model["path"].as_str().unwrap().ends_with("/Async.tsx"))
++        .unwrap();
++    let text = std::fs::read_to_string(fixture.join("Async.tsx")).unwrap();
++    assert_eq!(
++        source["sourceSha256"],
++        solid_facts::core::SourceHash::of(&text).to_string()
++    );
++    let origins = source["functions"]
++        .as_array()
++        .unwrap()
++        .iter()
++        .filter(|function| !function["derivedOrigin"].is_null())
++        .collect::<Vec<_>>();
++    assert_eq!(origins.len(), 8, "{origins:#?}");
++    for function in origins {
++        let origin = &function["derivedOrigin"];
++        let call = &text
++            [origin["start"].as_u64().unwrap() as usize..origin["end"].as_u64().unwrap() as usize];
++        assert!(
++            call.starts_with("createMemo(") || call.starts_with("Solid.createMemo("),
++            "{call}"
++        );
++        assert_eq!(function["asynchronous"], true);
++    }
++    let shadowed = models
++        .iter()
++        .find(|model| model["path"].as_str().unwrap().ends_with("/Feedback.ts"))
++        .unwrap();
++    assert!(
++        shadowed["functions"]
++            .as_array()
++            .unwrap()
++            .iter()
++            .all(|function| function["derivedOrigin"].is_null())
++    );
++    let text = std::fs::read_to_string(fixture.join("Feedback.ts")).unwrap();
++    for (name, expected) in [("discarded", "open"), ("used", "return-expression")] {
++        let child = shadowed["functions"]
++            .as_array()
++            .unwrap()
++            .iter()
++            .find(|function| {
++                let parent = &function["parent"];
++                parent["start"]
++                    .as_u64()
++                    .zip(parent["end"].as_u64())
++                    .is_some_and(|(start, end)| {
++                        text[start as usize..end as usize].starts_with(&format!("function {name}("))
++                    })
++            })
++            .unwrap();
++        assert_eq!(child["allocationRelevance"], expected);
++    }
++}
++
+ #[test]
+ fn ssr_client_hole_distinguishes_proven_and_unresolved_server_rendering() {
+     let Some(findings) = diagnostic_fixture("ssr-client-boundary") else {
+diff --git a/rust/crates/solid-reactive-ir/src/execution_role.rs b/rust/crates/solid-reactive-ir/src/execution_role.rs
+index f9a78ef99..36d23d9b9 100644
+--- a/rust/crates/solid-reactive-ir/src/execution_role.rs
++++ b/rust/crates/solid-reactive-ir/src/execution_role.rs
+@@ -665,7 +665,7 @@ fn semantic_write_execution_role_within(
+ /// prove, and with none it is unclassified, which reports nothing
+ /// (`docs/rules/reactive-write-in-owned-scope.md`: an unproven write position
+ /// is never a violation).
+-fn nested_literal_runs_during_body(
++pub(super) fn nested_literal_runs_during_body(
+     file: &solid_facts::FileFacts,
+     span: Span,
+     entities: &EntitySymbols,
+@@ -2228,6 +2228,23 @@ pub(super) fn async_execution_role(
+     }
+ }
+ 
++pub(super) fn pending_accessor_probe(
++    file: &solid_facts::FileFacts,
++    span: Span,
++    lookup: &SemanticLookup<'_>,
++) -> bool {
++    file.ast.arguments_containing(span).any(|(call, index)| {
++        direct_callback_contains(file, call.arguments[index].span, span)
++            && lookup
++                .primitive_at_call(file, call.span)
++                .is_some_and(|primitive| {
++                    lookup
++                        .dialect
++                        .callback_handles_pending_accessor_read(primitive, index)
++                })
++    })
++}
++
+ pub(super) fn allowed_callback_spans(
+     file: &solid_facts::FileFacts,
+     lookup: &SemanticLookup<'_>,
+diff --git a/rust/crates/solid-reactive-ir/src/lib.rs b/rust/crates/solid-reactive-ir/src/lib.rs
+index eb380ad4a..5c1ea668c 100644
+--- a/rust/crates/solid-reactive-ir/src/lib.rs
++++ b/rust/crates/solid-reactive-ir/src/lib.rs
+@@ -4,7 +4,11 @@ mod cleanup;
+ pub mod contract_semantics;
+ mod contracts;
+ mod creates_walk;
++mod development_feedback;
+ mod directives;
++pub use development_feedback::{
++    DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
++};
+ mod effect_api;
+ mod execution_role;
+ mod findings;
+@@ -1081,6 +1085,16 @@ pub struct AsyncRead {
+     /// obligation rather than a proven throw.
+     #[serde(default, skip_serializing_if = "is_false")]
+     pub host_callback_timing: bool,
++    /// The read's callback is handed to a callee whose invocation is not
++    /// proven on the current stack ([`ReactiveRead::callee_callback_timing`]).
++    /// The callee may defer the read or handle pending values, so SC5001 is
++    /// an open obligation rather than a proven pending-read exception.
++    #[serde(default, skip_serializing_if = "is_false")]
++    pub callee_callback_timing: bool,
++    /// Lexical nesting in a component does not prove this stored or returned
++    /// callback executes during that component's strict-read window.
++    #[serde(default, skip_serializing_if = "is_false")]
++    pub invocation_context_unproven: bool,
+ }
+ 
+ fn default_async_provenance() -> bool {
+@@ -1900,6 +1914,8 @@ fn empty_contract_exports() -> &'static BTreeMap<String, ContractExport> {
+ #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+ pub struct Program {
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
++    pub development_feedback: Vec<development_feedback::DevelopmentFile>,
+     pub reads: Vec<ReactiveRead>,
+     pub writes: Vec<ReactiveWrite>,
+     pub actions: Vec<ActionInvocation>,
+diff --git a/rust/crates/solid-reactive-ir/src/local_access.rs b/rust/crates/solid-reactive-ir/src/local_access.rs
+index c62a3e404..2deedfd16 100644
+--- a/rust/crates/solid-reactive-ir/src/local_access.rs
++++ b/rust/crates/solid-reactive-ir/src/local_access.rs
+@@ -26,8 +26,8 @@ use std::{
+ use crate::execution_role::{
+     RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
+     control_flow_execution_role, host_callback_timing, missing_jsx_census,
+-    named_callback_execution_role, read_analysis_context, semantic_execution_role,
+-    semantic_write_execution_role,
++    named_callback_execution_role, nested_literal_runs_during_body, pending_accessor_probe,
++    read_analysis_context, semantic_execution_role, semantic_write_execution_role,
+ };
+ use crate::identity::SymbolId;
+ use crate::indexes::{EntitySymbols, SemanticLookup};
+@@ -568,9 +568,10 @@ impl LocalAccessContext<'_, '_> {
+                 }
+                 let async_provenance = self.async_sources.contains(symbol);
+                 let async_options = self.effective_async_options(symbol);
+-                if async_provenance
++                if (async_provenance
+                     || async_options.ssr_client_bare
+-                    || async_options.server_rendering_unresolved
++                    || async_options.server_rendering_unresolved)
++                    && !pending_accessor_probe(file, call.callee, self.lookup)
+                 {
+                     let async_execution = async_execution_role(file, call.callee, execution);
+                     result.async_reads.push(Arc::new(AsyncRead {
+@@ -603,6 +604,21 @@ impl LocalAccessContext<'_, '_> {
+                             async_execution,
+                             self.lookup,
+                         ),
++                        callee_callback_timing: callee_callback_timing(
++                            file,
++                            call.callee,
++                            async_execution,
++                            self.lookup,
++                        ),
++                        invocation_context_unproven: async_execution
++                            == ExecutionRole::UntrackedRendering
++                            && !nested_literal_runs_during_body(
++                                file,
++                                call.callee,
++                                self.entities,
++                                self.symbol_names,
++                                self.lookup,
++                            ),
+                     }));
+                 }
+             }
+@@ -1044,6 +1060,21 @@ impl LocalAccessContext<'_, '_> {
+                         async_execution,
+                         self.lookup,
+                     ),
++                    callee_callback_timing: callee_callback_timing(
++                        file,
++                        member.span,
++                        async_execution,
++                        self.lookup,
++                    ),
++                    invocation_context_unproven: async_execution
++                        == ExecutionRole::UntrackedRendering
++                        && !nested_literal_runs_during_body(
++                            file,
++                            member.span,
++                            self.entities,
++                            self.symbol_names,
++                            self.lookup,
++                        ),
+                 }));
+             }
+         }
+@@ -1168,6 +1199,8 @@ impl LocalAccessContext<'_, '_> {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
++                invocation_context_unproven: false,
+             }));
+         }
+         result
+diff --git a/rust/crates/solid-reactive-ir/src/pipeline.rs b/rust/crates/solid-reactive-ir/src/pipeline.rs
+index 96b4c69ee..c6a6209ba 100644
+--- a/rust/crates/solid-reactive-ir/src/pipeline.rs
++++ b/rust/crates/solid-reactive-ir/src/pipeline.rs
+@@ -36,6 +36,7 @@ use typefacts::Location;
+ /// of its signature rather than ambient mutation of a shared function body.
+ #[derive(Default)]
+ pub(crate) struct ProgramDraft {
++    pub(crate) development_feedback: Vec<crate::development_feedback::DevelopmentFile>,
+     pub(crate) reads: Vec<ReactiveRead>,
+     pub(crate) writes: Vec<ReactiveWrite>,
+     pub(crate) action_invocations: Vec<ActionInvocation>,
+@@ -141,6 +142,7 @@ impl ProgramDraft {
+         self.contract_generation_obligations
+             .sort_by(|left, right| location_order(&left.location, &right.location));
+         Program {
++            development_feedback: self.development_feedback,
+             reads: self.reads,
+             writes: self.writes,
+             actions: self.action_invocations,
+@@ -393,6 +395,11 @@ fn build_with_accepted_contract_inputs_measured_incremental(
+     // Source discovery does not inspect missing exports, and the static prepass
+     // owns them after the two independent index passes complete.
+     let mut draft = ProgramDraft {
++        development_feedback: if rule_options.development_feedback {
++            crate::development_feedback::models(facts, semantic_lookup, dialect)
++        } else {
++            Vec::new()
++        },
+         static_defects: missing_contract_exports,
+         contract_binding: resolved_contracts.counts,
+         ..ProgramDraft::default()
+diff --git a/rust/crates/solid-reactive-ir/src/projection.rs b/rust/crates/solid-reactive-ir/src/projection.rs
+index 9c21bd3b3..16d0cae3a 100644
+--- a/rust/crates/solid-reactive-ir/src/projection.rs
++++ b/rust/crates/solid-reactive-ir/src/projection.rs
+@@ -1172,6 +1172,13 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) ->
+             if read.host_callback_timing && finding.id == "SC5001" {
+                 finding.kind = "uncertifiable".into();
+             }
++            // Lexical placement cannot prove an unknown callee runs the
++            // callback in this window or leaves pending values unhandled.
++            if (read.callee_callback_timing || read.invocation_context_unproven)
++                && finding.id == "SC5001"
++            {
++                finding.kind = "uncertifiable".into();
++            }
+             if read.server_rendering_unresolved {
+                 finding.kind = "uncertifiable".into();
+             }
+@@ -1608,6 +1615,8 @@ mod tests {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
++                invocation_context_unproven: false,
+             }],
+             ..Program::default()
+         };
+@@ -1648,6 +1657,8 @@ mod tests {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
++                invocation_context_unproven: false,
+             }],
+             ..Program::default()
+         };
+@@ -1698,6 +1709,8 @@ mod tests {
+                 ssr_client_hole: false,
+                 server_rendering_unresolved: false,
+                 host_callback_timing: false,
++                callee_callback_timing: false,
++                invocation_context_unproven: false,
+             }],
+             ..Program::default()
+         };
+diff --git a/rust/crates/solid-reactive-ir/src/upstream_compat/rule_options.rs b/rust/crates/solid-reactive-ir/src/upstream_compat/rule_options.rs
+index f28a0557c..d548b53a0 100644
+--- a/rust/crates/solid-reactive-ir/src/upstream_compat/rule_options.rs
++++ b/rust/crates/solid-reactive-ir/src/upstream_compat/rule_options.rs
+@@ -45,6 +45,9 @@ pub struct RuleOptions {
+     /// catalog options lets the shared pipeline thread one immutable selector
+     /// through every proof stage without making dialect code guess globals.
+     pub runtime: RuntimeEnvironment,
++    /// Optional source models for development instrumentation; included in
++    /// cache identity and never inferred from project rule configuration.
++    pub development_feedback: bool,
+ }
+ 
+ #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+diff --git a/rust/dialects/solid-v2/compiler/src/lib.rs b/rust/dialects/solid-v2/compiler/src/lib.rs
+index 67e6801eb..be201a454 100644
+--- a/rust/dialects/solid-v2/compiler/src/lib.rs
++++ b/rust/dialects/solid-v2/compiler/src/lib.rs
+@@ -26,21 +26,21 @@ const READS_TRACE_VERSION: u32 = 3;
+ 
+ /// Consumer-owned provenance literals. These deliberately do not reuse the
+ /// producer constants: otherwise a typo in the producer could certify itself.
+-const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "a10cf1a147209d8da50697896742d2b1d4afad75";
+-const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "7f4e1135943c1fb01231d1bda707b4a1856a5607";
+-pub const COMPILER_DISTRIBUTION_REVISION: &str = "9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4";
++const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "5efaf260becb32293f2bcb4d32f8be72be6de674";
++const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "c04c48779812d3d87166da3741c625748458c62f";
++pub const COMPILER_DISTRIBUTION_REVISION: &str = "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d";
+ 
+ /// Stable cache identity for the exact semantic producer this adapter reads.
+ /// Keep this synchronized with the pinned compiler revision and trace
+ /// implementation when either changes.
+ pub const COMPILER_FACTS_IDENTITY: &str =
+-    "solid-v2:trace3:7f4e1135943c1fb01231d1bda707b4a1856a5607";
++    "solid-v2:trace3:c04c48779812d3d87166da3741c625748458c62f";
+ 
+ /// Digest of the exact Git-owned semantic compiler source identity consumed by
+ /// this adapter. The independent identity gate recomputes this value from the
+ /// upstream, implementation, distribution, trace, and protocol pins.
+ pub const COMPILER_SOURCE_MANIFEST_SHA256: &str =
+-    "sha256:613049ba60fa514c662bd9350adb4b0ed9c3031e4f80f2bd1ecb23d56846fde0";
++    "sha256:35f4874f646f9482d0549fdf052f0d37bd02ec47b5c024d5732b6d9796423a9a";
+ 
+ /// A pin move that changes the producer's schema version fails the build here
+ /// instead of silently making the runtime refusal below unreachable again. The
+diff --git a/rust/dialects/solid-v2/dialect.json b/rust/dialects/solid-v2/dialect.json
+index 0a8368962..1e5e650de 100644
+--- a/rust/dialects/solid-v2/dialect.json
++++ b/rust/dialects/solid-v2/dialect.json
+@@ -10,7 +10,7 @@
+     "conformance": "docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json",
+     "report": "docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md",
+     "cargoPackage": "solidjs-compiler",
+-    "cargoSourcePrefix": "git+https://github.com/yumemi-thomas/solid?"
++    "cargoSourcePrefix": "git+@COMPILER_REPOSITORY_URI@?"
+   },
+   "contracts": [
+     {
+diff --git a/rust/dialects/solid-v2/rules/src/lib.rs b/rust/dialects/solid-v2/rules/src/lib.rs
+index ebd4e79af..b123541f5 100644
+--- a/rust/dialects/solid-v2/rules/src/lib.rs
++++ b/rust/dialects/solid-v2/rules/src/lib.rs
+@@ -369,6 +369,37 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) ->
+ }
+ 
+ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
++    if read.invocation_context_unproven {
++        return FindingWording::new(
++            Rule::PendingAsyncUnsuspendableRead.metadata(),
++            format!("async accessor {:?} is read in a stored or nested callback whose invocation during the component's strict-read window is unproven; this does not establish that the read throws", read.accessor),
++            "Establish when the callback runs and how pending values are handled. Use a tracking scope when the result needs suspension and retry.".to_owned(),
++        );
++    }
++    if read.callee_callback_timing {
++        let mut metadata = Rule::PendingAsyncUnsuspendableRead.metadata();
++        if read.leaf_owner.is_some() {
++            metadata.severity = "warning";
++        }
++        return FindingWording::new(
++            metadata,
++            format!(
++                "async accessor {:?} is read in a callback whose callee's invocation context and pending handling are unproven; this does not establish that the read throws",
++                read.accessor
++            ),
++            "Inspect when the callee invokes this callback and whether it handles pending values. Read async values in a tracking scope when the callback needs suspension and retry.".to_owned(),
++        )
++        .with_evidence(vec![
++            EvidenceStep {
++                message: "the source's computation is async; the callback's callee does not prove an unhandled pending read".to_owned(),
++                location: Some(read.declaration.clone()),
++            },
++            EvidenceStep {
++                message: "callback invocation remains an open obligation".to_owned(),
++                location: Some(read.location.clone()),
++            },
++        ]);
++    }
+     // Declared first paint (probed against rc.0): a loadingValue /
+     // seedLoadingValue node is born committed, so its *first flight* cannot
+     // throw anywhere — but once the first real answer lands, a pending
+diff --git a/docs/development-feedback.md b/docs/development-feedback.md
+new file mode 100644
+index 000000000..dde5ffcb9
+--- /dev/null
++++ b/docs/development-feedback.md
+@@ -0,0 +1,208 @@
++# Development feedback
++
++`solid-checker feedback` is the first implementation boundary for the package
++feedback experiment. It runs the native checker on the original application,
++then admits optional recorded application observations against those exact
++inputs. Package certification is not required to show an independent compiler
++finding or a recorded runtime failure. Unknown package behavior stays
++uncertifiable in native analysis.
++
++## Use from this checkout
++
++```sh
++export SOLID_CHECKER_NATIVE_BIN="$PWD/rust/target/debug/solid-checker-rust"
++export SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts"
++node packages/cli/bin/solid-checker.mjs feedback --project /absolute/path/tsconfig.json
++node packages/cli/bin/solid-checker.mjs feedback manifest --project /absolute/path/tsconfig.json > capture.json
++node packages/cli/bin/solid-checker.mjs feedback --project /absolute/path/tsconfig.json --capture capture.json
++```
++
++Build the main checkout with `make build-checker-debug` first. To use the
++locally integrated RC.13 build, set
++`SOLID_CHECKER_NATIVE_BIN` to
++`rust/target/local-rc13-checker/rust/target/debug/solid-checker-rust` and
++`SOLID_TYPEFACTS_BIN` to this checkout's `bin/solid-typefacts`, both as absolute
++paths. The compiler candidate has not been published. Production Git pins
++remain on their prior compiler revision. The integration patch and restoration
++instructions are in `benchmarks/compiler-facts/rc13/`.
++
++The manifest command works without a native binary. Project references require
++explicit project sessions and currently refuse. TypeScript checks the installed
++package declarations; it supplies no behavioral package inference here. When
++the input has TypeScript errors, additional capture guidance is suppressed.
++Existing native findings retain their own classification.
++
++## Capture format
++
++Keep the generated `project`, `inputId`, `manifest`, `authority: false` and
++`certification: false`. Fill `runtimeInputs` with canonical absolute file paths
++and SHA-256 digests (`sha256:…`) of the executed runtime bytes. Fill `events`
++with unique IDs and exact original-source locations:
++
++```json
++{
++  "id": "read-1",
++  "kind": "untracked-read",
++  "message": "Recorded read while tracking was off",
++  "tracking": "untracked",
++  "runtimeInput": "/absolute/path/instrumented-runtime.mjs",
++  "sourceSha256": "sha256:…",
++  "location": {
++    "path": "/absolute/path/src/App.tsx",
++    "startByte": 120,
++    "endByte": 128
++  }
++}
++```
++
++`runtime-exception` and `assertion-failure` are also admitted, with a message,
++source digest and location. They do not require a tracking state. Locations
++must belong to a source file in the configured project and use valid UTF-8
++byte boundaries. This is a supplied-record interface: digests detect changed
++inputs, but do not authenticate that an event occurred. Collectors and callers
++remain responsible for the observation's truth and original-source mapping.
++
++The report preserves native `analysis.findings`. Top-level `findings` contains
++proven violations; `gaps` contains uncertifiable native results, and
++`observations` contains recorded runtime events.
++Repeated equivalent observations retain all event IDs and an occurrence count.
++Untracked reads and observer queries have severity `info` and
++`reactiveIntent: "open"`. Recorded
++exceptions/assertion failures have severity `error` in their own channel. No
++observation becomes a static violation or a package contract. The exit status
++preserves native analysis status; supplied observations do not fail CI.
++
++Inputs are checked before and after native analysis. Changed source, resolved
++declarations, directory listings, missing resolution candidates or recorded
++runtime bytes refuse a stale report. This boundary does not yet provide an
++atomic shared Type Facts/runtime session or bind browser conditions.
++
++## Run an application
++
++The command now includes a live browser collector and the experiment's
++automatic read/result guidance and assertion-assisted selection:
++
++```sh
++node packages/cli/bin/solid-checker.mjs feedback run \
++  --project /absolute/path/app/tsconfig.json \
++  --scenario /absolute/path/scenario.json \
++  --browser /absolute/path/chromium
++```
++
++The application needs an `index.html` entry beside its TypeScript project.
++The collector uses installed Vite, `@solidjs/vite-plugin`, Playwright and
++`@jridgewell/trace-mapping` from that directory. `--tooling /absolute/path/tools`
++can select a separate existing tooling installation. The command starts a
++local server with the Solid plugin and executes the application in Chromium.
++It currently supports this controlled Vite setup; project-specific Vite
++configuration, SSR, browser navigation and external network requests need
++separate adapters. Other origins are blocked in this run.
++
++A scenario supplies explicit interactions and optional assertions. It never derives
++expected values from a proposed change:
++
++```json
++{
++  "schemaVersion": 1,
++  "steps": [
++    { "action": "wait-for-text", "selector": "#value", "text": "1" },
++    { "action": "click", "selector": "#update" },
++    { "action": "wait-for-selector", "selector": "[data-ready=true]" },
++    { "action": "assert-text", "id": "updated-value", "selector": "#value", "text": "2" }
++  ]
++}
++```
++
++`wait-for-text` and `wait-for-selector` establish readiness; `assert-text`
++records the current value without waiting for the expected answer. A failing
++assertion appears as an error under `assertionFailures`, with its selector,
++expected value and measured value. Read observations are separate information.
++Runtime exceptions are mapped to original source where possible; unmapped
++failures remain visible in `execution.unmapped` and `execution.pageErrors`.
++Native findings keep their original proof classification.
++
++The read hook is tied to the reviewed `@solidjs/signals@2.0.0-rc.9`
++`dev-shared.js` digest. It records normal native reads without an observer or
++owner, suppresses explicit native `untrack`, and leaves thrown reads to runtime
++error collection. It also records a native `getObserver` query that returns
++null on a modeled result path. Queries by the collector itself are excluded.
++Source maps locate reads and queries in configured original source.
++It covers reads that reach this shared reader, including calls from installed
++packages. Store-specific serving paths, owner-present reads, unexecuted paths,
++missing source frames and other runtime artifacts remain open. The collector
++retains at most 256 records and 1 MiB of event data; it reports dropped records
++and always labels coverage incomplete. A different runtime profile refuses
++instrumentation. The RC.13 **analysis compiler** does not expand this runtime
++profile to RC.13.
++
++### Measure a supplied comparison
++
++Add `--compare-project /absolute/path/comparison/tsconfig.json` to execute the
++same scenario against a separate application checkout. Neither source tree is
++edited. The selector gives an informational debugging note only when an
++original assertion fails and its matching assertion passes in the comparison.
++Passing original assertions stay quiet. A comparison that breaks one is
++reported under `guidance.open`. Missing comparisons and comparisons that still
++fail also stay open. TypeScript errors suppress assertions and guidance for
++that input, using installed published declarations.
++
++This ports the decision boundary from `replay-assertion-feedback-v1.mjs` in the
++experiment. The message describes the measured supplied comparison. It does
++not claim that a read caused the failure, that the comparison is a safe repair,
++or that unrelated assertions and side effects pass. Source proposals are not
++generated automatically. `observations`, `assertions` and `guidance` remain
++distinct; the exit status continues to preserve the original native result.
++
++### Automatic guidance without assertions or comparison code
++
++`automatic.notes` now contains conditional warnings from executed reads and
++native source models, plus informational observer-query notes. A scenario can
++contain just readiness steps and clicks;
++no assertion or comparison application is required.
++
++The native `--feedback-facts` request emits source digests, exact function and
++call spans, and derived origins resolved by the normal Type Facts lookup and
++dialect interface. It selects bounded candidate result paths: a call in a
++returned expression, an exact const initialization referenced by the returned
++value, or a read controlling distinct numeric field results. Multiple competing
++return paths remain open. These facts are absent from ordinary diagnostic output.
++
++The adapter instruments only those exact spans. Function tokens keep an origin
++across native `await` continuations and nested callbacks. A callback invoked
++later must also have a native allocation path related to its parent's result;
++lexical nesting alone is insufficient. Synchronous operation
++scopes restore the previous caller even when a call throws. Runtime values and
++function identities remain intact. TypeScript parses and prints syntax; it
++does not infer package behavior. Methods join through exact body spans when
++the parsers use different function spans. Receiver behavior and callable names
++are preserved. Generator bodies, calls with suspending arguments, direct `eval`
++and unmatched spans have no instrumentation of their own.
++
++Selection joins mapped executed reads to current native models. It receives no
++expected result, benchmark label or comparison code. The observed authored
++site must belong to the final modeled operation. A retained callback lineage
++with candidate result relationships can produce a warning: **if** this derived
++result should follow the value, capture that value while tracking and pass it
++to the async work. The warning does not prove stale output, Promise adoption,
++settlement, or repair safety. Intentional snapshots and object identity can
++need application expectations. Discarded reads and competing returns remain
++visible under `automatic.open`; incomplete collection cannot establish safety.
++
++An observer query alone produces an informational note, because it does not
++prove a reactive read or a skipped subscription. This surfaces APIs such as
++the installed map's trigger cache, which returns early when no observer exists
++and consequently emits no native read. Plain deferred callbacks can receive
++read guidance without being declared `async`. Query information is suppressed
++when the same derived origin already has an observed-read warning.
++
++The native analysis and published typing check run once per project capture.
++Their retained inputs are validated again after execution, including negative
++resolution candidates and directory listings. This avoids repeating unchanged
++type checks without weakening stale-input refusal.
++
++## Remaining implementation
++
++Editor/watch integration, automatic comparison planning, wider result-flow
++models, package ownership tracing and additional runtime profiles remain work.
++The native models above implement a bounded slice of the experiment's automatic
++read selector. They do not implement its complete behavioral model chain.
+diff --git a/fixtures/reactive-ir/callee-callback-timing/Async.tsx b/fixtures/reactive-ir/callee-callback-timing/Async.tsx
+new file mode 100644
+index 000000000..3f967da84
+--- /dev/null
++++ b/fixtures/reactive-ir/callee-callback-timing/Async.tsx
+@@ -0,0 +1,59 @@
++import { createMemo, isPending } from "solid-js";
++import { runNow, runLater } from "./helpers";
++import * as helpers from "./helpers";
++import * as Solid from "solid-js";
++
++declare const harness: { checkPending(callback: () => unknown): boolean; retained?: () => unknown };
++
++export function UnknownPendingHandler() {
++  const result = createMemo(async () => 1);
++  harness.checkPending(() => result()); // uncertifiable: pending handling unknown
++  return <span />;
++}
++
++export function DeferredPendingRead() {
++  const result = createMemo(async () => 1);
++  runLater(() => result()); // uncertifiable: callback invocation unknown
++  return <span />;
++}
++
++export function DirectPendingRead() {
++  const result = createMemo(async () => 1);
++  result(); // violation: pending read in the component body
++  return <span />;
++}
++
++export function InlinePendingRead() {
++  const result = createMemo(async () => 1);
++  runNow(() => result()); // violation: exact cross-file helper invokes it
++  helpers.runNow(() => result()); // violation: same symbol through namespace
++  return <span />;
++}
++
++export function NativePendingHandler() {
++  const result = Solid.createMemo(async () => 1);
++  isPending(() => result()); // clean: known native pending probe
++  Solid.isPending(() => result()); // same exact primitive through namespace
++  return <span />;
++}
++
++export function ShadowedPendingHandler() {
++  const result = createMemo(async () => 1);
++  const isPending = (callback: () => unknown) => callback();
++  isPending(() => result()); // violation: local symbol supplies no pending probe
++  return <span />;
++}
++
++export function StoredPendingHandler() {
++  const result = createMemo(async () => 1);
++  const target: { callback?: () => unknown } = {};
++  target.callback = () => result(); // uncertifiable: lexical placement does not prove invocation
++  return <span />;
++}
++
++export function RetainedPendingHandler() {
++  const result = createMemo(async () => 1);
++  const callback = () => result(); // negative: no proven pending exception in a retained callback
++  harness.retained = callback;
++  return <span />;
++}
+diff --git a/fixtures/reactive-ir/callee-callback-timing/Feedback.ts b/fixtures/reactive-ir/callee-callback-timing/Feedback.ts
+new file mode 100644
+index 000000000..b32bcb010
+--- /dev/null
++++ b/fixtures/reactive-ir/callee-callback-timing/Feedback.ts
+@@ -0,0 +1,13 @@
++// A local parameter's spelling supplies no primitive or derived-origin fact.
++export function unrelated(createMemo: (callback: () => Promise<number>) => unknown) {
++  return createMemo(async () => 1);
++}
++
++export function discarded(read: () => number) {
++  void Promise.resolve().then(async () => read());
++  return 9;
++}
++
++export function used(read: () => number) {
++  return Promise.resolve().then(async () => read());
++}
+diff --git a/packages/cli/scripts/development-feedback.mjs b/packages/cli/scripts/development-feedback.mjs
+new file mode 100644
+index 000000000..ca245a83c
+--- /dev/null
++++ b/packages/cli/scripts/development-feedback.mjs
+@@ -0,0 +1,187 @@
++import assert from "node:assert/strict";
++import { createHash } from "node:crypto";
++import { readFileSync, realpathSync } from "node:fs";
++import { dirname, resolve } from "node:path";
++import { performance } from "node:perf_hooks";
++import ts from "typescript";
++import { runNative } from "../bin/launcher.mjs";
++
++const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
++
++// TypeScript is the published-typing oracle here. Semantic analysis remains in
++// the native checker and its Type Facts/compiler fact domains.
++export function feedbackSnapshot(project) {
++  project = realpathSync(resolve(project));
++  const inputs = new Map();
++  const record = input => inputs.set(JSON.stringify([input.kind, input.path, input.arguments]), input);
++  const system = { ...ts.sys };
++  for (const method of ["readFile", "fileExists", "directoryExists", "realpath", "readDirectory", "getDirectories"]) {
++    const original = ts.sys[method];
++    if (!original) continue;
++    system[method] = (...args) => {
++      const result = original(...args);
++      record({ kind: method, path: resolve(args[0]), arguments: args.slice(1).map(value => value ?? null),
++        result: method === "readFile" ? result === undefined ? null : hash(result) : result });
++      return result;
++    };
++  }
++  const config = ts.readConfigFile(project, system.readFile);
++  assert(!config.error, "Cannot read the TypeScript project");
++  const parsed = ts.parseJsonConfigFileContent(config.config, system, dirname(project), {}, project);
++  assert(!parsed.projectReferences?.length, "Feedback project references need explicit project sessions");
++  const host = ts.createCompilerHost(parsed.options);
++  Object.assign(host, { readFile: system.readFile, fileExists: system.fileExists,
++    directoryExists: system.directoryExists, realpath: system.realpath, getDirectories: system.getDirectories,
++    getSourceFile(path, languageVersion) {
++      const text = system.readFile(path);
++      return text === undefined ? undefined : ts.createSourceFile(path, text, languageVersion, true);
++    } });
++  const program = ts.createProgram(parsed.fileNames, parsed.options, host);
++  const typingErrors = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)]
++    .filter(item => item.category === ts.DiagnosticCategory.Error).length;
++  const manifest = { project, typescript: ts.version, inputs: [...inputs.values()] };
++  return { manifest, inputId: hash(JSON.stringify(manifest)), typingErrors, sources: program.getSourceFiles() };
++}
++
++export function validateFeedbackInputs(manifest) {
++  for (const input of manifest.inputs) {
++    const read = ts.sys[input.kind];
++    assert(["readFile", "fileExists", "directoryExists", "realpath", "readDirectory", "getDirectories"].includes(input.kind)
++      && typeof read === "function", "Unsupported feedback input");
++    const current = read(input.path, ...input.arguments.map(value => value ?? undefined));
++    const result = input.kind === "readFile" ? current === undefined ? null : hash(current) : current;
++    assert.deepEqual(result, input.result, `Feedback input changed: ${input.path}`);
++  }
++}
++
++export function captureTemplate(snapshot) {
++  return { schemaVersion: 1, documentKind: "solid-checker-development-capture",
++    project: snapshot.manifest.project, inputId: snapshot.inputId,
++    manifest: snapshot.manifest, runtimeInputs: [], events: [],
++    authority: false, certification: false };
++}
++
++export function admitFeedbackCapture(snapshot, capture) {
++  assert.equal(capture.schemaVersion, 1);
++  assert.equal(capture.documentKind, "solid-checker-development-capture");
++  assert.equal(capture.authority, false); assert.equal(capture.certification, false);
++  assert.equal(capture.project, snapshot.manifest.project);
++  assert.equal(capture.inputId, snapshot.inputId, "Capture belongs to different project inputs");
++  assert.deepEqual(capture.manifest, snapshot.manifest, "Capture input manifest differs");
++  assert(Array.isArray(capture.runtimeInputs) && Array.isArray(capture.events));
++  validateFeedbackInputs(capture.manifest);
++  const runtime = new Map();
++  for (const input of capture.runtimeInputs) {
++    assert.equal(realpathSync(input.path), input.path, "Runtime input path is not canonical");
++    assert.equal(hash(readFileSync(input.path)), input.sha256, "Runtime input changed");
++    assert(!runtime.has(input.path), "Duplicate runtime input"); runtime.set(input.path, input.sha256);
++  }
++  const sources = new Map(snapshot.sources.map(source => [resolve(source.fileName), source]));
++  const seen = new Set(), observations = [], groups = new Map();
++  for (const event of capture.events) {
++    assert(typeof event.id === "string" && event.id.length && !seen.has(event.id), "Duplicate or missing capture event identity");
++    seen.add(event.id);
++    assert(["runtime-exception", "untracked-read", "observer-query", "assertion-failure"].includes(event.kind), "Unsupported capture event");
++    assert(typeof event.message === "string" && event.message.trim(), "Capture event message is missing");
++    const location = event.location, source = sources.get(location?.path);
++    assert(source && !source.isDeclarationFile, "Capture location is outside analyzed source");
++    assert.equal(event.sourceSha256, hash(source.text), "Captured source changed");
++    const bytes = Buffer.from(source.text);
++    assert(Number.isSafeInteger(location.startByte) && Number.isSafeInteger(location.endByte)
++      && location.startByte >= 0 && location.endByte > location.startByte && location.endByte <= bytes.length,
++      "Invalid capture source span");
++    assert.equal(Buffer.byteLength(bytes.subarray(0, location.startByte).toString("utf8")), location.startByte,
++      "Capture span cuts a UTF-8 code point");
++    assert.equal(Buffer.byteLength(bytes.subarray(0, location.endByte).toString("utf8")), location.endByte,
++      "Capture span cuts a UTF-8 code point");
++    if (["untracked-read", "observer-query"].includes(event.kind)) {
++      assert(event.tracking === "untracked" && event.runtimeInput && runtime.has(event.runtimeInput),
++        "Read observation needs explicit tracking state and bound runtime bytes");
++    }
++    // These are supplied development observations, never static violations.
++    // Intent-sensitive read records remain information, including snapshots.
++    const key = JSON.stringify([event.kind, location, event.message, event.runtimeInput]);
++    if (groups.has(key)) {
++      groups.get(key).eventIds.push(event.id);
++      groups.get(key).occurrences++;
++      continue;
++    }
++    const observation = { id: event.id, eventIds: [event.id], occurrences: 1,
++      channel: "recorded-runtime", kind: event.kind,
++      severity: ["untracked-read", "observer-query"].includes(event.kind) ? "info" : "error", message: event.message,
++      location, sourceSha256: event.sourceSha256, inputId: capture.inputId,
++      reactiveIntent: "open", authority: false, certification: false };
++    observations.push(observation); groups.set(key, observation);
++  }
++  return snapshot.typingErrors ? { observations: [], excluded: "TypeScript owns this input" }
++    : { observations, excluded: null };
++}
++
++export function inspectDevelopmentFeedback(project, { capture = null, analyze, feedbackFacts = false, snapshot: retainedSnapshot } = {}) {
++  const started = performance.now(), snapshot = retainedSnapshot ?? feedbackSnapshot(project);
++  assert.equal(snapshot.manifest.project, realpathSync(resolve(project)), "Retained snapshot belongs to another project");
++  const admitted = capture ? admitFeedbackCapture(snapshot, capture) : { observations: [], excluded: null };
++  validateFeedbackInputs(snapshot.manifest);
++  const native = analyze ? analyze(snapshot.manifest.project) : runNative("solid-checker", [
++    "--project", snapshot.manifest.project, "--format", "json", ...(feedbackFacts ? ["--feedback-facts"] : [])
++  ], { stdio: "pipe", encoding: "utf8", env: { SOLID_CHECKER_DAEMON: "0" } });
++  if (native.error) throw native.error;
++  assert([0, 1].includes(native.status), native.stderr || "Native analysis failed");
++  const analysis = JSON.parse(native.stdout);
++  assert(Array.isArray(analysis.findings), "Native response has no findings");
++  validateFeedbackInputs(snapshot.manifest);
++  if (capture) admitFeedbackCapture(snapshot, capture);
++  return { schemaVersion: 1, documentKind: "solid-checker-development-feedback",
++    authority: false, certification: false, project: snapshot.manifest.project,
++    inputId: snapshot.inputId, analysis, nativeExitCode: native.status, ...admitted, typingErrorCount: snapshot.typingErrors,
++    findings: analysis.findings.filter(finding => finding.kind === "violation"),
++    gaps: analysis.findings.filter(finding => finding.kind === "uncertifiable"),
++    coverage: { runtime: capture ? "supplied-records-only" : "unavailable", packageInference: "unavailable" },
++    durationMs: performance.now() - started };
++}
++
++export const developmentFeedbackHelp = `Development feedback (experimental)
++  solid-checker feedback --project <tsconfig.json> [--capture <capture.json>]
++  solid-checker feedback manifest --project <tsconfig.json>
++  solid-checker feedback run --project <tsconfig.json> --scenario <scenario.json>
++    --browser <chromium-path> [--tooling <directory>] [--compare-project <tsconfig.json>]
++
++Returns native checker findings and separately labeled recorded observations.
++Read observations are information; they do not prove a stale result.
++Live runs also report conditional automatic warnings from native result models.
++Scenarios may contain interactions without assertions or comparison projects.
++The manifest command creates a capture template before application execution.
++`;
++
++export async function developmentFeedback(args) {
++  if (!args.length || args.includes("--help") || args.includes("-h")) {
++    process.stdout.write(developmentFeedbackHelp); return;
++  }
++  const manifest = args[0] === "manifest", live = args[0] === "run";
++  if (manifest || live) args = args.slice(1);
++  let project, capture;
++  const options = new Map();
++  for (let index = 0; index < args.length; index++) {
++    const name = args[index];
++    assert((live ? ["--project", "--scenario", "--browser", "--tooling", "--compare-project"] : ["--project", "--capture"]).includes(name), `Unknown feedback option ${name}`);
++    assert(args[index + 1] && !args[index + 1].startsWith("--"), `${name} requires a path`);
++    assert(!options.has(name), `Duplicate feedback option ${name}`);
++    options.set(name, args[index + 1]);
++    if (name === "--project") { assert(!project, "Duplicate project option"); project = args[++index]; }
++    else if (name === "--capture") { assert(!capture, "Duplicate capture option"); capture = args[++index]; }
++    else index++;
++  }
++  assert(project, "Feedback requires --project");
++  assert(!manifest || !capture, "Capture manifest does not accept --capture");
++  if (live) {
++    assert(options.has("--scenario") && options.has("--browser"), "Browser feedback requires --scenario and --browser");
++    const { runBrowserFeedback } = await import("./feedback-browser.mjs");
++    const result = await runBrowserFeedback({ project, scenarioPath: options.get("--scenario"),
++      browserPath: options.get("--browser"), toolingRoot: options.get("--tooling"), comparisonProject: options.get("--compare-project") });
++    process.stdout.write(JSON.stringify(result, null, 2) + "\n"); process.exitCode = result.nativeExitCode; return;
++  }
++  const result = manifest ? captureTemplate(feedbackSnapshot(project))
++    : inspectDevelopmentFeedback(project, { capture: capture ? JSON.parse(readFileSync(capture, "utf8")) : null });
++  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
++  if (!manifest) process.exitCode = result.nativeExitCode;
++}
+diff --git a/packages/cli/scripts/feedback-assertion-selector.mjs b/packages/cli/scripts/feedback-assertion-selector.mjs
+new file mode 100644
+index 000000000..dc58bb546
+--- /dev/null
++++ b/packages/cli/scripts/feedback-assertion-selector.mjs
+@@ -0,0 +1,25 @@
++// Port of the experiment's replay-assertion-feedback-v1 decision boundary.
++// The comparison is supplied and measured; no automatic repair is inferred.
++export function selectAssertionFeedback(before, after) {
++  const notes = [], open = [], unchanged = [];
++  for (const assertion of before) {
++    const comparison = after.find(row => row.id === assertion.id);
++    if (!comparison || comparison.expected !== assertion.expected || comparison.selector !== assertion.selector) {
++      open.push({ id: assertion.id, reason: "No matching measured comparison assertion" }); continue;
++    }
++    if (assertion.actual === assertion.expected) {
++      unchanged.push({ id: assertion.id, passedBefore: true, passedAfter: comparison.actual === assertion.expected });
++      if (comparison.actual !== assertion.expected) open.push({ id: assertion.id, reason: "Comparison breaks a previously passing assertion" });
++      continue;
++    }
++    if (comparison.actual !== assertion.expected) {
++      open.push({ id: assertion.id, reason: "Comparison does not satisfy the supplied assertion" }); continue;
++    }
++    notes.push({ id: assertion.id, code: "COMPARISON_SATISFIES_VALUE_ASSERTION", severity: "info",
++      message: `The supplied comparison made this assertion pass (${assertion.actual} → ${comparison.actual}, expected ${assertion.expected}). Review execution timing and side effects.`,
++      selector: assertion.selector, expected: assertion.expected, before: assertion.actual, after: comparison.actual,
++      repairSafety: "unproved", reactiveIntent: "open", authority: false, certification: false,
++      scope: "Only the supplied assertion under the executed interaction" });
++  }
++  return { notes, open, unchanged, authority: false, certification: false };
++}
+diff --git a/packages/cli/scripts/feedback-browser.mjs b/packages/cli/scripts/feedback-browser.mjs
+new file mode 100644
+index 000000000..8ff2dead7
+--- /dev/null
++++ b/packages/cli/scripts/feedback-browser.mjs
+@@ -0,0 +1,262 @@
++import assert from "node:assert/strict";
++import { createHash } from "node:crypto";
++import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { createRequire } from "node:module";
++import { dirname, join, resolve } from "node:path";
++import { fileURLToPath, pathToFileURL } from "node:url";
++import { captureTemplate, feedbackSnapshot, inspectDevelopmentFeedback, validateFeedbackInputs } from "./development-feedback.mjs";
++import { instrumentFeedbackReads, sharedReaderSha256 } from "./feedback-native-hook.mjs";
++import { selectAssertionFeedback } from "./feedback-assertion-selector.mjs";
++import { instrumentFeedbackSource } from "./feedback-source-hook.mjs";
++import { selectReadFeedback } from "./feedback-read-selector.mjs";
++
++const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
++const runtimePath = fileURLToPath(new URL("./feedback-read-runtime.mjs", import.meta.url));
++
++export function validateFeedbackScenario(scenario) {
++  assert.equal(scenario.schemaVersion, 1);
++  assert(Array.isArray(scenario.steps) && scenario.steps.length > 0 && scenario.steps.length <= 64, "Scenario needs 1–64 steps");
++  const ids = new Set();
++  for (const step of scenario.steps) {
++    assert(["click", "wait-for-selector", "wait-for-text", "assert-text"].includes(step.action), "Unsupported scenario action");
++    assert(typeof step.selector === "string" && step.selector.trim(), "Step needs a selector");
++    if (["wait-for-text", "assert-text"].includes(step.action)) assert.equal(typeof step.text, "string");
++    if (step.action === "assert-text") {
++      assert(typeof step.id === "string" && step.id && !ids.has(step.id), "Assertion needs a unique ID"); ids.add(step.id);
++    }
++  }
++  return scenario;
++}
++
++async function toolingAt(root) {
++  const require = createRequire(join(root, "package.json"));
++  const imported = entry => {
++    if (typeof entry === "string") return entry;
++    if (Array.isArray(entry)) return entry.map(imported).find(Boolean);
++    if (entry && typeof entry === "object") return imported(entry.import ?? entry.node ?? entry.default);
++    return null;
++  };
++  const load = async name => {
++    const resolved = require.resolve(name);
++    let directory = dirname(resolved);
++    while (dirname(directory) !== directory) {
++      const metadata = join(directory, "package.json");
++      if (existsSync(metadata)) {
++        const pkg = JSON.parse(readFileSync(metadata, "utf8"));
++        if (pkg.name === name) {
++          const entry = imported(pkg.exports?.["."]);
++          return import(pathToFileURL(entry ? resolve(directory, entry) : resolved));
++        }
++      }
++      directory = dirname(directory);
++    }
++    return import(pathToFileURL(resolved));
++  };
++  // The Solid plugin's CJS fallback requires Vite. Finish that ESM load before
++  // loading dependent tooling, including older packages with mixed exports.
++  const { createServer } = await load("vite");
++  const solidModule = await load("@solidjs/vite-plugin");
++  const [{ chromium }, mapping] = await Promise.all([load("playwright"), load("@jridgewell/trace-mapping")]);
++  return { createServer, solid: solidModule.default, chromium,
++    TraceMap: mapping.TraceMap, originalPositionFor: mapping.originalPositionFor };
++}
++
++// Vite transform boundary: only one byte-reviewed native artifact is edited.
++// Every other runtime module remains original code executed by the application.
++export function feedbackReadPlugin({ snapshot, runtimeInputs, coverage }) {
++  const virtual = "\0solid-checker-feedback-entry", publicId = "virtual:solid-checker-feedback-entry";
++  return {
++    name: "solid-checker-feedback-reads", enforce: "pre",
++    resolveId(id) { if (id === publicId) return virtual; },
++    load(id) {
++      if (id !== virtual) return;
++      return `import {reads} from ${JSON.stringify("/@fs" + runtimePath)};
++        import * as Solid from 'solid-js';
++        globalThis.__solidCheckerDiagnostics=[];
++        Solid.OBSERVE?.diagnostics?.subscribe(event=>{
++          const rows=globalThis.__solidCheckerDiagnostics;
++          if(rows.length<256)rows.push({code:event.code,kind:event.kind,severity:event.severity});
++        });`;
++    },
++    transformIndexHtml() { return [{ tag: "script", attrs: { type: "module", src: "/@id/" + publicId }, injectTo: "head-prepend" }]; },
++    transform(code, id) {
++      const path = id.split("?")[0];
++      if (!path.endsWith("/dist/dev-shared.js")) return null;
++      // Resolve package identity from this exact module, including pnpm paths.
++      const metadata = join(dirname(dirname(path)), "package.json");
++      if (!existsSync(metadata)) return null;
++      const pkg = JSON.parse(readFileSync(metadata, "utf8"));
++      if (pkg.name !== "@solidjs/signals") return null;
++      assert.equal(pkg.version, "2.0.0-rc.9", "Native read collector needs a reviewed runtime profile");
++      assert.equal(readFileSync(path, "utf8"), code, "A previous transform changed the native reader");
++      const result = instrumentFeedbackReads(code, path, "/@fs" + runtimePath);
++      runtimeInputs.set(realpathSync(metadata), { path: realpathSync(metadata), sha256: hash(readFileSync(metadata)) });
++      coverage.nativeReader = { path: realpathSync(path), sha256: sharedReaderSha256, version: pkg.version };
++      return result;
++    },
++    configResolved(config) {
++      // The framework plugin adds prebundled includes during config merging.
++      // Bypass them so reviewed reader bytes execute through this hook and
++      // ephemeral optimizer output cannot masquerade as a package artifact.
++      for (const options of [config.optimizeDeps, ...Object.values(config.environments ?? {}).map(row => row.optimizeDeps)].filter(Boolean)) {
++        options.include = []; options.noDiscovery = true;
++        options.exclude = [...new Set([...(options.exclude ?? []), "solid-js", "@solidjs/signals", "@solidjs/web"])];
++      }
++      validateFeedbackInputs(snapshot.manifest);
++    }
++  };
++}
++
++async function collectProject(project, scenario, tools, browser) {
++  const snapshot = feedbackSnapshot(project), root = dirname(snapshot.manifest.project);
++  const nativeFeedback = inspectDevelopmentFeedback(project, { feedbackFacts: true, snapshot });
++  assert(Array.isArray(nativeFeedback.analysis.feedbackFacts), "Native checker does not expose development models");
++  const models = new Map(nativeFeedback.analysis.feedbackFacts.map(model => [model.path, model]));
++  const cache = mkdtempSync(join(tmpdir(), "solid-feedback-vite-"));
++  const runtimeInputs = new Map(), coverage = { nativeReader: null, sourceInstrumentation: [], complete: false }, unmapped = [];
++  const sourceFiles = new Map(snapshot.sources.filter(source => !source.isDeclarationFile)
++    .map(source => [resolve(source.fileName), source]));
++  const record = path => {
++    path = realpathSync(path);
++    const pin = { path, sha256: hash(readFileSync(path)) }, previous = runtimeInputs.get(path);
++    assert(!previous || previous.sha256 === pin.sha256, `Runtime input changed: ${path}`);
++    runtimeInputs.set(path, pin);
++  };
++  for (const path of [runtimePath, join(root, "index.html")]) record(path);
++  const server = await tools.createServer({ configFile: false, root, cacheDir: cache, publicDir: false,
++    plugins: [feedbackReadPlugin({ snapshot, runtimeInputs, coverage }), {
++      name: "solid-checker-development-source", enforce: "pre",
++      transform(code, id) {
++        const path = id.split("?")[0], model = models.get(path);
++        if (!model || snapshot.typingErrors || !model.functions.length) return null;
++        const result = instrumentFeedbackSource(code, path, model, "/@fs" + runtimePath);
++        coverage.sourceInstrumentation.push({ path, ...result.counts });
++        return { code: result.code, map: result.map };
++      }
++    }, tools.solid({ hot: false }), {
++      name: "solid-checker-feedback-inputs", enforce: "post",
++      transform(_code, id) {
++        const path = id.split("?")[0];
++        if (existsSync(path) && /\.[cm]?[jt]sx?$/.test(path)) record(path);
++      }
++    }],
++    resolve: { dedupe: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
++    optimizeDeps: { noDiscovery: true, include: [], exclude: ["solid-js", "@solidjs/signals", "@solidjs/web"] },
++    server: { host: "127.0.0.1", port: 0, fs: { allow: [root, dirname(runtimePath), dirname(dirname(runtimePath)), tools.root] } },
++    logLevel: "silent" });
++  let context;
++  const pageErrors = [], blockedRequests = [], assertions = [], checkpoints = [];
++  try {
++    await server.listen();
++    const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
++    context = await browser.newContext(); context.setDefaultTimeout(12000);
++    await context.route("**/*", route => {
++      const url = new URL(route.request().url());
++      if (url.origin === origin) return route.continue();
++      blockedRequests.push(url.href); return route.abort();
++    });
++    const page = await context.newPage();
++    page.on("pageerror", error => pageErrors.push({ message: error.message, stack: error.stack }));
++    await page.goto(origin, { waitUntil: "domcontentloaded" });
++    for (const step of scenario.steps) {
++      if (step.action === "click") await page.locator(step.selector).click();
++      if (step.action === "wait-for-selector") await page.locator(step.selector).waitFor({ state: "visible" });
++      if (step.action === "wait-for-text") await page.waitForFunction(({ selector, text }) =>
++        document.querySelector(selector)?.textContent === text, { selector: step.selector, text: step.text });
++      if (step.action === "assert-text") {
++        const actual = await page.locator(step.selector).textContent();
++        assertions.push({ id: step.id, selector: step.selector, expected: step.text, actual,
++          passed: actual === step.text, channel: "executed-assertion", severity: actual === step.text ? "info" : "error",
++          authority: false, certification: false });
++      }
++      checkpoints.push(await page.evaluate(selector => ({ events: globalThis.__solidCheckerReads?.events.length ?? 0,
++        selector, text: document.querySelector(selector)?.textContent ?? null }), step.selector));
++    }
++    const raw = await page.evaluate(() => ({ events: globalThis.__solidCheckerReads?.events ?? [],
++      stats: globalThis.__solidCheckerReads?.stats ?? null, diagnostics: globalThis.__solidCheckerDiagnostics ?? [] }));
++    const capture = captureTemplate(snapshot), maps = new Map();
++    async function original(frame) {
++      let url; try { url = new URL(frame.path); } catch { return null; }
++      if (url.origin !== origin) return null;
++      const key = url.pathname + url.search;
++      if (!maps.has(key)) {
++        const transformed = await server.transformRequest(key);
++        maps.set(key, transformed?.map ? new tools.TraceMap(transformed.map) : null);
++      }
++      const map = maps.get(key); if (!map) return null;
++      const position = tools.originalPositionFor(map, { line: frame.line, column: frame.column - 1 });
++      if (!position.source || !position.line) return null;
++      const served = url.pathname.startsWith("/@fs/") ? decodeURIComponent(url.pathname.slice(4)) : join(root, decodeURIComponent(url.pathname));
++      const path = resolve(dirname(served), position.source), source = sourceFiles.get(path);
++      if (!source) return null;
++      const lines = source.text.split("\n");
++      if (position.line > lines.length || position.column >= lines[position.line - 1].length) return null;
++      const offset = lines.slice(0, position.line - 1).reduce((n, line) => n + line.length + 1, 0) + position.column;
++      const character = String.fromCodePoint(source.text.codePointAt(offset));
++      return { location: { path, startByte: Buffer.byteLength(source.text.slice(0, offset)),
++        endByte: Buffer.byteLength(source.text.slice(0, offset)) + Buffer.byteLength(character) },
++        sourceSha256: hash(source.text), line: position.line, column: position.column + 1 };
++    }
++    const authoredEvents = [];
++    for (const [index, event] of raw.events.entries()) {
++      let site;
++      for (const frame of event.frames) { site = await original(frame); if (site) break; }
++      if (!site || !coverage.nativeReader) { unmapped.push({ kind: event.kind ?? "untracked-read", reason: "No configured authored source frame", nodeId: event.nodeId }); continue; }
++      authoredEvents.push({ ...event, site });
++      capture.events.push({ id: `read-${index}`, kind: event.kind ?? "untracked-read", message: event.kind === "observer-query" ?
++        "Queried tracking and found no observer. Whether package code skipped subscribing remains open." :
++        "Executed a reactive read without an observer or owner. Intent remains open.",
++        tracking: "untracked", runtimeInput: coverage.nativeReader.path, ...site });
++    }
++    // Uncaught errors remain recorded failures. Source attribution is accepted
++    // only when the browser stack maps to a configured original source.
++    for (const [index, error] of pageErrors.entries()) {
++      let site;
++      for (const line of (error.stack ?? "").split("\n")) {
++        const match = line.match(/(https?:\/\/.*?):(\d+):(\d+)\)?$/);
++        if (match) { site = await original({ path: match[1], line: Number(match[2]), column: Number(match[3]) }); if (site) break; }
++      }
++      if (site) capture.events.push({ id: `error-${index}`, kind: "runtime-exception", message: error.message, ...site });
++      else unmapped.push({ kind: "runtime-exception", message: error.message, reason: "No configured authored source frame" });
++    }
++    capture.runtimeInputs = [...runtimeInputs.values()];
++    for (const pin of capture.runtimeInputs) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Runtime input changed: ${pin.path}`);
++    validateFeedbackInputs(snapshot.manifest);
++    const feedback = inspectDevelopmentFeedback(project, { capture, snapshot, analyze: () => ({ status: nativeFeedback.nativeExitCode,
++      stdout: JSON.stringify(nativeFeedback.analysis) }) });
++    const automatic = selectReadFeedback(authoredEvents, [...models.values()], { typingErrors: snapshot.typingErrors, dropped: raw.stats?.dropped ?? 0 });
++    return { feedback, capture, assertions: snapshot.typingErrors ? [] : assertions,
++      automatic,
++      coverage, stats: raw.stats, diagnostics: raw.diagnostics, checkpoints, unmapped, blockedRequests,
++      pageErrors, typingErrors: snapshot.typingErrors };
++  } finally { await context?.close(); await server.close(); rmSync(cache, { recursive: true, force: true }); }
++}
++
++export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject }) {
++  const scenarioPin = { path: realpathSync(resolve(scenarioPath)), sha256: hash(readFileSync(scenarioPath)) };
++  const scenario = validateFeedbackScenario(JSON.parse(readFileSync(scenarioPin.path, "utf8")));
++  const tools = await toolingAt(resolve(toolingRoot ?? dirname(resolve(project))));
++  tools.root = realpathSync(resolve(toolingRoot ?? dirname(resolve(project))));
++  const browserPin = { path: realpathSync(resolve(browserPath)), sha256: hash(readFileSync(browserPath)) };
++  const browser = await tools.chromium.launch({ executablePath: browserPin.path, headless: true, timeout: 15000 });
++  try {
++    const original = await collectProject(project, scenario, tools, browser);
++    const comparison = comparisonProject ? await collectProject(comparisonProject, scenario, tools, browser) : null;
++    for (const run of [original, comparison].filter(Boolean)) {
++      validateFeedbackInputs(run.capture.manifest);
++      for (const pin of run.capture.runtimeInputs) assert.equal(hash(readFileSync(pin.path)), pin.sha256, `Runtime input changed: ${pin.path}`);
++    }
++    assert.equal(hash(readFileSync(scenarioPin.path)), scenarioPin.sha256, "Scenario changed during execution");
++    assert.equal(hash(readFileSync(browserPin.path)), browserPin.sha256, "Browser changed during execution");
++    const selection = selectAssertionFeedback(original.assertions, comparison?.assertions ?? []);
++    return { ...original.feedback, coverage: { ...original.feedback.coverage, runtime: "executed-browser", nativeReadCollection: original.coverage },
++      assertions: original.assertions, assertionFailures: original.assertions.filter(row => !row.passed),
++      guidance: selection, execution: { ...original, feedback: undefined, capture: undefined },
++      automatic: original.automatic,
++      comparison: comparison ? { project: comparison.feedback.project, inputId: comparison.feedback.inputId,
++        assertions: comparison.assertions, stats: comparison.stats, nativeExitCode: comparison.feedback.nativeExitCode,
++        typingErrors: comparison.typingErrors, pageErrors: comparison.pageErrors } : null,
++      scenario: scenarioPin, browser: { ...browserPin, version: browser.version() } };
++  } finally { await browser.close(); }
++}
+diff --git a/packages/cli/scripts/feedback-native-hook.mjs b/packages/cli/scripts/feedback-native-hook.mjs
+new file mode 100644
+index 000000000..35991849c
+--- /dev/null
++++ b/packages/cli/scripts/feedback-native-hook.mjs
+@@ -0,0 +1,74 @@
++import assert from "node:assert/strict";
++import { createHash } from "node:crypto";
++import ts from "typescript";
++
++// Reviewed RC.9 shared reader/untrack sites from native-read-hook-v3 in the
++// experiment. Exact bytes own this profile; names alone confer no behavior.
++export const sharedReaderSha256 = "sha256:70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e";
++export function instrumentFeedbackReads(text, path, runtimeSpecifier) {
++  assert.equal(`sha256:${createHash("sha256").update(text).digest("hex")}`, sharedReaderSha256,
++    "Native reader bytes have no reviewed development profile");
++  const f = ts.factory, source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
++  // TypeScript only parses and prints the pinned JavaScript. Package behavior,
++  // call dispatch, and user-source semantics are not inferred in this adapter.
++  let prefix = "__solidCheckerRead";
++  while (text.includes(prefix)) prefix += "_";
++  const id = suffix => f.createIdentifier(prefix + suffix);
++  const trace = () => f.createPropertyAccessExpression(f.createIdentifier("globalThis"), "__solidCheckerReads");
++  const call = (name, args) => f.createCallExpression(f.createPropertyAccessExpression(id("Trace"), name), undefined, args);
++  const decl = (name, value) => f.createVariableStatement(undefined, f.createVariableDeclarationList([
++    f.createVariableDeclaration(name, undefined, undefined, value)
++  ], ts.NodeFlags.Const));
++  let reader = 0, untrack = 0, observer = 0;
++  const result = ts.transpileModule(text, { fileName: path,
++    compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, sourceMap: true, inlineSources: true },
++    transformers: { before: [context => root => {
++      function visit(node) {
++        if (ts.isFunctionDeclaration(node) && node.getStart(source) === 130767 && node.end === 130897) {
++          observer++;
++          function returned(child) {
++            if (ts.isReturnStatement(child)) return f.updateReturnStatement(child,
++              f.createConditionalExpression(id("Trace"), undefined, call("observerQuery", [child.expression, f.createIdentifier("getOwner")]), undefined, child.expression));
++            return ts.visitEachChild(child, returned, context);
++          }
++          const body = ts.visitNode(node.body, returned);
++          return f.updateFunctionDeclaration(node, node.modifiers, node.asteriskToken, node.name, node.typeParameters,
++            node.parameters, node.type, f.updateBlock(body, [decl(id("Trace"), trace()), ...body.statements]));
++        }
++        if (ts.isFunctionDeclaration(node) && node.getStart(source) === 262883 && node.end === 271299) {
++          reader++;
++          function returned(child) {
++            if (child !== node.body && ts.isFunctionLike(child)) return child;
++            if (ts.isReturnStatement(child)) {
++              const value = child.expression ?? f.createVoidZero();
++              const next = f.updateReturnStatement(child, f.createConditionalExpression(id("Trace"), undefined,
++                call("finish", [value, id("Ticket")]), undefined, value));
++              return ts.setTextRange(ts.setOriginalNode(next, child), child);
++            }
++            return ts.visitEachChild(child, returned, context);
++          }
++          const body = ts.visitNode(node.body, returned);
++          return f.updateFunctionDeclaration(node, node.modifiers, node.asteriskToken, node.name, node.typeParameters,
++            node.parameters, node.type, f.updateBlock(body, [decl(id("Trace"), trace()),
++              decl(id("Ticket"), f.createConditionalExpression(id("Trace"), undefined, call("begin", [
++                f.createIdentifier("el"), f.createIdentifier("getObserver"), f.createIdentifier("getOwner")
++              ]), undefined, f.createNull())), ...body.statements]));
++        }
++        if (ts.isFunctionDeclaration(node) && node.getStart(source) === 242109 && node.end === 242584) {
++          untrack++;
++          return f.updateFunctionDeclaration(node, node.modifiers, node.asteriskToken, node.name, node.typeParameters,
++            node.parameters, node.type, f.createBlock([decl(id("Trace"), trace()),
++              decl(id("Intent"), f.createConditionalExpression(id("Trace"), undefined, call("enterIntent", []), undefined, f.createNumericLiteral(0))),
++              f.createTryStatement(node.body, undefined, f.createBlock([f.createIfStatement(id("Trace"),
++                f.createExpressionStatement(call("leaveIntent", [id("Intent")])))]))]));
++        }
++        return ts.visitEachChild(node, visit, context);
++      }
++      const transformed = ts.visitNode(root, visit);
++      return f.updateSourceFile(transformed, [f.createImportDeclaration(undefined, undefined,
++        f.createStringLiteral(runtimeSpecifier)), ...transformed.statements]);
++    }] }
++  });
++  assert.equal(reader, 1); assert.equal(untrack, 1); assert.equal(observer, 1);
++  return { code: result.outputText, map: JSON.parse(result.sourceMapText) };
++}
+diff --git a/packages/cli/scripts/feedback-read-runtime.mjs b/packages/cli/scripts/feedback-read-runtime.mjs
+new file mode 100644
+index 000000000..bacf0fd8e
+--- /dev/null
++++ b/packages/cli/scripts/feedback-read-runtime.mjs
+@@ -0,0 +1,66 @@
++// Browser-only collector. Normal reads keep their value and execution count.
++// Collection is bounded; missing records never establish correctness.
++export function createReadCollector({ maxEvents = 256, maxBytes = 1024 * 1024 } = {}) {
++  const events = [], nodes = new WeakMap();
++  let nextNode = 0, intent = 0, bytes = 0, dropped = 0, reads = 0, queries = 0, inspecting = 0, current = null;
++  function frames(skip) {
++    const error = new Error();
++    if (typeof Error.captureStackTrace === "function") Error.captureStackTrace(error, skip);
++    return (error.stack ?? "").split("\n").slice(0, 40).flatMap(line => {
++      const match = line.match(/(?:at .*?\()?((?:https?:\/\/|file:\/\/|\/).*?):(\d+):(\d+)\)?$/);
++      return match ? [{ path: match[1], line: Number(match[2]), column: Number(match[3]) }] : [];
++    });
++  }
++  function retain(ticket) {
++    const size = new TextEncoder().encode(JSON.stringify(ticket)).length;
++    if (events.length < maxEvents && bytes + size <= maxBytes) { events.push(ticket); bytes += size; }
++    else dropped++;
++  }
++  return {
++    events,
++    get stats() { return { reads, observerQueries: queries, retained: events.length, dropped, bytes, complete: false }; },
++    enterFunction(encoded, parent) {
++      const model = JSON.parse(encoded), inherited = current ?? parent;
++      const origin = model.derivedOrigin ? { path: model.path, sourceSha256: model.sourceSha256, span: model.derivedOrigin } : inherited?.origin;
++      if (!origin) return null;
++      const steps = model.derivedOrigin ? [] : [...(inherited?.steps ?? [])];
++      if (!model.derivedOrigin && !current && parent?.origin) steps.push({ kind: "allocation", path: model.path,
++        sourceSha256: model.sourceSha256, span: model.span, function: model.parent });
++      return { origin, steps: steps.slice(0, 32), truncated: model.derivedOrigin ? false :
++        (inherited?.truncated ?? false) || steps.length > 32 };
++    },
++    withOperation(token, encoded, invoke) {
++      const previous = current;
++      if (token) {
++        const steps = [...token.steps, JSON.parse(encoded)];
++        current = { origin: token.origin, steps: steps.slice(0, 32), truncated: token.truncated || steps.length > 32 };
++      } else current = null;
++      try { return invoke(); } finally { current = previous; }
++    },
++    enterIntent() { const previous = intent; intent++; return previous; },
++    leaveIntent(previous) { intent = previous; },
++    begin(node, getObserver, getOwner) {
++      reads++;
++      inspecting++;
++      try { if (intent || getObserver() || getOwner() || !node || typeof node !== "object") return null; }
++      finally { inspecting--; }
++      if (!nodes.has(node)) nodes.set(node, ++nextNode);
++      return { kind: "untracked-read", nodeId: nodes.get(node), frames: frames(this.begin), observer: false, owner: false,
++        lineage: current ? { origin: current.origin, steps: [...current.steps], truncated: current.truncated } : null };
++    },
++    observerQuery(observer, getOwner) {
++      queries++;
++      if (!inspecting && !intent && observer === null && current?.origin && !getOwner()) {
++        retain({ kind: "observer-query", nodeId: null, frames: frames(this.observerQuery), observer: false, owner: false,
++          lineage: { origin: current.origin, steps: [...current.steps], truncated: current.truncated } });
++      }
++      return observer;
++    },
++    finish(value, ticket) {
++      if (ticket) retain(ticket);
++      return value;
++    }
++  };
++}
++export const reads = createReadCollector();
++globalThis.__solidCheckerReads = reads;
+diff --git a/packages/cli/scripts/feedback-read-selector.mjs b/packages/cli/scripts/feedback-read-selector.mjs
+new file mode 100644
+index 000000000..575944faf
+--- /dev/null
++++ b/packages/cli/scripts/feedback-read-selector.mjs
+@@ -0,0 +1,61 @@
++// Join executed records to native, exact-source models. No package names,
++// API spellings, expected values, comparison code or benchmark roles enter
++// selection. Candidate result relationships were computed by the native IR.
++export function selectReadFeedback(events, models, { typingErrors = 0, dropped = 0 } = {}) {
++  const notes = [], queries = [], open = [], seen = new Set();
++  if (typingErrors) return { notes, open, excluded: "TypeScript owns this input", authority: false, certification: false };
++  const files = new Map(models.map(file => [file.path, file]));
++  const same = (left, right) => left && right && left.start === right.start && left.end === right.end;
++  for (const event of events) {
++    const lineage = event.lineage;
++    if (lineage && (!Array.isArray(lineage.steps) || lineage.steps.length > 32)) {
++      open.push({ reason: "Malformed or over-budget callback lineage", nodeId: event.nodeId }); continue;
++    }
++    if (!lineage?.origin) { open.push({ reason: "Derived origin was not observed", nodeId: event.nodeId }); continue; }
++    const origin = lineage.origin, file = files.get(origin.path);
++    if (!file || file.sourceSha256 !== origin.sourceSha256 ||
++      !file.functions.some(fn => same(fn.derivedOrigin, origin.span))) {
++      open.push({ reason: "Derived origin does not bind current native facts", nodeId: event.nodeId }); continue;
++    }
++    let valid = !lineage.truncated && lineage.steps.length > 0, returned = true;
++    for (const step of lineage.steps) {
++      const source = files.get(step.path);
++      let relevance;
++      if (step.kind === "allocation") {
++        const fn = source?.functions.find(row => same(row.span, step.span) && same(row.parent, step.function));
++        relevance = fn?.allocationRelevance;
++      } else {
++        const operation = source?.operations.find(row => same(row.span, step.span) && same(row.function, step.function));
++        const fn = source?.functions.find(row => same(row.span, step.function));
++        relevance = fn && operation?.resultRelevance;
++      }
++      if (!source || source.sourceSha256 !== step.sourceSha256 || !relevance) { valid = false; break; }
++      returned &&= ["return-expression", "local-initializer", "distinct-branch"].includes(relevance);
++    }
++    if (!valid || !returned) {
++      open.push({ origin, nodeId: event.nodeId, reason: !valid ? "Incomplete or stale callback lineage" :
++        "Result relevance or competing return paths remain open" }); continue;
++    }
++    const site = event.site, last = lineage.steps.at(-1);
++    if (!site || site.sourceSha256 !== last.sourceSha256 || site.location.path !== last.path ||
++      site.location.startByte < last.span.start || site.location.endByte > last.span.end || last.kind === "allocation") {
++      open.push({ origin, nodeId: event.nodeId, reason: "Observed authored site is outside the final modeled operation" }); continue;
++    }
++    const identity = `${origin.path}:${origin.span.start}:${event.nodeId}`;
++    if (seen.has(identity)) continue; seen.add(identity);
++    if (event.kind === "observer-query") {
++      queries.push({ kind: "observer-query-outside-tracking", severity: "info", channel: "executed-development",
++        message: "A call related to this derived result queried tracking and found no observer. A package may skip subscribing in this context; check whether its result should follow changing values.",
++        origin, observedRead: event.site ?? null, lineage: lineage.steps, reactiveRead: "unproven", reactiveIntent: "open",
++        authority: false, certification: false }); continue;
++    }
++    notes.push({ kind: "potential-untracked-result-read", severity: "warning", channel: "executed-development",
++      message: "A callback reached a reactive read without an observer. Native source models connect its call chain to a possible result of a derived computation. If this result should follow the value, read it while tracking and pass the captured value to the deferred work.",
++      origin, nodeId: event.nodeId, lineage: lineage.steps, reactiveIntent: "open",
++      observedRead: event.site ?? null,
++      resultFlow: "native-value-flow-candidate", promiseSettlement: "unproven", authority: false, certification: false });
++  }
++  notes.push(...queries.filter(query => !notes.some(note => same(note.origin.span, query.origin.span) && note.origin.path === query.origin.path)));
++  if (dropped) open.push({ reason: "Read evidence exceeded the retention budget", dropped });
++  return { notes, open, authority: false, certification: false, complete: false };
++}
+diff --git a/packages/cli/scripts/feedback-source-hook.mjs b/packages/cli/scripts/feedback-source-hook.mjs
+new file mode 100644
+index 000000000..a3d7a86a5
+--- /dev/null
++++ b/packages/cli/scripts/feedback-source-hook.mjs
+@@ -0,0 +1,90 @@
++import assert from "node:assert/strict";
++import { createHash } from "node:crypto";
++import ts from "typescript";
++
++// Syntax transformation only. The native analysis selects exact functions,
++// operations, derived origins and return-expression relationships.
++export function instrumentFeedbackSource(text, path, model, runtimeSpecifier) {
++  assert.equal(model.path, path);
++  assert.equal(model.sourceSha256, `sha256:${createHash("sha256").update(text).digest("hex")}`, "Development model source changed");
++  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true,
++    /x$/.test(path) ? ts.ScriptKind.TSX : ts.ScriptKind.TS), f = ts.factory;
++  const bytes = offset => Buffer.byteLength(text.slice(0, offset));
++  const key = span => `${span.start}:${span.end}`;
++  const at = node => key({ start: bytes(node.getStart(source)), end: bytes(node.end) });
++  const functions = new Map(model.functions.map(row => [key(row.span), row]));
++  const operations = new Map(model.operations.map(row => [key(row.span), row]));
++  let prefix = "__scDevelopment"; while (text.includes(prefix)) prefix += "_";
++  const runtime = f.createIdentifier(prefix + "Runtime"), tokens = new Map();
++  for (const row of model.functions) tokens.set(key(row.span), f.createIdentifier(`${prefix}_${row.span.start}`));
++  const call = (name, args) => f.createCallExpression(f.createPropertyAccessExpression(runtime, name), undefined, args);
++  const data = value => f.createStringLiteral(JSON.stringify(value));
++  const zero = () => f.createNull();
++  const counts = { functions: 0, operations: 0, skipped: 0 };
++  const matched = new Set();
++  function suspends(node) {
++    if (ts.isFunctionLike(node)) return false;
++    if (ts.isAwaitExpression(node) || ts.isYieldExpression(node)) return true;
++    return ts.forEachChild(node, suspends) ?? false;
++  }
++  const result = ts.transpileModule(text, { fileName: path,
++    compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.Preserve,
++      sourceMap: true, inlineSources: true },
++    transformers: { before: [context => root => {
++      function visit(node, active = null) {
++        if (ts.isFunctionLike(node)) {
++          // Oxc's function span excludes the containing export declaration;
++          // TypeScript includes its export/default modifiers in this node.
++          const modifier = node.modifiers?.find(item => ![ts.SyntaxKind.ExportKeyword, ts.SyntaxKind.DefaultKeyword].includes(item.kind));
++          const keyword = ts.isFunctionDeclaration(node) && node.getChildren(source).find(item => item.kind === ts.SyntaxKind.FunctionKeyword);
++          const canonical = modifier ?? keyword;
++          const bodies = node.body ? model.functions.filter(row => key(row.body) === at(node.body)) : [];
++          const row = functions.get(at(node)) ?? (canonical ? functions.get(key({ start: bytes(canonical.getStart(source)), end: bytes(node.end) })) : undefined) ??
++            (bodies.length === 1 ? bodies[0] : null);
++          if (!row || row.generator || !(ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node) ||
++            ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) || ts.isConstructorDeclaration(node)) || !node.body) {
++            counts.skipped++; return node;
++          }
++          matched.add(key(row.span)); counts.functions++;
++          const token = tokens.get(key(row.span));
++          const parent = row.parent && matched.has(key(row.parent)) ? tokens.get(key(row.parent)) : zero();
++          const body = ts.visitNode(node.body, child => visit(child, row));
++          const statements = ts.isBlock(body) ? [...body.statements] : [f.createReturnStatement(body)];
++          // Keep directive prologues at the beginning of the body.
++          let boundary = 0;
++          while (boundary < statements.length && ts.isExpressionStatement(statements[boundary]) && ts.isStringLiteral(statements[boundary].expression)) boundary++;
++          statements.splice(boundary, 0, f.createVariableStatement(undefined, f.createVariableDeclarationList([
++            f.createVariableDeclaration(token, undefined, undefined, call("enterFunction", [data({ path, sourceSha256: model.sourceSha256, ...row }), parent]))
++          ], ts.NodeFlags.Const)));
++          const nextBody = f.createBlock(statements, true);
++          if (ts.isArrowFunction(node)) return f.updateArrowFunction(node, node.modifiers, node.typeParameters, node.parameters, node.type, node.equalsGreaterThanToken, nextBody);
++          if (ts.isFunctionExpression(node)) return f.updateFunctionExpression(node, node.modifiers, node.asteriskToken, node.name, node.typeParameters, node.parameters, node.type, nextBody);
++          if (ts.isMethodDeclaration(node)) return f.updateMethodDeclaration(node, node.modifiers, node.asteriskToken, node.name, node.questionToken, node.typeParameters, node.parameters, node.type, nextBody);
++          if (ts.isGetAccessorDeclaration(node)) return f.updateGetAccessorDeclaration(node, node.modifiers, node.name, node.parameters, node.type, nextBody);
++          if (ts.isSetAccessorDeclaration(node)) return f.updateSetAccessorDeclaration(node, node.modifiers, node.name, node.parameters, nextBody);
++          if (ts.isConstructorDeclaration(node)) return f.updateConstructorDeclaration(node, node.modifiers, node.parameters, nextBody);
++          return f.updateFunctionDeclaration(node, node.modifiers, node.asteriskToken, node.name, node.typeParameters, node.parameters, node.type, nextBody);
++        }
++        const operation = ts.isCallExpression(node) && operations.get(at(node));
++        const next = ts.visitEachChild(node, child => visit(child, active), context);
++        if (!operation || !active || key(operation.function) !== key(active.span)) return next;
++        // Moving await/yield or direct eval into a new arrow changes semantics.
++        if (suspends(node) || node.expression.kind === ts.SyntaxKind.SuperKeyword || node.expression.kind === ts.SyntaxKind.ImportKeyword ||
++          (ts.isIdentifier(node.expression) && node.expression.text === "eval")) { counts.skipped++; return next; }
++        counts.operations++;
++        return ts.setTextRange(ts.setOriginalNode(call("withOperation", [tokens.get(key(active.span)),
++          data({ path, sourceSha256: model.sourceSha256, ...operation }),
++          f.createArrowFunction(undefined, undefined, [], undefined, f.createToken(ts.SyntaxKind.EqualsGreaterThanToken), next)]), node), node);
++      }
++      const transformed = ts.visitNode(root, visit);
++      const statements = [...transformed.statements];
++      let boundary = 0;
++      while (boundary < statements.length && ts.isExpressionStatement(statements[boundary]) && ts.isStringLiteral(statements[boundary].expression)) boundary++;
++      statements.splice(boundary, 0, f.createImportDeclaration(undefined,
++        f.createImportClause(false, undefined, f.createNamedImports([f.createImportSpecifier(false, f.createIdentifier("reads"), runtime)])),
++        f.createStringLiteral(runtimeSpecifier)));
++      return f.updateSourceFile(transformed, statements);
++    }] }
++  });
++  return { code: result.outputText, map: JSON.parse(result.sourceMapText), counts };
++}
+diff --git a/packages/cli/test/development-feedback.test.mjs b/packages/cli/test/development-feedback.test.mjs
+new file mode 100644
+index 000000000..00bb36506
+--- /dev/null
++++ b/packages/cli/test/development-feedback.test.mjs
+@@ -0,0 +1,94 @@
++import assert from "node:assert/strict";
++import { createHash } from "node:crypto";
++import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { spawnSync } from "node:child_process";
++import { test } from "vitest";
++import { feedbackSnapshot, captureTemplate, admitFeedbackCapture, inspectDevelopmentFeedback } from "../scripts/development-feedback.mjs";
++
++const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
++function fixture(run) {
++  const root = realpathSync(mkdtempSync(join(tmpdir(), "solid-feedback-")));
++  const path = join(root, "app.ts"), project = join(root, "tsconfig.json"), runtime = join(root, "runtime.js");
++  const source = "export const value = 1;\n";
++  writeFileSync(path, source); writeFileSync(runtime, "export const read = () => 1;\n");
++  writeFileSync(project, JSON.stringify({ compilerOptions: { strict: true, noEmit: true, types: [], skipLibCheck: false }, files: [path] }));
++  try {
++    const snapshot = feedbackSnapshot(project), capture = JSON.parse(JSON.stringify(captureTemplate(snapshot)));
++    capture.runtimeInputs.push({ path: runtime, sha256: hash(readFileSync(runtime)) });
++    capture.events.push({ id: "read-1", kind: "untracked-read", message: "Read while tracking was off", tracking: "untracked",
++      runtimeInput: runtime, sourceSha256: hash(source), location: { path, startByte: 13, endByte: 18 } });
++    return run({ root, path, project, runtime, snapshot, capture });
++  } finally { rmSync(root, { recursive: true, force: true }); }
++}
++test("capture JSON round trip retains current inputs and an informational read", () => fixture(({ snapshot, capture }) => {
++  const result = admitFeedbackCapture(snapshot, capture);
++  assert.equal(result.observations[0].severity, "info");
++  assert.equal(result.observations[0].reactiveIntent, "open");
++  assert.equal(result.observations[0].certification, false);
++}));
++test("native proven findings retain their own channel and uncertifiable rows", () => fixture(({ project, capture }) => {
++  const analysis = { findings: [{ kind: "violation", id: "SC1005" }, { kind: "uncertifiable", id: "SC1001" }] };
++  const report = inspectDevelopmentFeedback(project, { capture, analyze: () => ({ status: 0, stdout: JSON.stringify(analysis) }) });
++  assert.deepEqual(report.analysis, analysis);
++  assert.deepEqual(report.findings, [analysis.findings[0]]);
++  assert.deepEqual(report.gaps, [analysis.findings[1]]);
++  assert.equal(report.observations.length, 1);
++  assert.equal(report.coverage.packageInference, "unavailable");
++}));
++for (const kind of ["runtime-exception", "assertion-failure"]) {
++  test(`admits a supplied ${kind} without claiming native proof`, () => fixture(({ snapshot, capture }) => {
++    const read = capture.events[0];
++    capture.runtimeInputs = [];
++    capture.events = [{ id: "failure-1", kind, message: "Recorded application failure",
++      location: read.location, sourceSha256: read.sourceSha256 }];
++    const result = admitFeedbackCapture(snapshot, capture);
++    assert.equal(result.observations[0].kind, kind);
++    assert.equal(result.observations[0].severity, "error");
++    assert.equal(result.observations[0].channel, "recorded-runtime");
++    assert.equal(result.observations[0].authority, false);
++    assert.equal(result.observations[0].certification, false);
++  }));
++}
++for (const [name, edit] of [
++  ["source changes", ({ path }) => writeFileSync(path, "export const value = 2;\n")],
++  ["runtime changes", ({ runtime }) => writeFileSync(runtime, "export const read = () => 2;\n")],
++  ["configuration changes", ({ project }) => writeFileSync(project, "{}")],
++  ["forged source digest", ({ capture }) => { capture.events[0].sourceSha256 = hash("other"); }],
++  ["duplicate events", ({ capture }) => { capture.events.push(capture.events[0]); }],
++  ["unsupported event", ({ capture }) => { capture.events[0].kind = "proven-package-defect"; }],
++  ["missing native read input", ({ capture }) => { capture.runtimeInputs = []; }],
++  ["authority assertion", ({ capture }) => { capture.authority = true; }],
++  ["source span outside file", ({ capture }) => { capture.events[0].location.endByte = 1000; }],
++]) test(`refuses ${name}`, () => fixture(state => { edit(state); assert.throws(() => admitFeedbackCapture(state.snapshot, state.capture)); }));
++test("inputs changed during native analysis refuse the complete report", () => fixture(({ project, path, capture }) => {
++  assert.throws(() => inspectDevelopmentFeedback(project, { capture, analyze: () => {
++    writeFileSync(path, "export const value = 2;\n"); return { status: 0, stdout: '{"findings":[]}' };
++  } }));
++}));
++test("repeated observations group without dropping event identities", () => fixture(({ snapshot, capture }) => {
++  capture.events.push({ ...capture.events[0], id: "read-2" });
++  const result = admitFeedbackCapture(snapshot, capture);
++  assert.equal(result.observations.length, 1);
++  assert.equal(result.observations[0].occurrences, 2);
++  assert.deepEqual(result.observations[0].eventIds, ["read-1", "read-2"]);
++}));
++test("real TypeScript errors suppress additional captured guidance", () => fixture(({ project, path, runtime }) => {
++  writeFileSync(path, 'export const value: number = "wrong";\n');
++  const snapshot = feedbackSnapshot(project), capture = captureTemplate(snapshot);
++  capture.events.push({ id: "failure-1", kind: "runtime-exception", message: "A recorded failure",
++    location: { path, startByte: 13, endByte: 18 }, sourceSha256: hash(readFileSync(path)) });
++  assert(snapshot.typingErrors > 0);
++  assert.deepEqual(admitFeedbackCapture(snapshot, capture).observations, []);
++}));
++test("feedback manifest CLI works without the native binary", () => fixture(({ project }) => {
++  const result = spawnSync(process.execPath, [new URL("../bin/solid-checker.mjs", import.meta.url).pathname,
++    "feedback", "manifest", "--project", project], { encoding: "utf8" });
++  assert.equal(result.status, 0, result.stderr);
++  assert.equal(JSON.parse(result.stdout).documentKind, "solid-checker-development-capture");
++}));
++test("native failure exit status remains visible in the feedback report", () => fixture(({ project }) => {
++  const report = inspectDevelopmentFeedback(project, { analyze: () => ({ status: 1, stdout: '{"findings":[]}' }) });
++  assert.equal(report.nativeExitCode, 1);
++}));
+diff --git a/packages/cli/test/feedback-automatic.test.mjs b/packages/cli/test/feedback-automatic.test.mjs
+new file mode 100644
+index 000000000..9bd1ce291
+--- /dev/null
++++ b/packages/cli/test/feedback-automatic.test.mjs
+@@ -0,0 +1,108 @@
++import assert from "node:assert/strict";
++import { createHash } from "node:crypto";
++import { test } from "vitest";
++import { createReadCollector } from "../scripts/feedback-read-runtime.mjs";
++import { selectReadFeedback } from "../scripts/feedback-read-selector.mjs";
++import { instrumentFeedbackSource } from "../scripts/feedback-source-hook.mjs";
++
++const span = (start, end) => ({ start, end }), path = "/consumer.ts", sourceSha256 = "sha256:test";
++const model = { path, sourceSha256, functions: [{ span: span(0, 100), derivedOrigin: span(10, 90), asynchronous: true }],
++  operations: [{ span: span(30, 40), function: span(0, 100), resultRelevance: "return-expression" }] };
++const event = { nodeId: 1, site: { sourceSha256, location: { path, startByte: 31, endByte: 32 } }, lineage: { origin: { path, sourceSha256, span: span(10, 90) },
++  steps: [{ path, sourceSha256, ...model.operations[0] }], truncated: false } };
++test("automatic selection joins current native return models without assertions or comparison code", () => {
++  const result = selectReadFeedback([event, event], [model]);
++  assert.equal(result.notes.length, 1); assert.equal(result.notes[0].severity, "warning");
++  assert.equal(result.notes[0].reactiveIntent, "open"); assert.equal(result.notes[0].authority, false);
++});
++for (const changed of [ { ...event, lineage: null },
++  { ...event, lineage: { ...event.lineage, truncated: true } },
++  { ...event, lineage: { ...event.lineage, steps: null } },
++  { ...event, site: { sourceSha256, location: { path, startByte: 80, endByte: 81 } } },
++  { ...event, lineage: { ...event.lineage, origin: { ...event.lineage.origin, sourceSha256: "stale" } } },
++  { ...event, lineage: { ...event.lineage, steps: [{ ...event.lineage.steps[0], span: span(31, 40) }] } } ]) {
++  test(`missing or stale exact evidence stays open: ${JSON.stringify(changed)}`, () => {
++    const result = selectReadFeedback([changed], [model]); assert.equal(result.notes.length, 0); assert(result.open.length);
++  });
++}
++test("discarded read results stay open, and a plain deferred callback can produce guidance", () => {
++  assert.equal(selectReadFeedback([event], [{ ...model, operations: [{ ...model.operations[0], resultRelevance: "open" }] }]).notes.length, 0);
++  assert.equal(selectReadFeedback([event], [{ ...model, functions: [{ ...model.functions[0], asynchronous: false }] }]).notes.length, 1);
++});
++test("late callback allocations must relate to the parent's result", () => {
++  const child = { span: span(60, 80), parent: span(0, 100), allocationRelevance: "open" };
++  const next = { ...event, lineage: { ...event.lineage, steps: [...event.lineage.steps,
++    { kind: "allocation", path, sourceSha256, span: child.span, function: child.parent }, event.lineage.steps[0]] } };
++  assert.equal(selectReadFeedback([next], [{ ...model, functions: [...model.functions, child] }]).notes.length, 0);
++  assert.equal(selectReadFeedback([next], [{ ...model, functions: [...model.functions, { ...child, allocationRelevance: "return-expression" }] }]).notes.length, 1);
++});
++test("observer queries remain informational and do not duplicate an observed-read warning", () => {
++  const query = { ...event, kind: "observer-query", nodeId: null };
++  const result = selectReadFeedback([query], [model]); assert.equal(result.notes.length, 1); assert.equal(result.notes[0].severity, "info");
++  assert.equal(result.notes[0].reactiveRead, "unproven");
++  assert.equal(selectReadFeedback([query, event], [model]).notes.length, 1);
++});
++test("query collection preserves values, excludes the collector's own query, and respects explicit untrack", () => {
++  const collector = createReadCollector(), token = collector.enterFunction(JSON.stringify({ path, sourceSha256, derivedOrigin: span(10, 90) }), null);
++  collector.withOperation(token, "{}", () => {
++    assert.equal(collector.observerQuery(null, () => null), null);
++    const value = {}; assert.equal(collector.observerQuery(value, () => null), value);
++    collector.finish(1, collector.begin({}, () => collector.observerQuery(null, () => null), () => null));
++    const previous = collector.enterIntent(); collector.observerQuery(null, () => null); collector.leaveIntent(previous);
++  });
++  assert.deepEqual(collector.events.map(row => row.kind), ["observer-query", "untracked-read"]);
++});
++test("runtime-supplied return flags cannot override the native model", () => {
++  const changed = { ...model, operations: [{ ...model.operations[0], resultRelevance: "open" }] };
++  assert.equal(selectReadFeedback([event], [changed]).notes.length, 0);
++});
++test("native local-initializer and distinct-branch candidates are accepted without invented API semantics", () => {
++  for (const resultRelevance of ["local-initializer", "distinct-branch"]) {
++    assert.equal(selectReadFeedback([event], [{ ...model, operations: [{ ...model.operations[0], resultRelevance }] }]).notes.length, 1);
++  }
++});
++test("published typing errors suppress automatic warnings and retention losses stay visible", () => {
++  assert.equal(selectReadFeedback([event], [model], { typingErrors: 1 }).notes.length, 0);
++  assert.match(selectReadFeedback([], [model], { dropped: 3 }).open[0].reason, /retention/);
++});
++test("async function tokens preserve origin across continuation, restore callers, and bound lineage", async () => {
++  const collector = createReadCollector(), node = {};
++  const token = collector.enterFunction(JSON.stringify({ path, sourceSha256, derivedOrigin: span(10, 90) }), null);
++  await Promise.resolve();
++  collector.withOperation(token, JSON.stringify({ path, sourceSha256, ...model.operations[0] }), () => {
++    const ticket = collector.begin(node, () => null, () => null); collector.finish(1, ticket);
++  });
++  assert.deepEqual(collector.events[0].lineage.origin, event.lineage.origin);
++  assert.equal(collector.begin(node, () => null, () => null).lineage, null);
++  let nested = token;
++  for (let i = 0; i < 35; i++) collector.withOperation(nested, "{}", () => { nested = collector.enterFunction("{}", null); });
++  collector.withOperation(nested, "{}", () => { assert(collector.begin(node, () => null, () => null).lineage.truncated); });
++  assert.throws(() => collector.withOperation(token, "{}", () => { throw Error("failure"); }));
++  assert.equal(collector.begin(node, () => null, () => null).lineage, null);
++});
++test("source transformation preserves async return values, receiver calls and UTF8 identities", async () => {
++  const text = 'const label="é"; export async function example(){"use strict"; await Promise.resolve(); return receiver.get();}';
++  const start = Buffer.byteLength(text.slice(0, text.indexOf("export async"))), end = Buffer.byteLength(text);
++  const body = Buffer.byteLength(text.slice(0, text.indexOf('{'))), callStart = Buffer.byteLength(text.slice(0, text.indexOf("receiver.get()")));
++  const sourceModel = { path, sourceSha256: `sha256:${createHash("sha256").update(text).digest("hex")}`,
++    functions: [{ span: span(start, end), body: span(body, end), parent: null, asynchronous: true, generator: false, derivedOrigin: span(start, end) }],
++    operations: [{ span: span(callStart, callStart + 14), function: span(start, end), resultRelevance: "return-expression" }] };
++  const transformed = instrumentFeedbackSource(text, path, sourceModel, "/runtime.js");
++  assert.equal(transformed.counts.functions, 1); assert.equal(transformed.counts.operations, 1);
++  const value = {}, receiver = { get() { assert.equal(this, receiver); return value; } }, collector = createReadCollector();
++  const code = transformed.code.replace(/^import .*;\n/, "").replace("export async function", "async function");
++  const fn = new Function("__scDevelopmentRuntime", "receiver", code + "\nreturn example;")(collector, receiver);
++  assert.equal(await fn(), value);
++  assert.throws(() => instrumentFeedbackSource(text + " ", path, sourceModel, "/runtime.js"), /source changed/);
++});
++test("method models join by exact body span and preserve receiver and method name", () => {
++  const text = "const receiver={get(){return this;}};";
++  const bodyStart = text.indexOf("{return"), end = text.indexOf("}}") + 1;
++  const sourceModel = { path, sourceSha256: `sha256:${createHash("sha256").update(text).digest("hex")}`,
++    functions: [{ span: span(text.indexOf("(){"), end), body: span(bodyStart, end), parent: null, generator: false }], operations: [] };
++  const result = instrumentFeedbackSource(text, path, sourceModel, "/runtime.js");
++  assert.equal(result.counts.functions, 1);
++  const code = result.code.replace(/^import .*;\n/, "");
++  const receiver = new Function("__scDevelopmentRuntime", code + "\nreturn receiver;")(createReadCollector());
++  assert.equal(receiver.get(), receiver); assert.equal(receiver.get.name, "get");
++});
+diff --git a/packages/cli/test/feedback-browser.test.mjs b/packages/cli/test/feedback-browser.test.mjs
+new file mode 100644
+index 000000000..6f556911e
+--- /dev/null
++++ b/packages/cli/test/feedback-browser.test.mjs
+@@ -0,0 +1,77 @@
++import assert from "node:assert/strict";
++import { test } from "vitest";
++import { createReadCollector } from "../scripts/feedback-read-runtime.mjs";
++import { selectAssertionFeedback } from "../scripts/feedback-assertion-selector.mjs";
++import { validateFeedbackScenario } from "../scripts/feedback-browser.mjs";
++import { instrumentFeedbackReads } from "../scripts/feedback-native-hook.mjs";
++
++const row = (actual, expected = "2") => ({ id: "value", selector: "#value", actual, expected });
++test("measured comparison satisfying a failed supplied assertion receives bounded debugging guidance", () => {
++  const result = selectAssertionFeedback([row("1")], [row("2")]);
++  assert.equal(result.notes.length, 1); assert.equal(result.notes[0].severity, "info");
++  assert.equal(result.notes[0].repairSafety, "unproved"); assert.equal(result.notes[0].authority, false);
++});
++test("a passing snapshot assertion stays quiet when comparison also passes", () => {
++  const result = selectAssertionFeedback([row("9", "9")], [row("9", "9")]);
++  assert.deepEqual(result.notes, []); assert.equal(result.unchanged.length, 1);
++});
++test("breaking a passing identity assertion stays open", () => {
++  const result = selectAssertionFeedback([row("1", "1")], [row("2", "1")]);
++  assert.deepEqual(result.notes, []); assert.match(result.open[0].reason, /breaks/);
++});
++test("a changed result that still fails the assertion supplies no repair guidance", () => {
++  const result = selectAssertionFeedback([row("1", "3")], [row("2", "3")]);
++  assert.deepEqual(result.notes, []); assert.match(result.open[0].reason, /does not satisfy/);
++});
++for (const comparison of [[], [{ ...row("2"), id: "other" }], [{ ...row("2"), selector: "#other" }], [row("2", "3")]]) {
++  test(`no matching supplied assertion stays open: ${JSON.stringify(comparison)}`, () => {
++    const result = selectAssertionFeedback([row("1")], comparison);
++    assert.deepEqual(result.notes, []); assert.equal(result.open.length, 1);
++  });
++}
++test("collector preserves returned object identity and only records normal unowned reads", () => {
++  const collector = createReadCollector(), node = {}, value = {};
++  const ticket = collector.begin(node, () => null, () => null);
++  assert.equal(collector.finish(value, ticket), value); assert.equal(collector.events.length, 1);
++  assert.equal(collector.begin(node, () => ({}), () => null), null);
++  assert.equal(collector.begin(node, () => null, () => ({})), null);
++});
++test("native untrack suppresses observations and restores its previous scope", () => {
++  const collector = createReadCollector(), node = {};
++  const previous = collector.enterIntent();
++  assert.equal(collector.begin(node, () => null, () => null), null);
++  collector.leaveIntent(previous);
++  assert(collector.begin(node, () => null, () => null));
++});
++test("failed reads have no normal-return observation", () => {
++  const collector = createReadCollector(); collector.begin({}, () => null, () => null);
++  assert.equal(collector.events.length, 0);
++});
++test("event and byte budgets explicitly report incomplete coverage", () => {
++  const collector = createReadCollector({ maxEvents: 1 });
++  for (let i = 0; i < 3; i++) collector.finish(i, collector.begin({}, () => null, () => null));
++  assert.equal(collector.events.length, 1); assert.equal(collector.stats.dropped, 2); assert.equal(collector.stats.complete, false);
++  const small = createReadCollector({ maxBytes: 1 }); small.finish(1, small.begin({}, () => null, () => null));
++  assert.equal(small.events.length, 0); assert.equal(small.stats.dropped, 1);
++});
++test("native node identity stays weak and stable across reads", () => {
++  const collector = createReadCollector(), node = {};
++  assert.equal(collector.begin(node, () => null, () => null).nodeId, collector.begin(node, () => null, () => null).nodeId);
++});
++test("native bytes outside the reviewed profile refuse instrumentation", () => {
++  assert.throws(() => instrumentFeedbackReads("export function read(){}", "/native.js", "/runtime.js"), /reviewed development profile/);
++});
++test("scenario accepts explicit authored interactions and assertions", () => {
++  const scenario = { schemaVersion: 1, steps: [{ action: "click", selector: "button" },
++    { action: "assert-text", id: "value", selector: "#value", text: "2" }] };
++  assert.equal(validateFeedbackScenario(scenario), scenario);
++});
++test("automatic collection accepts interactions without assertions", () => {
++  assert.doesNotThrow(() => validateFeedbackScenario({ schemaVersion: 1, steps: [{ action: "click", selector: "button" }] }));
++});
++for (const steps of [[], [{ action: "evaluate", selector: "body" }],
++  [1, 2].map(() => ({ action: "assert-text", id: "same", selector: "#value", text: "2" }))]) {
++  test(`scenario refuses ambiguous or unsupported actions: ${JSON.stringify(steps)}`, () => {
++    assert.throws(() => validateFeedbackScenario({ schemaVersion: 1, steps }));
++  });
++}
+diff --git a/rust/crates/solid-reactive-ir/src/development_feedback.rs b/rust/crates/solid-reactive-ir/src/development_feedback.rs
+new file mode 100644
+index 000000000..7205acd62
+--- /dev/null
++++ b/rust/crates/solid-reactive-ir/src/development_feedback.rs
+@@ -0,0 +1,309 @@
++//! Optional, non-authoritative models for executed development feedback.
++//! Exact primitive identity comes from the normal semantic lookup. The host
++//! may instrument these spans, but cannot manufacture models from API names.
++use serde::{Deserialize, Serialize};
++use solid_dialect::{Dialect, Execution};
++use solid_facts::{
++    FileFacts, ProjectFacts,
++    ast::{FunctionFact, ReturnFact},
++    core::Span,
++};
++use std::collections::HashMap;
++
++use crate::indexes::SemanticLookup;
++
++#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase")]
++pub struct DevelopmentFile {
++    pub path: String,
++    pub source_sha256: String,
++    pub functions: Vec<DevelopmentFunction>,
++    pub operations: Vec<DevelopmentOperation>,
++}
++
++#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase")]
++pub struct DevelopmentFunction {
++    pub span: Span,
++    pub body: Span,
++    pub parent: Option<Span>,
++    pub asynchronous: bool,
++    pub generator: bool,
++    /// Present only for a callback directly supplied to an exactly resolved,
++    /// tracked primitive whose accessor yields only its computation's value.
++    pub derived_origin: Option<Span>,
++    /// Candidate relation of this function allocation to its parent's result.
++    /// A callback invoked later cannot inherit relevance from lexical nesting.
++    pub allocation_relevance: ResultRelevance,
++}
++
++#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase")]
++pub struct DevelopmentOperation {
++    pub span: Span,
++    pub function: Span,
++    /// Bounded candidate flow, never Promise adoption or reactive intent.
++    pub result_relevance: ResultRelevance,
++}
++
++#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
++#[serde(rename_all = "kebab-case")]
++pub enum ResultRelevance {
++    Open,
++    ReturnExpression,
++    LocalInitializer,
++    DistinctBranch,
++}
++
++fn relevance(file: &FileFacts, call: Span, returns: &[&ReturnFact]) -> ResultRelevance {
++    // Multiple exits can replace a return (notably finally). Keep them open
++    // unless this read controls two explicitly distinct numeric field results.
++    if returns.len() > 1 {
++        let numeric = returns
++            .iter()
++            .map(|value| {
++                let [property] = value.properties() else {
++                    return None;
++                };
++                let number = file.source_text(property.value)?.parse::<f64>().ok()?;
++                number
++                    .is_finite()
++                    .then_some((property.name.as_str(), number))
++            })
++            .collect::<Option<Vec<_>>>();
++        if numeric.is_some_and(|values| {
++            values.iter().all(|value| value.0 == values[0].0)
++                && values.iter().any(|value| value.1 != values[0].1)
++        }) && returns
++            .iter()
++            .any(|value| value.control_tests.iter().any(|test| test.contains(call)))
++        {
++            return ResultRelevance::DistinctBranch;
++        }
++        return ResultRelevance::Open;
++    }
++    let Some(value) = returns.first().and_then(|value| value.argument) else {
++        return ResultRelevance::Open;
++    };
++    if value.contains(call) {
++        return ResultRelevance::ReturnExpression;
++    }
++    // Const initialization -> exact lexical references in the returned value.
++    // This is a candidate through containers/closures, not a settlement proof.
++    if file.ast.bindings.iter().any(|binding| {
++        binding.immutable
++            && binding.names.len() == 1
++            && binding
++                .initializer
++                .is_some_and(|initializer| initializer.contains(call))
++            && file
++                .ast
++                .reference_declarations
++                .iter()
++                .any(|(reference, declaration)| {
++                    *declaration == binding.names[0].span && value.contains(*reference)
++                })
++    }) {
++        ResultRelevance::LocalInitializer
++    } else {
++        ResultRelevance::Open
++    }
++}
++
++fn enclosing(file: &FileFacts, span: Span) -> Option<&FunctionFact> {
++    file.ast
++        .functions
++        .iter()
++        .filter(|f| f.body.contains(span))
++        .min_by_key(|f| f.body.end - f.body.start)
++}
++
++pub(crate) fn models(
++    facts: &ProjectFacts,
++    lookup: &SemanticLookup<'_>,
++    dialect: &dyn Dialect,
++) -> Vec<DevelopmentFile> {
++    facts
++        .files
++        .iter()
++        .map(|file| {
++            let origins = file
++                .ast
++                .calls
++                .iter()
++                .filter_map(|call| {
++                    let [argument] = call.arguments.as_slice() else {
++                        return None;
++                    };
++                    let primitive = lookup.primitive_at_call(file, call.span)?;
++                    (dialect.accessor_yields_only_its_compute(primitive)
++                        && dialect.callback_execution_at(primitive, 0, 1)
++                            == Some(Execution::Tracked))
++                    .then_some((file.ast.peel_ts_sugar_span(argument.span), call.span))
++                })
++                .collect::<HashMap<_, _>>();
++            let mut returns = HashMap::<Span, Vec<&ReturnFact>>::new();
++            for function in &file.ast.functions {
++                returns
++                    .entry(function.span)
++                    .or_default()
++                    .extend(function.expression_return.iter());
++            }
++            for value in &file.ast.returns {
++                if let Some(function) = enclosing(file, value.span) {
++                    returns.entry(function.span).or_default().push(value);
++                }
++            }
++            let functions = file
++                .ast
++                .functions
++                .iter()
++                .map(|function| {
++                    let parent = file
++                        .ast
++                        .functions
++                        .iter()
++                        .filter(|other| {
++                            other.span != function.span && other.body.contains(function.span)
++                        })
++                        .min_by_key(|other| other.body.end - other.body.start)
++                        .map(|other| other.span);
++                    let derived_origin = origins
++                        .get(&function.span)
++                        .copied()
++                        .filter(|_| function.parameters.is_empty() && !function.rest_parameter);
++                    DevelopmentFunction {
++                        span: function.span,
++                        body: function.body,
++                        parent,
++                        asynchronous: function.r#async,
++                        generator: function.generator,
++                        derived_origin,
++                        allocation_relevance: parent.map_or(ResultRelevance::Open, |parent| {
++                            relevance(
++                                file,
++                                function.span,
++                                returns.get(&parent).map_or(&[], Vec::as_slice),
++                            )
++                        }),
++                    }
++                })
++                .collect();
++            let operations = file
++                .ast
++                .calls
++                .iter()
++                .filter(|call| !call.construct)
++                .filter_map(|call| {
++                    let function = enclosing(file, call.span)?;
++                    let result_relevance = relevance(
++                        file,
++                        call.span,
++                        returns.get(&function.span).map_or(&[], Vec::as_slice),
++                    );
++                    Some(DevelopmentOperation {
++                        span: call.span,
++                        function: function.span,
++                        result_relevance,
++                    })
++                })
++                .collect();
++            DevelopmentFile {
++                path: file.path.as_str().to_owned(),
++                source_sha256: file.source_hash.to_string(),
++                functions,
++                operations,
++            }
++        })
++        .collect()
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use solid_facts::{
++        compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
++        core::{Generation, SourceHash, SourcePath},
++    };
++    use std::sync::Arc;
++
++    fn classify(body: &str) -> ResultRelevance {
++        let source = format!("function example(read){{{body}}}");
++        let hash = SourceHash::of(&source);
++        let file = FileFacts {
++            generation: Generation::new(1).unwrap(),
++            path: SourcePath::new("/example.ts").unwrap(),
++            source_hash: hash.clone(),
++            source: Arc::from(source.as_str()),
++            ast: Arc::new(solid_facts::ast::extract("/example.ts", &source).unwrap()),
++            compiler: Arc::new(ExecutionMap {
++                compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
++                source_hash: hash,
++                semantic_model: Default::default(),
++                tracked_regions: vec![],
++                untracked_regions: vec![],
++                discarded_regions: vec![],
++                ownership_regions: vec![],
++                callback_roles: vec![],
++                jsx_operations: vec![],
++            }),
++        };
++        let call = file
++            .ast
++            .calls
++            .iter()
++            .find(|call| file.source_text(call.callee) == Some("read"))
++            .unwrap();
++        let function = enclosing(&file, call.span).unwrap();
++        let returns = file
++            .ast
++            .returns
++            .iter()
++            .filter(|value| {
++                enclosing(&file, value.span).is_some_and(|owner| owner.span == function.span)
++            })
++            .collect::<Vec<_>>();
++        relevance(&file, call.span, &returns)
++    }
++
++    #[test]
++    fn returns_and_exact_const_references_supply_bounded_candidates() {
++        assert_eq!(
++            classify("return {value:read()};"),
++            ResultRelevance::ReturnExpression
++        );
++        assert_eq!(
++            classify("const value=read();return {value};"),
++            ResultRelevance::LocalInitializer
++        );
++        assert_eq!(
++            classify("const value=read();return {then(resolve){resolve({value});}};"),
++            ResultRelevance::LocalInitializer
++        );
++        assert_eq!(
++            classify("const value=read();return {then(resolve){const value=9;resolve({value});}};"),
++            ResultRelevance::Open
++        );
++        assert_eq!(classify("read();return {value:9};"), ResultRelevance::Open);
++    }
++
++    #[test]
++    fn control_branches_need_distinct_results_and_competing_exits_stay_open() {
++        assert_eq!(
++            classify("if(read()===1)return {value:1};return {value:2};"),
++            ResultRelevance::DistinctBranch
++        );
++        assert_eq!(
++            classify("if(read()===1)return {value:9};return {value:9};"),
++            ResultRelevance::Open
++        );
++        assert_eq!(
++            classify("try{return {value:read()};}finally{return {value:9};}"),
++            ResultRelevance::Open
++        );
++        assert_eq!(
++            classify("if(flag)return {value:read()};return {value:2};"),
++            ResultRelevance::Open
++        );
++    }
++}

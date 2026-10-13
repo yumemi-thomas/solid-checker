@@ -1,0 +1,31 @@
+{
+  "authority": false,
+  "certification": false,
+  "results": [
+    {
+      "id": "legacy-keygen",
+      "accepted": false,
+      "compilerFactsRefused": true
+    },
+    {
+      "id": "menuitem",
+      "accepted": true,
+      "compiledOutputMatched": true
+    },
+    {
+      "id": "nested-void",
+      "accepted": true,
+      "compiledOutputMatched": true
+    },
+    {
+      "id": "root-void",
+      "accepted": true,
+      "compiledOutputMatched": true
+    },
+    {
+      "id": "ordinary-child",
+      "accepted": true,
+      "compiledOutputMatched": true
+    }
+  ]
+}

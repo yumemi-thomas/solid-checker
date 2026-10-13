@@ -1,0 +1,143 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "62892ac45b92adae7e692ad2b21c890352b22947d16bd76bbecae03885472816",
+            "path": "./dist/index.js",
+            "sha256": "eaf4ae6c8e7d7880eae42da534a616308d0ae35699133fef359a94eec91e223c"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "d5d78f977a81786b3f9b5b2e0da3e94f20cd02b48b060a4b8ecd297e8338c7fb"
+          },
+          "exports": {
+            "createCameras": "open-callable",
+            "createDevices": "authored-createDevices",
+            "createMicrophones": "open-callable",
+            "createSpeakers": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-/wJgCgYt69Z10A501hecGgunjaFHHxysOoN+GLv98Do1aq5Kvgb97vFe1HNhBMv+qhezpxmjeY5wRglrXQq0/g==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "4ab6226ebbc7abd78628bf8babd9ceae879df42f461319a06d3686f50f9384b7"
+    },
+    "name": "@solid-primitives/devices",
+    "version": "3.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-createDevices": {
+      "call": {
+        "operations": [
+          {
+            "id": "create-devices",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "devices"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "reactive",
+              "role": "accessor",
+              "resource": "devices"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-devices"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "reads": [],
+        "callbacks": [],
+        "resources": [
+          {
+            "id": "devices",
+            "kind": "reactive-source"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

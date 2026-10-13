@@ -1,12 +1,20 @@
 //! Semantic runtime-probe planning and transcript evaluation.
 //!
-//! Node remains the owner of package acquisition, process orchestration, and
-//! the worker implementation. This deep module owns every judgement made from
-//! worker output: exact artifact/mode selection, semantic event vocabulary,
-//! isolation and drain invariants, repeat consistency, and probe authority.
-//! A completed finite run can witness an occurrence or falsify proposed local
-//! closure. It can never prove absence, a positive minimum, a finite maximum,
+//! Node owns package acquisition for the audit path and the worker
+//! implementation. This deep module owns every judgement made from worker
+//! output: exact artifact/mode selection, semantic event vocabulary, isolation
+//! and drain invariants, repeat consistency, and probe authority. A completed
+//! finite run can witness an occurrence or falsify proposed local closure. It
+//! can never prove absence, a positive minimum, a finite maximum,
 //! exhaustiveness, or accepted closure.
+//!
+//! Inside a certification transaction the worker process is launched by
+//! `contract_certification::probe_harness`, not by the Node driver: Rust
+//! resolves and hashes the Node executable and the harness image against
+//! compiled-in pins, copies the image and the recipe into a private directory,
+//! and binds the process identity. The verdict one target's runs earn is
+//! derived here — `ProbeTargetVerdict` — and consumed only by
+//! `contract_certification::probe_gates`. A caller cannot construct one.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -32,6 +40,9 @@ const MAX_REPEATS: u16 = 16;
 const MAX_TIMEOUT_MILLIS: u64 = 120_000;
 const MAX_MICROTASK_TURNS: u16 = 4_096;
 const MAX_MACROTASK_TURNS: u16 = 256;
+/// Animation-frame turns are only drainable under the browser profile (ADR
+/// 0033); at 60 Hz this bound is about one second of frames.
+const MAX_ANIMATION_FRAME_TURNS: u16 = 64;
 const MAX_EVENTS: u32 = 65_536;
 const MAX_STRING_BYTES: usize = 16 * 1024;
 
@@ -85,6 +96,11 @@ pub struct ProbePolicy {
     pub timeout_millis: u64,
     pub max_microtask_turns: u16,
     pub max_macrotask_turns: u16,
+    /// ADR 0033: the bound on `animation-frames` drain turns. Zero — the
+    /// default for every corpus written before the browser profile — admits no
+    /// such step, and a zero bound leaves every digest this policy enters
+    /// byte-identical.
+    pub max_animation_frame_turns: u16,
     pub max_events: u32,
 }
 
@@ -98,6 +114,7 @@ impl ProbePolicy {
         }
         if self.max_microtask_turns > MAX_MICROTASK_TURNS
             || self.max_macrotask_turns > MAX_MACROTASK_TURNS
+            || self.max_animation_frame_turns > MAX_ANIMATION_FRAME_TURNS
             || self.max_events == 0
             || self.max_events > MAX_EVENTS
         {
@@ -126,8 +143,18 @@ pub enum ProbeScenario {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum DrainStep {
     Flush,
-    Microtasks { max_turns: u16 },
-    Macrotasks { max_turns: u16 },
+    Microtasks {
+        max_turns: u16,
+    },
+    Macrotasks {
+        max_turns: u16,
+    },
+    /// Bounded `requestAnimationFrame` turns. Only the browser profile can
+    /// drain these; the Node worker refuses the step as unknown, which refuses
+    /// the gate rather than pretending a frame elapsed.
+    AnimationFrames {
+        max_turns: u16,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -556,10 +583,20 @@ pub struct ProbeEvent {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProbeRunOutcome {
-    Completed { events: Vec<ProbeEvent> },
-    Error { details: Digest },
+    Completed {
+        events: Vec<ProbeEvent>,
+    },
+    Error {
+        details: Digest,
+        /// The worker's bounded one-line summary of what was thrown, when the
+        /// harness reported one. It explains an incomplete veto in the
+        /// withheld record and goes nowhere else: evidence keeps the digest.
+        summary: Option<String>,
+    },
     Timeout,
-    Refused { reason: String },
+    Refused {
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -569,6 +606,9 @@ pub struct ProbeRun {
     pub isolation: IsolationIdentity,
     pub drained_microtasks: u16,
     pub drained_macrotasks: u16,
+    /// Zero for every Node worker frame; the browser bootstrap reports what it
+    /// actually drained under an `animation-frames` step.
+    pub drained_animation_frames: u16,
     pub outcome: ProbeRunOutcome,
 }
 
@@ -610,11 +650,56 @@ pub struct ProbeContradictionRecord {
     pub transcript: Digest,
 }
 
+/// What one probe target's complete set of isolated repeat runs, across every
+/// covered mode, established about the proposed closure it vetoes.
+///
+/// This is the *only* channel through which a probe result reaches gate
+/// authority, and it is derived here from runs this module validated in the
+/// same call. `CleanNonObservation` says exactly that a complete, isolated,
+/// deterministic, scenario-satisfying execution did not observe the
+/// contradiction the recipe was written to provoke. It is not evidence of
+/// absence, and it never establishes closure: the Type Facts
+/// `DomainExhaustiveness` witness does that, and this verdict can only veto.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum ProbeTargetVerdict {
+    /// A run observed the behavior the proposed closure denies.
+    Contradiction,
+    /// Every mode completed cleanly and observed no contradiction.
+    CleanNonObservation,
+    /// A run was refused, errored, timed out, or was never returned.
+    Incomplete,
+    /// A possible-positive witness target. Witness targets veto nothing, so
+    /// they never satisfy or refuse a mandatory gate.
+    NotAGate,
+}
+
+impl ProbeTargetVerdict {
+    /// Combines the verdicts of one target's modes. A contradiction anywhere
+    /// vetoes; otherwise one incomplete mode makes the whole target
+    /// incomplete. Silence is never promoted over either.
+    fn join(self, other: Self) -> Self {
+        match (self, other) {
+            // Being a witness rather than a veto is a property of the target,
+            // not of its runs, so it survives every mode outcome.
+            (Self::NotAGate, _) | (_, Self::NotAGate) => Self::NotAGate,
+            (Self::Contradiction, _) | (_, Self::Contradiction) => Self::Contradiction,
+            (Self::Incomplete, _) | (_, Self::Incomplete) => Self::Incomplete,
+            (Self::CleanNonObservation, Self::CleanNonObservation) => Self::CleanNonObservation,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeProbeEvaluation {
     materials: Vec<ProbeClaimMaterial>,
     transcripts: Vec<ProbeTranscript>,
     contradictions: Vec<ProbeContradictionRecord>,
+    verdicts: BTreeMap<SemanticClaimId, ProbeTargetVerdict>,
+    /// Why each `Incomplete` verdict is incomplete, one line per mode that
+    /// did not complete: the timeout budget, the worker's failure summary, or
+    /// the refusal reason. Read by the certifier to explain a withheld
+    /// candidate (ADR 0036); never serialized into evidence.
+    incompletions: BTreeMap<SemanticClaimId, String>,
 }
 
 impl RuntimeProbeEvaluation {
@@ -631,6 +716,21 @@ impl RuntimeProbeEvaluation {
     #[must_use]
     pub fn contradictions(&self) -> &[ProbeContradictionRecord] {
         &self.contradictions
+    }
+
+    /// The verdict this evaluation established for one exact semantic claim,
+    /// or `None` when the claim was not a probe target at all.
+    pub(crate) fn verdict(&self, claim_id: &SemanticClaimId) -> Option<ProbeTargetVerdict> {
+        self.verdicts.get(claim_id).copied()
+    }
+
+    /// Why the claim's verdict is `Incomplete`, or `None` when it is not.
+    #[must_use]
+    pub fn incompletion(&self, claim_id: &str) -> Option<&str> {
+        self.incompletions
+            .iter()
+            .find(|(id, _)| id.as_str() == claim_id)
+            .map(|(_, reason)| reason.as_str())
     }
 }
 
@@ -684,6 +784,8 @@ pub fn evaluate_runtime_probes(
     let mut materials = Vec::new();
     let mut transcripts = Vec::new();
     let mut contradictions = Vec::new();
+    let mut verdicts = BTreeMap::<SemanticClaimId, ProbeTargetVerdict>::new();
+    let mut incompletions = BTreeMap::<SemanticClaimId, String>::new();
     for target in &plan.targets {
         let mut observations = Vec::new();
         let modes = plan
@@ -703,6 +805,24 @@ pub fn evaluate_runtime_probes(
                 .map(|session| supplied.get(&session.id).map(|run| (*session, run)))
                 .collect::<Vec<_>>();
             let evaluated = evaluate_mode(plan, target, &mode, &mode_runs, &isolation_collisions)?;
+            verdicts
+                .entry(target.claim_id.clone())
+                .and_modify(|existing| *existing = existing.join(evaluated.verdict))
+                .or_insert(evaluated.verdict);
+            if evaluated.verdict == ProbeTargetVerdict::Incomplete
+                && let Some(reason) = &evaluated.incompletion
+            {
+                let line = format!("{}: {reason}", mode.name);
+                incompletions
+                    .entry(target.claim_id.clone())
+                    .and_modify(|existing| {
+                        if !existing.split("; ").any(|known| known == line) {
+                            existing.push_str("; ");
+                            existing.push_str(&line);
+                        }
+                    })
+                    .or_insert(line);
+            }
             if let Some(transcript) = evaluated.transcript {
                 if matches!(evaluated.outcome, ProbeOutcome::Falsification { .. }) {
                     contradictions.push(ProbeContradictionRecord {
@@ -737,12 +857,17 @@ pub fn evaluate_runtime_probes(
         materials,
         transcripts,
         contradictions,
+        verdicts,
+        incompletions,
     })
 }
 
 struct EvaluatedMode {
     outcome: ProbeOutcome,
     transcript: Option<ProbeTranscript>,
+    verdict: ProbeTargetVerdict,
+    /// Why `verdict` is `Incomplete`; `None` for every other verdict.
+    incompletion: Option<String>,
 }
 
 fn evaluate_mode(
@@ -779,8 +904,12 @@ fn evaluate_mode(
                 "worker environment does not match the exact artifact-mode matrix",
             ));
         }
-        let (microtask_limit, macrotask_limit) = drain_limits(&session.drain);
-        if run.drained_microtasks > microtask_limit || run.drained_macrotasks > macrotask_limit {
+        let (microtask_limit, macrotask_limit, animation_frame_limit) =
+            drain_limits(&session.drain);
+        if run.drained_microtasks > microtask_limit
+            || run.drained_macrotasks > macrotask_limit
+            || run.drained_animation_frames > animation_frame_limit
+        {
             return Ok(refused_mode(
                 "worker exceeded the recipe's bounded semantic drain",
             ));
@@ -797,15 +926,31 @@ fn evaluate_mode(
                 limit_millis: plan.policy.timeout_millis,
             },
             transcript: None,
+            verdict: ProbeTargetVerdict::Incomplete,
+            incompletion: Some(format!(
+                "the worker did not report within the policy budget of {} ms",
+                plan.policy.timeout_millis
+            )),
         });
     }
-    if let Some(details) = runs.iter().find_map(|(_, run)| match &run.outcome {
-        ProbeRunOutcome::Error { details } => Some(details.clone()),
+    if let Some((details, summary)) = runs.iter().find_map(|(_, run)| match &run.outcome {
+        ProbeRunOutcome::Error { details, summary } => Some((details.clone(), summary.clone())),
         _ => None,
     }) {
+        if let Some(summary) = &summary {
+            validate_string(summary, "probe error summary")?;
+        }
         return Ok(EvaluatedMode {
             outcome: ProbeOutcome::Error { details },
             transcript: None,
+            verdict: ProbeTargetVerdict::Incomplete,
+            incompletion: Some(summary.map_or_else(
+                || "the worker threw (no summary reported)".to_owned(),
+                |summary| {
+                    unresolvable_package_incompletion(&summary)
+                        .unwrap_or_else(|| format!("the worker threw: {summary}"))
+                },
+            )),
         });
     }
     if let Some(reason) = runs.iter().find_map(|(_, run)| match &run.outcome {
@@ -841,32 +986,94 @@ fn evaluate_mode(
         .iter()
         .any(|event| event_matches(event, &target.expected_event))
     {
-        return Ok(refused_mode(
-            "finite execution did not witness the planned positive marker",
-        ));
+        // A closure-falsification recipe's marker *is* the contradiction it
+        // was written to provoke. Not seeing it in a complete, isolated,
+        // deterministic, scenario-satisfying execution is therefore a clean
+        // pass of the mandatory veto — not a refusal of the run. It is still
+        // not evidence: the observation stays `Refused` in probe evidence
+        // material, because finite silence can never support a claim. Only
+        // the separate gate verdict records that nothing contradicted.
+        let refused = refused_mode("finite execution did not witness the planned positive marker");
+        return Ok(match target.authority {
+            ProbeAuthority::ClosureFalsification => EvaluatedMode {
+                verdict: ProbeTargetVerdict::CleanNonObservation,
+                incompletion: None,
+                ..refused
+            },
+            ProbeAuthority::PossiblePositiveWitness => EvaluatedMode {
+                verdict: ProbeTargetVerdict::Incomplete,
+                ..refused
+            },
+        });
     }
 
     let transcript = emit_transcript(plan, target, mode, &runs)?;
-    let outcome = match target.authority {
-        ProbeAuthority::PossiblePositiveWitness => ProbeOutcome::Witness {
-            transcript: transcript.digest.clone(),
-        },
-        ProbeAuthority::ClosureFalsification => ProbeOutcome::Falsification {
-            transcript: transcript.digest.clone(),
-        },
+    let (outcome, verdict) = match target.authority {
+        ProbeAuthority::PossiblePositiveWitness => (
+            ProbeOutcome::Witness {
+                transcript: transcript.digest.clone(),
+            },
+            ProbeTargetVerdict::NotAGate,
+        ),
+        ProbeAuthority::ClosureFalsification => (
+            ProbeOutcome::Falsification {
+                transcript: transcript.digest.clone(),
+            },
+            ProbeTargetVerdict::Contradiction,
+        ),
     };
     Ok(EvaluatedMode {
         outcome,
         transcript: Some(transcript),
+        verdict,
+        incompletion: None,
     })
 }
 
+/// A worker throw that is really a missing authenticated dependency, named.
+///
+/// The private workspace carries this transaction's authenticated dependency
+/// closure and nothing else, and `require_authenticated_dependency_closure`
+/// checks it against the **analyzed package's own** declared dependencies --
+/// one level. A package the artifact case reaches *transitively* is neither
+/// declared by the analyzed package nor copied in, so it passes that check and
+/// then fails at import as a bare `ERR_MODULE_NOT_FOUND`.
+///
+/// Measured on six rows whose artifact cases name no conditions: Node's own
+/// `node` condition selects `solid-js/web/dist/server.js`, which imports
+/// `seroval`, which no one declared (§ 51 of
+/// `docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`).
+///
+/// This names it rather than deepening the precheck, and the distinction
+/// matters: a precheck walking *declared* dependencies transitively would
+/// refuse gates that work today, because what a case imports is a subset of
+/// what its closure declares -- `web.js` needs no `seroval` even though
+/// `server.js` does. Naming the package that actually failed to resolve
+/// cannot over-refuse, because the resolution already failed.
+///
+/// The outcome is unchanged either way: an incomplete veto withholds its
+/// candidate. Only the reason improves.
+fn unresolvable_package_incompletion(summary: &str) -> Option<String> {
+    let rest = summary.split_once("Cannot find package ")?.1;
+    let quote = rest.chars().next().filter(|c| *c == '\'' || *c == '"')?;
+    let name = rest[quote.len_utf8()..].split(quote).next()?;
+    if name.is_empty() || name.len() > 214 {
+        return None;
+    }
+    Some(format!(
+        "the probe worker could not resolve {name:?}: the private workspace carries only this \
+         transaction's authenticated dependency closure, and {name:?} is reached transitively \
+         rather than declared by the analyzed package"
+    ))
+}
+
 fn refused_mode(reason: impl Into<String>) -> EvaluatedMode {
+    let reason = reason.into();
     EvaluatedMode {
-        outcome: ProbeOutcome::Refused {
-            reason: reason.into(),
-        },
+        incompletion: Some(format!("the run was refused: {reason}")),
+        outcome: ProbeOutcome::Refused { reason },
         transcript: None,
+        verdict: ProbeTargetVerdict::Incomplete,
     }
 }
 
@@ -1063,6 +1270,7 @@ fn validate_drain(drain: &[DrainStep], policy: ProbePolicy) -> Result<(), Runtim
     }
     let mut microtasks = 0_u32;
     let mut macrotasks = 0_u32;
+    let mut animation_frames = 0_u32;
     for step in drain {
         match step {
             DrainStep::Flush => {}
@@ -1072,20 +1280,25 @@ fn validate_drain(drain: &[DrainStep], policy: ProbePolicy) -> Result<(), Runtim
             DrainStep::Macrotasks { max_turns } if *max_turns > 0 => {
                 macrotasks += u32::from(*max_turns);
             }
+            DrainStep::AnimationFrames { max_turns } if *max_turns > 0 => {
+                animation_frames += u32::from(*max_turns);
+            }
             _ => return invalid_plan("drain steps must have non-zero semantic turn bounds"),
         }
     }
     if microtasks > u32::from(policy.max_microtask_turns)
         || macrotasks > u32::from(policy.max_macrotask_turns)
+        || animation_frames > u32::from(policy.max_animation_frame_turns)
     {
         return invalid_plan("probe recipe exceeds the configured drain policy");
     }
     Ok(())
 }
 
-fn drain_limits(drain: &[DrainStep]) -> (u16, u16) {
+fn drain_limits(drain: &[DrainStep]) -> (u16, u16, u16) {
     let mut microtasks = 0_u16;
     let mut macrotasks = 0_u16;
+    let mut animation_frames = 0_u16;
     for step in drain {
         match step {
             DrainStep::Flush => {}
@@ -1095,9 +1308,12 @@ fn drain_limits(drain: &[DrainStep]) -> (u16, u16) {
             DrainStep::Macrotasks { max_turns } => {
                 macrotasks = macrotasks.saturating_add(*max_turns);
             }
+            DrainStep::AnimationFrames { max_turns } => {
+                animation_frames = animation_frames.saturating_add(*max_turns);
+            }
         }
     }
-    (microtasks, macrotasks)
+    (microtasks, macrotasks, animation_frames)
 }
 
 fn validate_environment(environment: &mut EnvironmentIdentity) -> Result<(), RuntimeProbeError> {
@@ -1197,6 +1413,10 @@ fn recipe_digest(claim_id: &SemanticClaimId, recipe: &ProbeRecipe) -> Digest {
                 hash_field(&mut hasher, "macrotasks");
                 hash_field(&mut hasher, &max_turns.to_string());
             }
+            DrainStep::AnimationFrames { max_turns } => {
+                hash_field(&mut hasher, "animation-frames");
+                hash_field(&mut hasher, &max_turns.to_string());
+            }
         }
     }
     for limitation in &recipe.coverage_limitations {
@@ -1219,6 +1439,12 @@ fn plan_digest(
     hash_field(&mut hasher, &policy.max_microtask_turns.to_string());
     hash_field(&mut hasher, &policy.max_macrotask_turns.to_string());
     hash_field(&mut hasher, &policy.max_events.to_string());
+    // Appended only when nonzero, so every plan digest computed before ADR
+    // 0033 — and every receipt binding one — is byte-identical.
+    if policy.max_animation_frame_turns > 0 {
+        hash_field(&mut hasher, "max-animation-frame-turns");
+        hash_field(&mut hasher, &policy.max_animation_frame_turns.to_string());
+    }
     for mode in &matrix.modes {
         hash_field(&mut hasher, &mode.artifact_case);
         hash_field(&mut hasher, &mode.name);
@@ -1404,7 +1630,15 @@ struct WireTranscriptRun<'a> {
     module_instance: &'a str,
     drained_microtasks: u16,
     drained_macrotasks: u16,
+    /// Omitted at zero so every transcript written before ADR 0033 keeps its
+    /// digest.
+    #[serde(skip_serializing_if = "is_zero_u16")]
+    drained_animation_frames: u16,
     events: Vec<WireProbeEvent<'a>>,
+}
+
+fn is_zero_u16(value: &u16) -> bool {
+    *value == 0
 }
 
 #[derive(Serialize)]
@@ -1543,6 +1777,7 @@ fn emit_transcript(
                 module_instance: &run.isolation.module_instance,
                 drained_microtasks: run.drained_microtasks,
                 drained_macrotasks: run.drained_macrotasks,
+                drained_animation_frames: run.drained_animation_frames,
                 events: events.iter().map(WireProbeEvent::from).collect(),
             }
         })

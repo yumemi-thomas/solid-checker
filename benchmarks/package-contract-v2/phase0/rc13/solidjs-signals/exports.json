@@ -1,0 +1,17 @@
+{
+  ".": {
+    "types": "./dist/types/index.d.ts",
+    "test": "./dist/dev.js",
+    "development": "./dist/dev.js",
+    "observe": "./dist/observe/index.js",
+    "default": "./dist/prod/index.js"
+  },
+  "./attribution": {
+    "types": "./dist/types/attribution.d.ts",
+    "test": "./dist/dev.attribution.js",
+    "development": "./dist/dev.attribution.js",
+    "observe": "./dist/observe/attribution.js",
+    "default": "./dist/prod/attribution.js"
+  },
+  "./package.json": "./package.json"
+}

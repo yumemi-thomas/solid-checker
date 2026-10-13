@@ -1,0 +1,6338 @@
+[
+ {
+  "package": "@solidjs/signals",
+  "export": "action",
+  "domain": "Reads",
+  "archive_path": "dist/prod/core/action.js",
+  "rc9": {
+   "start": 4429,
+   "end": 7642,
+   "slice": "92babceb624fbc7aff9607a87d8bb7d36fd8be20ef96a92d4d3c6f32d594f422",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 4433,
+   "prefix": " */ ",
+   "stmtEnd": 7641,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "action",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "9c553efe4bd52f7250f5657589680b042ab5ac25e006cf50d8c35b8841f3e907",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 4429,
+   "end": 7642,
+   "slice_sha256": "e12ad95406313eadf1c98f2981feebd6d14a2ad8e568ca978b2492febb8ad2a6",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "action",
+  "domain": "Reads",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 87962,
+   "end": 92525,
+   "slice": "6b9bd50c0f6bdfe85705563b2a76f7e146e2db559fce629be832289347893968",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 87962,
+   "prefix": "",
+   "stmtEnd": 92524,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "action",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 94506,
+   "end": 99299,
+   "slice_sha256": "dace43abb94b3bc3e1b147243818b3f67d8f7b402647e90b21a8bd7f7557afeb",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "action",
+  "domain": "Reads",
+  "archive_path": "dist/observe/core/action.js",
+  "rc9": {
+   "start": 4502,
+   "end": 8183,
+   "slice": "a503cb661462aed999de082d197ef9d229bd476655f176a73b1fce20603210ea",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 4506,
+   "prefix": " */ ",
+   "stmtEnd": 8182,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "action",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "5893c76f573aa9bd6cb71e4f13645c4ebddff8174577f1b79d31ac58731b735d",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 4502,
+   "end": 8183,
+   "slice_sha256": "e2ecc7ade034ed0e609d41dee4da36f44ee72c799fd121d22af9ba6aff029a9c",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "action",
+  "domain": "Creates",
+  "archive_path": "dist/prod/core/action.js",
+  "rc9": {
+   "start": 4429,
+   "end": 7642,
+   "slice": "92babceb624fbc7aff9607a87d8bb7d36fd8be20ef96a92d4d3c6f32d594f422",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 4433,
+   "prefix": " */ ",
+   "stmtEnd": 7641,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "action",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "9c553efe4bd52f7250f5657589680b042ab5ac25e006cf50d8c35b8841f3e907",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 4429,
+   "end": 7642,
+   "slice_sha256": "e12ad95406313eadf1c98f2981feebd6d14a2ad8e568ca978b2492febb8ad2a6",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "action",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 87962,
+   "end": 92525,
+   "slice": "6b9bd50c0f6bdfe85705563b2a76f7e146e2db559fce629be832289347893968",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 87962,
+   "prefix": "",
+   "stmtEnd": 92524,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "action",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 94506,
+   "end": 99299,
+   "slice_sha256": "dace43abb94b3bc3e1b147243818b3f67d8f7b402647e90b21a8bd7f7557afeb",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "action",
+  "domain": "Creates",
+  "archive_path": "dist/observe/core/action.js",
+  "rc9": {
+   "start": 4502,
+   "end": 8183,
+   "slice": "a503cb661462aed999de082d197ef9d229bd476655f176a73b1fce20603210ea",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 4506,
+   "prefix": " */ ",
+   "stmtEnd": 8182,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "action",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "5893c76f573aa9bd6cb71e4f13645c4ebddff8174577f1b79d31ac58731b735d",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 4502,
+   "end": 8183,
+   "slice_sha256": "e2ecc7ade034ed0e609d41dee4da36f44ee72c799fd121d22af9ba6aff029a9c",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createMemo",
+  "domain": "Reads",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 3028,
+   "end": 3095,
+   "slice": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 3028,
+   "prefix": "",
+   "stmtEnd": 3094,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createMemo",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 3341,
+   "end": 3408,
+   "slice_sha256": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createMemo",
+  "domain": "Reads",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 98008,
+   "end": 98097,
+   "slice": "46130d23b4ce3e9a8bfbe79e6ea1920b95f064c446f61e65327e08305592e3f0",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 98008,
+   "prefix": "",
+   "stmtEnd": 98096,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createMemo",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 105095,
+   "end": 105184,
+   "slice_sha256": "46130d23b4ce3e9a8bfbe79e6ea1920b95f064c446f61e65327e08305592e3f0",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createMemo",
+  "domain": "Reads",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 3110,
+   "end": 3177,
+   "slice": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 3110,
+   "prefix": "",
+   "stmtEnd": 3176,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createMemo",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 3423,
+   "end": 3490,
+   "slice_sha256": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createMemo",
+  "domain": "Creates",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 3028,
+   "end": 3095,
+   "slice": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 3028,
+   "prefix": "",
+   "stmtEnd": 3094,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createMemo",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 3341,
+   "end": 3408,
+   "slice_sha256": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createMemo",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 98008,
+   "end": 98097,
+   "slice": "46130d23b4ce3e9a8bfbe79e6ea1920b95f064c446f61e65327e08305592e3f0",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 98008,
+   "prefix": "",
+   "stmtEnd": 98096,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createMemo",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 105095,
+   "end": 105184,
+   "slice_sha256": "46130d23b4ce3e9a8bfbe79e6ea1920b95f064c446f61e65327e08305592e3f0",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createMemo",
+  "domain": "Creates",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 3110,
+   "end": 3177,
+   "slice": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 3110,
+   "prefix": "",
+   "stmtEnd": 3176,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createMemo",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 3423,
+   "end": 3490,
+   "slice_sha256": "f0f1d1a80dd61e1c62139a524f277d95e34957723fc71a02d9b9996e26cf5951",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createOptimistic",
+  "domain": "Reads",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 26484,
+   "end": 27031,
+   "slice": "09fd4865502a92243213a9a3162d7e6a99bed5d6456d0395e5d425d44161f189",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 26484,
+   "prefix": "",
+   "stmtEnd": 27031,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createOptimistic",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 26797,
+   "end": 27344,
+   "slice_sha256": "e79b75e3d7d2700ab665f566f53fd92fa47d3286f059a3e117bef3edc31a7658",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createOptimistic",
+  "domain": "Reads",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 122783,
+   "end": 123391,
+   "slice": "9180aeea6599b0c64fdfb3859e8c1802ace64c405e0d05ff952bc44e63ad7be3",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 122783,
+   "prefix": "",
+   "stmtEnd": 123391,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createOptimistic",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 129870,
+   "end": 130478,
+   "slice_sha256": "9180aeea6599b0c64fdfb3859e8c1802ace64c405e0d05ff952bc44e63ad7be3",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createOptimistic",
+  "domain": "Reads",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 26566,
+   "end": 27147,
+   "slice": "760ee92d8393a3d2102625aadc0c31e9378285b46bc98c4af9b2e0fa85697fe1",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 26566,
+   "prefix": "",
+   "stmtEnd": 27147,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createOptimistic",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 26879,
+   "end": 27460,
+   "slice_sha256": "760ee92d8393a3d2102625aadc0c31e9378285b46bc98c4af9b2e0fa85697fe1",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createOptimistic",
+  "domain": "Creates",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 26484,
+   "end": 27031,
+   "slice": "09fd4865502a92243213a9a3162d7e6a99bed5d6456d0395e5d425d44161f189",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 26484,
+   "prefix": "",
+   "stmtEnd": 27031,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createOptimistic",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 26797,
+   "end": 27344,
+   "slice_sha256": "e79b75e3d7d2700ab665f566f53fd92fa47d3286f059a3e117bef3edc31a7658",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createOptimistic",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 122783,
+   "end": 123391,
+   "slice": "9180aeea6599b0c64fdfb3859e8c1802ace64c405e0d05ff952bc44e63ad7be3",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 122783,
+   "prefix": "",
+   "stmtEnd": 123391,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createOptimistic",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 129870,
+   "end": 130478,
+   "slice_sha256": "9180aeea6599b0c64fdfb3859e8c1802ace64c405e0d05ff952bc44e63ad7be3",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createOptimistic",
+  "domain": "Creates",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 26566,
+   "end": 27147,
+   "slice": "760ee92d8393a3d2102625aadc0c31e9378285b46bc98c4af9b2e0fa85697fe1",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 26566,
+   "prefix": "",
+   "stmtEnd": 27147,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createOptimistic",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 26879,
+   "end": 27460,
+   "slice_sha256": "760ee92d8393a3d2102625aadc0c31e9378285b46bc98c4af9b2e0fa85697fe1",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createOptimisticStore",
+  "domain": "Creates",
+  "archive_path": "dist/prod/store/next/optimistic.js",
+  "rc9": {
+   "start": 6996,
+   "end": 13900,
+   "slice": "803fcb9cc11f9c2c503c6d6f86a6d82434f3655b8a1264fff1d3ed2d36b6a0a0",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 6996,
+   "prefix": "",
+   "stmtEnd": 13900,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createOptimisticStoreNext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fbae7c359a93f4940d251c284d8cf05ad70955d8fe8f565d6a9dac5e016e4cfa",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 8804,
+   "end": 15708,
+   "slice_sha256": "cea4b77a869b73bcc2f8a32893b205e830ff4408c1fd2571b7dc0e647ccaa53d",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createOptimisticStore",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 342913,
+   "end": 349941,
+   "slice": "bc5b1564c404e2ba7b688f6f44bb56fc3b6a211b0b055c935b1561d9f7474cc6",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 342913,
+   "prefix": "",
+   "stmtEnd": 349941,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createOptimisticStoreNext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 375116,
+   "end": 382179,
+   "slice_sha256": "c85e5378ff687e08f8c8ca1b1e1a8b0acd32406baae6327b8731a52edc6d3f23",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createOptimisticStore",
+  "domain": "Creates",
+  "archive_path": "dist/observe/store/next/optimistic.js",
+  "rc9": {
+   "start": 7025,
+   "end": 14010,
+   "slice": "ccd36eaea185d28df29b219512185424d91c1688bd6dd7b67efae16123719c30",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 7025,
+   "prefix": "",
+   "stmtEnd": 14010,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createOptimisticStoreNext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "61c20fac25f7bd50f91c42a9e5e5a61a89f1d38316d8ca25382eaf491810e108",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 8844,
+   "end": 15856,
+   "slice_sha256": "7ace8b58aec6b4a9487bbc5d0b8be7873a77edf2bf89168baff222504ca82191",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createProjection",
+  "domain": "Creates",
+  "archive_path": "dist/prod/store/next/projection.js",
+  "rc9": {
+   "start": 7209,
+   "end": 7307,
+   "slice": "bcbe84ac16a3f08d0d7aca97559146257937d7387ca7a0d10af5096c18e045d7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 7209,
+   "prefix": "",
+   "stmtEnd": 7307,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createProjectionNext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "07d68dc9532ec1e5508e479dc5d909a0b7bcdcfab020d0825f2357429cb6c5e5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 7013,
+   "end": 7111,
+   "slice_sha256": "bcbe84ac16a3f08d0d7aca97559146257937d7387ca7a0d10af5096c18e045d7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createProjection",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 334649,
+   "end": 334765,
+   "slice": "e1264ce5581a8fe3610fd0f676925fcb8f30fc2bc21983c0a5b712952b220e32",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 334649,
+   "prefix": "",
+   "stmtEnd": 334765,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createProjectionNext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 363258,
+   "end": 363374,
+   "slice_sha256": "e1264ce5581a8fe3610fd0f676925fcb8f30fc2bc21983c0a5b712952b220e32",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createProjection",
+  "domain": "Creates",
+  "archive_path": "dist/observe/store/next/projection.js",
+  "rc9": {
+   "start": 7303,
+   "end": 7401,
+   "slice": "bcbe84ac16a3f08d0d7aca97559146257937d7387ca7a0d10af5096c18e045d7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 7303,
+   "prefix": "",
+   "stmtEnd": 7401,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createProjectionNext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "d27cc4daa45913843b16614d5ec7bc40befcdb7338221e93acdde773d47972eb",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 7176,
+   "end": 7274,
+   "slice_sha256": "bcbe84ac16a3f08d0d7aca97559146257937d7387ca7a0d10af5096c18e045d7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createRoot",
+  "domain": "Creates",
+  "archive_path": "dist/prod/core/owner.js",
+  "rc9": {
+   "start": 11782,
+   "end": 11902,
+   "slice": "eefc749ba75a19179e86ce86935623ba829da692628162c809267f812583bbe3",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 11786,
+   "prefix": " */ ",
+   "stmtEnd": 11901,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createRoot",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "343b48001cd23d8b120a582a9cdfada999c808a60786af9920e6e01aa3a2912a",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 14172,
+   "end": 14292,
+   "slice_sha256": "d266035c22be8514767dbee4fe3aa0c947336ad4da585e24b09ee1722d916259",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createRoot",
+  "domain": "Creates",
+  "archive_path": "dist/dev-shared.js",
+  "rc9": {
+   "start": 135728,
+   "end": 135870,
+   "slice": "9a66667de7c1a48f5a90e9901d994ba532da603ac763dc460c16fb8e60496fa5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 135728,
+   "prefix": "",
+   "stmtEnd": 135869,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createRoot",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 162084,
+   "end": 162226,
+   "slice_sha256": "9a66667de7c1a48f5a90e9901d994ba532da603ac763dc460c16fb8e60496fa5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createRoot",
+  "domain": "Creates",
+  "archive_path": "dist/observe/core/owner.js",
+  "rc9": {
+   "start": 11828,
+   "end": 11948,
+   "slice": "d266035c22be8514767dbee4fe3aa0c947336ad4da585e24b09ee1722d916259",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 11832,
+   "prefix": " */ ",
+   "stmtEnd": 11947,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createRoot",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "1dfaba9a87a3626bfcd5f119d4d02ed62f3df0af7e95840f847088e87c814617",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 14337,
+   "end": 14457,
+   "slice_sha256": "d266035c22be8514767dbee4fe3aa0c947336ad4da585e24b09ee1722d916259",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createSignal",
+  "domain": "Reads",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 2747,
+   "end": 3027,
+   "slice": "ce6ade13e9e77463067c7bac3727622e0ac32bd8e9bad801501a28365b9da388",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 2747,
+   "prefix": "",
+   "stmtEnd": 3026,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createSignal",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 3060,
+   "end": 3340,
+   "slice_sha256": "fb6ef2e6f9d4932e0fe5d637daedf25207c1471b42357b528e783a2332b9d1e8",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createSignal",
+  "domain": "Reads",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 97659,
+   "end": 98008,
+   "slice": "d1292c1a9d7a916d932b8e2ae27b22c592daf612cc51ddf7848ecf64f63cd504",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 97659,
+   "prefix": "",
+   "stmtEnd": 98007,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createSignal",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 104746,
+   "end": 105095,
+   "slice_sha256": "d1292c1a9d7a916d932b8e2ae27b22c592daf612cc51ddf7848ecf64f63cd504",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createSignal",
+  "domain": "Reads",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 2795,
+   "end": 3109,
+   "slice": "0366fccdf03f70ca98cd1678d74800abeed9109c5499c65c626ee6868e6f565f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 2795,
+   "prefix": "",
+   "stmtEnd": 3108,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createSignal",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 3108,
+   "end": 3422,
+   "slice_sha256": "0366fccdf03f70ca98cd1678d74800abeed9109c5499c65c626ee6868e6f565f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createSignal",
+  "domain": "Creates",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 2747,
+   "end": 3027,
+   "slice": "ce6ade13e9e77463067c7bac3727622e0ac32bd8e9bad801501a28365b9da388",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 2747,
+   "prefix": "",
+   "stmtEnd": 3026,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createSignal",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 3060,
+   "end": 3340,
+   "slice_sha256": "fb6ef2e6f9d4932e0fe5d637daedf25207c1471b42357b528e783a2332b9d1e8",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createSignal",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 97659,
+   "end": 98008,
+   "slice": "d1292c1a9d7a916d932b8e2ae27b22c592daf612cc51ddf7848ecf64f63cd504",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 97659,
+   "prefix": "",
+   "stmtEnd": 98007,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createSignal",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 104746,
+   "end": 105095,
+   "slice_sha256": "d1292c1a9d7a916d932b8e2ae27b22c592daf612cc51ddf7848ecf64f63cd504",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createSignal",
+  "domain": "Creates",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 2795,
+   "end": 3109,
+   "slice": "0366fccdf03f70ca98cd1678d74800abeed9109c5499c65c626ee6868e6f565f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 2795,
+   "prefix": "",
+   "stmtEnd": 3108,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createSignal",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 3108,
+   "end": 3422,
+   "slice_sha256": "0366fccdf03f70ca98cd1678d74800abeed9109c5499c65c626ee6868e6f565f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createStore",
+  "domain": "Creates",
+  "archive_path": "dist/prod/store/index.js",
+  "rc9": {
+   "start": 525,
+   "end": 676,
+   "slice": "5ccb92725a12c3fe4c8eacf07bc49e364f976718010a237a995e0794377c7ff4",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 525,
+   "prefix": "",
+   "stmtEnd": 676,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createStore",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 525,
+   "end": 676,
+   "slice_sha256": "5ccb92725a12c3fe4c8eacf07bc49e364f976718010a237a995e0794377c7ff4",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createStore",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 370517,
+   "end": 370703,
+   "slice": "5ab024879afe7976504cb2b296f2e44c5f68823cd9cfc7c07c51d1dcba7d80ae",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 370517,
+   "prefix": "",
+   "stmtEnd": 370703,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createStore",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 403906,
+   "end": 404183,
+   "slice_sha256": "0303d53fb85615e9c957a4d05e062951d7c3206792193c77477d67369a4c3b12",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createStore",
+  "domain": "Creates",
+  "archive_path": "dist/observe/store/index.js",
+  "rc9": {
+   "start": 551,
+   "end": 702,
+   "slice": "5ccb92725a12c3fe4c8eacf07bc49e364f976718010a237a995e0794377c7ff4",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 551,
+   "prefix": "",
+   "stmtEnd": 702,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createStore",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "54de3c6d2552dd2a99abc25f2ed02b75fb4c71af00bea23ba85bb82dbed15d9d",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 562,
+   "end": 796,
+   "slice_sha256": "db153fc0bb96a41d329fe581a8ef762664921f79ac1ffcbcec2d37eb08084a44",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createTrackedEffect",
+  "domain": "Reads",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 9691,
+   "end": 9759,
+   "slice": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 9695,
+   "prefix": " */ ",
+   "stmtEnd": 9758,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createTrackedEffect",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 10004,
+   "end": 10072,
+   "slice_sha256": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createTrackedEffect",
+  "domain": "Reads",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 105290,
+   "end": 105376,
+   "slice": "59effb18726430b691223730bbeffeb8cb7c60f6b546261051389e4ee557154e",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 105290,
+   "prefix": "",
+   "stmtEnd": 105375,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createTrackedEffect",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 112377,
+   "end": 112463,
+   "slice_sha256": "59effb18726430b691223730bbeffeb8cb7c60f6b546261051389e4ee557154e",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createTrackedEffect",
+  "domain": "Reads",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 9773,
+   "end": 9841,
+   "slice": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 9777,
+   "prefix": " */ ",
+   "stmtEnd": 9840,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createTrackedEffect",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 10086,
+   "end": 10154,
+   "slice_sha256": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createTrackedEffect",
+  "domain": "Creates",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 9691,
+   "end": 9759,
+   "slice": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 9695,
+   "prefix": " */ ",
+   "stmtEnd": 9758,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createTrackedEffect",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 10004,
+   "end": 10072,
+   "slice_sha256": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createTrackedEffect",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 105290,
+   "end": 105376,
+   "slice": "59effb18726430b691223730bbeffeb8cb7c60f6b546261051389e4ee557154e",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 105290,
+   "prefix": "",
+   "stmtEnd": 105375,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createTrackedEffect",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 112377,
+   "end": 112463,
+   "slice_sha256": "59effb18726430b691223730bbeffeb8cb7c60f6b546261051389e4ee557154e",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "createTrackedEffect",
+  "domain": "Creates",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 9773,
+   "end": 9841,
+   "slice": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 9777,
+   "prefix": " */ ",
+   "stmtEnd": 9840,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createTrackedEffect",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 10086,
+   "end": 10154,
+   "slice_sha256": "eb5e053187dd25e3e410d0c6755696fcbd64cf462b00940e7181f6925ee6da30",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "flush",
+  "domain": "Reads",
+  "archive_path": "dist/prod/core/scheduler.js",
+  "rc9": {
+   "start": 57644,
+   "end": 59114,
+   "slice": "06c46ce4cc1dfc50fed5772ae6f737788defd6f59d26d9bc1ab81eba2d2e6536",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 57644,
+   "prefix": "",
+   "stmtEnd": 59113,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "flush",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "d68a86371c1895d53d6e7d14ade3ca9c2d71a005db7d4f12c9e60a456c15b10a",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 65269,
+   "end": 66739,
+   "slice_sha256": "d9935f43d0d020b93711a1a2169d3938cf7f46012b47c7bbed205174d8708220",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "flush",
+  "domain": "Reads",
+  "archive_path": "dist/dev-shared.js",
+  "rc9": {
+   "start": 103188,
+   "end": 107202,
+   "slice": "b77e8fd032473ce4ab08aadd107ab2d9e56ef76452366d9f7e0151614c538cce",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 103188,
+   "prefix": "",
+   "stmtEnd": 107201,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "flush",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 125237,
+   "end": 129517,
+   "slice_sha256": "ac0e1253703995d11781d18388bdf8c1296a8678c7ab4b944628d78c2802fa66",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "flush",
+  "domain": "Reads",
+  "archive_path": "dist/observe/core/scheduler.js",
+  "rc9": {
+   "start": 58268,
+   "end": 60335,
+   "slice": "4c7dcc9dedee59eb7249051b3460fbc7a4a537fab9e489aab1293de9d4e387c0",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 58268,
+   "prefix": "",
+   "stmtEnd": 60334,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "flush",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "dd4ad3a7780c852e58f257d732e9246f4197cdb654ffeb37207c33787eb73d7e",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 65893,
+   "end": 68238,
+   "slice_sha256": "15af13372a3ea04723f667a2664dd97d538363276f5a1b0ea67533090d165a56",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "flush",
+  "domain": "Creates",
+  "archive_path": "dist/prod/core/scheduler.js",
+  "rc9": {
+   "start": 57644,
+   "end": 59114,
+   "slice": "06c46ce4cc1dfc50fed5772ae6f737788defd6f59d26d9bc1ab81eba2d2e6536",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 57644,
+   "prefix": "",
+   "stmtEnd": 59113,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "flush",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "d68a86371c1895d53d6e7d14ade3ca9c2d71a005db7d4f12c9e60a456c15b10a",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 65269,
+   "end": 66739,
+   "slice_sha256": "d9935f43d0d020b93711a1a2169d3938cf7f46012b47c7bbed205174d8708220",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "flush",
+  "domain": "Creates",
+  "archive_path": "dist/dev-shared.js",
+  "rc9": {
+   "start": 103188,
+   "end": 107202,
+   "slice": "b77e8fd032473ce4ab08aadd107ab2d9e56ef76452366d9f7e0151614c538cce",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 103188,
+   "prefix": "",
+   "stmtEnd": 107201,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "flush",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 125237,
+   "end": 129517,
+   "slice_sha256": "ac0e1253703995d11781d18388bdf8c1296a8678c7ab4b944628d78c2802fa66",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "flush",
+  "domain": "Creates",
+  "archive_path": "dist/observe/core/scheduler.js",
+  "rc9": {
+   "start": 58268,
+   "end": 60335,
+   "slice": "4c7dcc9dedee59eb7249051b3460fbc7a4a537fab9e489aab1293de9d4e387c0",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 58268,
+   "prefix": "",
+   "stmtEnd": 60334,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "flush",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "dd4ad3a7780c852e58f257d732e9246f4197cdb654ffeb37207c33787eb73d7e",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 65893,
+   "end": 68238,
+   "slice_sha256": "15af13372a3ea04723f667a2664dd97d538363276f5a1b0ea67533090d165a56",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "getOwner",
+  "domain": "Reads",
+  "archive_path": "dist/prod/core/owner.js",
+  "rc9": {
+   "start": 8615,
+   "end": 8663,
+   "slice": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 8619,
+   "prefix": " */ ",
+   "stmtEnd": 8662,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "getOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "343b48001cd23d8b120a582a9cdfada999c808a60786af9920e6e01aa3a2912a",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 10593,
+   "end": 10641,
+   "slice_sha256": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "getOwner",
+  "domain": "Reads",
+  "archive_path": "dist/dev-shared.js",
+  "rc9": {
+   "start": 131908,
+   "end": 131950,
+   "slice": "e8cb95b765807fa14a97032551f4bbced263cc3d7837fc1258f156ffc71ba8bb",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 131908,
+   "prefix": "",
+   "stmtEnd": 131949,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "getOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 157883,
+   "end": 157925,
+   "slice_sha256": "e8cb95b765807fa14a97032551f4bbced263cc3d7837fc1258f156ffc71ba8bb",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "getOwner",
+  "domain": "Reads",
+  "archive_path": "dist/observe/core/owner.js",
+  "rc9": {
+   "start": 8635,
+   "end": 8683,
+   "slice": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 8639,
+   "prefix": " */ ",
+   "stmtEnd": 8682,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "getOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "1dfaba9a87a3626bfcd5f119d4d02ed62f3df0af7e95840f847088e87c814617",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 10710,
+   "end": 10758,
+   "slice_sha256": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "getOwner",
+  "domain": "Creates",
+  "archive_path": "dist/prod/core/owner.js",
+  "rc9": {
+   "start": 8615,
+   "end": 8663,
+   "slice": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 8619,
+   "prefix": " */ ",
+   "stmtEnd": 8662,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "getOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "343b48001cd23d8b120a582a9cdfada999c808a60786af9920e6e01aa3a2912a",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 10593,
+   "end": 10641,
+   "slice_sha256": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "getOwner",
+  "domain": "Creates",
+  "archive_path": "dist/dev-shared.js",
+  "rc9": {
+   "start": 131908,
+   "end": 131950,
+   "slice": "e8cb95b765807fa14a97032551f4bbced263cc3d7837fc1258f156ffc71ba8bb",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 131908,
+   "prefix": "",
+   "stmtEnd": 131949,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "getOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 157883,
+   "end": 157925,
+   "slice_sha256": "e8cb95b765807fa14a97032551f4bbced263cc3d7837fc1258f156ffc71ba8bb",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "getOwner",
+  "domain": "Creates",
+  "archive_path": "dist/observe/core/owner.js",
+  "rc9": {
+   "start": 8635,
+   "end": 8683,
+   "slice": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 8639,
+   "prefix": " */ ",
+   "stmtEnd": 8682,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "getOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "1dfaba9a87a3626bfcd5f119d4d02ed62f3df0af7e95840f847088e87c814617",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 10710,
+   "end": 10758,
+   "slice_sha256": "67fcbebd02b9e57fe095ba4af938b3b4b27e52e9ecda46862ddce141f1e4c9e2",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "omit",
+  "domain": "Creates",
+  "archive_path": "dist/prod/store/utils.js",
+  "rc9": {
+   "start": 40808,
+   "end": 42411,
+   "slice": "8b9a50f9840bd11547765d1269cb10f5f3486b49679852d061f1906408ca9128",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 40808,
+   "prefix": "",
+   "stmtEnd": 42411,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "omit",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "4c0a349e53eb94ea1d68fd0407b78e78c5fb35b00fa0dc0231b990b613e28040",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 43043,
+   "end": 45186,
+   "slice_sha256": "32992411ce661ee0c6948183ffcb32ff660c6d4796c5e6d789822a9b06ef6833",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "omit",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 192223,
+   "end": 194027,
+   "slice": "578fbc1412c64da8a3fa7d5ae5c7a703eb2028cf86ee29c132a1847e91bb737a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 192223,
+   "prefix": "",
+   "stmtEnd": 194027,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "omit",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 201577,
+   "end": 203849,
+   "slice_sha256": "c30db00b1292f96c94704743f877848501dfee2ece0a6fda87f6f41ce0c4b326",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "omit",
+  "domain": "Creates",
+  "archive_path": "dist/observe/store/utils.js",
+  "rc9": {
+   "start": 40834,
+   "end": 42437,
+   "slice": "8b9a50f9840bd11547765d1269cb10f5f3486b49679852d061f1906408ca9128",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 40834,
+   "prefix": "",
+   "stmtEnd": 42437,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "omit",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "513b407fa6fb25af9c583c1fd91074e60c04d2378691fdb0d07c871d26971d40",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 43069,
+   "end": 45212,
+   "slice_sha256": "32992411ce661ee0c6948183ffcb32ff660c6d4796c5e6d789822a9b06ef6833",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onCleanup",
+  "domain": "Reads",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 2598,
+   "end": 2651,
+   "slice": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 2602,
+   "prefix": " */ ",
+   "stmtEnd": 2650,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onCleanup",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 2911,
+   "end": 2964,
+   "slice_sha256": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onCleanup",
+  "domain": "Reads",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 96698,
+   "end": 97559,
+   "slice": "5f8d40b1c3165f17bc00846b5063eb55f8bdd0a6b49dceba4a60f5aeb6570e44",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 96698,
+   "prefix": "",
+   "stmtEnd": 97558,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onCleanup",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 103785,
+   "end": 104646,
+   "slice_sha256": "5f8d40b1c3165f17bc00846b5063eb55f8bdd0a6b49dceba4a60f5aeb6570e44",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onCleanup",
+  "domain": "Reads",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 2646,
+   "end": 2699,
+   "slice": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 2650,
+   "prefix": " */ ",
+   "stmtEnd": 2698,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onCleanup",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 2959,
+   "end": 3012,
+   "slice_sha256": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onCleanup",
+  "domain": "Creates",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 2598,
+   "end": 2651,
+   "slice": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 2602,
+   "prefix": " */ ",
+   "stmtEnd": 2650,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onCleanup",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 2911,
+   "end": 2964,
+   "slice_sha256": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onCleanup",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 96698,
+   "end": 97559,
+   "slice": "5f8d40b1c3165f17bc00846b5063eb55f8bdd0a6b49dceba4a60f5aeb6570e44",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 96698,
+   "prefix": "",
+   "stmtEnd": 97558,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onCleanup",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 103785,
+   "end": 104646,
+   "slice_sha256": "5f8d40b1c3165f17bc00846b5063eb55f8bdd0a6b49dceba4a60f5aeb6570e44",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onCleanup",
+  "domain": "Creates",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 2646,
+   "end": 2699,
+   "slice": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 2650,
+   "prefix": " */ ",
+   "stmtEnd": 2698,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onCleanup",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 2959,
+   "end": 3012,
+   "slice_sha256": "89ddda3041ae80177d8bea1730aeb504ddb62f57d37956e3cfea6232f0f8925b",
+   "prefix": " */ ",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onSettled",
+  "domain": "Reads",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 30911,
+   "end": 32079,
+   "slice": "107240ae071701f70c6f27055f0a525fdcffcf0a4f98fc7b655f04758e8a43c9",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 30915,
+   "prefix": " */ ",
+   "stmtEnd": 32078,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onSettled",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 31224,
+   "end": 32392,
+   "slice_sha256": "f1e430679468af832adf704b7f90a6e31fc0ea1ac6f007df0605e28cc4edce12",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onSettled",
+  "domain": "Reads",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 127274,
+   "end": 129069,
+   "slice": "add35758c224c4e5339e7e89db7000bce0b2b92ba37a28df5042414a2719547e",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 127274,
+   "prefix": "",
+   "stmtEnd": 129068,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onSettled",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 134361,
+   "end": 136156,
+   "slice_sha256": "add35758c224c4e5339e7e89db7000bce0b2b92ba37a28df5042414a2719547e",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onSettled",
+  "domain": "Reads",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 31027,
+   "end": 32219,
+   "slice": "7535e81cf25f0d998b1c69401f2225a460c6d4fd453855c905753c6a86471193",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 31031,
+   "prefix": " */ ",
+   "stmtEnd": 32218,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onSettled",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 31340,
+   "end": 32532,
+   "slice_sha256": "8461deec634a0716375424e0b8bf2fca348f48f8ffabaf62bea5812907acd29f",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onSettled",
+  "domain": "Creates",
+  "archive_path": "dist/prod/signals.js",
+  "rc9": {
+   "start": 30911,
+   "end": 32079,
+   "slice": "107240ae071701f70c6f27055f0a525fdcffcf0a4f98fc7b655f04758e8a43c9",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 30915,
+   "prefix": " */ ",
+   "stmtEnd": 32078,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onSettled",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bc105241f9ff559855a267f394cecad8d806a88f60a8acef6d5175f727062d59",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 31224,
+   "end": 32392,
+   "slice_sha256": "f1e430679468af832adf704b7f90a6e31fc0ea1ac6f007df0605e28cc4edce12",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onSettled",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 127274,
+   "end": 129069,
+   "slice": "add35758c224c4e5339e7e89db7000bce0b2b92ba37a28df5042414a2719547e",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 127274,
+   "prefix": "",
+   "stmtEnd": 129068,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onSettled",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 134361,
+   "end": 136156,
+   "slice_sha256": "add35758c224c4e5339e7e89db7000bce0b2b92ba37a28df5042414a2719547e",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "onSettled",
+  "domain": "Creates",
+  "archive_path": "dist/observe/signals.js",
+  "rc9": {
+   "start": 31027,
+   "end": 32219,
+   "slice": "7535e81cf25f0d998b1c69401f2225a460c6d4fd453855c905753c6a86471193",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 31031,
+   "prefix": " */ ",
+   "stmtEnd": 32218,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "onSettled",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7f003dd5cfc7d8eb80f60aa49943532b73a284245fc889fde9590ef9efe1b3ed",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 31340,
+   "end": 32532,
+   "slice_sha256": "8461deec634a0716375424e0b8bf2fca348f48f8ffabaf62bea5812907acd29f",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "reconcile",
+  "domain": "Reads",
+  "archive_path": "dist/prod/store/index.js",
+  "rc9": {
+   "start": 678,
+   "end": 758,
+   "slice": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 678,
+   "prefix": "",
+   "stmtEnd": 758,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "reconcile",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 678,
+   "end": 758,
+   "slice_sha256": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "reconcile",
+  "domain": "Reads",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 370704,
+   "end": 370802,
+   "slice": "572cd0645c23a657a2116f3609d220d042405d28255c1fefb439573572dbfc9c",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 370704,
+   "prefix": "",
+   "stmtEnd": 370802,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "reconcile",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 404184,
+   "end": 404282,
+   "slice_sha256": "572cd0645c23a657a2116f3609d220d042405d28255c1fefb439573572dbfc9c",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "reconcile",
+  "domain": "Reads",
+  "archive_path": "dist/observe/store/index.js",
+  "rc9": {
+   "start": 704,
+   "end": 784,
+   "slice": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 704,
+   "prefix": "",
+   "stmtEnd": 784,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "reconcile",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "54de3c6d2552dd2a99abc25f2ed02b75fb4c71af00bea23ba85bb82dbed15d9d",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 798,
+   "end": 878,
+   "slice_sha256": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "reconcile",
+  "domain": "Creates",
+  "archive_path": "dist/prod/store/index.js",
+  "rc9": {
+   "start": 678,
+   "end": 758,
+   "slice": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 678,
+   "prefix": "",
+   "stmtEnd": 758,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "reconcile",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 678,
+   "end": 758,
+   "slice_sha256": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "reconcile",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 370704,
+   "end": 370802,
+   "slice": "572cd0645c23a657a2116f3609d220d042405d28255c1fefb439573572dbfc9c",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 370704,
+   "prefix": "",
+   "stmtEnd": 370802,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "reconcile",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 404184,
+   "end": 404282,
+   "slice_sha256": "572cd0645c23a657a2116f3609d220d042405d28255c1fefb439573572dbfc9c",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "reconcile",
+  "domain": "Creates",
+  "archive_path": "dist/observe/store/index.js",
+  "rc9": {
+   "start": 704,
+   "end": 784,
+   "slice": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 704,
+   "prefix": "",
+   "stmtEnd": 784,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "reconcile",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "54de3c6d2552dd2a99abc25f2ed02b75fb4c71af00bea23ba85bb82dbed15d9d",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 798,
+   "end": 878,
+   "slice_sha256": "d99b5e9158dfd8f7042e5b5b8aa40be80ee52ab0c1e6c95d7f3ea18b0d5d9099",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "runWithOwner",
+  "domain": "Reads",
+  "archive_path": "dist/prod/core/core.js",
+  "rc9": {
+   "start": 87558,
+   "end": 87770,
+   "slice": "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 87558,
+   "prefix": "",
+   "stmtEnd": 87770,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": false,
+   "endsNL": false
+  },
+  "name": "runWithOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0c33a6ea8562cbc8a68d959ab7e3b590db57bc60d3fb9c77cdda4859223adb89",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 102384,
+   "end": 102596,
+   "slice_sha256": "edcf5f33372c979731c0d5ce2f7bddf0aff822d92b11ae75af6178a000a482a0",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "runWithOwner",
+  "domain": "Reads",
+  "archive_path": "dist/dev-shared.js",
+  "rc9": {
+   "start": 287156,
+   "end": 287864,
+   "slice": "332a218ceec024a1d0c3464213b7d043d4a902c529b5f02a7d6ae0467070a11c",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 287156,
+   "prefix": "",
+   "stmtEnd": 287864,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "runWithOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 331544,
+   "end": 332252,
+   "slice_sha256": "332a218ceec024a1d0c3464213b7d043d4a902c529b5f02a7d6ae0467070a11c",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "runWithOwner",
+  "domain": "Reads",
+  "archive_path": "dist/observe/core/core.js",
+  "rc9": {
+   "start": 89058,
+   "end": 89270,
+   "slice": "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 89058,
+   "prefix": "",
+   "stmtEnd": 89270,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": false,
+   "endsNL": false
+  },
+  "name": "runWithOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "1c011bd18d46f62cb6bdf6d3df449ac9ee29172ac9791620f8669ac10566ed85",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 104299,
+   "end": 104511,
+   "slice_sha256": "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "runWithOwner",
+  "domain": "Creates",
+  "archive_path": "dist/prod/core/core.js",
+  "rc9": {
+   "start": 87558,
+   "end": 87770,
+   "slice": "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 87558,
+   "prefix": "",
+   "stmtEnd": 87770,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": false,
+   "endsNL": false
+  },
+  "name": "runWithOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0c33a6ea8562cbc8a68d959ab7e3b590db57bc60d3fb9c77cdda4859223adb89",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 102384,
+   "end": 102596,
+   "slice_sha256": "edcf5f33372c979731c0d5ce2f7bddf0aff822d92b11ae75af6178a000a482a0",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "runWithOwner",
+  "domain": "Creates",
+  "archive_path": "dist/dev-shared.js",
+  "rc9": {
+   "start": 287156,
+   "end": 287864,
+   "slice": "332a218ceec024a1d0c3464213b7d043d4a902c529b5f02a7d6ae0467070a11c",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 287156,
+   "prefix": "",
+   "stmtEnd": 287864,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "runWithOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 331544,
+   "end": 332252,
+   "slice_sha256": "332a218ceec024a1d0c3464213b7d043d4a902c529b5f02a7d6ae0467070a11c",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "runWithOwner",
+  "domain": "Creates",
+  "archive_path": "dist/observe/core/core.js",
+  "rc9": {
+   "start": 89058,
+   "end": 89270,
+   "slice": "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 89058,
+   "prefix": "",
+   "stmtEnd": 89270,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": false,
+   "endsNL": false
+  },
+  "name": "runWithOwner",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "1c011bd18d46f62cb6bdf6d3df449ac9ee29172ac9791620f8669ac10566ed85",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 104299,
+   "end": 104511,
+   "slice_sha256": "5c40363ecc6eaf66378b57e0c387103fe67f51706d30dab3cb041fd10f8af3e5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "snapshot",
+  "domain": "Creates",
+  "archive_path": "dist/prod/store/index.js",
+  "rc9": {
+   "start": 760,
+   "end": 813,
+   "slice": "3bb31686d1eba591133042dd4c7c95515074c440f6d532da34f25cbf6c05bfd2",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 760,
+   "prefix": "",
+   "stmtEnd": 812,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "snapshot",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "4c0118833a2e8fb1455313398d87b6700aeb7f9a98731f28308ece04823350e8",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 760,
+   "end": 813,
+   "slice_sha256": "3bb31686d1eba591133042dd4c7c95515074c440f6d532da34f25cbf6c05bfd2",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "snapshot",
+  "domain": "Creates",
+  "archive_path": "dist/dev.js",
+  "rc9": {
+   "start": 370803,
+   "end": 370862,
+   "slice": "eebc4206bc3509952fd02519f13f9b58ed00bc63da5658c90322c97bd221d6be",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 370803,
+   "prefix": "",
+   "stmtEnd": 370861,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "snapshot",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "8dc03b10900358068678b4968c070e9d3f5cda781a5d8f7b40996e322b94a4c4",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 404283,
+   "end": 404342,
+   "slice_sha256": "eebc4206bc3509952fd02519f13f9b58ed00bc63da5658c90322c97bd221d6be",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "snapshot",
+  "domain": "Creates",
+  "archive_path": "dist/observe/store/index.js",
+  "rc9": {
+   "start": 786,
+   "end": 839,
+   "slice": "3bb31686d1eba591133042dd4c7c95515074c440f6d532da34f25cbf6c05bfd2",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 786,
+   "prefix": "",
+   "stmtEnd": 838,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "snapshot",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "54de3c6d2552dd2a99abc25f2ed02b75fb4c71af00bea23ba85bb82dbed15d9d",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 880,
+   "end": 933,
+   "slice_sha256": "3bb31686d1eba591133042dd4c7c95515074c440f6d532da34f25cbf6c05bfd2",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "untrack",
+  "domain": "Reads",
+  "archive_path": "dist/prod/core/core.js",
+  "rc9": {
+   "start": 49018,
+   "end": 49298,
+   "slice": "28c2d9f3861b28ad08edaeb66a6d8f2caa5530d6e7cff226afda0a9a7b5d912a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 49022,
+   "prefix": " */ ",
+   "stmtEnd": 49297,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "untrack",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0c33a6ea8562cbc8a68d959ab7e3b590db57bc60d3fb9c77cdda4859223adb89",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 56152,
+   "end": 56432,
+   "slice_sha256": "0fd615f97eec22ed61c5e13caadfcffa01e1a9db357577116d899559201da786",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "untrack",
+  "domain": "Reads",
+  "archive_path": "dist/dev-shared.js",
+  "rc9": {
+   "start": 242868,
+   "end": 243344,
+   "slice": "2a929c2683ae93a3820bf2b4bf1a4455b41c6a928880eaa480a6820fe43a1852",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 242868,
+   "prefix": "",
+   "stmtEnd": 243343,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "untrack",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 278820,
+   "end": 279412,
+   "slice_sha256": "a32fa71b267c22f271dfcb5ae86f7502dceca97942230649833183141d382b4d",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "untrack",
+  "domain": "Reads",
+  "archive_path": "dist/observe/core/core.js",
+  "rc9": {
+   "start": 50382,
+   "end": 50662,
+   "slice": "01672a8cba1c1d7a8800b0effde85a96cffd51ac0bb7025b40b208f805e98773",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 50386,
+   "prefix": " */ ",
+   "stmtEnd": 50661,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "untrack",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "1c011bd18d46f62cb6bdf6d3df449ac9ee29172ac9791620f8669ac10566ed85",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 57931,
+   "end": 58211,
+   "slice_sha256": "2dadaf6243bbfde3d0ae1f249d570bf7bc8f60d3ab744db34483488acebbc76b",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "untrack",
+  "domain": "Creates",
+  "archive_path": "dist/prod/core/core.js",
+  "rc9": {
+   "start": 49018,
+   "end": 49298,
+   "slice": "28c2d9f3861b28ad08edaeb66a6d8f2caa5530d6e7cff226afda0a9a7b5d912a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 49022,
+   "prefix": " */ ",
+   "stmtEnd": 49297,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "untrack",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0c33a6ea8562cbc8a68d959ab7e3b590db57bc60d3fb9c77cdda4859223adb89",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 56152,
+   "end": 56432,
+   "slice_sha256": "0fd615f97eec22ed61c5e13caadfcffa01e1a9db357577116d899559201da786",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "untrack",
+  "domain": "Creates",
+  "archive_path": "dist/dev-shared.js",
+  "rc9": {
+   "start": 242868,
+   "end": 243344,
+   "slice": "2a929c2683ae93a3820bf2b4bf1a4455b41c6a928880eaa480a6820fe43a1852",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 242868,
+   "prefix": "",
+   "stmtEnd": 243343,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "untrack",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 278820,
+   "end": 279412,
+   "slice_sha256": "a32fa71b267c22f271dfcb5ae86f7502dceca97942230649833183141d382b4d",
+   "prefix": "",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/signals",
+  "export": "untrack",
+  "domain": "Creates",
+  "archive_path": "dist/observe/core/core.js",
+  "rc9": {
+   "start": 50382,
+   "end": 50662,
+   "slice": "01672a8cba1c1d7a8800b0effde85a96cffd51ac0bb7025b40b208f805e98773",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 50386,
+   "prefix": " */ ",
+   "stmtEnd": 50661,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "untrack",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "1c011bd18d46f62cb6bdf6d3df449ac9ee29172ac9791620f8669ac10566ed85",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 57931,
+   "end": 58211,
+   "slice_sha256": "2dadaf6243bbfde3d0ae1f249d570bf7bc8f60d3ab744db34483488acebbc76b",
+   "prefix": " */ ",
+   "identical": false
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Reads",
+  "archive_path": "dist/web.js",
+  "rc9": {
+   "start": 75603,
+   "end": 76441,
+   "slice": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 75603,
+   "prefix": "",
+   "stmtEnd": 76441,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 77253,
+   "end": 78091,
+   "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Reads",
+  "archive_path": "dist/web.dev.js",
+  "rc9": {
+   "start": 83888,
+   "end": 84726,
+   "slice": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 83888,
+   "prefix": "",
+   "stmtEnd": 84726,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 88866,
+   "end": 89704,
+   "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Reads",
+  "archive_path": "dist/web.observe.js",
+  "rc9": {
+   "start": 76567,
+   "end": 77405,
+   "slice": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 76567,
+   "prefix": "",
+   "stmtEnd": 77405,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 78976,
+   "end": 79814,
+   "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Reads",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 128372,
+   "end": 128553,
+   "slice": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 128372,
+   "prefix": "",
+   "stmtEnd": 128553,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 147221,
+   "end": 147402,
+   "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Reads",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 139370,
+   "end": 139551,
+   "slice": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 139370,
+   "prefix": "",
+   "stmtEnd": 139551,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 166831,
+   "end": 167012,
+   "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Reads",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 131399,
+   "end": 131580,
+   "slice": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 131399,
+   "prefix": "",
+   "stmtEnd": 131580,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 152298,
+   "end": 152479,
+   "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Creates",
+  "archive_path": "dist/web.js",
+  "rc9": {
+   "start": 75603,
+   "end": 76441,
+   "slice": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 75603,
+   "prefix": "",
+   "stmtEnd": 76441,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 77253,
+   "end": 78091,
+   "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Creates",
+  "archive_path": "dist/web.dev.js",
+  "rc9": {
+   "start": 83888,
+   "end": 84726,
+   "slice": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 83888,
+   "prefix": "",
+   "stmtEnd": 84726,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 88866,
+   "end": 89704,
+   "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Creates",
+  "archive_path": "dist/web.observe.js",
+  "rc9": {
+   "start": 76567,
+   "end": 77405,
+   "slice": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 76567,
+   "prefix": "",
+   "stmtEnd": 77405,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 78976,
+   "end": 79814,
+   "slice_sha256": "f6412c9af0fb9a131456f7aa9bb9e4e7b372a6ccd58038a058e30787fe8d572b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Creates",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 128372,
+   "end": 128553,
+   "slice": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 128372,
+   "prefix": "",
+   "stmtEnd": 128553,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 147221,
+   "end": 147402,
+   "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Creates",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 139370,
+   "end": 139551,
+   "slice": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 139370,
+   "prefix": "",
+   "stmtEnd": 139551,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 166831,
+   "end": 167012,
+   "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "clientOnly",
+  "domain": "Creates",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 131399,
+   "end": 131580,
+   "slice": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 131399,
+   "prefix": "",
+   "stmtEnd": 131580,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "clientOnly",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 152298,
+   "end": 152479,
+   "slice_sha256": "31fd1a14ca31fa876e0af88c56d8b5c397fefd7f8ef84133d9484d5721ad1061",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Reads",
+  "archive_path": "dist/web.js",
+  "rc9": {
+   "start": 76479,
+   "end": 76526,
+   "slice": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 76479,
+   "prefix": "",
+   "stmtEnd": 76526,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 78129,
+   "end": 78176,
+   "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Reads",
+  "archive_path": "dist/web.dev.js",
+  "rc9": {
+   "start": 84764,
+   "end": 84811,
+   "slice": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 84764,
+   "prefix": "",
+   "stmtEnd": 84811,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 89742,
+   "end": 89789,
+   "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Reads",
+  "archive_path": "dist/web.observe.js",
+  "rc9": {
+   "start": 77443,
+   "end": 77490,
+   "slice": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 77443,
+   "prefix": "",
+   "stmtEnd": 77490,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 79852,
+   "end": 79899,
+   "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Reads",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 129688,
+   "end": 131088,
+   "slice": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 129688,
+   "prefix": "",
+   "stmtEnd": 131088,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 148537,
+   "end": 149937,
+   "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Reads",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 140686,
+   "end": 142086,
+   "slice": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 140686,
+   "prefix": "",
+   "stmtEnd": 142086,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 168147,
+   "end": 169547,
+   "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Reads",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 132715,
+   "end": 134115,
+   "slice": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 132715,
+   "prefix": "",
+   "stmtEnd": 134115,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 153614,
+   "end": 155014,
+   "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Creates",
+  "archive_path": "dist/web.js",
+  "rc9": {
+   "start": 76479,
+   "end": 76526,
+   "slice": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 76479,
+   "prefix": "",
+   "stmtEnd": 76526,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 78129,
+   "end": 78176,
+   "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Creates",
+  "archive_path": "dist/web.dev.js",
+  "rc9": {
+   "start": 84764,
+   "end": 84811,
+   "slice": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 84764,
+   "prefix": "",
+   "stmtEnd": 84811,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 89742,
+   "end": 89789,
+   "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Creates",
+  "archive_path": "dist/web.observe.js",
+  "rc9": {
+   "start": 77443,
+   "end": 77490,
+   "slice": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 77443,
+   "prefix": "",
+   "stmtEnd": 77490,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 79852,
+   "end": 79899,
+   "slice_sha256": "cd98272f0f010dfe4990526fc6ba5a3508aea05b6f10233e5747ecd803b76e42",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Creates",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 129688,
+   "end": 131088,
+   "slice": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 129688,
+   "prefix": "",
+   "stmtEnd": 131088,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 148537,
+   "end": 149937,
+   "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Creates",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 140686,
+   "end": 142086,
+   "slice": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 140686,
+   "prefix": "",
+   "stmtEnd": 142086,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 168147,
+   "end": 169547,
+   "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpHeader",
+  "domain": "Creates",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 132715,
+   "end": 134115,
+   "slice": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 132715,
+   "prefix": "",
+   "stmtEnd": 134115,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpHeader",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 153614,
+   "end": 155014,
+   "slice_sha256": "3d0445e29f9bdff71a0501f0a5fff30a15073ae3955a0519708d97324c004f20",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Reads",
+  "archive_path": "dist/web.js",
+  "rc9": {
+   "start": 76442,
+   "end": 76478,
+   "slice": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 76442,
+   "prefix": "",
+   "stmtEnd": 76478,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 78092,
+   "end": 78128,
+   "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Reads",
+  "archive_path": "dist/web.dev.js",
+  "rc9": {
+   "start": 84727,
+   "end": 84763,
+   "slice": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 84727,
+   "prefix": "",
+   "stmtEnd": 84763,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 89705,
+   "end": 89741,
+   "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Reads",
+  "archive_path": "dist/web.observe.js",
+  "rc9": {
+   "start": 77406,
+   "end": 77442,
+   "slice": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 77406,
+   "prefix": "",
+   "stmtEnd": 77442,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 79815,
+   "end": 79851,
+   "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Reads",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 128658,
+   "end": 129687,
+   "slice": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 128658,
+   "prefix": "",
+   "stmtEnd": 129687,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 147507,
+   "end": 148536,
+   "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Reads",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 139656,
+   "end": 140685,
+   "slice": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 139656,
+   "prefix": "",
+   "stmtEnd": 140685,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 167117,
+   "end": 168146,
+   "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Reads",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 131685,
+   "end": 132714,
+   "slice": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 131685,
+   "prefix": "",
+   "stmtEnd": 132714,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 152584,
+   "end": 153613,
+   "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Creates",
+  "archive_path": "dist/web.js",
+  "rc9": {
+   "start": 76442,
+   "end": 76478,
+   "slice": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 76442,
+   "prefix": "",
+   "stmtEnd": 76478,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "7006f19d7b2a429444ee28ea9aad66265dcb77461fe659435cf0147c65aca5d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 78092,
+   "end": 78128,
+   "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Creates",
+  "archive_path": "dist/web.dev.js",
+  "rc9": {
+   "start": 84727,
+   "end": 84763,
+   "slice": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 84727,
+   "prefix": "",
+   "stmtEnd": 84763,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "bd417d367b53da351b1f566102a768aeb7ec66ab0d5cabe9f16ce8dec66a4077",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 89705,
+   "end": 89741,
+   "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Creates",
+  "archive_path": "dist/web.observe.js",
+  "rc9": {
+   "start": 77406,
+   "end": 77442,
+   "slice": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 77406,
+   "prefix": "",
+   "stmtEnd": 77442,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "2ee52aa0219d1eb37963bb38ebd35cad53e6c269b34ef3895fe357f7c1d65f9e",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 79815,
+   "end": 79851,
+   "slice_sha256": "9de7ebfe186dfaf587fcaf60460297678b12e25a81e7c1221a574094397c926b",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Creates",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 128658,
+   "end": 129687,
+   "slice": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 128658,
+   "prefix": "",
+   "stmtEnd": 129687,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f798fc997b031f48e29e408c8b16227928f625d3fc340d7e03579326af4cf298",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 147507,
+   "end": 148536,
+   "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Creates",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 139656,
+   "end": 140685,
+   "slice": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 139656,
+   "prefix": "",
+   "stmtEnd": 140685,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "d71df58be3ffb83136b0b797e6d72b962d3ea6f845e58565793b9439c7ef9ea1",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 167117,
+   "end": 168146,
+   "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "@solidjs/web",
+  "export": "httpStatus",
+  "domain": "Creates",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 131685,
+   "end": 132714,
+   "slice": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 131685,
+   "prefix": "",
+   "stmtEnd": 132714,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "httpStatus",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "ab31eaf25a26ed90f63fec5a23b2bbf8c1506ea6abd2d3b2f3ee72c203de86de",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 152584,
+   "end": 153613,
+   "slice_sha256": "56233798652c4cdbb935eecde9e930996c50b7a747a4da9b37e3ec4dc19183e7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Reads",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 37042,
+   "end": 37467,
+   "slice": "3f85ecafbe4729ce5c20deac5622cf43aed0153bf0154f5b1fa27513f3aeb065",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 37042,
+   "prefix": "",
+   "stmtEnd": 37467,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 43257,
+   "end": 43682,
+   "slice_sha256": "3f85ecafbe4729ce5c20deac5622cf43aed0153bf0154f5b1fa27513f3aeb065",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Reads",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 39271,
+   "end": 39722,
+   "slice": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 39271,
+   "prefix": "",
+   "stmtEnd": 39722,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 46422,
+   "end": 46873,
+   "slice_sha256": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Reads",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 37372,
+   "end": 37823,
+   "slice": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 37372,
+   "prefix": "",
+   "stmtEnd": 37823,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 44079,
+   "end": 44530,
+   "slice_sha256": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Reads",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 65074,
+   "end": 65296,
+   "slice": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 65074,
+   "prefix": "",
+   "stmtEnd": 65296,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 72325,
+   "end": 72547,
+   "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Reads",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 74377,
+   "end": 74599,
+   "slice": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 74377,
+   "prefix": "",
+   "stmtEnd": 74599,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 83707,
+   "end": 83929,
+   "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Reads",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 69358,
+   "end": 69580,
+   "slice": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 69358,
+   "prefix": "",
+   "stmtEnd": 69580,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 77301,
+   "end": 77523,
+   "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Creates",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 37042,
+   "end": 37467,
+   "slice": "3f85ecafbe4729ce5c20deac5622cf43aed0153bf0154f5b1fa27513f3aeb065",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 37042,
+   "prefix": "",
+   "stmtEnd": 37467,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 43257,
+   "end": 43682,
+   "slice_sha256": "3f85ecafbe4729ce5c20deac5622cf43aed0153bf0154f5b1fa27513f3aeb065",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Creates",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 39271,
+   "end": 39722,
+   "slice": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 39271,
+   "prefix": "",
+   "stmtEnd": 39722,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 46422,
+   "end": 46873,
+   "slice_sha256": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Creates",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 37372,
+   "end": 37823,
+   "slice": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 37372,
+   "prefix": "",
+   "stmtEnd": 37823,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 44079,
+   "end": 44530,
+   "slice_sha256": "eabb480fb722cb1bf1aec173113ad7c3b152476d54c436dd6b04f37ff59441b5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Creates",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 65074,
+   "end": 65296,
+   "slice": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 65074,
+   "prefix": "",
+   "stmtEnd": 65296,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 72325,
+   "end": 72547,
+   "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Creates",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 74377,
+   "end": 74599,
+   "slice": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 74377,
+   "prefix": "",
+   "stmtEnd": 74599,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 83707,
+   "end": 83929,
+   "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "For",
+  "domain": "Creates",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 69358,
+   "end": 69580,
+   "slice": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 69358,
+   "prefix": "",
+   "stmtEnd": 69580,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "For",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 77301,
+   "end": 77523,
+   "slice_sha256": "36dc66a015203248b9aa9eef6309f2386d8a3b74406d85a925cd123e0d2da223",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Reads",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 39758,
+   "end": 39799,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 39758,
+   "prefix": "",
+   "stmtEnd": 39799,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 45973,
+   "end": 46014,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Reads",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 42212,
+   "end": 42253,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 42212,
+   "prefix": "",
+   "stmtEnd": 42253,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 49388,
+   "end": 49429,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Reads",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 40303,
+   "end": 40344,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 40303,
+   "prefix": "",
+   "stmtEnd": 40344,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 47035,
+   "end": 47076,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Reads",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 67106,
+   "end": 67147,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 67106,
+   "prefix": "",
+   "stmtEnd": 67147,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 74357,
+   "end": 74398,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Reads",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 76409,
+   "end": 76450,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 76409,
+   "prefix": "",
+   "stmtEnd": 76450,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 85739,
+   "end": 85780,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Reads",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 71390,
+   "end": 71431,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 71390,
+   "prefix": "",
+   "stmtEnd": 71431,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 79333,
+   "end": 79374,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Creates",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 39758,
+   "end": 39799,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 39758,
+   "prefix": "",
+   "stmtEnd": 39799,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 45973,
+   "end": 46014,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Creates",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 42212,
+   "end": 42253,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 42212,
+   "prefix": "",
+   "stmtEnd": 42253,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 49388,
+   "end": 49429,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Creates",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 40303,
+   "end": 40344,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 40303,
+   "prefix": "",
+   "stmtEnd": 40344,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 47035,
+   "end": 47076,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Creates",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 67106,
+   "end": 67147,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 67106,
+   "prefix": "",
+   "stmtEnd": 67147,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 74357,
+   "end": 74398,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Creates",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 76409,
+   "end": 76450,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 76409,
+   "prefix": "",
+   "stmtEnd": 76450,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 85739,
+   "end": 85780,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Match",
+  "domain": "Creates",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 71390,
+   "end": 71431,
+   "slice": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 71390,
+   "prefix": "",
+   "stmtEnd": 71431,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Match",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 79333,
+   "end": 79374,
+   "slice_sha256": "54f4236b8d126e70e15e5dea7b0afd6ed62ce73f4a95d4dd8fa9dd0da056920f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Reads",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 37468,
+   "end": 37749,
+   "slice": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 37468,
+   "prefix": "",
+   "stmtEnd": 37749,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 43683,
+   "end": 43964,
+   "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Reads",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 39723,
+   "end": 40033,
+   "slice": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 39723,
+   "prefix": "",
+   "stmtEnd": 40033,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 46874,
+   "end": 47184,
+   "slice_sha256": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Reads",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 37824,
+   "end": 38134,
+   "slice": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 37824,
+   "prefix": "",
+   "stmtEnd": 38134,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 44531,
+   "end": 44841,
+   "slice_sha256": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Reads",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 65297,
+   "end": 65578,
+   "slice": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 65297,
+   "prefix": "",
+   "stmtEnd": 65578,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 72548,
+   "end": 72829,
+   "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Reads",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 74600,
+   "end": 74881,
+   "slice": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 74600,
+   "prefix": "",
+   "stmtEnd": 74881,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 83930,
+   "end": 84211,
+   "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Reads",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 69581,
+   "end": 69862,
+   "slice": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 69581,
+   "prefix": "",
+   "stmtEnd": 69862,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 77524,
+   "end": 77805,
+   "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Creates",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 37468,
+   "end": 37749,
+   "slice": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 37468,
+   "prefix": "",
+   "stmtEnd": 37749,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 43683,
+   "end": 43964,
+   "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Creates",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 39723,
+   "end": 40033,
+   "slice": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 39723,
+   "prefix": "",
+   "stmtEnd": 40033,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 46874,
+   "end": 47184,
+   "slice_sha256": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Creates",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 37824,
+   "end": 38134,
+   "slice": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 37824,
+   "prefix": "",
+   "stmtEnd": 38134,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 44531,
+   "end": 44841,
+   "slice_sha256": "c9b26a452e05bdb29c555e798b72a155d0eeee2c0d21d3df3025cd70647a1a95",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Creates",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 65297,
+   "end": 65578,
+   "slice": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 65297,
+   "prefix": "",
+   "stmtEnd": 65578,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 72548,
+   "end": 72829,
+   "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Creates",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 74600,
+   "end": 74881,
+   "slice": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 74600,
+   "prefix": "",
+   "stmtEnd": 74881,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 83930,
+   "end": 84211,
+   "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "Repeat",
+  "domain": "Creates",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 69581,
+   "end": 69862,
+   "slice": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 69581,
+   "prefix": "",
+   "stmtEnd": 69862,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "Repeat",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 77524,
+   "end": 77805,
+   "slice_sha256": "540fa67ec55df13ad8823dae14825bbf275c5c3697d4d3b8b3f516c8aa14d66a",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createContext",
+  "domain": "Creates",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 1295,
+   "end": 1634,
+   "slice": "c3be410a00e4ddc5fd5150138223a341e6280d8489dc94d2e6ac6560665d899f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 1295,
+   "prefix": "",
+   "stmtEnd": 1634,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 1295,
+   "end": 1634,
+   "slice_sha256": "c3be410a00e4ddc5fd5150138223a341e6280d8489dc94d2e6ac6560665d899f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createContext",
+  "domain": "Creates",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 1324,
+   "end": 1663,
+   "slice": "c3be410a00e4ddc5fd5150138223a341e6280d8489dc94d2e6ac6560665d899f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 1324,
+   "prefix": "",
+   "stmtEnd": 1663,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 1342,
+   "end": 1681,
+   "slice_sha256": "c3be410a00e4ddc5fd5150138223a341e6280d8489dc94d2e6ac6560665d899f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createContext",
+  "domain": "Creates",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 1317,
+   "end": 1656,
+   "slice": "c3be410a00e4ddc5fd5150138223a341e6280d8489dc94d2e6ac6560665d899f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 1317,
+   "prefix": "",
+   "stmtEnd": 1656,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 1317,
+   "end": 1656,
+   "slice_sha256": "c3be410a00e4ddc5fd5150138223a341e6280d8489dc94d2e6ac6560665d899f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createContext",
+  "domain": "Creates",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 49988,
+   "end": 50325,
+   "slice": "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 49988,
+   "prefix": "",
+   "stmtEnd": 50325,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 56336,
+   "end": 56673,
+   "slice_sha256": "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createContext",
+  "domain": "Creates",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 54369,
+   "end": 54706,
+   "slice": "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 54369,
+   "prefix": "",
+   "stmtEnd": 54706,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 62593,
+   "end": 62930,
+   "slice_sha256": "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createContext",
+  "domain": "Creates",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 52107,
+   "end": 52444,
+   "slice": "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 52107,
+   "prefix": "",
+   "stmtEnd": 52444,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 58894,
+   "end": 59231,
+   "slice_sha256": "87cfe46a740a3e2a7e4a35a9df518de40c49d5156a36c310f20a29f120722829",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createMemo",
+  "domain": "Creates",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 23820,
+   "end": 23905,
+   "slice": "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 23820,
+   "prefix": "",
+   "stmtEnd": 23905,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createMemo",
+  "kind": "const",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 29607,
+   "end": 29692,
+   "slice_sha256": "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createMemo",
+  "domain": "Creates",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 25516,
+   "end": 25601,
+   "slice": "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 25516,
+   "prefix": "",
+   "stmtEnd": 25601,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createMemo",
+  "kind": "const",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 31810,
+   "end": 31895,
+   "slice_sha256": "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createMemo",
+  "domain": "Creates",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 24140,
+   "end": 24225,
+   "slice": "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 24140,
+   "prefix": "",
+   "stmtEnd": 24225,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createMemo",
+  "kind": "const",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 29927,
+   "end": 30012,
+   "slice_sha256": "1528dcd8aeb175ac5dda5fa0477fdbe76d6a7498ef43ce7a0ab6ffc196f982f5",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createSignal",
+  "domain": "Reads",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 23906,
+   "end": 23997,
+   "slice": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 23906,
+   "prefix": "",
+   "stmtEnd": 23997,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createSignal",
+  "kind": "const",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 29693,
+   "end": 29784,
+   "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createSignal",
+  "domain": "Reads",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 25602,
+   "end": 25693,
+   "slice": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 25602,
+   "prefix": "",
+   "stmtEnd": 25693,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createSignal",
+  "kind": "const",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 31896,
+   "end": 31987,
+   "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createSignal",
+  "domain": "Reads",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 24226,
+   "end": 24317,
+   "slice": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 24226,
+   "prefix": "",
+   "stmtEnd": 24317,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createSignal",
+  "kind": "const",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 30013,
+   "end": 30104,
+   "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createSignal",
+  "domain": "Reads",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 8763,
+   "end": 9388,
+   "slice": "38028a6c27dec146a1e4eb81e2e9bdfce1f1e90ce2d2701fe21c1d460148cf39",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 8763,
+   "prefix": "",
+   "stmtEnd": 9387,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createSignal",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 13012,
+   "end": 13637,
+   "slice_sha256": "38028a6c27dec146a1e4eb81e2e9bdfce1f1e90ce2d2701fe21c1d460148cf39",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createSignal",
+  "domain": "Reads",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 12317,
+   "end": 13006,
+   "slice": "6002fc5a126d938f9e23b7d284d707d2448bf56a65da3e428bb02167efe9c979",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 12317,
+   "prefix": "",
+   "stmtEnd": 13005,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createSignal",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 17518,
+   "end": 18207,
+   "slice_sha256": "6002fc5a126d938f9e23b7d284d707d2448bf56a65da3e428bb02167efe9c979",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createSignal",
+  "domain": "Reads",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 10004,
+   "end": 10629,
+   "slice": "38028a6c27dec146a1e4eb81e2e9bdfce1f1e90ce2d2701fe21c1d460148cf39",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 10004,
+   "prefix": "",
+   "stmtEnd": 10628,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": true
+  },
+  "name": "createSignal",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 14665,
+   "end": 15290,
+   "slice_sha256": "38028a6c27dec146a1e4eb81e2e9bdfce1f1e90ce2d2701fe21c1d460148cf39",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createSignal",
+  "domain": "Creates",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 23906,
+   "end": 23997,
+   "slice": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 23906,
+   "prefix": "",
+   "stmtEnd": 23997,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createSignal",
+  "kind": "const",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 29693,
+   "end": 29784,
+   "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createSignal",
+  "domain": "Creates",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 25602,
+   "end": 25693,
+   "slice": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 25602,
+   "prefix": "",
+   "stmtEnd": 25693,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createSignal",
+  "kind": "const",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 31896,
+   "end": 31987,
+   "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "createSignal",
+  "domain": "Creates",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 24226,
+   "end": 24317,
+   "slice": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 24226,
+   "prefix": "",
+   "stmtEnd": 24317,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "createSignal",
+  "kind": "const",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 30013,
+   "end": 30104,
+   "slice_sha256": "96473897517769f0074a40f4e1657dfb1d580a915549f978b7651ab38f3ec8a7",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Reads",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 1635,
+   "end": 1697,
+   "slice": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 1635,
+   "prefix": "",
+   "stmtEnd": 1697,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 1635,
+   "end": 1697,
+   "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Reads",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 1664,
+   "end": 1726,
+   "slice": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 1664,
+   "prefix": "",
+   "stmtEnd": 1726,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 1682,
+   "end": 1744,
+   "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Reads",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 1657,
+   "end": 1719,
+   "slice": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 1657,
+   "prefix": "",
+   "stmtEnd": 1719,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 1657,
+   "end": 1719,
+   "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Reads",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 50326,
+   "end": 50582,
+   "slice": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 50326,
+   "prefix": "",
+   "stmtEnd": 50582,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 56674,
+   "end": 56930,
+   "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Reads",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 54707,
+   "end": 54963,
+   "slice": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 54707,
+   "prefix": "",
+   "stmtEnd": 54963,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 62931,
+   "end": 63187,
+   "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Reads",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 52445,
+   "end": 52701,
+   "slice": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 52445,
+   "prefix": "",
+   "stmtEnd": 52701,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 59232,
+   "end": 59488,
+   "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Creates",
+  "archive_path": "dist/solid.js",
+  "rc9": {
+   "start": 1635,
+   "end": 1697,
+   "slice": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 1635,
+   "prefix": "",
+   "stmtEnd": 1697,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "81111de698a29afc53636b574385af43cde37c3e39c4f44c951d97021052c878",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 1635,
+   "end": 1697,
+   "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Creates",
+  "archive_path": "dist/solid.dev.js",
+  "rc9": {
+   "start": 1664,
+   "end": 1726,
+   "slice": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 1664,
+   "prefix": "",
+   "stmtEnd": 1726,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "0489d4c57801d5d31e66013f4973c35105bba229df22ae95cdd5a8e260d19e7f",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 1682,
+   "end": 1744,
+   "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Creates",
+  "archive_path": "dist/solid.observe.js",
+  "rc9": {
+   "start": 1657,
+   "end": 1719,
+   "slice": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 1657,
+   "prefix": "",
+   "stmtEnd": 1719,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "fa9a7c25d1827aa1e9fe11ede19d42af4e0c5ee7a61099813331bd0c81d2a165",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 1657,
+   "end": 1719,
+   "slice_sha256": "03f0fc70f94b38bb7a4b6720e59c06f7cf491dc297ffe4e5918960d5b9621618",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Creates",
+  "archive_path": "dist/server.js",
+  "rc9": {
+   "start": 50326,
+   "end": 50582,
+   "slice": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 50326,
+   "prefix": "",
+   "stmtEnd": 50582,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "f65a92da939c10cbbb66242f264de2631b8459d9a23efa121f9d23794c2273a5",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 56674,
+   "end": 56930,
+   "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Creates",
+  "archive_path": "dist/server.dev.js",
+  "rc9": {
+   "start": 54707,
+   "end": 54963,
+   "slice": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 54707,
+   "prefix": "",
+   "stmtEnd": 54963,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "be726daa949ae51c089003cfadf5e64ec22201b3d5f23e4163beeb9d31bf75d2",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 62931,
+   "end": 63187,
+   "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "prefix": "",
+   "identical": true
+  }
+ },
+ {
+  "package": "solid-js",
+  "export": "useContext",
+  "domain": "Creates",
+  "archive_path": "dist/server.observe.js",
+  "rc9": {
+   "start": 52445,
+   "end": 52701,
+   "slice": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "file_ok": true,
+   "slice_ok": true,
+   "defOffset": 52445,
+   "prefix": "",
+   "stmtEnd": 52701,
+   "reproduced": true
+  },
+  "conv": {
+   "lineStart": true,
+   "endsNL": false
+  },
+  "name": "useContext",
+  "kind": "function",
+  "rc13": {
+   "file_sha256": "e30d10de1732fe70677d1d4a225f859fa6bc37c877224adef66066db9506fe1b",
+   "manifest_ok": true,
+   "hits": 1,
+   "start": 59232,
+   "end": 59488,
+   "slice_sha256": "3cbc46d0ef0841dd0dab0674ca61438056a050d6d118d44c094404c42ad8dd5f",
+   "prefix": "",
+   "identical": true
+  }
+ }
+]

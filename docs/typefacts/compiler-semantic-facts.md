@@ -444,9 +444,62 @@ bounded by the demand; finite literal, callability, protocol, tuple, and genuine
 common-discriminant partitions are marked complete only when compiler relations
 prove them exhaustive.
 
+The callable-path census reports two kinds of member. A **declared member** is
+one some declaration in the program writes down; `subtreeEnumerated` and the
+whole-census closure a consumer asks for are claims about declared members
+only, and apparent leaves appear only at nodes with remaining demand depth, so
+a callable node at the depth cut reports an enumerated subtree while carrying
+un-emitted apparent members. An **apparent member**, marked `apparent: true`,
+is one a value carries solely through the compiler's apparent-type augmentation
+— the global `Function` interface's members on a node with call or construct
+signatures — and is emitted as a leaf the producer does not descend into, with
+the presence the compiler gives it. A tuple carries its Array or ReadonlyArray
+base's members beside its element slots, so the same member is answerable for
+`[T, T]` and for `T[]`. Cross-alternative reconciliation never proves a path
+`absent` when its last segment names a member of the global `Object` interface,
+because that augmentation is not enumerated and a closed declared census is not
+evidence about it; if the interface does not resolve, no absence is synthesized
+at all. Apparent members are excluded from the template set that reconciliation
+answers for, while still serving as prefixes there. A union reached below the root
+keeps the compiler's own answer — the members common to every constituent — for
+the reason recorded in the ADR. See
+[ADR 0023](adr/0023-v1-apparent-callable-path-members.md).
+
+The implementation call census also traces *value provenance*. Each call
+carries `argumentSources`: one entry per written argument slot, holding the
+traced provenance of the expression written there — the same
+`implementationValueSource` rows a return site carries, from the same walk. The
+walk peels parenthesized expressions, descends array literals with a tuple path,
+answers a callable expression as `directCallable`, a call expression as
+`callResult` with its resolved callee, and an identifier through exactly one hop
+to a binding element whose variable initializer is a call, which yields that
+call plus the tuple slot the element sits at. That hop takes five premises: the
+symbol has exactly one declaration, is never an assignment target anywhere
+(answered by the checker's assignment-target symbols, not by a source-text
+scan), the element carries neither a rest token nor a default, and the reference
+is positioned at or after the end of its binding's whole variable declaration in
+the same file — `cb(hoisted); var [hoisted] = createSignal(1)` reads
+`undefined`. It stops there: a reassigned or redeclared binding, a rest element,
+a defaulted element, a hoisted or self-reference, a computed or non-identifier
+callee, a property read and a conditional initializer all trace to nothing. The slot gate is
+`exactArgumentSlots`, so a slot a spread displaced is empty even when an
+accessor is written at that position.
+
+**An empty list is "traced nothing", never a claim about the value.** It is not
+"not an accessor" and not "plain"; a consumer must fail closed on it. The same
+narrowing applies to a return site's `sources`, which had followed a symbol's
+first declaration since it existed. `targetModule` remains the written import
+specifier text and is empty for a locally declared callee, so dialect identity
+is the consumer's question to ask of the dialect, not a fact the producer
+states. See [ADR 0024](adr/0024-v1-argument-value-provenance.md).
+
 An optional census classifies every formal-binding reference in the current
 implementation by symbol identity and separately enumerates return, throw, and
-branch sites. It deliberately does not assign Solid timing, tracking, or owner
+branch sites. A reference the language spells as a declaration name is still a
+value read when it is an object-literal *shorthand* — `{ cb }` stores the value
+exactly as `{ cb: cb }` does — so a shorthand whose name resolves to a censused
+parameter is recorded as an `unknownEscape` use at the identifier. Without it a
+consumer reading this census as exhaustive was blind to that one spelling. It deliberately does not assign Solid timing, tracking, or owner
 semantics. Unsupported loop, switch, and try reachability opens only the
 control-flow domain.
 

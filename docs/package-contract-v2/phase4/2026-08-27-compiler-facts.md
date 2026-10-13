@@ -1,5 +1,14 @@
 # Phase 4 completion report: compiler execution facts
 
+RC.13 adoption (2026-10-05, ADR 0196): the checker pins upstream
+`5efaf260becb32293f2bcb4d32f8be72be6de674`, implementation
+`c04c48779812d3d87166da3741c625748458c62f` and distribution
+`3ad4bbec37ae30f325a803cdb4271a71c86a2a2d`, published as
+`yumemi-thomas/solid:solid-checker/compiler-facts-rc13`. The candidate was
+prepared and validated on 2026-10-03
+(`../phase22/2026-10-03-rc13-compiler-facts-rebase.md`). The historical prose
+below describes the earlier rc.3-era pin.
+
 Date: 2026-08-27
 
 ## Outcome
@@ -13,10 +22,10 @@ request was opened against upstream Solid.
 
 | Role | Identity |
 | --- | --- |
-| Official upstream base | `solidjs/solid@a10cf1a147209d8da50697896742d2b1d4afad75` |
-| Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-v3` |
-| Semantic implementation | `7f4e1135943c1fb01231d1bda707b4a1856a5607` |
-| Identity-only distribution commit | `9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4` |
+| Official upstream base | `solidjs/solid@5efaf260becb32293f2bcb4d32f8be72be6de674` |
+| Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-rc13` |
+| Semantic implementation | `c04c48779812d3d87166da3741c625748458c62f` |
+| Identity-only distribution commit | `3ad4bbec37ae30f325a803cdb4271a71c86a2a2d` |
 | Solid 2 trace | version 3 |
 | Checker compiler-facts | protocol 2 |
 | Solid 1 producer | `yumemi-thomas/solid-1x-compiler@ca3bbfae7d1e00e28ef73f9af58bdb46e248b512`, trace 2 |

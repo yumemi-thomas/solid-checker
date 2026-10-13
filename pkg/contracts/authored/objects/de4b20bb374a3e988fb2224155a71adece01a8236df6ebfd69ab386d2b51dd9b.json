@@ -1,0 +1,185 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "6d20fd3011cd036206ee183d2a54e11683e7ca562f1883b634086ab9a8806bce",
+            "path": "./dist/index.js",
+            "sha256": "7d5089d2c2a22f5503aa09e5267c26aed57f30be54abfb1db1d582364ac978dc"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "853d89668babc92f8d394a1dc0cc429308a09413569fc7d81a19b82406022b37"
+          },
+          "exports": {
+            "createOrientation": "authored-createOrientation",
+            "makeOrientation": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-pkC2QC31+sk9VfrwMoFc9ByCUGLQFxBFg2iYW/HtbvFaui5W7vreV34U1ajeX1fCuDT6AZeU4E30G9veAa9GbA==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "07cc240dfeffa6fc2956996c1d378d7d221031ba253b49fbc9540a595ee130ff"
+    },
+    "name": "@solid-primitives/orientation",
+    "version": "1.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "authored-createOrientation": {
+      "call": {
+        "operations": [
+          {
+            "id": "create-angle",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "angle"
+            ]
+          },
+          {
+            "id": "create-type",
+            "kind": "create",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "resources": [
+              "type"
+            ]
+          },
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "object",
+              "closed": [
+                "properties"
+              ],
+              "properties": [
+                {
+                  "name": "angle",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "angle"
+                  }
+                },
+                {
+                  "name": "type",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor",
+                    "resource": "type"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "creates": [
+          "create-angle",
+          "create-type"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "reads": [],
+        "callbacks": [],
+        "resources": [
+          {
+            "id": "angle",
+            "kind": "reactive-source"
+          },
+          {
+            "id": "type",
+            "kind": "reactive-source"
+          }
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ]
+      },
+      "shape": "callable"
+    },
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

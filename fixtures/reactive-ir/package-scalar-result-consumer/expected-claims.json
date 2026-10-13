@@ -1,0 +1,47 @@
+{
+  "status": "observed; findings snapshot is fixtures/findings-snapshots/reactive-ir__package-scalar-result-consumer.json",
+  "resultDispatchClean": [
+    "SyntaxClean",
+    "BuiltinClean"
+  ],
+  "violations": [
+    {
+      "function": "ProducerViolation",
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation"
+    }
+  ],
+  "resultDispatchUncertifiable": [
+    "RefusedCompletions (except the existing throw-only shortcut)",
+    "ShadowedDate",
+    "ShadowedMath",
+    "ReplacedLocalDate"
+  ],
+  "noNewViolation": [
+    "RefusedCompletions",
+    "ShadowedDate",
+    "ShadowedMath",
+    "ReplacedLocalDate"
+  ],
+  "withheldProofs": [
+    "annotations",
+    "casts over unknown values",
+    "object coercion",
+    "typed local builtin receivers",
+    "unknown member targets",
+    "computed calls",
+    "optional calls and members",
+    "unreviewed Math.max",
+    "constructors",
+    "async callbacks",
+    "named callbacks",
+    "fallthrough",
+    "multiple returns",
+    "finally override",
+    "throw-only callback",
+    "non-Call result protocol",
+    "open result-use census",
+    "required result call"
+  ]
+}

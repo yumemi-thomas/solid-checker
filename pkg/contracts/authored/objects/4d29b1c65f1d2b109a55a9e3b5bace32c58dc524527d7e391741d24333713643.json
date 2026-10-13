@@ -1,0 +1,91 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "349886683e056b0b5d925f400386baede77eb47bd064fc495d10c1836d97e903",
+            "path": "./dist/index.js",
+            "sha256": "0079b2d50f6f7270321e7c3aa1cb4a821bdf87f7e8cb5fd81fd6403fc968061c"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "7589602766be459e9b57e608814f6ec75ff54cdbb6cdbbef78602c0427736d11"
+          },
+          "exports": {
+            "ReactiveMap": "open-callable",
+            "ReactiveWeakMap": "authored-ReactiveWeakMap",
+            "createMap": "open-callable",
+            "createWeakMap": "open-callable"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-9TipViAZvtT9sNCJuriC7SbKTDA9THKseAxeGWmtvEcWEupwdCTsb/mA8qoobmo+rTgkkhYLyc2N+jHGH4KykQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "e36305dd6325b73172014e4bfbfe0362d8cfcca6768e44873b5569c0dfb656dc"
+    },
+    "name": "@solid-primitives/map",
+    "version": "1.0.0-next.2"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "open-callable": {
+      "call": {},
+      "shape": "callable"
+    },
+    "authored-ReactiveWeakMap": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "entries-iteration"
+          }
+        ],
+        "operations": [
+          {
+            "id": "entries-iteration",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "ambient-at-execution",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-execution"
+            },
+            "protocol": "iterate"
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

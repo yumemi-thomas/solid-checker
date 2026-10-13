@@ -1,0 +1,400 @@
+{
+  "diagnostic": true,
+  "exactArtifactCaseIdentitiesPreserved": false,
+  "runtimeDeclarationAndBranchSelectionsPreserved": true,
+  "transitions": [
+    {
+      "entrypoint": "./refresh",
+      "selectionBefore": {
+        "artifact": {
+          "closureSha256": "9346be02356e4d0055bda6a4bc3218d86de527e71a5e960a36111524731dd85c",
+          "path": "./dist/refresh.dev.js",
+          "sha256": "15b33e58727ecf3e4c0c0caee4d3e886352d2c1dc71074196acbaa02ba22243b"
+        },
+        "declarations": {
+          "path": "./types/refresh/index.d.ts",
+          "sha256": "e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1refresh/development/import/default",
+          "typesBranch": "/exports/.~1refresh/development/import/types"
+        }
+      },
+      "selectionAfter": {
+        "artifact": {
+          "closureSha256": "0c2d6d03f175422d392b37beef215bce60a84f98b7e23e4db399ec7a65d08bef",
+          "path": "./dist/refresh.dev.js",
+          "sha256": "15b33e58727ecf3e4c0c0caee4d3e886352d2c1dc71074196acbaa02ba22243b"
+        },
+        "declarations": {
+          "path": "./types/refresh/index.d.ts",
+          "sha256": "e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1refresh/development/import/default",
+          "typesBranch": "/exports/.~1refresh/development/import/types"
+        }
+      },
+      "identicalClosureEntries": true,
+      "identicalClaims": true,
+      "beforeClaims": {
+        "$$component": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$decline": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$refresh": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$registry": {
+          "call": {},
+          "shape": "callable"
+        },
+        "configureRefresh": {
+          "call": {},
+          "shape": "callable"
+        }
+      },
+      "afterClaims": {
+        "$$component": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$decline": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$refresh": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$registry": {
+          "call": {},
+          "shape": "callable"
+        },
+        "configureRefresh": {
+          "call": {},
+          "shape": "callable"
+        }
+      },
+      "closureBefore": {
+        "entries": [
+          {
+            "role": "runtime",
+            "path": "./dist/refresh.dev.js",
+            "digest": "sha256:15b33e58727ecf3e4c0c0caee4d3e886352d2c1dc71074196acbaa02ba22243b"
+          },
+          {
+            "role": "declaration",
+            "path": "./types/refresh/index.d.ts",
+            "digest": "sha256:e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+          },
+          {
+            "role": "declaration",
+            "path": "./types/types.d.ts",
+            "digest": "sha256:f089b3993cd5a7a6ad626cb06eb9b5cdc3b8540d652fc9431c61e398f33354ec"
+          },
+          {
+            "role": "manifest",
+            "path": "./package.json",
+            "digest": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+          },
+          {
+            "role": "resolution-input",
+            "path": "./package.json",
+            "digest": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+          }
+        ],
+        "hazards": [
+          {
+            "kind": "unaccepted-external-dependency",
+            "source": "./dist/refresh.dev.js:solid-js",
+            "affectedDomains": [
+              "callbacks",
+              "reads",
+              "writes",
+              "creates",
+              "invalidates",
+              "throws",
+              "returns",
+              "cleanups",
+              "disposals"
+            ]
+          }
+        ],
+        "digest": "sha256:9346be02356e4d0055bda6a4bc3218d86de527e71a5e960a36111524731dd85c"
+      },
+      "closureAfter": {
+        "entries": [
+          {
+            "role": "runtime",
+            "path": "./dist/refresh.dev.js",
+            "digest": "sha256:15b33e58727ecf3e4c0c0caee4d3e886352d2c1dc71074196acbaa02ba22243b"
+          },
+          {
+            "role": "declaration",
+            "path": "./types/refresh/index.d.ts",
+            "digest": "sha256:e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+          },
+          {
+            "role": "declaration",
+            "path": "./types/types.d.ts",
+            "digest": "sha256:f089b3993cd5a7a6ad626cb06eb9b5cdc3b8540d652fc9431c61e398f33354ec"
+          },
+          {
+            "role": "manifest",
+            "path": "./package.json",
+            "digest": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+          },
+          {
+            "role": "resolution-input",
+            "path": "./package.json",
+            "digest": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+          }
+        ],
+        "dependencies": [
+          {
+            "specifier": "solid-js",
+            "packageName": "solid-js",
+            "artifactCase": "artifact-case:4d76735bc9f72250f121dd88a8535f6d834bfbd13ecfadf3a20dd816de779052",
+            "acceptedContractDigest": "sha256:9f8d2a029aec315554d8c9526fb68eb922c0bf4c188c04646ce129c737aa43da"
+          }
+        ],
+        "digest": "sha256:0c2d6d03f175422d392b37beef215bce60a84f98b7e23e4db399ec7a65d08bef"
+      },
+      "dependencyReceiptsRoot": "sha256:f81407d0c7a686ddf4357d892db5869878d7d81dec37d3d21eeaf26703e9adbb",
+      "dependencyTrustRoot": "sha256:60fd6691489d0721b5da35e53c969179cf1120709cef27d0bfdfa67c727cfd81",
+      "beforeCatalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-SBqLgc/solid-js@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/2f7110cd3339a8070c323f1f60c520ec4815346e79bd3da0bdb25df719214c07/cases/0358ed9d25ccf7fa6dc0e567e635114a53ba7ecb30fe3ecd94dfcaa32825f85e/accepted-contracts.json",
+      "afterCatalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-vhE7jZ/solid-js@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/6a690132b3a05c61892599f1511bf02ab70d87db3e4d2ee2d60558bc22e9bd52/cases/7a42d81e0a8ab66a8c7f448612fd041baff8571ed1ed4bb4a44946b4bbd58bb9/accepted-contracts.json"
+    },
+    {
+      "entrypoint": "./refresh",
+      "selectionBefore": {
+        "artifact": {
+          "closureSha256": "ed6e231e8023d6eb277509b336e65429e608007dbefe52a5766cbcc8dc452e2f",
+          "path": "./dist/refresh.js",
+          "sha256": "8cafe4135f61bed38399c24e7d6ff62063b3050d30cea03f06b8dcb2989e3b05"
+        },
+        "declarations": {
+          "path": "./types/refresh/index.d.ts",
+          "sha256": "e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1refresh/import/default",
+          "typesBranch": "/exports/.~1refresh/import/types"
+        }
+      },
+      "selectionAfter": {
+        "artifact": {
+          "closureSha256": "b46298d5dfb1409881633ff2e2d6f6ba53eb02ae3c85b53f5b7e7adec8d23063",
+          "path": "./dist/refresh.js",
+          "sha256": "8cafe4135f61bed38399c24e7d6ff62063b3050d30cea03f06b8dcb2989e3b05"
+        },
+        "declarations": {
+          "path": "./types/refresh/index.d.ts",
+          "sha256": "e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+        },
+        "resolution": {
+          "runtimeBranch": "/exports/.~1refresh/import/default",
+          "typesBranch": "/exports/.~1refresh/import/types"
+        }
+      },
+      "identicalClosureEntries": true,
+      "identicalClaims": true,
+      "beforeClaims": {
+        "$$component": {
+          "call": {
+            "operations": [
+              {
+                "at": {
+                  "event": "call",
+                  "schedule": "same-stack"
+                },
+                "count": {
+                  "max": "many",
+                  "min": 0,
+                  "scope": "call"
+                },
+                "id": "return",
+                "kind": "return",
+                "output": {
+                  "index": 2,
+                  "kind": "parameter",
+                  "path": []
+                },
+                "tracking": "untracked",
+                "trigger": {
+                  "event": "call"
+                }
+              }
+            ],
+            "returns": [
+              "return"
+            ]
+          },
+          "shape": "callable"
+        },
+        "$$decline": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$refresh": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$registry": {
+          "call": {},
+          "shape": "callable"
+        },
+        "configureRefresh": {
+          "call": {},
+          "shape": "callable"
+        }
+      },
+      "afterClaims": {
+        "$$component": {
+          "call": {
+            "operations": [
+              {
+                "at": {
+                  "event": "call",
+                  "schedule": "same-stack"
+                },
+                "count": {
+                  "max": "many",
+                  "min": 0,
+                  "scope": "call"
+                },
+                "id": "return",
+                "kind": "return",
+                "output": {
+                  "index": 2,
+                  "kind": "parameter",
+                  "path": []
+                },
+                "tracking": "untracked",
+                "trigger": {
+                  "event": "call"
+                }
+              }
+            ],
+            "returns": [
+              "return"
+            ]
+          },
+          "shape": "callable"
+        },
+        "$$decline": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$refresh": {
+          "call": {},
+          "shape": "callable"
+        },
+        "$$registry": {
+          "call": {},
+          "shape": "callable"
+        },
+        "configureRefresh": {
+          "call": {},
+          "shape": "callable"
+        }
+      },
+      "closureBefore": {
+        "entries": [
+          {
+            "role": "runtime",
+            "path": "./dist/refresh.js",
+            "digest": "sha256:8cafe4135f61bed38399c24e7d6ff62063b3050d30cea03f06b8dcb2989e3b05"
+          },
+          {
+            "role": "declaration",
+            "path": "./types/refresh/index.d.ts",
+            "digest": "sha256:e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+          },
+          {
+            "role": "declaration",
+            "path": "./types/types.d.ts",
+            "digest": "sha256:f089b3993cd5a7a6ad626cb06eb9b5cdc3b8540d652fc9431c61e398f33354ec"
+          },
+          {
+            "role": "manifest",
+            "path": "./package.json",
+            "digest": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+          },
+          {
+            "role": "resolution-input",
+            "path": "./package.json",
+            "digest": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+          }
+        ],
+        "hazards": [
+          {
+            "kind": "unaccepted-external-dependency",
+            "source": "./dist/refresh.js:solid-js",
+            "affectedDomains": [
+              "callbacks",
+              "reads",
+              "writes",
+              "creates",
+              "invalidates",
+              "throws",
+              "returns",
+              "cleanups",
+              "disposals"
+            ]
+          }
+        ],
+        "digest": "sha256:ed6e231e8023d6eb277509b336e65429e608007dbefe52a5766cbcc8dc452e2f"
+      },
+      "closureAfter": {
+        "entries": [
+          {
+            "role": "runtime",
+            "path": "./dist/refresh.js",
+            "digest": "sha256:8cafe4135f61bed38399c24e7d6ff62063b3050d30cea03f06b8dcb2989e3b05"
+          },
+          {
+            "role": "declaration",
+            "path": "./types/refresh/index.d.ts",
+            "digest": "sha256:e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+          },
+          {
+            "role": "declaration",
+            "path": "./types/types.d.ts",
+            "digest": "sha256:f089b3993cd5a7a6ad626cb06eb9b5cdc3b8540d652fc9431c61e398f33354ec"
+          },
+          {
+            "role": "manifest",
+            "path": "./package.json",
+            "digest": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+          },
+          {
+            "role": "resolution-input",
+            "path": "./package.json",
+            "digest": "sha256:e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+          }
+        ],
+        "dependencies": [
+          {
+            "specifier": "solid-js",
+            "packageName": "solid-js",
+            "artifactCase": "artifact-case:d92c9176b6070188e8b83a430e9fae3c566ff84442540ea86625ff5d2b7e216f",
+            "acceptedContractDigest": "sha256:4b8b70b6072b346a281022060ebfa96cde441cb512a0b411a7d5b52ca281232e"
+          }
+        ],
+        "digest": "sha256:b46298d5dfb1409881633ff2e2d6f6ba53eb02ae3c85b53f5b7e7adec8d23063"
+      },
+      "dependencyReceiptsRoot": "sha256:b0d0f20476d752fefe3333fda76a1eec1a09a657cbff41697d83e98ba8e0111e",
+      "dependencyTrustRoot": "sha256:d2d783932ef5596aea45a802b5824fc3a95c87574a59fdc0d21ddebc16f23689",
+      "beforeCatalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-SBqLgc/solid-js@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/2f7110cd3339a8070c323f1f60c520ec4815346e79bd3da0bdb25df719214c07/cases/2f93c07a698ff41e5a80b7334f56f707bad3e452339a0a1c3f6139c743858351/accepted-contracts.json",
+      "afterCatalog": "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-vhE7jZ/solid-js@2.0.0-rc.3--solid2--only.json.accepted-catalog/case-sets/6a690132b3a05c61892599f1511bf02ab70d87db3e4d2ee2d60558bc22e9bd52/cases/e1e8cc5a19a86002258d8a49a716269b25ca3da94b4f865ee6f2ac4946b14e3f/accepted-contracts.json"
+    }
+  ],
+  "metricChanged": false
+}

@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use crate::{
     contract_document::{self, SidecarDigests},
     contract_interface::load_receipt_issued_embedded_contract,
-    first_party_bundles::{solid1_bundles_with_measurements, solid2_rc3_bundles_with_measurements},
+    first_party_bundles::solid2_rc3_bundles_with_measurements,
 };
 
 const DEFAULT_LOAD_ITERATIONS: usize = 25;
@@ -20,8 +20,7 @@ const DEFAULT_QUERY_ITERATIONS: usize = 250;
 
 pub fn phase16_benchmark_report() -> Result<Value, Box<dyn std::error::Error>> {
     let baseline_resident_kib = resident_kib();
-    let mut bundles = solid1_bundles_with_measurements()?;
-    bundles.extend(solid2_rc3_bundles_with_measurements()?);
+    let mut bundles = solid2_rc3_bundles_with_measurements()?;
     bundles.sort_by(|left, right| left.bundle.file_stem.cmp(&right.bundle.file_stem));
 
     let mut pretty_main = Vec::new();
@@ -203,7 +202,7 @@ fn resident_delta(before: Option<u64>, after: Option<u64>) -> Option<u64> {
 }
 
 #[cfg(unix)]
-fn resident_kib() -> Option<u64> {
+pub(crate) fn resident_kib() -> Option<u64> {
     // SAFETY: `usage` points to a valid writable `rusage`, and RUSAGE_SELF
     // requires no caller-owned lifetime. The OS initializes the full value.
     let usage = unsafe {
@@ -222,7 +221,7 @@ fn resident_kib() -> Option<u64> {
 }
 
 #[cfg(not(unix))]
-fn resident_kib() -> Option<u64> {
+pub(crate) fn resident_kib() -> Option<u64> {
     None
 }
 
@@ -232,8 +231,7 @@ mod tests {
 
     #[test]
     fn ordinary_queries_are_closed_over_normalized_semantics_after_raw_inputs_are_dropped() {
-        let mut bundles = solid1_bundles_with_measurements().unwrap();
-        bundles.extend(solid2_rc3_bundles_with_measurements().unwrap());
+        let bundles = solid2_rc3_bundles_with_measurements().unwrap();
         let accepted = bundles
             .iter()
             .map(|measured| {

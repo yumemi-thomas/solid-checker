@@ -1,0 +1,133 @@
+function createOptimisticStoreNext(e, t, n) {
+    // Engine first (armed nodes need optimisticWrite installed before any
+    // node exists), then the next-shape hooks.
+    installOptimisticEngine();
+    installNextBlockedHalf();
+    const i = typeof e === "function";
+    const r = i ? n : t;
+    const o = i ? t : e;
+    const s = {
+        map: new WeakMap,
+        node: null,
+        shallow: !!r?.shallow,
+        opt: true
+    };
+    const l = wrapNext(o, null, null, s);
+    s.px = l;
+    // Same key resolution the projection channels use ("id" default) — replay's
+    // satisfaction rule reads it off the family.
+        const u = r?.key === undefined ? "id" : r.key;
+    s.key = typeof u === "function" ? u : u === null ? null : e => isWrappable(e) ? e[u] : undefined;
+    if (s.shallow) {
+        l[$TARGET].s = true;
+        markRawIngest(o);
+    }
+    if (i) {
+        const t = e;
+        // #3146: an async settle event belongs to the flight's OWN transaction.
+        // A live declared one re-enters (a merge if the generic settle path
+        // already entered a graph-stamped stranger — the landing supersedes any
+        // recompute deriving from that stranger's world); a dead one renews (per
+        // A18(1) each arrival reveals on its own schedule, so per-yield
+        // transactions die with their commit and the next settle event opens the
+        // flight's next one — still declared, never anonymous). An UNDECLARED
+        // flight (loading window) keeps the ambient reveal (#2933: the loading
+        // rail is transaction-invisible).
+                const enterFlightTransition = () => {
+            const e = s.ft;
+            if (e == null) return;
+            let t = liveTransition(e);
+            if (t === null) s.ft = t = createTransition();
+            s.node.Ge = t;
+            globalQueue.initTransition(t);
+        };
+        // Landing router (#3164 fold ruling): while a transaction retains
+        // optimistic edits on this family, truth landings stage INTO it and
+        // reveal atomically at settle; with no retainer they commit immediately
+        // under the authoritative posture (async commits land outside the
+        // computed's sync body, so the posture is re-applied here) — inside the
+        // flight-owned transaction (#3146). Sync commits (the derive's body,
+        // owner is the firewall itself) reveal with their own recompute's flush.
+                const wrapCommit = (e, t) => {
+            const n = retainingTransition(s);
+            if (n !== null) return void stageLanding(s, n, t);
+            if (getOwner() !== s.node) enterFlightTransition();
+            runAuthoritative(e);
+        };
+        // Draft writes (the derive mutating its draft, sync body and post-await
+        // continuations alike) are the same truth channel per-operation: bind
+        // each op to the retaining transaction so its node writes stage and its
+        // backing fold defers (ensurePB stamps foldBatches with the swapped-in
+        // batch; the write-override eager-commit branch in notifyWrites yields
+        // to any active transaction).
+                const aroundDraftWrite = e => {
+            const t = retainingTransition(s);
+            if (t === null) e(); else runFolded(t, e);
+        };
+        // Flight declaration (#3146): a recompute that registered a truth-flight
+        // OWNS its transaction. The ask's transaction is recorded on the family
+        // (created by the flight's own pending throw when none was ambient, the
+        // causing write's/refresh's when one was — graph-driven causality) and
+        // the firewall is stamped so every settle path resolves the flight's
+        // transaction by construction, not by whatever last brushed the node.
+        // When the ask took none (a dead stale stamp — the previous flight's,
+        // cleared nowhere — bare-returns the pre-throw entry), the flight opens
+        // its own here, same activation point as the pre-throw's creation: the
+        // ambient batch (the causing write, same-tick bare optimism) adopts into
+        // it exactly as it would have there, and the pending notification that
+        // follows this unwind registers observers against it. The flight
+        // also registers as its own async reporter: the transaction lives
+        // exactly as long as the question is unanswered, observed or not — the
+        // #2951 refetch-hold no longer depends on a tracked observer having
+        // happened to register one. Loading-window flights declare nothing
+        // (#2933: the loading rail is transaction-invisible); a sync run clears
+        // the declaration.
+                const declareFlight = e => {
+            if (e.o?.Re == null) {
+                if (!e.ge) s.ft = null;
+                return;
+            }
+            // First flight (#3146 carve-out): nothing has ever committed, so there
+            // is no truth to keep on screen and no optimistic state to protect. An
+            // uninitialized ask suspends its readers into their Loading boundary
+            // exactly like a plain derived store's first flight — declaring a
+            // transaction here instead held the ROOT MOUNT (render()'s scheduled
+            // insert rides transitions) until the fetch landed, so the boundary's
+            // fallback never showed and the whole page stayed blank. The loading
+            // window (#2933) already declares nothing for the same reason; once
+            // the first truth lands, every refetch flight declares as before.
+                        if (e.ge || e.S & STATUS_UNINITIALIZED) return;
+            let t = activeTransition;
+            if (t === null) globalQueue.initTransition(t = createTransition());
+            s.ft = t;
+            e.Ge = t;
+            let n = t.oe.get(e);
+            if (n === undefined) t.oe.set(e, n = new Set);
+            n.add(e);
+        };
+        let n;
+        if (r?.seedLoadingValue) n = {
+            loadingValue: undefined
+        };
+        const i = computed(() => {
+            const e = getOwner();
+            try {
+                runAuthoritative(() => runProjectionComputedNext(l, t, r?.key === undefined ? "id" : r.key, wrapCommit, aroundDraftWrite));
+            } finally {
+                declareFlight(e);
+            }
+        }, n);
+        i.T &= ~CONFIG_AUTO_DISPOSE;
+        s.node = i;
+    }
+    return [ l, e => {
+        // Retention ledger (#3164): record the owning transaction so landings
+        // know to fold. Captured at entry — the action machinery has the
+        // transaction ambient while user code runs; a bare write with no
+        // transaction retains nothing (it rides the flight's own transition
+        // per #2951 and dies with it).
+        const t = activeTransition;
+        storeSetterNext(l, e);
+        if (t !== null) (s.rt ??= new Set).add(t);
+    } ];
+}

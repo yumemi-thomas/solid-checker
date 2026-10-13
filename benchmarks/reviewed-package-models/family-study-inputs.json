@@ -1,0 +1,27 @@
+{
+  "authority": false,
+  "certification": false,
+  "datasets": [
+    {
+      "group": "primary",
+      "browser": "rust/target/family-matrix-browser-v2/browser/results.json",
+      "static": "rust/target/family-matrix-static/results.json",
+      "projection": "rust/target/family-matrix-projected-v2.json"
+    },
+    {
+      "group": "async-and-intent",
+      "browser": "rust/target/family-matrix-extension-browser/browser/results.json",
+      "static": "rust/target/family-matrix-extension-static/results.json",
+      "projection": "rust/target/family-matrix-extension-projected.json"
+    },
+    {
+      "group": "transfer",
+      "browser": "rust/target/family-transfer-permission-browser/browser/results.json",
+      "static": "rust/target/family-transfer-permission-static/results.json"
+    }
+  ],
+  "precisionChecks": [
+    "rust/target/family-transfer-browser/browser/results.json",
+    "rust/target/family-transfer-root-browser/browser/results.json"
+  ]
+}

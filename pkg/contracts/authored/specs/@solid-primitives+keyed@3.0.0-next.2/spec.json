@@ -1,0 +1,131 @@
+{
+  "package": "@solid-primitives/keyed",
+  "version": "3.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "exports": {
+    "keyArray": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyed-keyArray-module-scope-browser/node_modules/@solid-primitives/keyed/dist/index.js:19-89 - A-discarded browser factory only, complete census and opaque returned graph. No hostFreeIdentity or hostFree claim added: server eagerly executes caller callbacks before return.",
+      "call": {
+        "closed": [
+          "reads",
+          "returns",
+          "creates",
+          "callbacks",
+          "cleanups"
+        ],
+        "cleanups": [
+          "cleanup"
+        ],
+        "operations": [
+          {
+            "id": "cleanup",
+            "kind": "cleanup",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresCleanup": "required"
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "output": {
+              "kind": "returned-callable"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "reads": [],
+        "creates": [],
+        "callbacks": []
+      },
+      "closures": {
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyed-keyArray-module-scope-browser/node_modules/@solid-primitives/keyed/dist/index.js:19-89 - Browser constructor reads no reactive value: new Map and onCleanup only. items/$TRACK reads occur inside omitted returned graph. P2 package-owned map traversal at cleanup is plain.",
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyed-keyArray-module-scope-browser/node_modules/@solid-primitives/keyed/dist/index.js:19-89 - Browser returns one mapping arrow with graph omitted. Server also returns an arrow, but its earlier callbacks differ and are not covered by this browser factory claim.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyed-keyArray-module-scope-browser/node_modules/@solid-primitives/keyed/dist/index.js:19-89 - Browser constructor creates no reactive owner, source or computation. Item/fallback roots and signals exist only in the omitted returned graph.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyed-keyArray-module-scope-browser/node_modules/@solid-primitives/keyed/dist/index.js:19-89 - Browser constructor invokes none of items/keyFn/mapFn/options.fallback. Later mapping callbacks are in the omitted returned graph. Server eagerly invokes items/mapFn/fallback; do not derive a host-free empty callback census.",
+        "cleanups": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/keyed-keyArray-module-scope-browser/node_modules/@solid-primitives/keyed/dist/index.js:19-89 - Browser line 28 registers exactly one required cleanup, disposing only package-created roots in the retained map. It does not invoke a caller callback."
+      },
+      "rule": "missing-owner",
+      "scenario": [
+        {
+          "action": "click",
+          "selector": "#target"
+        },
+        {
+          "action": "wait-for-text",
+          "selector": "#done",
+          "text": "done"
+        }
+      ],
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The direct cleanup rejects a present leaf before any returned mapper is called."
+        },
+        {
+          "label": "discarded-owner",
+          "rule": "missing-owner",
+          "why": "Fresh discarded-result pair: unowned asynchronous setup versus live root; no returned function/object is called, read or escaped.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

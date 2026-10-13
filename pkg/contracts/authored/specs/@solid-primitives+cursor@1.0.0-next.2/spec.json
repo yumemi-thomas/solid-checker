@@ -1,0 +1,439 @@
+{
+  "package": "@solid-primitives/cursor",
+  "version": "1.0.0-next.2",
+  "solidRuntime": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-4+pRdrAHtfyE9BUJWBup3TpzJojJjgW2mV1vm/Jik4tWa5epxXB/YrLkwqP1v8+S9XjyKKZu5BSLqmcpswMYeQ=="
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.13",
+      "integrity": "sha512-vI/7v/XM8B/3U/oKAzCW2VjTLFkM5IArB2DFnrjxyPRYD3FX9KAXg9QuAnPIPQHC/xvg/LgxmvoVfZUfJ96gOQ=="
+    }
+  ],
+  "identity": "identity.json",
+  "hostFreeIdentity": "identity.host-free.json",
+  "exports": {
+    "createBodyCursor": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108 — Browser-only source-supported draft; every probe is pending. Mandatory-first correction: Installed browser @solid-primitives/cursor/dist/index.js:97-108, especially direct createEffect(cursor, apply) at 99; @solidjs/signals/dist/dev.js:2427-2447 -> effect at 1723-1733 unconditionally calls recompute(node, true). dev-shared.js:4875 installs context=el and 4942 invokes el._fn(value). Exactly the passed cursor is the first compute, not utils access. No lazy option or callable/arity test. Server returns at cursor/index.js:98, so host-free argument-0 MUST remain min:0.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "cursor-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "argument-0",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 1,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "cursor-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "argument-0"
+          }
+        ],
+        "computations": [
+          "cursor-effect"
+        ],
+        "resources": [
+          {
+            "id": "cursor-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108 — Browser construction has no return expression and completes with undefined.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:101-106 — P1: DOM style accesses are native host operations. Caller accessor reads belong to the explicit tracked callback rows; no own reactive source is read.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108 — Exactly one createEffect computation, requiring an ambient owner that accepts children. Its apply-returned DOM restoration cleanup belongs to the effect; there is no other reactive owner construction.",
+        "callbacks": "Installed browser @solid-primitives/cursor/dist/index.js:97-108, especially direct createEffect(cursor, apply) at 99; @solidjs/signals/dist/dev.js:2427-2447 -> effect at 1723-1733 unconditionally calls recompute(node, true). dev-shared.js:4875 installs context=el and 4942 invokes el._fn(value). Exactly the passed cursor is the first compute, not utils access. No lazy option or callable/arity test. Server returns at cursor/index.js:98, so host-free argument-0 MUST remain min:0."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The unconditional browser effect rejects a present leaf owner."
+        },
+        {
+          "label": "cursor-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The caller accessor executes inside effect compute; the twins read the same signal and only misuse writes there.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "first-run",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "No read of a returned result forces this callback. Plain runs counter asserts that construction invoked it before returning; only misuse writes a reactive sink in compute.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; Server returns undefined at line 98 before any callback, computation, or cleanup; browser creates the stated effect. No claimed return changes. Optional callback operations already have minimum zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:98.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Mandatory-first correction: Installed browser @solid-primitives/cursor/dist/index.js:97-108, especially direct createEffect(cursor, apply) at 99; @solidjs/signals/dist/dev.js:2427-2447 -> effect at 1723-1733 unconditionally calls recompute(node, true). dev-shared.js:4875 installs context=el and 4942 invokes el._fn(value). Exactly the passed cursor is the first compute, not utils access. No lazy option or callable/arity test. Server returns at cursor/index.js:98, so host-free argument-0 MUST remain min:0.",
+        "minZero": [
+          "cursor-effect",
+          "argument-0"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; Server returns undefined at line 98 before any callback, computation, or cleanup; browser creates the stated effect. No claimed return changes. Optional callback operations already have minimum zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:98.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108 — Browser construction has no return expression and completes with undefined.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; Server returns undefined at line 98 before any callback, computation, or cleanup; browser creates the stated effect. No claimed return changes. Optional callback operations already have minimum zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:98.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:101-106 — P1: DOM style accesses are native host operations. Caller accessor reads belong to the explicit tracked callback rows; no own reactive source is read.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; Server returns undefined at line 98 before any callback, computation, or cleanup; browser creates the stated effect. No claimed return changes. Optional callback operations already have minimum zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:98.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108 — Exactly one createEffect computation, requiring an ambient owner that accepts children. Its apply-returned DOM restoration cleanup belongs to the effect; there is no other reactive owner construction.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; Server returns undefined at line 98 before any callback, computation, or cleanup; browser creates the stated effect. No claimed return changes. Optional callback operations already have minimum zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:98.  Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:97-108; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly the cursor accessor (and, for createElementCursor, callable target and callable cursor). access invokes only zero-arity functions, so guarded rows make no positive lower-count promise. P1 excludes reactive style methods. Mandatory-first correction: Installed browser @solid-primitives/cursor/dist/index.js:97-108, especially direct createEffect(cursor, apply) at 99; @solidjs/signals/dist/dev.js:2427-2447 -> effect at 1723-1733 unconditionally calls recompute(node, true). dev-shared.js:4875 installs context=el and 4942 invokes el._fn(value). Exactly the passed cursor is the first compute, not utils access. No lazy option or callable/arity test. Server returns at cursor/index.js:98, so host-free argument-0 MUST remain min:0."
+        }
+      }
+    },
+    "createElementCursor": {
+      "why": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81 — Browser-only source-supported draft; every probe is pending.",
+      "rule": "missing-owner",
+      "call": {
+        "operations": [
+          {
+            "id": "cursor-effect",
+            "kind": "compute",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 1,
+              "max": 1,
+              "scope": "call"
+            },
+            "owner": {
+              "source": "ambient-at-call",
+              "requires": "required",
+              "requiresChildren": "required",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            }
+          },
+          {
+            "id": "argument-0",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "cursor-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "argument-1",
+            "kind": "invoke",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "tracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "owner": {
+              "source": "created",
+              "resource": "cursor-effect-owner",
+              "children": "allowed",
+              "cleanup": "supported",
+              "productions": [
+                {
+                  "resource": "cursor-effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported"
+                }
+              ]
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "path": [],
+                  "kind": "callable"
+                }
+              ]
+            }
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": {
+              "event": "call"
+            },
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "tracking": "untracked",
+            "count": {
+              "min": 0,
+              "max": "many",
+              "scope": "call"
+            },
+            "output": {
+              "kind": "undefined"
+            }
+          }
+        ],
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "argument-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "argument-1"
+          }
+        ],
+        "computations": [
+          "cursor-effect"
+        ],
+        "resources": [
+          {
+            "id": "cursor-effect-owner",
+            "kind": "owner"
+          }
+        ],
+        "returns": [
+          "return"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "reads": [],
+        "creates": []
+      },
+      "closures": {
+        "returns": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81 — Browser construction has no return expression and completes with undefined.",
+        "reads": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:73-77 — P1: DOM style accesses are native host operations. Caller accessor reads belong to the explicit tracked callback rows; no own reactive source is read.",
+        "creates": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81 — Exactly one createEffect computation, requiring an ambient owner that accepts children. Its apply-returned DOM restoration cleanup belongs to the effect; there is no other reactive owner construction.",
+        "callbacks": "/Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly the cursor accessor (and, for createElementCursor, callable target and callable cursor). access invokes only zero-arity functions, so guarded rows make no positive lower-count promise. P1 excludes reactive style methods."
+      },
+      "probes": [
+        {
+          "label": "leaf",
+          "rule": "leaf-owner-forbidden-call",
+          "why": "The unconditional browser effect rejects a present leaf owner."
+        },
+        {
+          "label": "target-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The caller accessor executes inside effect compute; the twins read the same signal and only misuse writes there.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        },
+        {
+          "label": "cursor-tracking",
+          "rule": "reactive-write-in-owned-scope",
+          "why": "The caller accessor executes inside effect compute; the twins read the same signal and only misuse writes there.",
+          "scenario": [
+            {
+              "action": "click",
+              "selector": "#target"
+            },
+            {
+              "action": "wait-for-text",
+              "selector": "#done",
+              "text": "done"
+            }
+          ]
+        }
+      ],
+      "hostFree": {
+        "why": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; Server returns undefined at line 66 before target/cursor access or effect registration. Browser access and apply remain unchanged; optional callbacks already permit zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:66. Dependency access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors).",
+        "minZero": [
+          "cursor-effect"
+        ],
+        "closed": [
+          "returns",
+          "reads",
+          "creates",
+          "callbacks"
+        ],
+        "closures": {
+          "returns": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; Server returns undefined at line 66 before target/cursor access or effect registration. Browser access and apply remain unchanged; optional callbacks already permit zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:66. Dependency access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81 — Browser construction has no return expression and completes with undefined.",
+          "reads": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; Server returns undefined at line 66 before target/cursor access or effect registration. Browser access and apply remain unchanged; optional callbacks already permit zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:66. Dependency access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:73-77 — P1: DOM style accesses are native host operations. Caller accessor reads belong to the explicit tracked callback rows; no own reactive source is read.",
+          "creates": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; Server returns undefined at line 66 before target/cursor access or effect registration. Browser access and apply remain unchanged; optional callbacks already permit zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:66. Dependency access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81 — Exactly one createEffect computation, requiring an ambient owner that accepts children. Its apply-returned DOM restoration cleanup belongs to the effect; there is no other reactive owner construction.",
+          "callbacks": "Both paths reviewed: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; Server returns undefined at line 66 before target/cursor access or effect registration. Browser access and apply remain unchanged; optional callbacks already permit zero. cursor-effect may be skipped at /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:66. Dependency access: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88. Runtime resolution: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/server.js:4278 (isServer=true), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/web/dist/web.dev.js:2237 (isServer=false); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:467-477 (server observer scope), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:586-679 (memo owner/observer and branded return), /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/server.dev.js:1115-1177 (server effect compute runs; user apply is omitted); /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1-2, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/solid-js/dist/solid.dev.js:1014-1019, /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createBodyCursor-module-scope/node_modules/@solidjs/signals/dist/dev.js:2341-2357 (browser memo/signal accessors). Browser closure argument retained: /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/cursor/dist/index.js:65-81; /Users/thomas/Documents/Github/solid-checker/rust/target/primitives-checkpoint/misuse/cursor-createElementCursor-module-scope/node_modules/@solid-primitives/utils/dist/index.js:88 — Exactly the cursor accessor (and, for createElementCursor, callable target and callable cursor). access invokes only zero-arity functions, so guarded rows make no positive lower-count promise. P1 excludes reactive style methods."
+        }
+      }
+    }
+  }
+}

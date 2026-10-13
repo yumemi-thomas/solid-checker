@@ -73,7 +73,7 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // passes against the rewritten ledger.
   assert.deepEqual(ledger.authority.currentReport, {
     path: "benchmarks/ecosystem/report.json",
-    sha256: "8402935288c2b72b680d157131f6092961a87c27facf57b562a880c400fc5032"
+    sha256: "30cbfb0098997f7e8dbe440dd1abcefbd096214cdf4c5d995b47c35a318c067f"
   });
   assert.equal(ledger.rows.filter(row => row.phase21Disposition == null).length, 0);
   // One row moved, `@solid-primitives/geolocation@1.5.5|solid1|only`:
@@ -109,13 +109,51 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // primitive-string root of `Hotkey | (string & {})`; the ordinary policy-2
   // receipt now verifies, while this historical disposition function has no
   // verified case for that row.
+  // 2026-09-05 repin: the four tanstack query Solid 2 rows and
+  // @tanstack/solid-query 5.102.5 certify through the graph lane while their
+  // plain-lane generation still refuses, so the historical disposition function
+  // books them as pending-phase21-checker-work (5 -> 1 authenticated-layout,
+  // 3 -> 3 semantic-model with hotkeys and 5.102.5 swapping); corvu@0.7.2 moves
+  // verified -> pending on the @floating-ui/utils open fact (none -> 0,
+  // checker-dependency-composition 1).
   assert.deepEqual(ledger.summary.dispositionStates, {
     "confirmed-upstream-declaration-defect": 1,
-    "exact-refusal-authenticated-layout": 5,
+    "exact-refusal-authenticated-layout": 1,
     "exact-refusal-package-import-resolution": 3,
-    "exact-refusal-semantic-model": 4,
-    "exact-refusal-type-facts-capability": 1,
-    "pending-phase21-checker-work": 3,
+    // @tanstack/solid-query-persist-client 5.102.5 left the semantic-model
+    // refusal set on 2026-09-03 (declaration-owner harness fix) and certifies
+    // through an ordinary receipt, so the geolocation-style secondary gap books
+    // it as pending-phase21-checker-work rather than verified.
+    // 2026-09-14 fourth repin (ten @solid-primitives/refs and /scheduled
+    // reads recipes finishing Tier A, 42 rows): no disposition moved; only
+    // the report digest above changed.
+    // 2026-09-14 third repin (certification speed fix; wall 1,316 s -> 597 s
+    // with identical closure, 10,420 entries and no status move): no
+    // disposition moved; only the report digest above changed.
+    // 2026-09-14 second repin (ten corvu ./create/* reads recipes on the
+    // keyedContext, once and controllableSignal cases): no disposition moved;
+    // only the report digest above changed.
+    // 2026-09-14 repin (twenty-four carried and DOM-predicate reads recipes on
+    // the corvu-next reactivity and floating-ui DOM cases): no disposition
+    // moved; only the report digest above changed.
+    // 2026-09-14 second repin (sixteen @corvu-next/utils@0.1.5 reads vetoes,
+    // 1,380 -> 1,364 recipe-less reads rows): no disposition moved; only the
+    // report digest above changed.
+    // 2026-09-14 repin (ADR 0107's reads-census callee demand and the eight
+    // combineStyle vetoes it makes serviceable, 1,470 -> 1,380 recipe-less
+    // reads rows): no disposition moved; only the report digest above changed.
+    // 2026-09-13 third repin (seventy-three reads recipes at four cases): no
+    // disposition moved; only the report digest above changed.
+    // 2026-09-13 second repin (ADR 0099 not-callable value premise, the two
+    // ADR 0036 loop savings, cores-bounded certification pool, 1800 s row
+    // timeout): no disposition moved; only the report digest above changed.
+    // 2026-09-13 repin (callbacks census, sixteen-row Solid 1.x creates audit,
+    // workspace-refusal withholding, eighty-five reads recipes, 1200 s row
+    // timeout): the three semantic-model refusals and the type-facts-capability
+    // refusal now certify in the live report, so the historical disposition
+    // function books them as pending-phase21-checker-work (9 -> 12), and one
+    // row gains a verified case (verified-through-ordinary-receipt-load).
+    "pending-phase21-checker-work": 12,
     "retained-unsupported-runtime-model": 7,
     "retained-upstream-missing-bytes": 5,
     "verified-through-ordinary-receipt-load": 1
@@ -125,7 +163,7 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
     "checker-resolver": 3,
     "checker-semantic-model": 6,
     "checker-type-facts": 2,
-    none: 1,
+    "none": 1,
     "runtime-model": 7,
     "upstream-package": 6
   });

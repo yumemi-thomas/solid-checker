@@ -18,10 +18,16 @@ use solid_facts_backend::{
     NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession, dialect,
 };
 
-/// The 1.x dialect, chosen explicitly: these fixtures carry no `node_modules`
-/// for detection to read, and a session is always opened with a dialect anyway.
-fn solid_v1() -> &'static dialect::Dialect {
-    dialect::by_id("solid-v1").expect("the 1.x dialect is registered")
+/// The dialect, chosen explicitly: these fixtures carry no `node_modules` for
+/// detection to read, and a session is always opened with a dialect anyway.
+///
+/// Nothing below is a claim *about* the dialect. These are cross-file
+/// reachability and fragment-invalidation properties that merely need some
+/// vocabulary to resolve primitives through; they ran under 1.x because that
+/// is what the fixtures were written against, not because the property is
+/// version-specific.
+fn solid_v2() -> &'static dialect::Dialect {
+    dialect::by_id("solid-v2").expect("the 2.0 dialect is registered")
 }
 
 fn fixture(name: &str) -> PathBuf {
@@ -52,7 +58,7 @@ fn editing_the_only_invocation_site_invalidates_the_factory_file_fragments() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    let fixture = fixture("solid-1x-cross-file-adapter");
+    let fixture = fixture("cross-file-adapter");
     let project = fixture.join("tsconfig.json").canonicalize().unwrap();
     let project_id = project.to_string_lossy().into_owned();
     let adapter = fixture.join("adapter.ts");
@@ -61,10 +67,10 @@ fn editing_the_only_invocation_site_invalidates_the_factory_file_fragments() {
 
     let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
     let mut session =
-        NativeIncrementalSession::open(solid_v1(), project_id, sources, typescript).unwrap();
+        NativeIncrementalSession::open(solid_v2(), project_id, sources, typescript).unwrap();
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let first_program = incremental.build(&first, solid_v1().vocabulary).unwrap().0;
+    let first_program = incremental.build(&first, solid_v2().vocabulary).unwrap().0;
 
     // The premise: with the invocation in place, the mapper's read of `scale`
     // is a live reactive read attributed to `adapter.ts`.
@@ -107,8 +113,8 @@ fn editing_the_only_invocation_site_invalidates_the_factory_file_fragments() {
         )
         .unwrap();
 
-    let fresh = solid_reactive_ir::build(&edited, solid_v1().vocabulary).unwrap();
-    let (retained, _) = incremental.build(&edited, solid_v1().vocabulary).unwrap();
+    let fresh = solid_reactive_ir::build(&edited, solid_v2().vocabulary).unwrap();
+    let (retained, _) = incremental.build(&edited, solid_v2().vocabulary).unwrap();
 
     // The edit really does change what is true about the *other* file, so a
     // cache that ignores it is observably stale rather than merely coarse.
@@ -137,7 +143,7 @@ fn an_options_object_comparator_stays_reachable() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    let fixture = fixture("solid-1x-options-comparator");
+    let fixture = fixture("options-comparator");
     let project = fixture.join("tsconfig.json").canonicalize().unwrap();
     let project_id = project.to_string_lossy().into_owned();
     let app = fixture.join("App.ts");
@@ -145,10 +151,10 @@ fn an_options_object_comparator_stays_reachable() {
 
     let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
     let mut session =
-        NativeIncrementalSession::open(solid_v1(), project_id, vec![source_file(&app)], typescript)
+        NativeIncrementalSession::open(solid_v2(), project_id, vec![source_file(&app)], typescript)
             .unwrap();
     let facts = session.analyze().unwrap();
-    let program = solid_reactive_ir::build(&facts, solid_v1().vocabulary).unwrap();
+    let program = solid_reactive_ir::build(&facts, solid_v2().vocabulary).unwrap();
 
     // The comparator's body, located from the source text so the assertions
     // cannot drift onto the memo's own callback.
@@ -195,7 +201,7 @@ fn an_options_object_comparator_stays_reachable() {
     // their own copy of the argument rule; held to each other, neither can be
     // narrowed alone.
     let (retained, _) = solid_reactive_ir::IncrementalBuilder::default()
-        .build(&facts, solid_v1().vocabulary)
+        .build(&facts, solid_v2().vocabulary)
         .unwrap();
     assert_eq!(retained, program);
 }

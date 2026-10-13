@@ -1,0 +1,24 @@
+{
+  "name": "solid-js",
+  "version": "2.0.0-rc.13",
+  "tarball": "https://registry.npmjs.org/solid-js/-/solid-js-2.0.0-rc.13.tgz",
+  "gitHead": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+  "registryIntegrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ==",
+  "registryShasum": "dab58df9435bb422e3a991674b88fc6992e74955",
+  "registryFileCount": 34,
+  "registryUnpackedSize": 619256,
+  "downloaded": {
+    "date": "2026-10-05",
+    "by": "npm pack solid-js@2.0.0-rc.13",
+    "bytes": 151874,
+    "sha512": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ==",
+    "sha1": "dab58df9435bb422e3a991674b88fc6992e74955",
+    "sha256": "ab3b18d7d90c53b1a10080e7531c9a70d8323d6ffe6b433eab238f4911f00b21",
+    "extractedFileCount": 34,
+    "extractedTreeEqualsLockfileInstall": true
+  },
+  "lockfileIntegrity": {
+    "source": "rust/target/audit-rc13 npm install, node_modules/.package-lock.json",
+    "integrity": "sha512-62bYOI4JZ15KOqL5eReKyWSwAXrGb0fbX8SDnHsbJk2UX+SzSyy1gobas2cxW/0BXcobGfQ1V6ffPyQkMIBdoQ=="
+  }
+}

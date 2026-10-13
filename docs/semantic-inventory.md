@@ -74,6 +74,9 @@ fields when a broader runtime diagnostic has a statically proven sub-context,
 such as a `createEffect` apply callback or a proven component-props read.
 Adapters may use them to provide exact
 compatibility rule names without changing certification status.
+`subjectKind` `package` or `package-export` marks a package-contract finding
+collapsed over the project: its `relatedLocations` are further sites of the
+same finding, so a per-file adapter reports it in every file holding one.
 
 - No violation and no unresolved obligation: `certified`.
 - At least one proven breach: `violation`.

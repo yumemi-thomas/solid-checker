@@ -6,8 +6,21 @@ import { test } from "vitest";
 
 import { loadDialectManifests } from "./dialect-manifests.mjs";
 
+/**
+ * The compiler wiring every manifest must declare, so that these cases can be
+ * about the package inventory. `compilerIdentity` has its own cases below.
+ */
+const compilerIdentity = {
+  document: "docs/solid-v9/compiler-identity.json",
+  adapter: "rust/dialects/solid-v9/compiler/src/lib.rs",
+  conformance: "docs/solid-v9/conformance.json",
+  report: "docs/solid-v9/compiler-facts.md",
+  cargoPackage: "solidjs-v9-compiler",
+  cargoSourcePrefix: "git+https://example.invalid/solid?"
+};
+
 /** Loads one synthetic dialect tree through the real validator. */
-function load(contracts) {
+function load(contracts, identity = compilerIdentity) {
   const projectRoot = mkdtempSync(join(tmpdir(), "solid-checker-manifest-"));
   const dialect = join(projectRoot, "rust", "dialects", "solid-v9");
   mkdirSync(dialect, { recursive: true });
@@ -19,6 +32,7 @@ function load(contracts) {
       ruleManifest: "packages/cli/lib/rules-solid-v9.json",
       bundleIndex: "pkg/contracts/bundled/solid-v9/bundle-index.json",
       reviewBundleIndex: "rust/crates/solid-dialect/contracts/solid-v9/bundle-index.json",
+      ...(identity === null ? {} : { compilerIdentity: identity }),
       contracts
     })
   );
@@ -59,5 +73,28 @@ test("one package cannot be declared twice in a dialect", () => {
   assert.throws(
     load([generated, generated]),
     /declares solid-js twice/
+  );
+});
+
+// The gate that checks a dialect's compiler against its identity documents
+// reads these paths from here. A dialect that declared nothing would have been
+// assembled and never checked, so absence has to fail the manifest.
+test("a dialect must declare the compiler its identity gate checks", () => {
+  assert.throws(load([generated], null), /requires compilerIdentity/);
+  for (const field of Object.keys(compilerIdentity)) {
+    const partial = { ...compilerIdentity };
+    delete partial[field];
+    assert.throws(
+      load([generated], partial),
+      new RegExp(`requires non-empty compilerIdentity\\.${field}`),
+      `compilerIdentity.${field} must be required`
+    );
+  }
+});
+
+test("unknown compiler wiring fields are refused", () => {
+  assert.throws(
+    load([generated], { ...compilerIdentity, babelPlugin: "solid-v9/babel" }),
+    /compilerIdentity.babelPlugin is not part of the compiler wiring/
   );
 });

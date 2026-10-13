@@ -1,0 +1,7 @@
+{
+  "status": "hand-stated, unrun; compare before recording snapshots",
+  "kind": "violation versus uncertifiable",
+  "browserSource": "src/helper.ts",
+  "browserViolation": true,
+  "certifyInferred": false
+}
