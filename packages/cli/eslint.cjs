@@ -268,39 +268,122 @@ function dependencySourceSetting(config) {
 }
 
 /**
- * Whether the native run may analyze installed package source (ADR 0297):
- * under a declared target and build it does unless opted out, and any
- * selection or host spelled in `commandArgs` may make it so. Over-answering
- * is the safe side; it only costs the cross-pass cache.
+ * The native options that consume the next argument as their value, exactly
+ * as `request_from_args` (rust/crates/solid-facts-backend/src/main.rs) reads
+ * them, and its value-less flags. A value is never an option: in
+ * `--runtime-condition --no-dependency-source` the second token is a
+ * condition (review round 1 of ADR 0297).
  */
-function readsPackageSource(commandArgs, runtime, dependencySource) {
-  if (dependencySource === false || commandArgs.includes("--no-dependency-source")) return false;
-  if (runtime?.target && runtime?.build) return true;
-  return commandArgs.some(argument =>
-    /^--(?:dependency-source|runtime-target|runtime-build|daemon-runtime)(?:=|$)/.test(argument));
+const NATIVE_VALUE_OPTIONS = new Set([
+  "--project", "-project", "--typefacts", "--dialect", "--accepted-contracts",
+  "--proposal-dependencies", "--receipt-trust-configuration", "--conditions",
+  "--preset", "--enable-rule", "--format", "--runtime-resolution", "--daemon-runtime",
+  "--validate-contract", "--emit-contract", "--emit-contract-batch",
+  "--contract-batch-results", "--declaration-probe-plan", "--emit-module-inventory",
+  "--dependency-source", "--runtime-realm", "--runtime-module-resolutions",
+  "--contract-resolution", "--emit-proposal-plan", "--merge-contract",
+  "--merge-contract-output", "--merge-proposal-plan", "--merge-proposal-plan-output",
+  "--review-contract", "--review-output", "--runtime-probe-proposal",
+  "--runtime-probe-proposal-plan", "--runtime-probe-request", "--runtime-probe-plan-output",
+  "--runtime-probe-runs", "--runtime-probe-evaluation-output",
+  "--plan-contract-certification", "--certification-plan-output",
+  "--execute-contract-certification", "--verify-policy2-discovery", "--package-name",
+  "--package-version", "--contract-entry-file", "--contract-package-root",
+  "--runtime-target", "--runtime-build", "--rendering", "--program-boundary",
+  "--runtime-condition", "--runtime-conditions", "--framework-transform"
+]);
+const NATIVE_FLAGS = new Set([
+  "--certify", "--feedback-facts", "--check-contracts", "--no-bundled-contracts",
+  "--serve", "--help", "-h", "--no-dependency-source"
+]);
+/** Options whose presence may select package source under the native default. */
+const SOURCE_OPTIONS = new Set([
+  "--dependency-source", "--runtime-target", "--runtime-build", "--daemon-runtime"
+]);
+
+/**
+ * What `commandArgs` say about package source, read at the positions native
+ * reads options: `optOut` for `--no-dependency-source` as an option, `source`
+ * for a host or selection option, and `opaque` for an option this table does
+ * not know, whose arity -- and so whether a later token is an option at all
+ * -- is unknown. A token that is no option is a wrapper's own argument (a
+ * script path); native refuses one.
+ */
+function commandArgsSource(userArgs) {
+  const read = { optOut: false, source: false, opaque: false };
+  for (let index = 0; index < userArgs.length; index++) {
+    const argument = String(userArgs[index]);
+    if (!argument.startsWith("-")) continue;
+    if (NATIVE_VALUE_OPTIONS.has(argument)) {
+      if (SOURCE_OPTIONS.has(argument)) read.source = true;
+      index++;
+    } else if (argument === "--no-dependency-source") {
+      read.optOut = true;
+    } else if (!NATIVE_FLAGS.has(argument)) {
+      read.opaque = true;
+    }
+  }
+  return read;
 }
 
 /**
- * One analysis per linted file's pass, for a run that reads package source.
+ * Whether the native run may analyze installed package source (ADR 0297):
+ * under a declared target and build it does unless opted out, and a host or
+ * selection in `commandArgs` may make it so. An option the adapter cannot
+ * read makes the answer unknown, and unknown is taken as source.
+ * Over-answering is the safe side; it only costs the cross-pass cache.
+ */
+function readsPackageSource(userArgs, runtime, dependencySource) {
+  if (dependencySource === false) return false;
+  const read = commandArgsSource(userArgs);
+  if (read.opaque) return true;
+  if (read.optOut) return false;
+  return Boolean(runtime?.target && runtime?.build) || read.source;
+}
+
+/**
+ * One analysis per lint pass over a file, for a run that reads package source.
  *
  * The cross-pass cache keys on settings alone, and nothing in that key moves
  * when an installed package's file does, so a persistent editor session would
- * serve a snapshot of package bytes that are gone. Every rule of one file's
- * pass shares ESLint's one `SourceCode` object, so keying on it reuses one
- * analysis within the pass -- as a single run would -- and never across
- * files or passes. A context without one simply analyzes again.
+ * serve a snapshot of package bytes that are gone. The pass is ESLint's
+ * per-pass file context: `runRules` (lib/linter/linter.js) builds one
+ * `FileContext` per pass and every rule's context of that pass is
+ * `fileContext.extend(...)`, an object whose prototype it is. It is found as
+ * the nearest object on the context's prototype chain owning `sourceCode`.
+ * The `SourceCode` object itself is not a pass: `Linter.verify` accepts one
+ * and lints it again (review round 1). A context without such an object
+ * simply analyzes again.
+ *
+ * Every adapter rule also drops its pass's entry at `Program:exit`
+ * (`endPass`). The traversal fires every `Program` listener of the pass
+ * before any `Program:exit`, and the adapter's rules read only in `Program`,
+ * so the drop is after every adapter read of the pass; a later read misses
+ * and analyzes again rather than reusing.
  */
 const passSnapshots = new WeakMap();
 
+function passOf(context) {
+  for (let object = context; object != null; object = Object.getPrototypeOf(object)) {
+    if (Object.prototype.hasOwnProperty.call(object, "sourceCode")) return object;
+  }
+  return null;
+}
+
 function passCache(context) {
-  const sourceCode = context.sourceCode ?? context.getSourceCode?.();
-  if (sourceCode == null || typeof sourceCode !== "object") return null;
-  let cache = passSnapshots.get(sourceCode);
+  const pass = passOf(context);
+  if (pass == null) return null;
+  let cache = passSnapshots.get(pass);
   if (!cache) {
     cache = new Map();
-    passSnapshots.set(sourceCode, cache);
+    passSnapshots.set(pass, cache);
   }
   return cache;
+}
+
+function endPass(context) {
+  const pass = passOf(context);
+  if (pass != null) passSnapshots.delete(pass);
 }
 
 function loadSnapshot(context) {
@@ -317,8 +400,11 @@ function loadSnapshot(context) {
 
   const project = configuredProject(context, config);
   const command = config.command ?? process.env.SOLID_CHECKER_BIN ?? process.execPath;
-  const commandArgs = config.command || process.env.SOLID_CHECKER_BIN
+  const userArgs = config.command || process.env.SOLID_CHECKER_BIN
     ? [...(config.commandArgs ?? [])]
+    : [];
+  const commandArgs = config.command || process.env.SOLID_CHECKER_BIN
+    ? userArgs
     : [join(__dirname, "bin", "solid-checker.mjs")];
   const acceptedContracts = configuredPath(config, "acceptedContracts");
   const trust = receiptTrust(config);
@@ -352,7 +438,7 @@ function loadSnapshot(context) {
   });
   // ADR 0297: a run that reads installed package source is reused within one
   // file's pass only (`passCache`). An observed runtime is never reused.
-  const pass = !observesRuntime && readsPackageSource(commandArgs, runtime, dependencySource)
+  const pass = !observesRuntime && readsPackageSource(userArgs, runtime, dependencySource)
     ? passCache(context) ?? new Map()
     : null;
   const store = (value) => (pass ?? snapshotCache).set(key, value);
@@ -621,6 +707,9 @@ const certification = {
             !(finding.rule === CONTRACT_GAP_RULE && finding.kind === "uncertifiable")
         );
         projectFindings(context, program, findings);
+      },
+      "Program:exit"() {
+        endPass(context);
       }
     };
   }
@@ -657,6 +746,9 @@ const contractNote = {
     return {
       Program(program) {
         reportNotices(context, program, loadSnapshot(context));
+      },
+      "Program:exit"() {
+        endPass(context);
       }
     };
   }
@@ -710,6 +802,7 @@ function reportingRule(entry, catalog) {
         },
         "Program:exit"() {
           releaseOwnedRule(filename, entry.name);
+          endPass(context);
         }
       };
     }
@@ -866,6 +959,9 @@ module.exports._testing = {
   findingMessage,
   loadSnapshot,
   passSnapshots,
+  passOf,
+  nativeValueOptions: NATIVE_VALUE_OPTIONS,
+  nativeFlags: NATIVE_FLAGS,
   manifests,
   manifestEntriesByRule,
   deprecatedRuleKeys: DEPRECATED_RULE_KEYS,

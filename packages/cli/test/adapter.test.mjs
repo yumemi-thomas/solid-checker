@@ -1024,3 +1024,148 @@ test("a run that reads package source is reused within one file's pass only (ADR
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// Review round 1 of ADR 0297: an analyzer whose snapshot names the epoch on
+// disk at the time it ran, standing in for package or project bytes native
+// reads and the linted file does not show.
+function epochAnalyzer(root) {
+  const epoch = join(root, "epoch.txt");
+  const runs = join(root, "runs.txt");
+  const analyzer = join(root, "epoch-analyzer.mjs");
+  writeFileSync(epoch, "before-edit");
+  writeFileSync(analyzer, `import { appendFileSync, readFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(runs)}, "x");
+process.stdout.write(JSON.stringify({ status: "certified", findings: [],
+  epoch: readFileSync(${JSON.stringify(epoch)}, "utf8"),
+  run: readFileSync(${JSON.stringify(runs)}, "utf8").length }));
+`);
+  return {
+    command: process.execPath,
+    commandArgs: [analyzer],
+    edit: () => writeFileSync(epoch, "after-edit"),
+    runs: () => {
+      try {
+        return readFileSync(runs, "utf8").length;
+      } catch {
+        return 0;
+      }
+    }
+  };
+}
+
+test("a SourceCode linted again is a new pass and analyzes again (ADR 0297 review)", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-reverify-"));
+  try {
+    const project = join(root, "tsconfig.json");
+    writeFileSync(project, "{}\n");
+    const { command, commandArgs, edit, runs } = epochAnalyzer(root);
+    const observe = {
+      create(context) {
+        return {
+          Program(node) {
+            const snapshot = plugin._testing.loadSnapshot(context);
+            context.report({ node, message: `${snapshot.epoch} ${snapshot.run}` });
+          }
+        };
+      }
+    };
+    const config = [{
+      plugins: { review: { rules: { observe, other: observe } }, "solid-checker": plugin },
+      settings: { solidChecker: {
+        project, command, commandArgs, runtime: { target: "browser", build: "development" }
+      } },
+      rules: {
+        "review/observe": "warn",
+        "review/other": "warn",
+        "solid-checker/certification": "error"
+      }
+    }];
+    const linter = new Linter({ cwd: root });
+    const messages = (input, configs = config) =>
+      linter.verify(input, configs, { filename: join(root, "App.js") }).map(m => m.message);
+    assert.deepEqual(messages("export {};"), ["before-edit 1", "before-edit 1"],
+      "every rule of one pass shares one analysis");
+    const sourceCode = linter.getSourceCode();
+    edit();
+    assert.deepEqual(messages(sourceCode), ["after-edit 2", "after-edit 2"],
+      "the same SourceCode linted again is a new pass");
+    assert.deepEqual(messages("export {};"), ["after-edit 3", "after-edit 3"]);
+    assert.equal(runs(), 3);
+
+    // Without an adapter rule to end it, the pass is still ESLint's per-pass
+    // file context, not the SourceCode.
+    const bare = [{ ...config[0], rules: { "review/observe": "warn" } }];
+    assert.deepEqual(messages(sourceCode, bare), ["after-edit 4"]);
+    assert.equal(plugin._testing.snapshotCache.size, 0);
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("commandArgs are read at native's option positions (ADR 0297 review)", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-argv-"));
+  try {
+    const project = join(root, "tsconfig.json");
+    writeFileSync(project, "{}\n");
+    const { command, commandArgs, edit, runs } = epochAnalyzer(root);
+    const lint = (settings, extra) => plugin._testing.loadSnapshot({
+      filename: join(root, "App.tsx"),
+      physicalFilename: join(root, "App.tsx"),
+      sourceCode: sourceCode("export {};"),
+      settings: { solidChecker: {
+        command, commandArgs: [...commandArgs, ...extra], project, ...settings
+      } },
+      options: []
+    }).epoch;
+    const host = { runtime: { target: "browser", build: "development" } };
+    plugin._testing.snapshotCache.clear();
+
+    // A condition spelled like the opt-out is a condition: native defaults to
+    // source, so no pass reuses another's analysis.
+    const condition = ["--runtime-condition", "--no-dependency-source"];
+    assert.equal(lint(host, condition), "before-edit");
+    edit();
+    assert.equal(lint(host, condition), "after-edit", "a later pass analyzes again");
+    assert.equal(runs(), 2);
+    assert.equal(plugin._testing.snapshotCache.size, 0);
+
+    // The opt-out as an option is contract mode, cached across passes.
+    lint(host, ["--no-dependency-source"]);
+    lint(host, ["--no-dependency-source"]);
+    assert.equal(runs(), 3);
+
+    // An option the adapter cannot read leaves arity unknown: taken as source.
+    lint({}, ["--some-future-option", "--no-dependency-source"]);
+    lint({}, ["--some-future-option", "--no-dependency-source"]);
+    assert.equal(runs(), 5);
+
+    // The setting is the adapter's own opt-out, whatever commandArgs hold.
+    lint({ ...host, dependencySource: false }, condition);
+    lint({ ...host, dependencySource: false }, condition);
+    assert.equal(runs(), 6);
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the adapter's native option table is native's argv parser", () => {
+  const main = readFileSync(
+    new URL("../../../rust/crates/solid-facts-backend/src/main.rs", import.meta.url),
+    "utf8"
+  );
+  const start = main.indexOf("fn request_from_args()");
+  const body = main.slice(start, main.indexOf("unknown => return Err", start));
+  const arms = [...body.matchAll(/\n {12}((?:"-[^"]+"(?: \| )?)+) =>/g)];
+  const values = new Set();
+  const flags = new Set();
+  arms.forEach((arm, index) => {
+    const end = index + 1 < arms.length ? arms[index + 1].index : body.length;
+    const consumes = /args\s*\.next\(\)/.test(body.slice(arm.index + arm[0].length, end));
+    for (const [, name] of arm[1].matchAll(/"([^"]+)"/g)) (consumes ? values : flags).add(name);
+  });
+  assert.ok(values.size > 40, "the parser was found");
+  assert.deepEqual([...plugin._testing.nativeValueOptions].sort(), [...values].sort());
+  assert.deepEqual([...plugin._testing.nativeFlags].sort(), [...flags].sort());
+});

@@ -51,12 +51,13 @@ export interface SolidCheckerSettings {
   runtime?: SolidCheckerRuntimeSettings;
   /**
    * Whether installed Solid packages are analyzed from their runtime source.
-   * When `runtime` declares both `target` and `build`, the checker does so by
-   * default and keeps package contracts for what it cannot read (ADR 0297).
-   * `false` passes `--no-dependency-source`, binding every package through its
-   * contract. A run reading package source reuses its analysis within one
-   * file's lint pass only, so an edited installed package is seen on the next
-   * pass.
+   * When `runtime` declares both `target` and `build` and the project installs
+   * a Solid Vite plugin, the checker does so by default and keeps package
+   * contracts for what it cannot read (ADR 0297). `false` passes
+   * `--no-dependency-source`, binding every package through its contract. A
+   * run that may read package source reuses its analysis within one lint pass
+   * over a file only, so an edited installed package is seen on the next pass,
+   * even when ESLint lints the same `SourceCode` object again.
    */
   dependencySource?: boolean;
   /** Opt-in Vite client resolver observation; executes project config. Off by default. */
