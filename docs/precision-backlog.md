@@ -30429,3 +30429,23 @@ Open, found in this round and not fixed:
   for a re-export between packages inside a selected closure. Without an
   accepted contract the call keeps its `SC9011` when it passes a reactive
   value.
+
+## Kui package-context getter recovery investigation (2026-10-14, ADR 0289)
+
+Still open: `TopicsRoute.tsx:425:75` is SC9012 in dependency source mode.
+The router 2.0.0-next.26 source proves that its own provider initially supplies
+a `location.search` getter that calls a memo. It does not close all providers
+of the publicly exported `RouterContext`, or preserve the shared location's
+descriptor through callbacks and writes. ADR 0291's selected package closure
+is not a census of every runtime consumer of that context.
+
+The two proposed shortcuts remain refused: accepting the sole visible
+package provider admits the existing `dependency-source-context-reprovided`
+counterexample; accepting all visible getters leaves unknown providers and
+getter replacement unproven. A static project provider and an
+`Object.defineProperty(useLocation(), "search", { value: "" })` replacement
+both pass TypeScript 5.9.3 against kui's real router/Solid declarations. No
+violation rule, fixture snapshot or generated artifact changed. See ADR
+0289's recovery investigation for the required consumer, provider and
+descriptor facts. No sound recovery proof was found within the current fact
+boundary; the uncertifiable result is retained.

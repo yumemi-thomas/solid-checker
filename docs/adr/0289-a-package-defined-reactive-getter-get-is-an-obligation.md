@@ -168,3 +168,54 @@ Recorded, not fixed (contrived):
 - an ADR 0287 trap that throws for every string key still yields a
   violation;
 - a monkeypatched `Reflect.get` is not seen.
+
+## Recovery investigation (2026-10-14)
+
+No new proof is admitted. Kui's `TopicsRoute.tsx:425:75` remains SC9012 in
+dependency source mode. The installed `@solidjs/router` 2.0.0-next.26 source
+establishes the candidate getter, but not the value and descriptor at that
+read:
+
+- `routing.js` creates the default-less `RouterContextObj`; `index.jsx`
+  publicly re-exports it as `RouterContext`. `useLocation()` reads
+  `useRouter().location`, and `useRouter()` returns the context value through
+  `invariant`. `routers/factory.jsx` provides `createRouterContext(...)`.
+- `createRouterContext` builds `location` with `createLocation`. Its
+  `search` getter unconditionally calls the `search` memo. The object is
+  returned as an ordinary mutable literal, without a freeze or a sealed
+  descriptor. `routers/components.jsx` passes the same location to root and
+  route preload callbacks and to the supplied root component.
+
+A single visible package provider is insufficient. ADR 0291 selects Solid
+packages, not every runtime module: a non-Solid or refused package can import
+the exported context and supply another value. Review round 1's
+`dependency-source-context-reprovided` already demonstrates this failure.
+The current facts contain no proof that all runtime users of this exported
+context have entered the provider census. Nor do they connect this read's
+owner to the router's provider through the route and component callbacks.
+
+Joining all visible providers is insufficient too. A project provider may
+use `{ ...router, location: { ...router.location, search: "" } }`, which
+preserves the declared types but makes the eventual Get inert. An unknown
+provider contributes no proven getter. Even when every provider initially
+supplies the reactive object, a consumer can use
+`Object.defineProperty(useLocation(), "search", { value: "" })` to replace
+its getter. The package's open writes still veto `location` and `search`
+under ADR 0284, and its shared receivers still escape. Ignoring those vetoes
+would admit the package-writes-getter case rather than prove it impossible.
+
+The project-provider and descriptor-replacement examples pass TypeScript
+5.9.3 `--noEmit` against kui's installed, published router 2.0.0-next.26 and
+Solid 2.0.0-rc.13 declarations, without fixture stubs. They establish that
+types do not discharge either demand; they are not claims that kui contains
+these replacements.
+
+Recovery needs affirmative facts closing the context's runtime consumers
+(or identifying the enclosing provider at this read), then preserving both
+the `location` member and its `search` descriptor across aliases, callbacks
+and writes. Alternatively, every possible provider and subsequent write
+must preserve an accessor-reading getter. `dependency_getters` supplies
+neither proof: it is a may-derivation that deliberately ignores these
+requirements. Promoting its result, removing the dependency-root refusal,
+or exempting the router's open writes would loosen the accepted boundary.
+This investigation stops without any of those changes.
