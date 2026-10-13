@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-program/App.tsx",
+      "start": 234,
+      "end": 248,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-source-uncaptured",
+      "code": "SC9011",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-program/legacy/Legacy.tsx",
+      "start": 348,
+      "end": 352,
+      "fixes": 0
+    }
+  ]
+}

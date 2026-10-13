@@ -8,7 +8,10 @@
 //! with `solid`, `import`, `module`, `default` and the host's own conditions:
 //! its target, its build and every `--runtime-condition`), walks its
 //! relative imports to a closure, and writes a sibling tsconfig that extends
-//! the project's and lists that closure as root files with `allowJs`. The
+//! the project's and lists exactly the project's configured sources plus that
+//! closure as root files, with `allowJs` and an empty `include`, so neither an
+//! inherited `include` nor `allowJs` changes which project files are analyzed
+//! (review round 2). The
 //! caller then binds each import of the package, and each relative import
 //! inside it, to the runtime file it loads (`ImportResolution`), because the
 //! compiler still resolves them to declarations.
@@ -86,6 +89,7 @@ pub fn prepare(
     tsconfig: &Path,
     specifiers: &[String],
     host: &Host,
+    project_files: &[PathBuf],
 ) -> Result<Option<DependencySources>, String> {
     let directory = tsconfig
         .parent()
@@ -112,6 +116,20 @@ pub fn prepare(
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Ordered>(&bytes).ok())
             .ok_or_else(|| format!("--dependency-source {specifier:?}: unreadable package.json"))?;
+        // A `browser` map remaps files inside the package for a browser
+        // build, which the closure walk does not model (review round 2). An
+        // empty map remaps nothing.
+        if host.browser
+            && manifest.get("browser").is_some_and(|field| match field {
+                Ordered::String(_) => false,
+                Ordered::Object(map) => !map.is_empty(),
+                _ => true,
+            })
+        {
+            return Err(format!(
+                "--dependency-source {specifier:?}: a `browser` field map is not supported"
+            ));
+        }
         let relative = entry_target(&manifest, &subpath, host).ok_or_else(|| {
             format!(
                 "--dependency-source {specifier:?}: no runtime entry for {subpath} under the declared host's conditions"
@@ -144,19 +162,17 @@ pub fn prepare(
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or("--dependency-source: the project tsconfig name is not UTF-8")?;
-    let base = fs::read_to_string(tsconfig).map_err(|error| error.to_string())?;
-    // A child `files` with no inherited `include` would drop the project's
-    // default `**/*`.
-    let include = (!base.contains("\"include\"") && !base.contains("\"files\""))
-        .then(|| serde_json::json!(["**/*"]));
-    let mut document = serde_json::json!({
+    let root_files = project_files
+        .iter()
+        .chain(&files)
+        .map(|file| file.to_string_lossy().into_owned())
+        .collect::<BTreeSet<_>>();
+    let document = serde_json::json!({
         "extends": format!("./{tsconfig_name}"),
         "compilerOptions": { "allowJs": true, "checkJs": false },
-        "files": files.iter().map(|file| file.to_string_lossy().into_owned()).collect::<Vec<_>>(),
+        "files": root_files,
+        "include": [],
     });
-    if let Some(include) = include {
-        document["include"] = include;
-    }
     let written = directory.join(format!(
         ".solid-checker-dependency-sources.{}.tsconfig.json",
         std::process::id()
@@ -178,6 +194,49 @@ pub fn prepare(
         resolutions: resolutions.into_iter().collect(),
         tsconfig: written,
     }))
+}
+
+/// The package a bare specifier names (`@scope/pkg` for `@scope/pkg/sub`).
+#[must_use]
+pub fn package_name(specifier: &str) -> Option<String> {
+    split_bare_specifier(specifier).map(|(name, _)| name)
+}
+
+/// The runtime-bound specifiers of `packages` that `source` imports or
+/// re-exports: every subpath a selected package is loaded through (review
+/// round 2). A side-effect or type-only import binds nothing to redirect.
+#[must_use]
+pub fn imported_subpaths(
+    path: &str,
+    source: &str,
+    packages: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    let Ok(facts) = solid_facts::ast::extract(path.to_owned(), source) else {
+        return BTreeSet::new();
+    };
+    let selected = |module: &str| package_name(module).is_some_and(|name| packages.contains(&name));
+    facts
+        .imports
+        .iter()
+        .filter(|import| {
+            !import.type_only
+                && import.bindings.iter().any(|binding| {
+                    !binding.type_only
+                        && binding.runtime_referenced
+                        && binding.kind != solid_facts::ast::ImportKind::SideEffect
+                })
+        })
+        .map(|import| import.module.as_str())
+        .chain(
+            facts
+                .exports
+                .iter()
+                .filter(|export| !export.type_only)
+                .filter_map(|export| export.module.as_deref()),
+        )
+        .filter(|module| selected(module))
+        .map(str::to_owned)
+        .collect()
 }
 
 fn is_source(path: &Path) -> bool {
@@ -207,7 +266,13 @@ fn entry_target(manifest: &Ordered, subpath: &str, host: &Host) -> Option<String
             select(entry, host, 0)
         }
         None if subpath == "." => {
-            let browser = host.browser.then(|| manifest.get("browser")).flatten();
+            // An empty map, as `@solid-primitives` packages ship, remaps
+            // nothing.
+            let browser = host
+                .browser
+                .then(|| manifest.get("browser"))
+                .flatten()
+                .filter(|field| !matches!(field, Ordered::Object(map) if map.is_empty()));
             if browser.is_some_and(|field| field.as_str().is_none()) {
                 return None;
             }
@@ -348,6 +413,7 @@ mod tests {
             &tsconfig,
             &["not-installed-here".to_owned()],
             &host(&["browser", "development"]),
+            &[],
         )
         .unwrap();
         let written = std::fs::read_dir(&directory).unwrap().count();
@@ -387,6 +453,25 @@ mod tests {
     }
 
     #[test]
+    fn every_runtime_imported_subpath_of_a_selected_package_is_selected() {
+        let packages = ["@scope/pkg".to_owned()].into_iter().collect();
+        let source = r#"
+            import { a } from "@scope/pkg";
+            import { b } from "@scope/pkg/sub";
+            import type { C } from "@scope/pkg/types";
+            import "@scope/pkg/styles.css";
+            import { d } from "@scope/other";
+            export { e } from "@scope/pkg/more";
+            console.log(a, b, d);
+        "#;
+        let selected = super::imported_subpaths("/p/App.ts", source, &packages);
+        assert_eq!(
+            selected.into_iter().collect::<Vec<_>>(),
+            ["@scope/pkg", "@scope/pkg/more", "@scope/pkg/sub"]
+        );
+    }
+
+    #[test]
     fn the_declared_host_selects_the_entry() {
         // Review round 1: a fixed browser/development set read the source a
         // Node or production build never loads.
@@ -419,5 +504,10 @@ mod tests {
         );
         let remap = ordered(r#"{"browser":{"./a.js":"./b.js"},"module":"./module.js"}"#);
         assert!(entry_target(&remap, ".", &host(&["browser", "development"])).is_none());
+        let empty = ordered(r#"{"browser":{},"module":"./module.js"}"#);
+        assert_eq!(
+            entry_target(&empty, ".", &host(&["browser", "development"])).as_deref(),
+            Some("./module.js")
+        );
     }
 }

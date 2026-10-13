@@ -29943,3 +29943,20 @@ unchanged (562/3,731). Open:
   `const tag = { label }; relabel(tag); tag.label()` is reported SC1001 even
   though `relabel` replaces `label`. The same happens through a factory
   return and with the longhand `{ label: label }`.
+
+## Review round 2 of ADR 0284 (2026-10-13)
+
+Seven confirmed results, all in program composition and redirect binding,
+all fixed:
+- the program is the project's own program files plus the closure, with an
+  empty `include`;
+- every runtime-imported subpath of a selected package is selected;
+- a redirect needs its declaration inside the target's installed package;
+- an ambiguous `export *` binds nothing;
+- a browser host refuses a `browser` field map.
+
+Two new fixtures pin the composition cases.
+Open from the review, unconfirmed:
+- a Node host with no `exports` reads `module` before `main`;
+- a workspace package selected by name;
+- cross-package wildcard writes.

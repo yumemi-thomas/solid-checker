@@ -38,14 +38,26 @@ installed package as project code.
 2. **Closure.** Relative static imports and re-exports are walked from the
    entry, inside the package, to at most 4,000 files. A relative import that
    resolves to no source file is an error.
-3. **Program.** A sibling tsconfig extends the project's, adds `allowJs`
-   (`checkJs: false`), and lists the closure as root files. It is removed when
-   the run ends. The Type Facts daemon is bypassed.
+3. **Program.** The project's own program is opened first. A sibling
+   tsconfig then extends the project's, adds `allowJs` (`checkJs: false`) and
+   an empty `include`, and lists as root files exactly the files that program
+   holds outside `node_modules`, plus the closure. An inherited `include`, a
+   `files`-only configuration or `allowJs` therefore cannot change which
+   project files are analyzed. The sibling tsconfig is removed when the run
+   ends. The Type Facts daemon is bypassed.
+   - Every subpath of a selected package that the project imports with a
+     runtime binding is selected too.
 4. **Binding.** The compiler still resolves the package to its declarations.
    Each import of the package by its bare specifier, and each relative import
    inside it that resolves to declarations, is redirected to the export entity
    of the runtime file it loads (the ADR 0186 `runtime_symbol_redirects`
-   mechanism). A source bound to two targets binds none.
+   mechanism).
+   - Only when the declaration it resolved to lies inside the same installed
+     package as the target.
+   - A source bound to two targets binds none, so two subpaths sharing one
+     declaration fail closed.
+   - A name two star exports provide is unbound, as it is at link time.
+   - A browser host refuses a package with a `browser` field map.
 5. **Host.** Package files are folded under the declared runtime host
    (`selected_conditions()`), like project files.
 6. **Contracts.** The selected packages' accepted contracts are not bound, and
@@ -97,8 +109,27 @@ global. The same shape in project code alone
 that does not depend on this mode. It is recorded in docs/precision-backlog.md
 and is being fixed separately.
 
+## Review round 2
+
+All seven confirmed results came from how the program was assembled and how
+redirects bound; none came from the package-body analysis. All are fixed:
+- an `include` inherited through `extends` was replaced by `**/*`;
+- a `files`-only project analyzed none of its files and reported `certified`;
+- `allowJs` pulled in project JavaScript outside the program;
+- another installed copy of the package was bound to the selected source;
+- an unselected subpath sharing a declaration was redirected;
+- a `browser` map beside `exports` was ignored;
+- an ambiguous `export *` bound its first provider.
+
+About 150 package-body shapes, and a 42-package sweep over the corpus,
+produced no other false violation.
+
 ## Evidence
 
+- **Fixtures** `reactive-ir/dependency-source-program` (inherited `include`,
+  another installed copy) and `reactive-ir/dependency-source-default-include`
+  (project JavaScript stays out). The round-1 binary reports false violations
+  in both.
 - **Fixture** `reactive-ir/dependency-source`: the `solid` condition is
   preferred over `default`, a relative closure is followed, a package-located
   finding is dropped, and a package `Object.assign` does not veto a project

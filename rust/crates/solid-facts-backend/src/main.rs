@@ -3487,10 +3487,63 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             conditions: request.runtime.selected_conditions(),
             browser: target == RuntimeTarget::Browser,
         };
+        // The project's own configured sources, read from its own program,
+        // are the project half of the sibling tsconfig's `files`: composing
+        // `include`/`files` through `extends` widened or emptied it (review
+        // round 2). Every subpath of a selected package they load is selected
+        // too, so an unselected subpath sharing a declaration cannot be bound
+        // to another subpath's source.
+        let mut configured = TypeFactsSession::open(
+            &request.typefacts_executable,
+            &request.project_id,
+            &producer_arguments(&request.typefacts_args),
+        )?;
+        let project_sources = configured.configured_sources()?;
+        // Configured sources omit declaration files, and an ambient
+        // `declare module` stub is part of the project's program too: take
+        // every file the program holds outside `node_modules`.
+        let graph = configured.module_graph(&typefacts::ModuleGraphDemand::default())?;
+        drop(configured);
+        let packages = request
+            .dependency_sources
+            .iter()
+            .filter_map(|specifier| {
+                solid_facts_backend::dependency_sources::package_name(specifier)
+            })
+            .collect::<BTreeSet<_>>();
+        let mut specifiers = request
+            .dependency_sources
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        for source in &project_sources {
+            specifiers.extend(solid_facts_backend::dependency_sources::imported_subpaths(
+                &source.path,
+                &source.source,
+                &packages,
+            ));
+        }
+        let project_files = graph
+            .modules
+            .iter()
+            .map(|module| PathBuf::from(module.path.as_ref()))
+            .chain(
+                project_sources
+                    .iter()
+                    .map(|source| PathBuf::from(&source.path)),
+            )
+            .filter(|path| {
+                path.is_file()
+                    && !path
+                        .components()
+                        .any(|component| component.as_os_str() == "node_modules")
+            })
+            .collect::<Vec<_>>();
         let prepared = solid_facts_backend::dependency_sources::prepare(
             Path::new(&request.project_id),
-            &request.dependency_sources,
+            &specifiers.into_iter().collect::<Vec<_>>(),
             &host,
+            &project_files,
         )?;
         if let Some(prepared) = &prepared {
             request.project_id = prepared.tsconfig.to_string_lossy().into_owned();
@@ -7043,7 +7096,7 @@ fn runtime_symbol_redirects(
             ))
         })
         .collect::<Result<Vec<_>, std::io::Error>>()?;
-    symbol_redirects(facts, typescript, rows, |importer, target| {
+    symbol_redirects(facts, typescript, rows, |importer, target, _| {
         importer.starts_with(&package_root) && target.starts_with(&package_root)
     })
 }
@@ -7090,8 +7143,14 @@ fn dependency_source_redirects(
             }
         }
     }
-    symbol_redirects(facts, typescript, rows, |_, target| {
-        sources.contains(target)
+    symbol_redirects(facts, typescript, rows, |_, target, declaration| {
+        let declaration = declaration
+            .canonicalize()
+            .unwrap_or_else(|_| declaration.to_path_buf());
+        sources
+            .roots
+            .iter()
+            .any(|root| target.starts_with(root) && declaration.starts_with(root))
     })
 }
 
@@ -7103,7 +7162,7 @@ fn symbol_redirects(
     facts: &solid_facts::ProjectFacts,
     typescript: &mut TypeFactsSession,
     rows: Vec<(PathBuf, String, PathBuf)>,
-    admitted: impl Fn(&Path, &Path) -> bool,
+    admitted: impl Fn(&Path, &Path, &Path) -> bool,
 ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
     let import_paths = rows
         .iter()
@@ -7127,18 +7186,22 @@ fn symbol_redirects(
     let mut redirects = HashMap::<String, String>::new();
     let mut ambiguous = HashSet::new();
     for (importer_path, specifier, target_path) in rows {
-        if !admitted(&importer_path, &target_path) {
-            continue;
-        }
-        let declaration_redirect = graph.imports.iter().any(|import| {
-            import.text.as_ref() == specifier
+        // The declaration the compiler resolved this import to, which
+        // `admitted` judges beside the runtime target: another installed
+        // copy of the package resolves elsewhere (ADR 0284 review round 2).
+        let declaration = graph.imports.iter().find_map(|import| {
+            (import.text.as_ref() == specifier
                 && same_canonical_path(Path::new(import.specifier.path.as_ref()), &importer_path)
                 && import.included_path.is_empty()
                 && (import.resolved_path.ends_with(".d.ts")
                     || import.resolved_path.ends_with(".d.mts")
-                    || import.resolved_path.ends_with(".d.cts"))
+                    || import.resolved_path.ends_with(".d.cts")))
+            .then(|| PathBuf::from(import.resolved_path.as_ref()))
         });
-        if !declaration_redirect {
+        let Some(declaration) = declaration else {
+            continue;
+        };
+        if !admitted(&importer_path, &target_path, &declaration) {
             continue;
         }
         let Some(importer) = facts
@@ -10297,6 +10360,11 @@ fn entry_export_entity_with_visiting<'a>(
     // `AstFacts::module_level_exports`.
     let consult_export_stars =
         validate_module_export_precedence(&file.ast, &entry_file, name).ok()?;
+    // Star exports are consulted after every explicit export, and a name two
+    // of them provide with different bindings is ambiguous: importing it is a
+    // link error, not either binding (ADR 0284 review round 2).
+    let mut starred: Option<&typefacts::EntityFact> = None;
+    let mut star_ambiguous = false;
     for export in file
         .ast
         .module_level_exports()
@@ -10349,11 +10417,17 @@ fn entry_export_entity_with_visiting<'a>(
             let target = resolve_relative_export(facts, &entry_file, module).ok()?;
             if let Some(entity) = entry_export_entity_with_visiting(facts, &target, name, visiting)
             {
-                return Some(entity);
+                match starred {
+                    Some(previous) if previous.location != entity.location => {
+                        star_ambiguous = true;
+                    }
+                    Some(_) => {}
+                    None => starred = Some(entity),
+                }
             }
         }
     }
-    None
+    if star_ambiguous { None } else { starred }
 }
 
 fn unify_runtime_alias_summaries(

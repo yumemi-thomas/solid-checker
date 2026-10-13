@@ -434,3 +434,9 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/tuple-slot-provenance/node_modules/**
 !fixtures/reactive-ir/tuple-slot-context/node_modules/
 !fixtures/reactive-ir/tuple-slot-context/node_modules/**
+!fixtures/reactive-ir/dependency-source-program/node_modules/
+!fixtures/reactive-ir/dependency-source-program/node_modules/**
+!fixtures/reactive-ir/dependency-source-program/legacy/node_modules/
+!fixtures/reactive-ir/dependency-source-program/legacy/node_modules/**
+!fixtures/reactive-ir/dependency-source-default-include/node_modules/
+!fixtures/reactive-ir/dependency-source-default-include/node_modules/**
