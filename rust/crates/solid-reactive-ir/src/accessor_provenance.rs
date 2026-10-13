@@ -33,6 +33,16 @@ enum Value {
         path: String,
         elements: Vec<Span>,
     },
+    /// ADR 0282: the slots of the fresh array literal that a factory's one
+    /// unconditional return builds. Only an exact `const` array pattern
+    /// bound to that very call consumes it. Every other route (an alias, a
+    /// parameter handoff, a context provider) refuses it, because there the
+    /// array is no longer fresh: a holder could replace a slot.
+    Tuple {
+        path: String,
+        factory: Span,
+        elements: Vec<Span>,
+    },
 }
 
 pub(super) struct Resolver<'a, 'facts> {
@@ -1253,7 +1263,8 @@ impl Resolver<'_, '_> {
             let closed = match &value {
                 Value::Object { .. } => uses.is_none_or(|uses| !uses.object_escaped),
                 Value::Array { .. } => uses.is_none_or(|uses| !uses.array_escaped),
-                Value::Callable(_) => false,
+                // ADR 0282: a handed-off tuple is a held array, not a fresh one.
+                Value::Callable(_) | Value::Tuple { .. } => false,
             };
             if !closed {
                 return None;
@@ -1313,6 +1324,13 @@ impl Resolver<'_, '_> {
                 *transported = true;
                 let (provider_file, value) = self.provider(file, call)?;
                 let mut value = self.value(provider_file, value, depth - 1, transported)?;
+                // ADR 0282: every consumer of the context shares the provider's
+                // one array, and any of them can write a slot. (An array
+                // pattern of a context value already blocks that context in
+                // the receiver census; this keeps the refusal local.)
+                if matches!(value, Value::Tuple { .. }) {
+                    return None;
+                }
                 if let Value::Object { context, .. } = &mut value {
                     *context = true;
                 }
@@ -1333,7 +1351,28 @@ impl Resolver<'_, '_> {
             }
             let returned = single_return(target_file, function)?;
             *transported = true;
+            // ADR 0282: a returned array literal whose slots are not all closed
+            // objects (ADR 0273's map/forEach receivers keep their own path) is
+            // a tuple. It is described here, at the call, and nowhere else, so
+            // only a literal this one return builds is ever a tuple: `const t =
+            // [..]; return t` is not one, nor is a literal the factory merely
+            // holds.
+            let literal = target_file.ast.peel_ts_sugar_span(returned);
+            if target_file.ast.array_literals.contains(&literal)
+                && returned_array_elements(target_file, literal).is_none()
+            {
+                return Some(Value::Tuple {
+                    path: target_file.path.to_string(),
+                    factory: function.span,
+                    elements: returned_tuple_elements(target_file, literal)?,
+                });
+            }
             let value = self.value(target_file, returned, depth - 1, transported)?;
+            // ADR 0282: `return make()` forwards another factory's tuple. It is
+            // still fresh, but v1 admits only the literal's own factory.
+            if matches!(value, Value::Tuple { .. }) {
+                return None;
+            }
             if matches!(value, Value::Array { .. })
                 && !target_file
                     .ast
@@ -1451,10 +1490,19 @@ impl Resolver<'_, '_> {
             }
             return Some(Value::Callable(Callable::Accessor(symbol)));
         }
+        if binding.shape == ast::BindingShape::Array {
+            return self.tuple_slot(file, bound_file, binding, declaration, depth, transported);
+        }
         if binding.shape != ast::BindingShape::Identifier || binding.names.len() != 1 {
             return None;
         }
         let value = self.value(bound_file, binding.initializer?, depth - 1, transported)?;
+        // ADR 0282: `const t = make()` holds the tuple. `t[1] = other` or a
+        // call that receives `t` can replace a slot, so a held tuple is no
+        // tuple; `t[1]()` keeps its computed-callee obligation.
+        if matches!(value, Value::Tuple { .. }) {
+            return None;
+        }
         if matches!(value, Value::Array { .. }) {
             let key = location(bound_file.path.shared(), binding.pattern);
             return self
@@ -1509,6 +1557,71 @@ impl Resolver<'_, '_> {
             }
         }
         matches!(value, Value::Callable(_)).then_some(value)
+    }
+
+    /// ADR 0282: `const [running, start] = make(); start()` calls the closure
+    /// in slot 1 of the array literal `make`'s one unconditional return
+    /// builds. The array is fresh and this pattern consumes it in the same
+    /// statement, so no other code holds it and no write can replace a slot
+    /// between the return and the destructuring. The caller has already
+    /// refused a `let`, a written name and a declaration this lookup cannot
+    /// pair with one binding.
+    fn tuple_slot(
+        &self,
+        file: &FileFacts,
+        bound_file: &FileFacts,
+        binding: &ast::BindingFact,
+        declaration: Span,
+        depth: usize,
+        transported: &mut bool,
+    ) -> Option<Value> {
+        // `declaration` is a span of `file`; a binding another file holds
+        // cannot be paired with it by position.
+        if bound_file.path != file.path
+            || !simple_array_binding(binding)
+            // Destructuring runs `Array.prototype[Symbol.iterator]`. Like ADR
+            // 0273's members, its stability is a premise; a write whose key
+            // no literal names is the one veto visible here.
+            || self.member_stability.all.is_some()
+        {
+            return None;
+        }
+        let index = binding
+            .array_slots
+            .iter()
+            .position(|slot| slot.as_ref().is_some_and(|slot| slot.span == declaration))?;
+        // The initializer is the call itself, so the array is the call's
+        // fresh result: `const [, start] = t` destructures a held tuple.
+        let initializer = bound_file.ast.peel_ts_sugar_span(binding.initializer?);
+        bound_file.ast.call_at(initializer)?;
+        let Value::Tuple {
+            path,
+            factory,
+            elements,
+        } = self.value(bound_file, initializer, depth - 1, transported)?
+        else {
+            return None;
+        };
+        // ADR 0284: a wildcard write inside a package analyzed as source
+        // vetoes the tuples that package creates.
+        if !*transported
+            || self
+                .facts
+                .dependency_source_root(&path)
+                .and_then(|root| self.member_stability.dependencies.get(root))
+                .is_some_and(|package| package.all.is_some())
+        {
+            return None;
+        }
+        // A slot past the literal's end destructures `undefined`.
+        let element = *elements.get(index)?;
+        let span = slot_closure(
+            self.lookup.file_by_path(&path)?,
+            factory,
+            element,
+            self.lookup,
+        )?;
+        Some(Value::Callable(Callable::Function { path, span }))
     }
 
     /// One exact default-less dialect context, one syntactic provider, no
@@ -1716,6 +1829,116 @@ fn simple_object_binding(binding: &ast::BindingFact) -> bool {
                 .iter()
                 .any(|slot| slot.local.span == name.span)
         })
+}
+
+/// ADR 0282: a `const` array pattern of plain identifier slots. A default
+/// (`[a = f]`), a nested pattern (`[[a]]`, `[{ a }]`) or a rest element binds a
+/// name that has no identifier slot, so the counts differ and the pattern is
+/// refused. A hole (`[, a]`) skips a position and keeps every other exact.
+fn simple_array_binding(binding: &ast::BindingFact) -> bool {
+    binding.immutable
+        && binding.shape == ast::BindingShape::Array
+        && !binding.names.is_empty()
+        && binding.array_slots.iter().flatten().count() == binding.names.len()
+        && binding.names.iter().all(|name| {
+            binding
+                .array_slots
+                .iter()
+                .flatten()
+                .any(|slot| slot.span == name.span)
+        })
+}
+
+/// ADR 0282: a slot names its closure only as an inline arrow, or as an
+/// identifier for the exact unwritten `const` arrow binding the factory itself
+/// declares. Arrows only, as in `member_value`: a `function` value's `this` and
+/// a declaration's hoisted, writable binding are outside the summary. An
+/// accessor slot (`running`) is source discovery's, never a second claim here;
+/// a parameter, an import, a module binding, a call result and every other
+/// expression refuse.
+fn slot_closure(
+    file: &FileFacts,
+    factory: Span,
+    element: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let (arrow, declaration) = slot_arrow(file, factory, element)?;
+    // The same write pair the identifier route checks: `binding_written`
+    // (redeclarations) ran in `slot_arrow`; assignment targets join through
+    // the binding's symbol, which only the lookup holds.
+    if let Some(declaration) = declaration {
+        let symbol = lookup.entities().at(file.path.as_str(), declaration)?;
+        if crate::value_identity::binding_has_write(file, lookup.entities(), symbol) {
+            return None;
+        }
+    }
+    Some(arrow)
+}
+
+/// The syntactic half of [`slot_closure`]: the arrow a slot names, and the
+/// declaration of the binding that named it, if one did.
+fn slot_arrow(file: &FileFacts, factory: Span, element: Span) -> Option<(Span, Option<Span>)> {
+    let element = file.ast.peel_ts_sugar_span(element);
+    let (arrow, declaration) = if file.ast.functions.iter().any(|f| f.span == element) {
+        (element, None)
+    } else {
+        if !exact_identifier(file, element) {
+            return None;
+        }
+        let declaration = file.ast.reference_declaration(element)?;
+        let binding = file
+            .ast
+            .bindings
+            .iter()
+            .find(|b| b.names.iter().any(|n| n.span == declaration))?;
+        if !binding.immutable
+            || binding.shape != ast::BindingShape::Identifier
+            || binding.names.len() != 1
+            || containing_ast_function(&file.ast, declaration).map(|f| f.span) != Some(factory)
+            || crate::indexes::binding_written(file, declaration)
+        {
+            return None;
+        }
+        (
+            file.ast.peel_ts_sugar_span(binding.initializer?),
+            Some(declaration),
+        )
+    };
+    let function = file.ast.functions.iter().find(|f| f.span == arrow)?;
+    (function.kind == ast::FunctionKind::Arrow && !function.r#async && !function.generator)
+        .then_some((arrow, declaration))
+}
+
+/// ADR 0282: the exact slots of a returned array literal. A hole or a spread
+/// moves every later position, so either refuses the whole literal.
+fn returned_tuple_elements(file: &FileFacts, span: Span) -> Option<Vec<Span>> {
+    let span = file.ast.peel_ts_sugar_span(span);
+    if !file.ast.array_literals.contains(&span) {
+        return None;
+    }
+    let returned = file
+        .ast
+        .returns
+        .iter()
+        .chain(
+            file.ast
+                .functions
+                .iter()
+                .filter_map(|f| f.expression_return.as_ref()),
+        )
+        .find(|r| {
+            r.argument
+                .is_some_and(|s| file.ast.peel_ts_sugar_span(s) == span)
+        })?;
+    let structure = returned.structure.as_ref()?;
+    if !structure.complete_literal || structure.elements.is_empty() {
+        return None;
+    }
+    structure
+        .elements
+        .iter()
+        .map(|s| s.map(|s| file.ast.peel_ts_sugar_span(s)))
+        .collect()
 }
 
 /// The signature names the built-in operation; the admitted fresh literal
@@ -1973,6 +2196,96 @@ mod tests {
                 "{source}"
             );
         }
+    }
+
+    #[test]
+    fn returned_tuple_census_requires_every_slot_literal() {
+        for (source, slots) in [
+            (
+                "function make() { const start = () => 1; return [read, start]; }",
+                Some(2),
+            ),
+            (
+                "function make() { return [read, () => 1] as const; }",
+                Some(2),
+            ),
+            ("const make = () => [read, () => 1] as const;", Some(2)),
+            ("function make() { return [read, , start]; }", None),
+            ("function make() { return [read, ...rest]; }", None),
+            ("function make() { return [...rest, start]; }", None),
+            ("function make() { return []; }", None),
+        ] {
+            let file = file(source);
+            let returned = single_return(&file, &file.ast.functions[0]).unwrap();
+            assert_eq!(
+                returned_tuple_elements(&file, returned).map(|elements| elements.len()),
+                slots,
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn simple_array_binding_refuses_defaults_rest_nested_and_mutable() {
+        for (source, admitted) in [
+            ("const [running, start] = make();", true),
+            ("const [, start] = make();", true),
+            ("const [running, start] = make() as const;", true),
+            ("let [running, start] = make();", false),
+            ("var [running, start] = make();", false),
+            ("const [running, start = other] = make();", false),
+            ("const [running, ...rest] = make();", false),
+            ("const [running, [start]] = make();", false),
+            ("const [running, { start }] = make();", false),
+        ] {
+            let file = file(source);
+            assert_eq!(
+                simple_array_binding(&file.ast.bindings[0]),
+                admitted,
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn tuple_slot_is_the_exact_arrow_the_factory_declares() {
+        let source = "const outer = () => 0;
+function make(parameter: () => number) {
+  const start = () => 1;
+  const typed = (() => 2) as () => number;
+  let replaceable = () => 3;
+  const expression = function () { return 4; };
+  function declared() { return 5; }
+  const wrapped = wrap(() => 6);
+  return [start, typed, () => 9, (() => 10) as () => number, replaceable,
+    expression, declared, wrapped, outer, parameter, async () => 11];
+}";
+        let file = file(source);
+        let factory = file
+            .ast
+            .functions
+            .iter()
+            .find(|f| f.kind == ast::FunctionKind::Declaration && f.parameters.len() == 1)
+            .unwrap();
+        let returned = single_return(&file, factory).unwrap();
+        let elements = returned_tuple_elements(&file, returned).unwrap();
+        let admitted = elements
+            .iter()
+            .map(|element| slot_arrow(&file, factory.span, *element).is_some())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            admitted,
+            [
+                true, true, true, true, false, false, false, false, false, false, false
+            ]
+        );
+        // A slot names the arrow itself, never the binding or the wrapper.
+        let (arrow, declaration) = slot_arrow(&file, factory.span, elements[1]).unwrap();
+        assert_eq!(file.source_text(arrow), Some("() => 2"));
+        assert_eq!(declaration.and_then(|d| file.source_text(d)), Some("typed"));
+        let (arrow, declaration) = slot_arrow(&file, factory.span, elements[3]).unwrap();
+        assert_eq!(file.source_text(arrow), Some("() => 10"));
+        assert_eq!(declaration, None);
     }
 
     #[test]

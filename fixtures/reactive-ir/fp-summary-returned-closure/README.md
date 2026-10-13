@@ -40,7 +40,7 @@ Scope and approximations:
 | --- | --- | --- |
 | `createMutation()` called in `Screen`, `m.busy()` only in a JSX attribute | none | the closure runs in a tracked position |
 | `createResetter()` with a block-bodied property closure, called from a handler | none | same hook shape, handler |
-| `createFlag()` returning `[s, () => s() > 0]` | none | tuple element closure |
+| `createFlag()` returning `[s, () => s() > 0]` | none (`SC9012` at `positive()`, here and in `RemoteFlag`) | tuple element closure; since ADR 0282 the destructured slot resolves to that exact inline arrow, which keeps the same outside-the-function-universe obligation as `m.busy()` |
 | a property closure that calls a bound helper | none | the call edge is inside the closure |
 | getter in the returned object | none | held back as a property function |
 | method in the returned object | none | a node of its own, never folded |

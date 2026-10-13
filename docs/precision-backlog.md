@@ -29885,3 +29885,25 @@ positive found. Open:
   type-checked;
 - the "rendering function" label on summary-propagated apply reads, which
   base mode shares.
+
+## Tuple slot closures through destructuring (2026-10-13, ADR 0282)
+
+`const [running, start] = make(); start()` now follows slot 1 to its closure
+when `make` has one unconditional return of a complete array literal. That
+slot must be an inline arrow or a `const` arrow that `make` declares. The
+pattern must be a `const` of plain identifier slots bound to that call's own
+result. The closure's read then counts under ADRs 0275–0280, as for the
+object form `const { start } = make()`. An inline arrow slot gets the same
+`returned-callable-outside-source-universe` `SC9012` as an inline object
+member; `fp-summary-returned-closure` gained two such rows. Corpus unchanged
+(562/3,731).
+
+Still refused (silent):
+- more than one return site, including `createRAF`'s `if (isServer) return
+  [...]` guard (slice 2: host constants under a stated target);
+- a held tuple (`const t = make()`, a parameter, a context value, `return
+  make()`); `t[1]()` keeps its `SC9012`;
+- a pattern default, rest or nesting, and a hole or spread in the literal;
+- `function`, declaration, module, imported, parameter, `let` and call-result
+  slots;
+- a pattern in another file than the call.
