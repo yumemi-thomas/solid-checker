@@ -78,7 +78,9 @@ write whose key no literal names is the one veto this slice can see.
   obligation, as an inline object member already did. This includes a call in
   JSX: `fp-summary-returned-closure`'s `positive()` gained two such rows.
 - `createRAF` itself stays silent. Its body has the `isServer` guard return,
-  which is slice 2.
+  which is slice 2. (ADR 0288: under `--dependency-source` the ADR 0284 fold
+  already removes that return; what silences raf there is the wildcard veto
+  below.)
 - Only function declarations resolve across files, as for the object form.
   Reads through a captured factory parameter stay unattributed.
 - No cache change. The slot rides the existing transport map, which

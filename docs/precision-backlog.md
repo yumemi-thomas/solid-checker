@@ -29876,7 +29876,8 @@ project objects. Over the rc.13 corpus with 11 packages: violations
 562 → 559 (+3 router reads, −6 losses), uncertifiable 3,731 → 3,557, no false
 positive found. Open:
 - `new Proxy(store, { get })` results (solid-query `useQuery`);
-- returned tuple slots (`@solid-primitives/raf`);
+- returned tuple slots (`@solid-primitives/raf`; ADR 0288: the wildcard
+  veto, not the `isServer` return);
 - a context-provided value read through a package hook (kui);
 - attributing a package-located finding to the project call that causes it
   (`createTimer` → `onCleanup` without an owner);
@@ -30041,3 +30042,35 @@ Open:
   dependency and every contract emission.
 - A handler held in a variable, a `target[prop]` return, another receiver, a
   cross-file forward, and a proxy over a store member all refuse.
+
+## Host-dead return sites and the tuple wall (2026-10-13, ADR 0288)
+
+No engine change. Under `--dependency-source`, a package's
+`if (isServer) return [...]` is already folded away under the declared host
+(ADR 0284 § 5), so ADR 0282's one-return rule sees only the live return.
+Fixture `reactive-ir/host-dead-return` has 4 `SC1001`s under a browser host;
+its `-server` twin reports nothing under a Node SSR host.
+`@solid-primitives/raf`'s two lost app-game sites are not lost to the guard:
+`Object.assign(draft, next)` in app-game's abr-viewer sets ADR 0282's
+project-wide wildcard veto, and every tuple slot in the program refuses.
+`host-dead-return-wildcard` pins this. Corpus unchanged (562/3,731 base,
+559/3,556 dependency).
+
+Lifting the veto for tuples only is a premise decision for the owner. As an
+experiment it gives:
+- dependency mode: +1 true positive (`three-examples/renderer.tsx:32`), +8
+  uncertifiable;
+- base mode: +0 violations, +6 uncertifiable;
+- no false positive.
+
+Open:
+- the wildcard veto on tuple destructuring;
+- `rapier-2d-physics-engine/index.tsx:80`: uncertifiable on the transported
+  path even without the veto (a component declared inside a `lazy` loader),
+  where the contract path proved it;
+- slice 2 for project files. Project code is not folded, so a project
+  factory's guard keeps two returns, and ADR 0276/0280 still leave a project
+  helper's `if (isServer) return;` undecided;
+- a live return under a folded control test (`if (!isServer) { return … }`),
+  `isServer || flag`, a namespace-imported `isServer`, and
+  `return isServer ? a : b`.

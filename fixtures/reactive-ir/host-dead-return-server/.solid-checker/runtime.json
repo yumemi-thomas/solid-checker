@@ -1,0 +1,1 @@
+{ "target": "node", "build": "development", "rendering": "string-ssr", "dependencySources": ["dep-loop"] }
