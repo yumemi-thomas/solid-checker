@@ -316,6 +316,63 @@ fn project_returned_source<'a>(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     resolved_contracts: &ResolvedContracts,
 ) -> Option<(&'a FileFacts, &'a solid_facts::ast::CallFact, Primitive)> {
+    returned_source_through(
+        lookup,
+        caller,
+        call,
+        entities,
+        symbol_names,
+        resolved_contracts,
+        RETURNED_SOURCE_FORWARDS,
+    )
+}
+
+/// How many same-file `return g(…)` hops (ADR 0287) a returned-source proof
+/// follows before it refuses.
+const RETURNED_SOURCE_FORWARDS: usize = 4;
+
+/// ADR 0287: the store a `new Proxy(root, { get })` return reads exactly, as
+/// the span of `root`. The construct must be the standard library's `Proxy`
+/// constructor, and its handler must forward every read
+/// ([`solid_facts::ast::proxy_get_forward_target`]); which binding `root`
+/// names, and that it is a store, the caller proves.
+fn proxied_target(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    value: solid_facts::core::Span,
+) -> Option<solid_facts::core::Span> {
+    let construct = file
+        .ast
+        .calls
+        .iter()
+        .find(|call| call.construct && call.span == value)?;
+    let resolved = lookup.resolved_callee_call(file, construct.callee)?;
+    let declaration = resolved.declaration.as_ref()?;
+    if resolved.kind != typefacts::CallKind::Construct
+        || !declaration.standard_library
+        || declaration.qualified_name.as_ref() != "ProxyConstructor.construct"
+        || construct.arguments.len() != 2
+        || construct.arguments.iter().any(|argument| argument.spread)
+    {
+        return None;
+    }
+    let target = solid_facts::ast::proxy_get_forward_target(
+        std::path::Path::new(file.path.as_str()),
+        &file.source,
+        construct.span,
+    )?;
+    (file.ast.peel_ts_sugar_span(construct.arguments[0].span) == target).then_some(target)
+}
+
+fn returned_source_through<'a>(
+    lookup: &SemanticLookup<'a>,
+    caller: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    resolved_contracts: &ResolvedContracts,
+    forwards: usize,
+) -> Option<(&'a FileFacts, &'a solid_facts::ast::CallFact, Primitive)> {
     // This first slice only admits straight-line calls, which also excludes
     // optional invocation and optional receivers. No selected signature is
     // substituted for a value identity.
@@ -348,17 +405,68 @@ fn project_returned_source<'a>(
         .collect::<Vec<_>>();
     let mut source = None;
     let mut sites = Vec::new();
+    let mut roots = Vec::new();
+    // ADR 0287: the target of a forwarding proxy is the root, and naming it
+    // there hands it only to the proven trap.
+    let mut proxy_targets = Vec::new();
+    let mut forwarded = None::<(&'a FileFacts, &'a solid_facts::ast::CallFact, Primitive)>;
     for returned in &returns {
         let value = file.ast.peel_ts_sugar_span(returned.argument?);
-        if !file.ast.identifiers.iter().any(|id| id.span == value) {
+        sites.push(value);
+        if file.ast.identifiers.iter().any(|id| id.span == value) {
+            roots.push(value);
+            continue;
+        }
+        if let Some(target) = proxied_target(lookup, file, value) {
+            roots.push(target);
+            proxy_targets.push(target);
+            continue;
+        }
+        // ADR 0287: `return g(…)`, where `g` is a function in this same file
+        // whose every return yields a fresh source. Each call of this
+        // function runs that one call and returns its value. Staying in one
+        // file keeps the proof's syntax inside a file the cross-file proof
+        // digest already binds (`indexes::returns_source_root`).
+        let inner = file
+            .ast
+            .calls
+            .iter()
+            .find(|inner| !inner.construct && inner.span == value)?;
+        let next = forwards.checked_sub(1)?;
+        let found = returned_source_through(
+            lookup,
+            file,
+            inner,
+            entities,
+            symbol_names,
+            resolved_contracts,
+            next,
+        )?;
+        if found.0.path != file.path
+            || forwarded.is_some_and(|prior: (&FileFacts, &solid_facts::ast::CallFact, _)| {
+                prior.1.span != found.1.span
+            })
+        {
             return None;
         }
-        let symbol = entities.at(file.path.as_str(), value)?;
+        forwarded = Some(found);
+    }
+    if let Some(found) = forwarded {
+        return (roots.is_empty()
+            && solid_facts::ast::completion_return_cover(
+                std::path::Path::new(file.path.as_str()),
+                &file.source,
+                function.body,
+                &sites,
+            ) == Some(true))
+        .then_some(found);
+    }
+    for root in &roots {
+        let symbol = entities.at(file.path.as_str(), *root)?;
         if source.is_some_and(|prior| prior != symbol) {
             return None;
         }
         source = Some(symbol);
-        sites.push(value);
     }
     let source = source?;
     let binding = file.ast.bindings.iter().find(|binding| {
@@ -407,8 +515,10 @@ fn project_returned_source<'a>(
         resolved_contracts,
         dialect: lookup.dialect,
     };
-    let returned = effective_value_return(returns.first()?.argument?, &context, 16)?;
-    if !matches!(returned.kind.as_str(), "accessor" | "store-path") {
+    let returned = effective_value_return(*roots.first()?, &context, 16)?;
+    if !matches!(returned.kind.as_str(), "accessor" | "store-path")
+        || (!proxy_targets.is_empty() && returned.kind != "store-path")
+    {
         return None;
     }
     // No alias or escape of the root: another call could receive it through
@@ -420,6 +530,9 @@ fn project_returned_source<'a>(
                 || entities.at(file.path.as_str(), id.span) == Some(source))
     }) {
         let at = reference.span;
+        if proxy_targets.contains(&at) {
+            continue;
+        }
         if (file.ast.calls.iter().any(|call| {
             call.arguments
                 .iter()

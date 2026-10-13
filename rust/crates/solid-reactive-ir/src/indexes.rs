@@ -49,10 +49,12 @@ fn constant_string_key(file: &FileFacts, key: Span) -> Option<String> {
 /// file after its declaration: as an assignment target or inside one (a
 /// destructuring pattern), or as a loop head (`for (x of …)`). A write of a
 /// member of it (`x.y = …`) does not rebind it.
-/// Whether some function in `file` returns a bare identifier: the only shape
-/// whose callee syntax a returned-source proof (ADR 0222) reads beyond the
-/// summaries and Type Facts the caches compare.
-pub(crate) fn returns_bare_identifier(file: &FileFacts) -> bool {
+/// Whether some function in `file` returns a bare identifier, or a `new` of a
+/// callee spelled `Proxy` (ADR 0287): the only shapes whose callee syntax a
+/// returned-source proof (ADR 0222) reads beyond the summaries and Type Facts
+/// the caches compare. A same-file `return g(…)` forward (ADR 0287) proves
+/// nothing unless its file also holds one of these, so it is bound with it.
+pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
     file.ast
         .returns
         .iter()
@@ -68,6 +70,10 @@ pub(crate) fn returns_bare_identifier(file: &FileFacts) -> bool {
             file.ast.identifiers.iter().any(|identifier| {
                 identifier.span == argument
                     && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            }) || file.ast.calls.iter().any(|call| {
+                call.construct
+                    && call.span == argument
+                    && file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("Proxy")
             })
         })
 }
@@ -1329,12 +1335,12 @@ impl<'a> SemanticLookup<'a> {
             // Returned-source proofs inspect callee syntax and binding facts,
             // even when its public type and read summary do not change. Bind
             // the byte identity of every file that can hold such a proof (a
-            // bare identifier return, ADR 0222); a file gaining or losing one
+            // bare identifier or `new Proxy` return, ADR 0222 and 0287); a file gaining or losing one
             // enters or leaves the digest, so the set itself is bound too.
             let mut source_inputs = self
                 .files()
                 .iter()
-                .filter(|file| returns_bare_identifier(file))
+                .filter(|file| returns_source_root(file))
                 .collect::<Vec<_>>();
             source_inputs.sort_unstable_by(|left, right| left.path.cmp(&right.path));
             hasher.update(b"returned-source-inputs\0");

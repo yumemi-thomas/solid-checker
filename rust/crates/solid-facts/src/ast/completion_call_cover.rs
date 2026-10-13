@@ -97,6 +97,29 @@ fn completion_cover(
     Some((fallthrough | walk.returns) == 2)
 }
 
+/// [`completion_return_cover`] over statements the caller already parsed and
+/// bound: whether every normal completion of `statements` returns one of the
+/// exact peeled value spans in `candidates`. A throw completes without a
+/// return and is neither; fallthrough, other returns, and unmodeled control
+/// flow refuse.
+pub(super) fn statements_return_cover(
+    statements: &[Statement<'_>],
+    candidates: HashSet<(u32, u32)>,
+) -> Option<bool> {
+    if candidates.is_empty() {
+        return None;
+    }
+    let mut walk = Cover {
+        candidates,
+        dead_returns: HashSet::new(),
+        returns: 0,
+        budget: 4096,
+        return_sites: true,
+    };
+    let fallthrough = walk.statements(statements, 1, 0)?;
+    Some((fallthrough | walk.returns) == 2)
+}
+
 fn same(actual: oxc_span::Span, expected: Span) -> bool {
     actual.start == expected.start && actual.end == expected.end
 }

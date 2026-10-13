@@ -30013,3 +30013,31 @@ uncertifiable (base mode: 562/3,731), at about 2.9× base mode's time. Open:
 - non-Solid libraries are not analyzed;
 - `exports` arrays and `browser` maps are refused;
 - the cost.
+
+## A forwarding proxy reads its store (2026-10-13, ADR 0287)
+
+ADR 0222's returned-store proof now accepts a return of
+`new Proxy(root, { get(target, prop, receiver) { … } })` over the store root,
+and a same-file `return g(…)` forward to such a function. The handler must
+hold only a `get` trap written in place, and every normal completion of the
+trap must return `Reflect.get(target, prop[, receiver])` over its own
+unwritten parameters. Throws are allowed. Any other return, a fallthrough, or
+`try`/loop/`switch` refuses. A branch counts as dead only when the ADR 0166
+fold removed it from the analyzed text. Refusals are silent.
+
+Fixtures `reactive-ir/returned-store-proxy` (4 violations, 14 silent) and
+`reactive-ir/dependency-source-proxy-store` (a folded `isServer` branch is
+excluded; a `typeof window` branch is not). Coverage otherwise unmoved. Corpus
+unchanged: 562/3,731 in base mode, 559/3,556 in dependency mode.
+
+Open:
+- **solid-query is not recovered.** `useBaseQuery` guards its server branch
+  with `var isServer2 = typeof window === "undefined"`, which is not a host
+  constant, so the branch returning `Reflect.get(resolved, prop)` stays live.
+  With that one line replaced by an `@solidjs/web` `isServer` import in a
+  clone, spotify-desk-thing regains exactly its two contract-mode
+  `prefer-show` findings. Folding `typeof window` under a declared `browser`
+  host is a separate premise decision. It would affect every selected
+  dependency and every contract emission.
+- A handler held in a variable, a `target[prop]` return, another receiver, a
+  cross-file forward, and a proxy over a store member all refuse.

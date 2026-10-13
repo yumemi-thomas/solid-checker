@@ -82,7 +82,9 @@ installed package as project code.
   which is often compiled JavaScript with `any`-typed parameters. ADR 0285
   (forwarded parameters) came out of this mode.
 - Known losses against contract mode:
-  - a `new Proxy(store, { get })` result (solid-query `useQuery`);
+  - a `new Proxy(store, { get })` result (solid-query `useQuery`). ADR 0287
+    proves a forwarding proxy, but solid-query's server branch is guarded by
+    `typeof window`, which no host fold decides, so this loss remains;
   - tuple slots returned by a hook (`@solid-primitives/raf`; ADR 0282 covers
     destructured closures);
   - a context-provided value read through a package hook (kui's location);

@@ -994,6 +994,137 @@ declare namespace JSX {
     }
 }
 
+/// ADR 0287: whether a hook returns its store reads the hook's own syntax --
+/// the proxy trap, and the same-file forward to the function holding it --
+/// which no summary or declared type carries. An edit to either has to
+/// invalidate the caller's retained source discovery.
+#[test]
+fn incremental_result_cache_follows_a_proxy_trap_and_forward() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("proxy-store-cache");
+    let project = directory.join("tsconfig.json");
+    let app = directory.join("App.tsx");
+    let hook = directory.join("hook.ts");
+    let declarations = directory.join("solid-js.d.ts");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"files":["App.tsx","hook.ts","solid-js.d.ts"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        &app,
+        r#"import { createSignal } from "solid-js";
+import { useQuery } from "./hook";
+export function App() {
+  const query = useQuery();
+  const [config] = createSignal(query.search);
+  return <div>{config()}</div>;
+}
+"#,
+    )
+    .unwrap();
+    let hook_source = |trap: &str, forward: &str| {
+        format!(
+            r#"import {{ createStore }} from "solid-js";
+type Query = {{ search: string }};
+const other: Query = {{ search: "" }};
+function useBase(): Query {{
+  const [state] = createStore<Query>({{ search: "" }});
+  return new Proxy(state, {{
+    get(target, prop, receiver) {{
+      return {trap};
+    }},
+  }});
+}}
+function usePlain(): Query {{
+  return {{ search: "" }};
+}}
+export function useQuery(): Query {{
+  return {forward}();
+}}
+"#
+        )
+    };
+    let proven = hook_source("Reflect.get(target, prop, receiver)", "useBase");
+    let other_trap = hook_source("Reflect.get(other, prop, receiver)", "useBase");
+    let other_forward = hook_source("Reflect.get(target, prop, receiver)", "usePlain");
+    fs::write(&hook, &proven).unwrap();
+    fs::write(
+        &declarations,
+        r#"declare module "solid-js" {
+  export function createSignal<T>(value: T): [() => T, (value: T) => void];
+  export function createStore<T extends object>(value: T): [T, (fn: (state: T) => void) => void];
+}
+declare namespace JSX {
+  interface IntrinsicElements { div: Record<string, unknown>; }
+  interface Element {}
+}
+"#,
+    )
+    .unwrap();
+
+    let project_id = project.to_string_lossy().into_owned();
+    let sources = [&app, &hook]
+        .iter()
+        .map(|path| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: fs::read_to_string(path).unwrap().into(),
+            compiler_options: CompilerOptions::default(),
+        })
+        .collect();
+    let selected = dialect::by_id("solid-v2").unwrap();
+    let typescript = open_type_facts_session(&typefacts, &project_id);
+    let mut session =
+        NativeIncrementalSession::open(selected, project_id, sources, typescript).unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    let violations = |program: &_| {
+        selected
+            .solve(program)
+            .iter()
+            .filter(|finding| {
+                finding.rule == "strict-read-untracked" && finding.kind == "violation"
+            })
+            .count()
+    };
+    assert_eq!(
+        violations(&initial),
+        1,
+        "the forwarded proxy reads its store in the component body"
+    );
+
+    for (version, source) in [
+        (1, &other_trap),
+        (2, &proven),
+        (3, &other_forward),
+        (4, &proven),
+    ] {
+        let edited = session
+            .edit(
+                vec![SourceChange {
+                    path: hook.to_string_lossy().into_owned(),
+                    version,
+                    source: Some(source.clone()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let fresh = solid_reactive_ir::build(&edited, selected.vocabulary).unwrap();
+        let (retained, _) = incremental.build(&edited, selected.vocabulary).unwrap();
+        assert_eq!(retained, fresh, "version {version}");
+        assert_eq!(
+            violations(&retained),
+            usize::from(source == &proven),
+            "version {version}"
+        );
+    }
+}
+
 #[test]
 fn compiler_option_only_edit_invalidates_cached_ownership() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {

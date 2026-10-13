@@ -7422,11 +7422,11 @@ pub(crate) fn site_on_every_completion(
 /// Whether `file` holds syntax that a caller's call-role proof reads beyond
 /// the summaries the result cache compares: an async function's suspensions,
 /// a parameter default, or a written binding that may hold a function
-/// (`function_value_is_current`, ADR 0221), or a bare identifier return whose
+/// (`function_value_is_current`, ADR 0221), or a bare identifier or `new Proxy` return whose
 /// source identity discovery follows (ADR 0222). A file without any of these moves
 /// no such proof.
 fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
-    crate::indexes::returns_bare_identifier(file)
+    crate::indexes::returns_source_root(file)
         || !file.ast.object_get_shapes.is_empty()
         // Provider multiplicity and returned literal identities are project
         // syntax inputs, even when their read summaries stay byte-identical.

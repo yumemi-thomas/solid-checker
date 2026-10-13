@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-proxy-store/App.tsx",
+      "start": 270,
+      "end": 282,
+      "fixes": 0
+    }
+  ]
+}

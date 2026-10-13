@@ -46,6 +46,7 @@ mod inert_javascript;
 mod module_requests;
 mod object_binding;
 mod primitive_completion;
+mod proxy_get_forward;
 mod reexport_chain;
 mod retained_arguments;
 mod span_index;
@@ -80,6 +81,7 @@ pub use object_binding::{
     unwritten_primitive_binding,
 };
 pub use primitive_completion::primitive_completion_by_syntax;
+pub use proxy_get_forward::proxy_get_forward_target;
 pub use reexport_chain::{ModuleGraph, ModuleLanding, entry_names_publishing_import};
 pub use retained_arguments::{
     RetainedConstructorArguments, RetainedParameter, retained_constructor_arguments,
