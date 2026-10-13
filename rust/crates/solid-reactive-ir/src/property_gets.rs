@@ -180,10 +180,7 @@ pub(super) fn reads(
             .file
             .source_text(getter.body)
             .is_none_or(mentions_receiver_route)
-            || context.file.ast.module_hazards.iter().any(|hazard| {
-                hazard.kind == solid_facts::ast::ModuleHazardKind::Eval
-                    && getter.span.contains(hazard.span)
-            })
+            || direct_eval_in(context.file, getter.span)
         {
             preceding_mutation_hazards += 1;
         }
@@ -375,12 +372,22 @@ fn forwarded_parameter(
             && file
                 .source_text(identifier.span)
                 .is_none_or(|text| text == "arguments" || text.contains('\\'))
-    }) || ast
-        .module_hazards
-        .iter()
-        .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval);
+    }) || direct_eval_in(file, Span::new(0, u32::MAX));
     (!touched_before && !aliased && !crate::indexes::binding_written(file, declaration))
         .then_some(index)
+}
+
+/// Whether `within` holds a direct `eval`, which reaches local bindings and
+/// `this` with no static reference. Transparent TypeScript wrappers erase at
+/// run time, so `(eval as typeof eval)(...)` and `eval!(...)` are direct too;
+/// an escaped spelling is refused by the callers' backslash checks.
+fn direct_eval_in(file: &solid_facts::FileFacts, within: Span) -> bool {
+    file.ast.module_hazards.iter().any(|hazard| {
+        hazard.kind == solid_facts::ast::ModuleHazardKind::Eval && within.contains(hazard.span)
+    }) || file.ast.calls.iter().any(|call| {
+        within.contains(call.span)
+            && file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("eval")
+    })
 }
 
 /// Whether `span` lies in a class written inside `within`: a field
@@ -573,6 +580,11 @@ mod tests {
                 None,
             ),
             ("function h(o) { eval('o.x = 1'); return new V(o); }", None),
+            (
+                "function h(o) { (eval as typeof eval)('o.x = 1'); return new V(o); }",
+                None,
+            ),
+            ("function h(o) { eval!('o.x = 1'); return new V(o); }", None),
             ("function h(o, p = arguments[0]) { return new V(o); }", None),
             (
                 "function h(o) { mutate(); return new V(o); function mutate() { o.x = 1; } }",

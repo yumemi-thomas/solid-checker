@@ -38,7 +38,8 @@ real corpus call open:
      aliases the parameter without a reference bound to it; no identifier in
      it is spelled with an escape, which could decode to `arguments`; and its
      file holds no direct `eval`, which reaches the parameter with no static
-     reference;
+     reference. A callee spelled `eval` under transparent TypeScript wrappers
+     (`(eval as typeof eval)(…)`, `eval!(…)`) is direct too;
    - the package call is not inside a class body, where a field initializer
      runs at instantiation, not at definition.
 
@@ -79,8 +80,9 @@ real corpus call open:
 - Review round 1 (rust/target/research/adr-0274/REVIEW-1.md) found three false
   violations: an `arguments[0]` alias, a hoisted mutating declaration, and an
   instance field initializer. Round 2 (REVIEW-2.md) found direct `eval`, an
-  escaped `arguments` and `super.valueOf()` in a getter. Each now stays
-  uncertifiable, and the unit tests pin them.
+  escaped `arguments` and `super.valueOf()` in a getter. Round 3 (REVIEW-3.md)
+  found direct `eval` behind TypeScript wrappers, in the helper and in a
+  getter. Each now stays uncertifiable, and the unit tests pin them.
 - Unit tests: `a_helper_forwards_only_an_untouched_parameter_on_its_straight_line`
   and `receiver_routes_are_matched_as_tokens`.
 - Twin `probus-virtual-helper-forwarded-later-getter` in
