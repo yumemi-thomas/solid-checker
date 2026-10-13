@@ -51,7 +51,8 @@ DOM globals installed. A Window realm is a separate premise.
    replaced.
 3. **A `const` alias carries it**, as an ADR 0166 alias does: never written,
    never redeclared. A read before the initializer throws, so it cannot take
-   the other arm.
+   the other arm. (Review round 1: the throw is itself an effect the fold
+   erased. A read now also needs an initialization proof.)
 4. **A module-level `var` alias carries it only with an initialization
    proof.** A `var` reads `undefined` before its declaration runs, and a
    hoisted function can run that early. The alias must be one plain `var`
@@ -131,3 +132,55 @@ DOM globals installed. A Window realm is a separate premise.
 - **Corpus:** the same two modes over the 24 rc.13 corpus apps with a root
   tsconfig. The realm moves only those two findings. app-game exits 2 in
   both modes, on an Oxc parse error unrelated to this change.
+
+## Review round 1
+
+Four false-violation shapes, all reproduced as SC1001 on d9e50a946 and all
+fixed:
+- **A `const` alias read before its declaration.** The read throws
+  (`ReferenceError`), and deciding it erased the throw. Decision 3 was
+  wrong. A `const` alias now carries the realm only to a read proved to run
+  after its initializer: in the same function and textually after it (not
+  across `switch` cases), or in an arrow, function expression, method or
+  class created after it. A read in a hoisted function needs the `var`
+  alias's module proof. Any other read is decided as ADR 0166 decides it,
+  without the realm.
+- **A dead arm's `var` was deleted.** `if (typeof window === "undefined")
+  { var Reflect; }` still declares the function's own `Reflect`. Replacing
+  the arm with `;` made a later `Reflect.get` the global one. Now a dead arm,
+  dead `else` or dead statement after a returning arm keeps its text when
+  it declares a binding outside itself: a nested `var`, any function, or a
+  class or other declaration beside the `if`. The condition is still
+  rewritten. ADR 0166's fold uses the same rewrite, so it is fixed too.
+- **An `exports` array hid a cycle.** `{"browser": ["./cycle.js"],
+  "default": "./leaf.js"}` fell through to `default`. Vite reads it as
+  `./cycle.js`. `select` now follows Vite's `resolve.exports`: the first set
+  condition decides. An array, `null`, or a nested object that resolves
+  nothing refuses. It does not fall through to a later key. The same selector
+  picks dependency-source entries (ADRs 0284 and 0291), so such a package is
+  now refused there too.
+- **A package importing itself by name.** Inside `p`, `import "p"` resolves
+  to `p`'s own `exports` (self-reference) before `node_modules`. The walk took
+  a nested `node_modules/p` copy and saw no cycle.
+  `runtime_package_root` now reads the nearest `package.json` first, as
+  Vite's `tryNodeResolve` does. A manifest it cannot read refuses. Both the
+  cycle walk and `prepare_all`'s bare-import queue use it.
+
+The residual questions are also closed by refusing. The cycle proof refuses
+a module that references `require` or `createRequire` under any binding, or
+imports `module` / `node:module`. It also refuses any `import.meta` that is
+not a static member other than `glob` (an alias, `import.meta["glob"]`).
+
+Fixtures: `dependency-source-window-realm` gains `Review.tsx` with
+`TdzQuery`, `HoistedQuery`, `ArrayCycleQuery` (packages `dep-array` and
+`dep-bridge`) and `SelfQuery` (`dep-self` with a nested 0.9.0 copy). All four
+are silent. Each one reports once its one defect is undone, checked by hand
+on a copy. The undeclared twin carries the same bytes. Snapshots unmoved.
+spotify-desk-thing (release binary, the flags above) is unchanged: 8
+violations with the realm, 6 without, `PlayerControls.tsx:133:5` and
+`PlayerControlIcon.tsx:26:5` kept.
+
+Recorded, not fixed: outside a declared realm, an ADR 0166 `const` alias of
+an imported host constant is still decided at a read in its temporal dead
+zone. That fold mirrors the producer's `literalTruthinessLocked`, and
+changing one side alone would split emission from certification.

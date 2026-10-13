@@ -1,1 +1,1 @@
-{ "target": "browser", "build": "development", "dependencySources": ["dep-query"] }
+{ "target": "browser", "build": "development", "dependencySources": ["dep-query", "dep-array", "dep-self"] }

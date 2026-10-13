@@ -185,7 +185,22 @@ const IDENTICAL_SOURCES = [
       "node_modules/dep-query/src/index.js",
       "node_modules/dep-query/src/early.js",
       "node_modules/dep-query/src/cyclic.js",
-      "node_modules/dep-query/src/cycle-back.js"
+      "node_modules/dep-query/src/cycle-back.js",
+      // Review round 1 of ADR 0295.
+      "Review.tsx",
+      "node_modules/dep-query/src/tdz.js",
+      "node_modules/dep-query/src/hoisted.js",
+      "node_modules/dep-array/package.json",
+      "node_modules/dep-array/dist/index.d.ts",
+      "node_modules/dep-array/src/index.js",
+      "node_modules/dep-bridge/package.json",
+      "node_modules/dep-bridge/cycle.js",
+      "node_modules/dep-bridge/leaf.js",
+      "node_modules/dep-self/package.json",
+      "node_modules/dep-self/dist/index.d.ts",
+      "node_modules/dep-self/src/index.js",
+      "node_modules/dep-self/node_modules/dep-self/package.json",
+      "node_modules/dep-self/node_modules/dep-self/src/index.js"
     ]
   }
 ];

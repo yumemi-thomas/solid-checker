@@ -30199,6 +30199,29 @@ Open:
 - Contract emission and certification read no realm; binding it into
   receipts and replay is separate work.
 
+Review round 1 (2026-10-14). Four false SC1001 shapes, each reproduced on
+d9e50a946 and now silent (`dependency-source-window-realm/Review.tsx`):
+- a `const` alias read in its temporal dead zone. Its reads now need an
+  initialization proof, and an unproved read is decided without the realm;
+- a dead arm whose `var` was deleted, which rebound a later `Reflect`. A dead
+  region that declares a binding outside itself now keeps its text. This is
+  **also a fix to ADR 0166's fold**, which shares the rewrite;
+- an `exports` array that fell through to `default`, hiding a cycle. `select`
+  now lets the first set condition decide, as Vite's `resolve.exports` does.
+  An array, `null` or an unresolved nested object refuses there, so
+  dependency-source package selection (ADRs 0284, 0291) refuses those
+  packages too;
+- a package's import of its own name, which took a nested copy.
+  Self-reference via `exports` is now resolved first, in the cycle walk and
+  in `prepare_all`.
+The cycle proof also refuses a bound `require`/`createRequire`, an import of
+`module`, and any `import.meta` other than a static non-`glob` member.
+
+Still open after round 1: an ADR 0166 `const` alias of an imported host
+constant, outside a realm, is still decided at a read in its temporal dead
+zone. That fold mirrors the producer's `literalTruthinessLocked` and is left
+unchanged.
+
 ## A `lazy` module's `default` is rendered, not retained (2026-10-13, ADR 0292)
 
 The object-retention refusal no longer forces callback timing on calls written

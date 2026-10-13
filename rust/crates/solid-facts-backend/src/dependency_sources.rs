@@ -385,9 +385,7 @@ pub fn prepare_all(
         }
         // An alias, a virtual module or a builtin resolves to no installed
         // package directory, and stays what it was.
-        let Some(root) =
-            find_package_root(&importer, &name, None).and_then(|root| root.canonicalize().ok())
-        else {
+        let Some(root) = runtime_package_root(&importer, &name).ok().flatten() else {
             continue;
         };
         if unsupported.contains(&root) || not_solid.contains(&root) {
@@ -696,8 +694,17 @@ fn pattern_entry<'a>(
     .then_some((entry, Some(star)))
 }
 
-/// Node's conditional resolution: the first key, in document order, that is
-/// a set condition and resolves. `star` is a pattern match's text.
+/// Vite's conditional resolution (`resolve.exports` 2.0.3, which Vite 8
+/// vendors): the first key, in document order, that is a set condition
+/// decides, whatever its value selects. `star` is a pattern match's text.
+///
+/// `None` when that value is a form this does not read -- an array, `null`,
+/// a nested object no set condition of which resolves -- and the selection is
+/// then refused, never continued at a later key (review round 1 of ADR 0295:
+/// Vite reads `{"browser": ["./cycle.js"], "default": "./leaf.js"}` as
+/// `./cycle.js`, and falling through to `default` hid an import cycle). Node
+/// would try a later key after a nested object that resolves nothing; Vite
+/// does not, so neither answer is claimed.
 fn select(entry: &Ordered, host: &Host, depth: usize, star: Option<&str>) -> Option<String> {
     if depth > 16 {
         return None;
@@ -709,10 +716,10 @@ fn select(entry: &Ordered, host: &Host, depth: usize, star: Option<&str>) -> Opt
         },
         Ordered::Object(map) => map
             .iter()
-            .filter(|(key, _)| {
+            .find(|(key, _)| {
                 BUILD_CONDITIONS.contains(&key.as_str()) || host.conditions.contains(key.as_str())
             })
-            .find_map(|(_, value)| select(value, host, depth + 1, star)),
+            .and_then(|(_, value)| select(value, host, depth + 1, star)),
         _ => None,
     }
 }
@@ -788,8 +795,10 @@ fn walk(
 /// functions before a module-level `var` is initialized.
 ///
 /// Every load is followed as [`prepare`] follows one -- a relative import to
-/// the source file it names, a bare one through Node's lookup and the
-/// package's `exports` for the host -- into every package, selected or not.
+/// the source file it names, a bare one through package self-reference, then
+/// Node's lookup, and the package's `exports` for the host
+/// ([`runtime_package_root`], [`select`]) -- into every package, selected or
+/// not.
 /// `false` whenever a load on the way cannot be followed (an unreadable or
 /// unparsable file, a CommonJS `require`, an `import.meta.glob`, a bare
 /// specifier no installed package answers, an `exports` form this does not
@@ -839,10 +848,45 @@ fn module_loads(file: &Path, host: &Host) -> Option<Vec<PathBuf>> {
             continue;
         }
         let (name, subpath) = split_bare_specifier(&specifier)?;
-        let root = find_package_root(file, &name, None)?.canonicalize().ok()?;
+        let root = runtime_package_root(file, &name).ok()??;
         loads.push(select_entry(&root, &subpath, host).ok()?);
     }
     Some(loads)
+}
+
+/// The canonical package directory a bare import of `name` from `importer`
+/// loads, as Vite's `tryNodeResolve` finds it: the package's own directory
+/// when the nearest `package.json` above `importer` is named `name` and has
+/// `exports` (Node's package self-reference), and otherwise the nearest
+/// `node_modules/<name>`. `Ok(None)` when no installed package answers;
+/// `Err` when the nearest manifest cannot be read, so whether it refers to
+/// itself is unknown (review round 1 of ADR 0295: inside `p`, `import "p"`
+/// is `p` itself, not a nested `node_modules/p`).
+fn runtime_package_root(importer: &Path, name: &str) -> Result<Option<PathBuf>, ()> {
+    let mut directory = importer.parent();
+    while let Some(current) = directory {
+        let manifest = current.join("package.json");
+        if manifest.is_file() {
+            let manifest = fs::read(&manifest)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Ordered>(&bytes).ok())
+                .ok_or(())?;
+            if manifest.get("name").and_then(Ordered::as_str) == Some(name) {
+                match manifest.get("exports") {
+                    // No `exports` (or an empty string): no self-reference.
+                    None => {}
+                    Some(Ordered::String(target)) if target.is_empty() => {}
+                    // `null` and `false` refer to nothing, an array or a
+                    // number to itself: this does not tell them apart.
+                    Some(Ordered::Other) => return Err(()),
+                    Some(_) => return current.canonicalize().map(Some).map_err(|_| ()),
+                }
+            }
+            break;
+        }
+        directory = current.parent();
+    }
+    Ok(find_package_root(importer, name, None).and_then(|root| root.canonicalize().ok()))
 }
 
 /// A relative specifier as a bundler resolves it: the exact file, then the
@@ -1191,6 +1235,128 @@ mod tests {
         let unread = package("unread", &[("index.js", "import \"./style.css\";\n")]);
         std::fs::write(modules.join("unread/style.css"), "").unwrap();
         assert!(!super::outside_import_cycles(&unread, &browser));
+        std::fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[test]
+    fn the_first_set_condition_decides_and_an_unread_value_refuses() {
+        // Review round 1 of ADR 0295: Vite's resolver returns the first set
+        // condition's value; an array there is not a reason to read `default`.
+        let browser = host(&["browser", "development"]);
+        for exports in [
+            r#"{"browser":["./cycle.js"],"default":"./leaf.js"}"#,
+            r#"{"browser":null,"default":"./leaf.js"}"#,
+            r#"{"browser":{"worker":"./worker.js"},"default":"./leaf.js"}"#,
+            r#"{".":{"import":["./a.js","./b.js"],"default":"./leaf.js"}}"#,
+        ] {
+            let manifest = ordered(&format!(r#"{{"exports":{exports}}}"#));
+            assert!(
+                entry_target(&manifest, ".", &browser).is_none(),
+                "{exports}"
+            );
+        }
+        // An unset condition's array is never read.
+        let manifest = ordered(r#"{"exports":{"node":["./a.js"],"default":"./leaf.js"}}"#);
+        assert_eq!(
+            entry_target(&manifest, ".", &browser).as_deref(),
+            Some("./leaf.js")
+        );
+    }
+
+    #[test]
+    fn an_unread_exports_value_or_a_self_reference_does_not_hide_a_cycle() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-hidden-cycles-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let write = |path: &str, contents: &str| {
+            let path = directory.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, contents).unwrap();
+        };
+        let browser = host(&["browser", "development"]);
+        // Finding 3: `bridge`'s browser array selects `cycle.js`, which
+        // imports `p` back; `default` would have selected a leaf.
+        write(
+            "node_modules/p/package.json",
+            r#"{"name":"p","exports":"./index.js"}"#,
+        );
+        write(
+            "node_modules/p/index.js",
+            "import { touch } from \"bridge\";\n",
+        );
+        write(
+            "node_modules/bridge/package.json",
+            r#"{"name":"bridge","exports":{"browser":["./cycle.js"],"default":"./leaf.js"}}"#,
+        );
+        write("node_modules/bridge/cycle.js", "import \"p\";\n");
+        write("node_modules/bridge/leaf.js", "export {};\n");
+        let p = directory.join("node_modules/p/index.js");
+        assert!(!super::outside_import_cycles(&p, &browser));
+        // The same package with a string the walk can follow: the cycle.
+        write(
+            "node_modules/bridge/package.json",
+            r#"{"name":"bridge","exports":{"browser":"./cycle.js","default":"./leaf.js"}}"#,
+        );
+        assert!(!super::outside_import_cycles(&p, &browser));
+        // And with the leaf: no cycle.
+        write(
+            "node_modules/bridge/package.json",
+            r#"{"name":"bridge","exports":{"browser":"./leaf.js","default":"./cycle.js"}}"#,
+        );
+        assert!(super::outside_import_cycles(&p, &browser));
+        // Finding 4: inside `self`, `import "self"` is `self` itself (it has
+        // `exports`), not the nested copy.
+        write(
+            "node_modules/self/package.json",
+            r#"{"name":"self","exports":"./index.js"}"#,
+        );
+        write(
+            "node_modules/self/index.js",
+            "import { a } from \"self\";\n",
+        );
+        write(
+            "node_modules/self/node_modules/self/package.json",
+            r#"{"name":"self","exports":"./index.js"}"#,
+        );
+        write(
+            "node_modules/self/node_modules/self/index.js",
+            "export const a = 1;\n",
+        );
+        let own = directory.join("node_modules/self/index.js");
+        assert!(!super::outside_import_cycles(&own, &browser));
+        assert_eq!(
+            super::runtime_package_root(&own, "self"),
+            Ok(Some(
+                directory.join("node_modules/self").canonicalize().unwrap()
+            ))
+        );
+        // Without `exports` there is no self-reference: Node's lookup finds
+        // the nested copy.
+        write(
+            "node_modules/self/package.json",
+            r#"{"name":"self","main":"./index.js"}"#,
+        );
+        assert!(super::outside_import_cycles(&own, &browser));
+        // A nearer manifest of another name stops the search, and one this
+        // cannot read refuses.
+        write("node_modules/self/lib/package.json", r#"{"type":"module"}"#);
+        write("node_modules/self/lib/inner.js", "import \"self\";\n");
+        assert_eq!(
+            super::runtime_package_root(&directory.join("node_modules/self/lib/inner.js"), "self"),
+            Ok(Some(
+                directory
+                    .join("node_modules/self/node_modules/self")
+                    .canonicalize()
+                    .unwrap()
+            ))
+        );
+        write("node_modules/self/lib/package.json", "{");
+        assert_eq!(
+            super::runtime_package_root(&directory.join("node_modules/self/lib/inner.js"), "self"),
+            Err(())
+        );
         std::fs::remove_dir_all(&directory).unwrap();
     }
 }
