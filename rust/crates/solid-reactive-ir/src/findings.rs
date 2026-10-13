@@ -356,19 +356,27 @@ pub fn finish_findings(
     )
 }
 
+/// The context a read with no named context is described in, from its role.
+/// A module-scope read has no enclosing function, and an effect's apply
+/// callback is not a rendering function; naming either one so would describe
+/// a context that does not exist.
+const fn unnamed_read_context(execution: crate::ExecutionRole) -> &'static str {
+    match execution {
+        crate::ExecutionRole::ModuleInitialization => "module scope",
+        crate::ExecutionRole::EffectApply => "effect apply callback",
+        _ => "rendering function",
+    }
+}
+
 /// The strict-read message: how an untracked read of a reactive value is
 /// described. The sentence is version-independent; what differs per dialect
 /// is the hint, which the catalogs word themselves.
 #[must_use]
 pub fn strict_read_message(read: &ReactiveRead) -> String {
-    let context = if !read.context.is_empty() {
-        &read.context
-    } else if read.execution == crate::ExecutionRole::ModuleInitialization {
-        // A module-scope read has no enclosing function to name; calling it a
-        // "rendering function" would describe a context that does not exist.
-        "module scope"
+    let context = if read.context.is_empty() {
+        unnamed_read_context(read.execution)
     } else {
-        "rendering function"
+        &read.context
     };
     if read.callback_invocation_unproven {
         let tracking = if read.missing_jsx_census
@@ -532,12 +540,10 @@ pub fn strict_read_evidence(read: &ReactiveRead) -> Vec<EvidenceStep> {
                 } else {
                     ""
                 },
-                if !read.context.is_empty() {
-                    &read.context
-                } else if read.execution == crate::ExecutionRole::ModuleInitialization {
-                    "module scope"
+                if read.context.is_empty() {
+                    unnamed_read_context(read.execution)
                 } else {
-                    "rendering function"
+                    &read.context
                 }
             ),
             location: Some(read.location.clone()),
