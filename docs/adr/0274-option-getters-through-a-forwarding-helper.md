@@ -35,7 +35,10 @@ real corpus call open:
      a nested function declaration counts wherever it is written, because a
      hoisted declaration may run first;
    - the helper (its parameters included) never names `arguments`, which
-     aliases the parameter without a reference bound to it;
+     aliases the parameter without a reference bound to it; no identifier in
+     it is spelled with an escape, which could decode to `arguments`; and its
+     file holds no direct `eval`, which reaches the parameter with no static
+     reference;
    - the package call is not inside a class body, where a field initializer
      runs at instantiation, not at definition.
 
@@ -48,8 +51,10 @@ real corpus call open:
    abrupt completion out of scope. The same premise puts reads in a reached
    getter body inside it, not only its first call. A getter that may reach
    the receiver mutates the enumeration. The receiver is a fresh unaliased
-   literal, so `this` is its only route, and any `this` token in a getter
-   leaves every later getter possible rather than guaranteed. A read inside
+   literal, so it is reachable only as the getter's receiver: `this`, `super`
+   (whose member calls receive the literal), or code `eval` builds. Any such
+   token, an escaped identifier, or an `eval` in a getter leaves every later
+   getter possible rather than guaranteed. A read inside
    a class written in the getter body is deferred to instantiation, so it
    stays an obligation.
 3. **Result reuse.** A file holding such a helper is call-role syntax, so
@@ -73,10 +78,11 @@ real corpus call open:
 
 - Review round 1 (rust/target/research/adr-0274/REVIEW-1.md) found three false
   violations: an `arguments[0]` alias, a hoisted mutating declaration, and an
-  instance field initializer. Each now stays uncertifiable, and the forwarding
-  test pins them.
+  instance field initializer. Round 2 (REVIEW-2.md) found direct `eval`, an
+  escaped `arguments` and `super.valueOf()` in a getter. Each now stays
+  uncertifiable, and the unit tests pin them.
 - Unit tests: `a_helper_forwards_only_an_untouched_parameter_on_its_straight_line`
-  and `this_is_matched_only_as_a_token`.
+  and `receiver_routes_are_matched_as_tokens`.
 - Twin `probus-virtual-helper-forwarded-later-getter` in
   `fixtures/app-patterns-misuse/corpus-twins.json`. Natively, the misuse twin
   has `rows` and `margin` violations at the helper call and the correct twin

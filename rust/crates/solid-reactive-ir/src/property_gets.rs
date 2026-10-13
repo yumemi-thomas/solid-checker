@@ -173,13 +173,17 @@ pub(super) fn reads(
             continue;
         };
         // The receiver is a fresh unaliased literal, so a getter can reach it
-        // only through `this`: deleting a later key or replacing its
-        // descriptor. Any `this` token refuses the later getters; a false
-        // match only withholds.
+        // only as its receiver: `this`, `super` (whose member calls receive
+        // the literal), or code `eval` builds. Any such route refuses the later
+        // getters; a false match only withholds.
         if context
             .file
             .source_text(getter.body)
-            .is_none_or(mentions_this)
+            .is_none_or(mentions_receiver_route)
+            || context.file.ast.module_hazards.iter().any(|hazard| {
+                hazard.kind == solid_facts::ast::ModuleHazardKind::Eval
+                    && getter.span.contains(hazard.span)
+            })
         {
             preceding_mutation_hazards += 1;
         }
@@ -363,12 +367,18 @@ fn forwarded_parameter(
                         && nested.span.contains(*reference)
                 }))
     });
-    // `arguments` aliases every parameter without a reference bound to it.
+    // `arguments` aliases every parameter without a reference bound to it. An
+    // identifier that decodes to it is spelled so or carries an escape, and
+    // direct `eval` reaches the parameter with no static reference at all.
     let aliased = ast.identifiers.iter().any(|identifier| {
-        identifier.role == solid_facts::ast::IdentifierRole::Reference
-            && function.span.contains(identifier.span)
-            && file.source_text(identifier.span) == Some("arguments")
-    });
+        function.span.contains(identifier.span)
+            && file
+                .source_text(identifier.span)
+                .is_none_or(|text| text == "arguments" || text.contains('\\'))
+    }) || ast
+        .module_hazards
+        .iter()
+        .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval);
     (!touched_before && !aliased && !crate::indexes::binding_written(file, declaration))
         .then_some(index)
 }
@@ -419,13 +429,18 @@ pub(super) fn forwards_enumeration(
         .any(|function| !helper_forwards(file, function, lookup).is_empty())
 }
 
-/// Whether `text` contains the `this` keyword as a token.
-fn mentions_this(text: &str) -> bool {
+/// Whether `text` contains a `this` or `super` keyword as a token, or an
+/// escaped identifier that may spell one.
+fn mentions_receiver_route(text: &str) -> bool {
     let bytes = text.as_bytes();
     let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
-    text.match_indices("this").any(|(at, _)| {
-        (at == 0 || !ident(bytes[at - 1])) && bytes.get(at + 4).is_none_or(|b| !ident(*b))
-    })
+    text.contains('\\')
+        || ["this", "super"].iter().any(|word| {
+            text.match_indices(word).any(|(at, _)| {
+                (at == 0 || !ident(bytes[at - 1]))
+                    && bytes.get(at + word.len()).is_none_or(|b| !ident(*b))
+            })
+        })
 }
 
 #[cfg(test)]
@@ -553,6 +568,11 @@ mod tests {
                 "function h(o) { touch(arguments[0]); return new V(o); }",
                 None,
             ),
+            (
+                "function h(o) { touch(argum\\u0065nts[0]); return new V(o); }",
+                None,
+            ),
+            ("function h(o) { eval('o.x = 1'); return new V(o); }", None),
             ("function h(o, p = arguments[0]) { return new V(o); }", None),
             (
                 "function h(o) { mutate(); return new V(o); function mutate() { o.x = 1; } }",
@@ -593,12 +613,14 @@ mod tests {
     }
 
     #[test]
-    fn this_is_matched_only_as_a_token() {
-        assert!(mentions_this("{ delete this.count; }"));
-        assert!(mentions_this("this"));
-        assert!(!mentions_this("{ return thisValue(); }"));
-        assert!(!mentions_this("{ return history(); }"));
-        assert!(!mentions_this("{ return $this; }"));
+    fn receiver_routes_are_matched_as_tokens() {
+        assert!(mentions_receiver_route("{ delete this.count; }"));
+        assert!(mentions_receiver_route("this"));
+        assert!(mentions_receiver_route("{ return super.valueOf(); }"));
+        assert!(mentions_receiver_route("{ return th\\u0069s.x; }"));
+        assert!(!mentions_receiver_route("{ return thisValue(); }"));
+        assert!(!mentions_receiver_route("{ return history() + superb(); }"));
+        assert!(!mentions_receiver_route("{ return $this; }"));
     }
 
     #[test]
