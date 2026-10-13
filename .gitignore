@@ -303,6 +303,8 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/argument-sensitive-reads/node_modules/**
 !fixtures/reactive-ir/returned-store-nested-read/node_modules/
 !fixtures/reactive-ir/returned-store-nested-read/node_modules/**
+!fixtures/reactive-ir/getter-parameter-read/node_modules/
+!fixtures/reactive-ir/getter-parameter-read/node_modules/**
 !fixtures/reactive-ir/feedback-tiers/node_modules/
 !fixtures/reactive-ir/feedback-tiers/node_modules/**
 !fixtures/reactive-ir/feedback-tiers-open/node_modules/

@@ -2,15 +2,18 @@
 //! The first slice admits fresh closed literals and one non-escaped const
 //! binding. Spreads and aliases remain obligations. ADR 0274 adds a local
 //! helper that forwards its exact parameter to the package call, and every
-//! getter a hazard-free prefix reaches.
+//! getter a hazard-free prefix reaches. ADR 0283 adds a project function's
+//! own member Gets of a parameter, on its every-completion path.
 
 use super::*;
-use solid_facts::ast::{BindingShape, ObjectGetShapeFact};
+use solid_facts::ast::{BindingShape, ObjectGetPropertyFact, ObjectGetShapeFact};
 
+/// The call a receiver's getters are instantiated at, and what reading them
+/// there needs. Shared by the contract rows and a project function's own
+/// parameter Gets.
 pub(super) struct ReadContext<'a, 'b> {
     pub file: &'a solid_facts::FileFacts,
     pub call: &'a solid_facts::ast::CallFact,
-    pub callback: &'a ContractCallback,
     pub valid: bool,
     pub execution: ExecutionRole,
     pub label: &'a str,
@@ -26,16 +29,22 @@ pub(super) struct ReadContext<'a, 'b> {
 /// A spread *of* it cannot change its own descriptors and is allowed; a
 /// spread *inside* its literal is not resolved in this initial slice.
 fn receiver<'a>(
-    ast: &'a solid_facts::ast::AstFacts,
+    file: &'a solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     parameter: usize,
 ) -> Option<&'a ObjectGetShapeFact> {
+    let ast = &file.ast;
     let argument = call.arguments.get(parameter)?;
     if argument.spread {
         return None;
     }
     let mut span = ast.peel_ts_sugar_span(argument.span);
     if let Some(declaration) = ast.reference_declaration(span) {
+        // Direct `eval` reaches the binding with no static reference, so it
+        // may delete or redefine a getter before the call (ADR 0283).
+        if direct_eval_in(file, Span::new(0, u32::MAX)) {
+            return None;
+        }
         let mut candidates = ast.bindings.iter().filter(|binding| {
             binding.shape == BindingShape::Identifier
                 && binding.immutable
@@ -130,7 +139,8 @@ fn obligation(context: &ReadContext<'_, '_>) -> Option<StaticDefect> {
 }
 
 pub(super) fn reads(
-    context: ReadContext<'_, '_>,
+    context: &ReadContext<'_, '_>,
+    callback: &ContractCallback,
 ) -> (
     Vec<ReactiveRead>,
     Option<StaticDefect>,
@@ -143,11 +153,11 @@ pub(super) fn reads(
         // proof for this checker, nor a duplicate package-call complaint.
         return (reads, None, dependencies);
     }
-    if !context.callback.path.is_empty() {
-        return (reads, obligation(&context), dependencies);
+    if !callback.path.is_empty() {
+        return (reads, obligation(context), dependencies);
     }
-    let Some(shape) = receiver(&context.file.ast, context.call, context.callback.parameter) else {
-        return (reads, obligation(&context), dependencies);
+    let Some(shape) = receiver(context.file, context.call, callback.parameter) else {
+        return (reads, obligation(context), dependencies);
     };
     let mut preceding_mutation_hazards = 0;
     let mut unresolved = false;
@@ -157,121 +167,173 @@ pub(super) fn reads(
             continue;
         };
         let occurrence_guaranteed = crate::contract_semantics::enumeration_get_is_guaranteed(
-            context.callback.protocol,
+            callback.protocol,
             true,
             preceding_mutation_hazards,
         );
-        let Some(getter) = context
-            .file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == getter_span)
-        else {
+        let Some(getter) = getter_function(context.file, getter_span) else {
             unresolved = true;
             preceding_mutation_hazards += 1;
             continue;
         };
-        // The receiver is a fresh unaliased literal, so a getter can reach it
-        // only as its receiver: `this`, `super` (whose member calls receive
-        // the literal), or code `eval` builds. Any such route refuses the later
-        // getters; a false match only withholds.
-        if context
-            .file
-            .source_text(getter.body)
-            .is_none_or(mentions_receiver_route)
-            || direct_eval_in(context.file, getter.span)
-        {
+        // Any route to the receiver refuses the later getters.
+        if reaches_receiver(context.file, getter) {
             preceding_mutation_hazards += 1;
         }
-        for call in context.file.ast.calls.iter().filter(|call| {
-            crate::owners::written_directly_in(&context.file.ast, getter, call.span)
-                && getter.body.contains(call.span)
-        }) {
-            // A class written in the getter defers its field initializers to
-            // instantiation; nothing proves when, or that, they run.
-            if inside_class_in(&context.file.ast, getter.body, call.span) {
-                unresolved = true;
-                continue;
-            }
-            let Some(symbol) = context
-                .entities
-                .get(&location(context.file.path.shared(), call.callee))
-            else {
-                unresolved = true;
-                continue;
-            };
-            if context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Accessor)
-                || !source_has_runtime_witness(
-                    symbol,
-                    context.accessors,
-                    context.entities,
-                    context.symbol_names,
-                    context.lookup,
-                )
-            {
-                // Local helper calls and arbitrary package calls need their
-                // own entered-body proof; do not call them inert.
-                unresolved = true;
-                continue;
-            }
-            let Some((display, declaration)) = context.accessors.get(symbol) else {
-                unresolved = true;
-                continue;
-            };
-            dependencies.insert(InterproceduralResultDependency::Symbol(symbol.clone()));
-            // A read written directly in a reached getter body executes under
-            // the statically-present-code premise; `entry_call` is no longer
-            // the only guaranteed read.
-            let guaranteed = occurrence_guaranteed;
-            reads.push(ReactiveRead {
-                kind: "accessor".into(),
-                accessor: display.to_string().into(),
-                location: location(context.file.path.shared(), context.call.span),
-                declaration: declaration.clone(),
-                execution: context.execution,
-                context: enclosing_function_label(context.file, context.call.span).into(),
-                via: context.label.into(),
-                origin: Some(location(context.file.path.shared(), call.span)),
-                origin_context: format!("get {}", property.key).into(),
-                uncertain: false,
-                missing_jsx_census: missing_jsx_census(
-                    context.file,
-                    context.call.span,
-                    context.execution,
-                ),
-                host_callback_timing: host_callback_timing(
-                    context.file,
-                    context.call.span,
-                    context.execution,
-                    context.lookup,
-                ),
-                callee_callback_timing: callee_callback_timing(
-                    context.file,
-                    context.call.span,
-                    context.execution,
-                    context.lookup,
-                ),
-                project_consumer_non_strict: false,
-                callback_invocation_unproven: !guaranteed,
-                package_internal: false,
-                summary_attributed: !guaranteed,
-                transported: false,
-            });
-        }
-        // Member reads can themselves enter getters or a reactive proxy.
-        // This first slice proves accessor Calls only; a member-only getter
-        // never becomes a clean result just because that call loop is empty.
-        unresolved |= context.file.ast.members.iter().any(|member| {
-            crate::owners::written_directly_in(&context.file.ast, getter, member.span)
-                && getter.body.contains(member.span)
-        });
+        unresolved |= getter_reads(
+            context,
+            property,
+            getter,
+            occurrence_guaranteed,
+            GetterBody::Written,
+            &mut reads,
+            &mut dependencies,
+        );
     }
     (
         reads,
-        unresolved.then(|| obligation(&context)).flatten(),
+        unresolved.then(|| obligation(context)).flatten(),
         dependencies,
     )
+}
+
+fn getter_function(
+    file: &solid_facts::FileFacts,
+    getter: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    file.ast
+        .functions
+        .iter()
+        .find(|function| function.span == getter)
+}
+
+/// Whether `getter` may reach its receiver. The receiver is a fresh
+/// unaliased literal, so a getter can reach it only as its receiver: `this`,
+/// `super` (whose member calls receive the literal), or code `eval` builds.
+/// A false match only withholds.
+fn reaches_receiver(
+    file: &solid_facts::FileFacts,
+    getter: &solid_facts::ast::FunctionFact,
+) -> bool {
+    file.source_text(getter.body)
+        .is_none_or(mentions_receiver_route)
+        || direct_eval_in(file, getter.span)
+}
+
+/// Which accessor calls of a reached getter body count as performed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GetterBody {
+    /// ADR 0225/0274: every call written directly in the body, under the
+    /// statically-present-code premise, as for a callback the caller wrote.
+    Written,
+    /// ADR 0283: only a call on the getter's own every-completion path
+    /// (`site_on_every_completion`). A call in a branch arm or after an
+    /// early `return` is left out rather than reported as unproven.
+    EveryCompletion,
+}
+
+/// The accessor reads a Get of `property` performs through `getter` at
+/// `context.call`, appended to `reads`: located at the call, with the
+/// getter's read as origin and the call's role. Returns whether the body
+/// holds anything this proof leaves open.
+fn getter_reads(
+    context: &ReadContext<'_, '_>,
+    property: &ObjectGetPropertyFact,
+    getter: &solid_facts::ast::FunctionFact,
+    guaranteed: bool,
+    body: GetterBody,
+    reads: &mut Vec<ReactiveRead>,
+    dependencies: &mut HashSet<InterproceduralResultDependency>,
+) -> bool {
+    let mut unresolved = false;
+    for call in context.file.ast.calls.iter().filter(|call| {
+        crate::owners::written_directly_in(&context.file.ast, getter, call.span)
+            && getter.body.contains(call.span)
+    }) {
+        // A class written in the getter defers its field initializers to
+        // instantiation; nothing proves when, or that, they run.
+        if inside_class_in(&context.file.ast, getter.body, call.span) {
+            unresolved = true;
+            continue;
+        }
+        if body == GetterBody::EveryCompletion
+            && !site_on_every_completion(context.lookup, context.file, getter.span, call.span)
+        {
+            unresolved = true;
+            continue;
+        }
+        let Some(symbol) = context
+            .entities
+            .get(&location(context.file.path.shared(), call.callee))
+        else {
+            unresolved = true;
+            continue;
+        };
+        if context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Accessor)
+            || !source_has_runtime_witness(
+                symbol,
+                context.accessors,
+                context.entities,
+                context.symbol_names,
+                context.lookup,
+            )
+        {
+            // Local helper calls and arbitrary package calls need their
+            // own entered-body proof; do not call them inert.
+            unresolved = true;
+            continue;
+        }
+        let Some((display, declaration)) = context.accessors.get(symbol) else {
+            unresolved = true;
+            continue;
+        };
+        dependencies.insert(InterproceduralResultDependency::Symbol(symbol.clone()));
+        // A read written directly in a reached getter body executes under
+        // the statically-present-code premise; `entry_call` is no longer
+        // the only guaranteed read.
+        reads.push(ReactiveRead {
+            kind: "accessor".into(),
+            accessor: display.to_string().into(),
+            location: location(context.file.path.shared(), context.call.span),
+            declaration: declaration.clone(),
+            execution: context.execution,
+            context: enclosing_function_label(context.file, context.call.span).into(),
+            via: context.label.into(),
+            origin: Some(location(context.file.path.shared(), call.span)),
+            origin_context: format!("get {}", property.key).into(),
+            uncertain: false,
+            missing_jsx_census: missing_jsx_census(
+                context.file,
+                context.call.span,
+                context.execution,
+            ),
+            host_callback_timing: host_callback_timing(
+                context.file,
+                context.call.span,
+                context.execution,
+                context.lookup,
+            ),
+            callee_callback_timing: callee_callback_timing(
+                context.file,
+                context.call.span,
+                context.execution,
+                context.lookup,
+            ),
+            project_consumer_non_strict: false,
+            callback_invocation_unproven: !guaranteed,
+            package_internal: false,
+            summary_attributed: !guaranteed,
+            transported: false,
+        });
+    }
+    // Member reads can themselves enter getters or a reactive proxy.
+    // This first slice proves accessor Calls only; a member-only getter
+    // never becomes a clean result just because that call loop is empty.
+    unresolved
+        || context.file.ast.members.iter().any(|member| {
+            crate::owners::written_directly_in(&context.file.ast, getter, member.span)
+                && getter.body.contains(member.span)
+        })
 }
 
 /// ADR 0274: the value-enumeration rows a local helper forwards, keyed by the
@@ -481,6 +543,229 @@ pub(super) fn forwards_enumeration(
         .any(|function| !helper_forwards(file, function, lookup).is_empty())
 }
 
+/// ADR 0283: the getter reads a project function's own member Gets of its
+/// parameters perform at `context.call`, and the result dependencies they
+/// rest on. Emits nothing unless every step is proven, so an unproven case
+/// keeps the getter's existing uncertifiable read and gains nothing.
+///
+/// Per argument: the receiver is ADR 0225's exact closed literal; the callee
+/// is one current project function with a summary node, reached with an
+/// exact argument-to-parameter mapping (`project_callee_at_parameter`, ADR
+/// 0278); no getter of the receiver may reach the receiver; and the
+/// function Gets that key on its every-completion path. Each getter
+/// then contributes only the accessor calls on its own every-completion
+/// path. `has_summary_node` keeps the `FunctionSource` dependency live: a
+/// dependency on a function without a node stays `Missing` across every
+/// edit, so a cached answer could never be invalidated.
+pub(super) fn parameter_reads(
+    context: &ReadContext<'_, '_>,
+    has_summary_node: impl Fn(&str, Span) -> bool,
+) -> (Vec<ReactiveRead>, HashSet<InterproceduralResultDependency>) {
+    let mut reads = Vec::new();
+    let mut dependencies = HashSet::new();
+    // Invalid calls belong to TypeScript. A construction runs a class body
+    // whose fields and `super` call this slice does not model.
+    if !context.valid || context.call.construct {
+        return (reads, dependencies);
+    }
+    for index in 0..context.call.arguments.len() {
+        let Some(shape) = receiver(context.file, context.call, index) else {
+            continue;
+        };
+        if shape
+            .properties
+            .iter()
+            .all(|property| property.getter.is_none())
+        {
+            continue;
+        }
+        let Some((callee_file, callee, exact)) = crate::execution_role::project_callee_at_parameter(
+            context.file,
+            context.call,
+            index,
+            context.lookup,
+        ) else {
+            continue;
+        };
+        if !has_summary_node(callee_file.path.as_str(), callee.span) {
+            continue;
+        }
+        // Recorded for every evaluated pair, refusals included: the answer
+        // is a function of the callee's body, which no read summary states.
+        dependencies.insert(InterproceduralResultDependency::FunctionSource(
+            callee_file.path.to_string(),
+            callee.span,
+        ));
+        if !exact {
+            continue;
+        }
+        // Every getter, not only the read one: the function may Get another
+        // key first, and a getter that reaches its receiver may delete or
+        // redefine the one read later.
+        let Some(getters) = shape
+            .properties
+            .iter()
+            .filter_map(|property| property.getter.map(|getter| (property, getter)))
+            .map(|(property, getter)| {
+                getter_function(context.file, getter)
+                    .filter(|getter| !reaches_receiver(context.file, getter))
+                    .map(|getter| (property, getter))
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
+        let mut keys = parameter_gets(callee_file, callee, context.lookup)
+            .into_iter()
+            .filter(|(parameter, _)| *parameter == index)
+            .map(|(_, key)| key)
+            .collect::<Vec<_>>();
+        keys.sort_unstable();
+        keys.dedup();
+        for (property, getter) in getters
+            .into_iter()
+            .filter(|(property, _)| keys.binary_search(&property.key.as_str()).is_ok())
+        {
+            // Anything a getter leaves open is already the getter's own
+            // uncertifiable read; there is no contract to owe it to.
+            let _ = getter_reads(
+                context,
+                property,
+                getter,
+                true,
+                GetterBody::EveryCompletion,
+                &mut reads,
+                &mut dependencies,
+            );
+        }
+    }
+    (reads, dependencies)
+}
+
+/// ADR 0283: the `(parameter, key)` Gets `function` performs on every normal
+/// completion of a call of it, before any suspension. Empty unless its
+/// value is current.
+fn parameter_gets<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<(usize, &'a str)> {
+    if !lookup.function_value_is_current(file, function) {
+        return Vec::new();
+    }
+    parameter_get_sites(file, function)
+        .into_iter()
+        .filter(|(_, _, site)| site_on_every_completion(lookup, file, function.span, *site))
+        .map(|(parameter, key, _)| (parameter, key))
+        .collect()
+}
+
+/// The syntactic half of [`parameter_gets`]: `(parameter, key, member)` for
+/// each static member Get of a parameter written in `function`'s body on
+/// its straight-line flow (`AstFacts::completion_sites`, then
+/// `body_site_runs_during_call`).
+///
+/// The parameter must be a plain, unwritten, default-less identifier, and
+/// every reference to it must be the object of such a Get
+/// ([`parameter_get`]). So it never escapes, is never aliased, never reaches
+/// another function, and is never written through: the only code that can
+/// run against the receiver during the call is its own getters. Refused
+/// whole for an async function or a generator (its body may run after the
+/// call returns), any directive (the compiler or host may replace the body,
+/// as in ADR 0274), a name `arguments` or an escaped identifier (which may
+/// spell it) in the function, and a direct `eval` in the file.
+fn parameter_get_sites<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Vec<(usize, &'a str, Span)> {
+    let ast = &file.ast;
+    if function.r#async
+        || function.generator
+        || !function.directives.is_empty()
+        || !ast.module_directives.is_empty()
+        || ast.identifiers.iter().any(|identifier| {
+            function.span.contains(identifier.span)
+                && file
+                    .source_text(identifier.span)
+                    .is_none_or(|text| text == "arguments" || text.contains('\\'))
+        })
+        || direct_eval_in(file, Span::new(0, u32::MAX))
+    {
+        return Vec::new();
+    }
+    let mut sites = Vec::new();
+    for (index, parameter) in function.parameters.iter().enumerate() {
+        if parameter.shape != BindingShape::Identifier
+            || parameter.names.len() != 1
+            || parameter.initializer.is_some()
+        {
+            continue;
+        }
+        let declaration = parameter.names[0].span;
+        if crate::indexes::binding_written(file, declaration) {
+            continue;
+        }
+        let Some(gets) = ast
+            .reference_declarations
+            .iter()
+            .filter(|(_, bound)| *bound == declaration)
+            .map(|(reference, _)| parameter_get(file, *reference))
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
+        sites.extend(
+            gets.into_iter()
+                .filter(|(member, _)| {
+                    function.body.contains(*member)
+                        && ast.completion_sites.binary_search(member).is_ok()
+                        && containing_ast_function(ast, *member)
+                            .is_some_and(|owner| owner.span == function.span)
+                        && body_site_runs_during_call(file, function, *member)
+                })
+                .map(|(member, key)| (index, key, member)),
+        );
+    }
+    sites
+}
+
+/// The member whose object is `reference`, and its key, when that member
+/// only performs a Get of a static key: `p.key`, under transparent
+/// TypeScript wrappers. Not computed or optional, not a callee or a tag
+/// (which receive `p` as `this`), and inside no write, `delete`,
+/// destructuring or iteration target, compound and update writes included.
+fn parameter_get(file: &solid_facts::FileFacts, reference: Span) -> Option<(Span, &str)> {
+    let ast = &file.ast;
+    let member = ast
+        .members
+        .iter()
+        .find(|member| ast.peel_ts_sugar_span(member.object) == reference)?;
+    let key = file.source_text(member.property)?;
+    let refused = ast.computed_members.binary_search(&member.span).is_ok()
+        || ast.optional_members.binary_search(&member.span).is_ok()
+        || key.contains('\\')
+        || key.starts_with('#')
+        || ast
+            .calls
+            .iter()
+            .any(|call| ast.peel_ts_sugar_span(call.callee) == member.span)
+        || ast
+            .tagged_template_tags
+            .iter()
+            .any(|tag| ast.peel_ts_sugar_span(*tag) == member.span)
+        || !member_is_get(ast, member.span)
+        || ast
+            .assignments
+            .iter()
+            .any(|assignment| assignment.target.contains(member.span))
+        || ast
+            .deleted_targets
+            .iter()
+            .chain(&ast.iteration_targets)
+            .any(|target| target.contains(member.span));
+    (!refused).then_some((member.span, key))
+}
+
 /// Whether `text` contains a `this` or `super` keyword as a token, or an
 /// escaped identifier that may spell one.
 fn mentions_receiver_route(text: &str) -> bool {
@@ -557,14 +842,21 @@ mod tests {
                 "export const opts = { get count() { return n(); } }; new V(opts);",
                 false,
             ),
+            // Direct `eval` may delete a named receiver's getter first.
+            (
+                "const opts = { get count() { return n(); } }; eval('delete opts.count'); new V(opts);",
+                false,
+            ),
+            ("new V({ get count() { return n(); } }); eval('1');", true),
         ] {
-            let ast = solid_facts::ast::extract("/project/get.ts", source).unwrap();
-            let call = ast
+            let facts = file(source);
+            let call = facts
+                .ast
                 .calls
                 .iter()
                 .find(|call| call.construct && call.arguments.len() == 1)
                 .unwrap();
-            assert_eq!(receiver(&ast, call, 0).is_some(), expected, "{source}");
+            assert_eq!(receiver(&facts, call, 0).is_some(), expected, "{source}");
         }
     }
 
@@ -687,14 +979,126 @@ mod tests {
 
     #[test]
     fn copying_data_function_values_does_not_select_their_bodies() {
-        let ast = solid_facts::ast::extract(
-            "/project/get.ts",
-            "new V({ fn: () => n(), get count() { return n(); } });",
-        )
-        .unwrap();
-        let call = ast.calls.iter().find(|call| call.construct).unwrap();
-        let shape = receiver(&ast, call, 0).unwrap();
+        let facts = file("new V({ fn: () => n(), get count() { return n(); } });");
+        let call = facts.ast.calls.iter().find(|call| call.construct).unwrap();
+        let shape = receiver(&facts, call, 0).unwrap();
         assert!(shape.properties[0].getter.is_none());
         assert!(shape.properties[1].getter.is_some());
+    }
+
+    #[test]
+    fn a_parameter_yields_gets_only_when_every_reference_is_a_static_get() {
+        for (source, expected) in [
+            ("function h(o) { return o.a; }", vec![(0, "a")]),
+            (
+                "function h(a, o) { const x = o.b; return x + o.a; }",
+                vec![(1, "b"), (1, "a")],
+            ),
+            ("const h = (o) => o.a;", vec![(0, "a")]),
+            (
+                "function h(o) { return (o as T).a + o!.b; }",
+                vec![(0, "a"), (0, "b")],
+            ),
+            ("function h(o) { return o.a ?? 0; }", vec![(0, "a")]),
+            ("function h(o) { return o.a.b; }", vec![(0, "a")]),
+            // Some paths only: the parameter is proven only read, but no Get
+            // runs on every completion.
+            ("function h(f, o) { if (f) return o.a; return 0; }", vec![]),
+            ("function h(o) { return c && o.a; }", vec![]),
+            ("function h(o) { return () => o.a; }", vec![]),
+            ("function h(o) { try { return o.a; } finally {} }", vec![]),
+            (
+                "function h(o) { for (const x of xs) { o.b; } return o.a; }",
+                vec![(0, "a")],
+            ),
+            (
+                "function h(o) { for (const x of xs) { break; } return o.a; }",
+                vec![],
+            ),
+            ("function h(o) { return <i>{o.a}</i>; }", vec![]),
+            ("function h(o) { class C { v = o.a } return C; }", vec![]),
+            ("function h(o) { const { x = o.a } = q; return x; }", vec![]),
+            ("function h(o, x = o.a) { return x; }", vec![]),
+            // A reference that is not a static Get refuses the parameter.
+            ("function h(o) { sink(o); return o.a; }", vec![]),
+            ("function h(o) { const p = o; return p.a; }", vec![]),
+            ("function h(o) { return { ...o }.a + o.a; }", vec![]),
+            ("function h(o, k) { return o[k] + o.a; }", vec![]),
+            ("function h(o) { return o['a']; }", vec![]),
+            ("function h(o) { return o?.a; }", vec![]),
+            ("function h(o) { o.m(); return o.a; }", vec![]),
+            ("function h(o) { o.m`x`; return o.a; }", vec![]),
+            ("function h(o) { o.a = 1; return 0; }", vec![]),
+            ("function h(o) { o.a += 1; return o.b; }", vec![]),
+            ("function h(o) { o.a++; return o.b; }", vec![]),
+            ("function h(o) { o.a.b = 1; return o.b; }", vec![]),
+            ("function h(o) { delete o.a; return o.b; }", vec![]),
+            ("function h(o) { [o.a] = [1]; return o.b; }", vec![]),
+            ("function h(o) { for (o.a of xs) {} return o.b; }", vec![]),
+            (
+                "function h(o) { return typeof o === 'object' && o.a; }",
+                vec![],
+            ),
+            ("function h(o) { return o.\\u0061; }", vec![]),
+            // The parameter or the function is refused whole.
+            ("function h({ a }) { return a; }", vec![]),
+            ("function h(o = {}) { return o.a; }", vec![]),
+            ("function h(...o) { return o.a; }", vec![]),
+            ("function h(o) { o = x; return o.a; }", vec![]),
+            ("function h(o) { var o; return o.a; }", vec![]),
+            ("function h(o) { return arguments[0].a + o.a; }", vec![]),
+            (
+                "function h(o) { return argum\\u0065nts.length + o.a; }",
+                vec![],
+            ),
+            ("function h(o) { return o.a; } eval('1');", vec![]),
+            ("function h(o) { (eval as F)('1'); return o.a; }", vec![]),
+            ("async function h(o) { return o.a; }", vec![]),
+            ("function* h(o) { yield o.a; }", vec![]),
+            ("function h(o) { 'use server'; return o.a; }", vec![]),
+            ("function h(o) { 'use strict'; return o.a; }", vec![]),
+            ("'use client'; function h(o) { return o.a; }", vec![]),
+        ] {
+            let facts = file(source);
+            let function = facts
+                .ast
+                .functions
+                .iter()
+                .find(|f| f.name.is_some() || f.kind == solid_facts::ast::FunctionKind::Arrow)
+                .unwrap();
+            let found = parameter_get_sites(&facts, function)
+                .into_iter()
+                .map(|(parameter, key, _)| (parameter, key))
+                .collect::<Vec<_>>();
+            assert_eq!(found, expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn a_getter_read_counts_only_on_the_getters_every_completion_path() {
+        for (source, expected) in [
+            ("({ get a() { return s(); } });", true),
+            ("({ get a() { const v = s(); return v + 1; } });", true),
+            ("({ get a() { return c ? s() : 0; } });", false),
+            ("({ get a() { if (c) return 1; return s(); } });", false),
+            ("({ get a() { return c && s(); } });", false),
+            ("({ get a() { return () => s(); } });", false),
+        ] {
+            let facts = file(source);
+            let shape = &facts.ast.object_get_shapes[0];
+            let getter = getter_function(&facts, shape.properties[0].getter.unwrap()).unwrap();
+            let read = facts
+                .ast
+                .calls
+                .iter()
+                .find(|call| facts.source_text(call.callee) == Some("s"))
+                .unwrap();
+            // The lookup-free part of `site_on_every_completion`.
+            let on_path = facts.ast.completion_sites.binary_search(&read.span).is_ok()
+                && containing_ast_function(&facts.ast, read.span)
+                    .is_some_and(|owner| owner.span == getter.span)
+                && body_site_runs_during_call(&facts, getter, read.span);
+            assert_eq!(on_path, expected, "{source}");
+        }
     }
 }

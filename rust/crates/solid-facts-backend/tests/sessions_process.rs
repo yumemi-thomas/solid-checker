@@ -885,6 +885,115 @@ declare namespace JSX {
     }
 }
 
+/// ADR 0283: a caller's getter read through a helper's own parameter Get
+/// rests on the helper's body, which no read summary states. The helper file
+/// holds no call-role syntax, so only the `FunctionSource` dependency can
+/// invalidate the caller's retained result when the Get becomes an alias.
+#[test]
+fn incremental_result_cache_follows_a_helper_parameter_get() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("helper-parameter-get-cache");
+    let project = directory.join("tsconfig.json");
+    let app = directory.join("App.tsx");
+    let helper = directory.join("helper.ts");
+    let declarations = directory.join("solid-js.d.ts");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"files":["App.tsx","helper.ts","solid-js.d.ts"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        &app,
+        r#"import { createSignal } from "solid-js";
+import { read } from "./helper";
+export function App() {
+  const [count] = createSignal(0);
+  const value = read({ get a() { return count(); } });
+  return <div>{value}</div>;
+}
+"#,
+    )
+    .unwrap();
+    let before = r#"export function read(o: { a: number }) {
+  return o.a;
+}
+"#;
+    let after = r#"export function read(o: { a: number }) {
+  const alias = o;
+  return alias.a;
+}
+"#;
+    fs::write(&helper, before).unwrap();
+    fs::write(
+        &declarations,
+        r#"declare module "solid-js" {
+  export function createSignal<T>(value: T): [() => T, (value: T) => void];
+}
+declare namespace JSX {
+  interface IntrinsicElements { div: Record<string, unknown>; }
+  interface Element {}
+}
+"#,
+    )
+    .unwrap();
+
+    let project_id = project.to_string_lossy().into_owned();
+    let sources = [&app, &helper]
+        .iter()
+        .map(|path| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: fs::read_to_string(path).unwrap().into(),
+            compiler_options: CompilerOptions::default(),
+        })
+        .collect();
+    let selected = dialect::by_id("solid-v2").unwrap();
+    let typescript = open_type_facts_session(&typefacts, &project_id);
+    let mut session =
+        NativeIncrementalSession::open(selected, project_id, sources, typescript).unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    let violations = |program: &_| {
+        selected
+            .solve(program)
+            .iter()
+            .filter(|finding| {
+                finding.rule == "strict-read-untracked" && finding.kind == "violation"
+            })
+            .count()
+    };
+    assert_eq!(
+        violations(&initial),
+        1,
+        "the helper's Get runs the getter in the component body"
+    );
+
+    for (version, source) in [(1, after), (2, before), (3, after)] {
+        let edited = session
+            .edit(
+                vec![SourceChange {
+                    path: helper.to_string_lossy().into_owned(),
+                    version,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let fresh = solid_reactive_ir::build(&edited, selected.vocabulary).unwrap();
+        let (retained, _) = incremental.build(&edited, selected.vocabulary).unwrap();
+        assert_eq!(retained, fresh, "version {version}");
+        assert_eq!(
+            violations(&retained),
+            usize::from(source == before),
+            "version {version}"
+        );
+    }
+}
+
 #[test]
 fn compiler_option_only_edit_invalidates_cached_ownership() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {

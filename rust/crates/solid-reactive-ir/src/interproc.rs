@@ -5911,6 +5911,15 @@ fn interprocedural_result_reads_for_file(
     let mut dependencies = HashSet::new();
     let mut seen = HashSet::new();
     let allowed = allowed_callback_spans(file, lookup);
+    let result_indexes = context.result.indexes;
+    // ADR 0283 instantiates only getters this file writes in a literal.
+    let receives_getters = file.ast.object_get_shapes.iter().any(|shape| {
+        shape.closed
+            && shape
+                .properties
+                .iter()
+                .any(|property| property.getter.is_some())
+    });
     for call in &file.ast.calls {
         if !enclosing_render_function(file, call.span, lookup) {
             continue;
@@ -6427,6 +6436,18 @@ fn interprocedural_result_reads_for_file(
             continue;
         }
         let mut context = None::<String>;
+        let get_context = property_gets::ReadContext {
+            file,
+            call,
+            valid: valid_call && ambiguous_candidates.is_none(),
+            execution,
+            label: &label,
+            source_kinds,
+            accessors,
+            entities,
+            symbol_names,
+            lookup,
+        };
         // ADR 0274: a local helper that forwards its parameter to a package
         // value copy performs that copy at this call.
         let forwarded = if contract_callbacks.contains_key(symbol) {
@@ -6436,19 +6457,7 @@ fn interprocedural_result_reads_for_file(
         };
         for callback in &forwarded {
             let (mut reads, obligation, get_dependencies) =
-                property_gets::reads(property_gets::ReadContext {
-                    file,
-                    call,
-                    callback,
-                    valid: valid_call && ambiguous_candidates.is_none(),
-                    execution,
-                    label: &label,
-                    source_kinds,
-                    accessors,
-                    entities,
-                    symbol_names,
-                    lookup,
-                });
+                property_gets::reads(&get_context, callback);
             if object_callable {
                 for read in &mut reads {
                     read.callee_callback_timing = true;
@@ -6458,25 +6467,28 @@ fn interprocedural_result_reads_for_file(
             dispatch_obligations.extend(obligation);
             dependencies.extend(get_dependencies);
         }
+        // ADR 0283: a project function's own member Gets of a parameter run
+        // the getters of the exact literal this call passes there.
+        if receives_getters && transported.is_none() && !contract_callbacks.contains_key(symbol) {
+            let (mut reads, get_dependencies) =
+                property_gets::parameter_reads(&get_context, |path, span| {
+                    result_indexes.contains_key(&(path.to_owned(), span))
+                });
+            if object_callable {
+                for read in &mut reads {
+                    read.callee_callback_timing = true;
+                }
+            }
+            result.extend(reads);
+            dependencies.extend(get_dependencies);
+        }
         if let Some(callbacks) = contract_callbacks.get(symbol) {
             for callback in callbacks
                 .iter()
                 .filter(|callback| callback.protocol.is_value_enumeration())
             {
                 let (mut reads, obligation, get_dependencies) =
-                    property_gets::reads(property_gets::ReadContext {
-                        file,
-                        call,
-                        callback,
-                        valid: valid_call && ambiguous_candidates.is_none(),
-                        execution,
-                        label: &label,
-                        source_kinds,
-                        accessors,
-                        entities,
-                        symbol_names,
-                        lookup,
-                    });
+                    property_gets::reads(&get_context, callback);
                 if object_callable {
                     for read in &mut reads {
                         read.callee_callback_timing = true;

@@ -29907,3 +29907,22 @@ Still refused (silent):
 - `function`, declaration, module, imported, parameter, `let` and call-result
   slots;
 - a pattern in another file than the call.
+
+## Getter reads through a parameter (2026-10-13, ADR 0283)
+
+A project function that Gets `p.key` of its parameter on its every-completion
+path now runs the `key` getter of the exact literal a call passes there. The
+parameter must be only ever read as a static member Get. The getter's
+every-completion accessor reads become `SC1001` violations at the call;
+everything unproven keeps the getter's existing uncertifiable read. A named
+`const` receiver now refuses direct `eval` in its file, on the contract path
+too. Runtime-confirmed with probus-hk's rc.13 development runtime. Corpus
+unchanged (562/3,731). Open:
+- argument-sensitive member sites (slice 2);
+- object spread, `for…in`, constructors, `this.method` dispatch and
+  forwarding chains;
+- computed literal keys and getters that call a project helper;
+- the residual uncertifiable read beside each new violation;
+- the contract path still counts a getter-body read in a branch arm, under
+  the statically-present-code premise (ADR 0275); the new path does not.
+  Aligning the two is an owner decision.
