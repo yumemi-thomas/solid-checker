@@ -40,8 +40,10 @@ real corpus call open:
      file holds no direct `eval`, which reaches the parameter with no static
      reference. A callee spelled `eval` under transparent TypeScript wrappers
      (`(eval as typeof eval)(…)`, `eval!(…)`) is direct too;
-   - the package call is not inside a class body, where a field initializer
-     runs at instantiation, not at definition.
+   - the package call is not inside a class body or a JSX element. A field
+     initializer runs at instantiation, and the compiler wraps a dynamic JSX
+     prop or child in a getter its consumer runs, so neither runs where it
+     is written.
 
    The caller's argument must then be the same exact receiver ADR 0225
    requires, and the getters run with the caller's call role. `new`
@@ -55,9 +57,9 @@ real corpus call open:
    literal, so it is reachable only as the getter's receiver: `this`, `super`
    (whose member calls receive the literal), or code `eval` builds. Any such
    token, an escaped identifier, or an `eval` in a getter leaves every later
-   getter possible rather than guaranteed. A read inside
-   a class written in the getter body is deferred to instantiation, so it
-   stays an obligation.
+   getter possible rather than guaranteed. A read inside a class or JSX
+   element written in the getter body is deferred, so it stays an
+   obligation.
 3. **Result reuse.** A file holding such a helper is call-role syntax, so
    editing it invalidates its callers' retained results.
 
@@ -82,7 +84,9 @@ real corpus call open:
   instance field initializer. Round 2 (REVIEW-2.md) found direct `eval`, an
   escaped `arguments` and `super.valueOf()` in a getter. Round 3 (REVIEW-3.md)
   found direct `eval` behind TypeScript wrappers, in the helper and in a
-  getter. Each now stays uncertifiable, and the unit tests pin them.
+  getter. Round 4 (REVIEW-4.md) found a construction or read inside a JSX
+  prop, which the compiler defers to its consumer. Each now stays
+  uncertifiable, and the unit tests pin them.
 - Unit tests: `a_helper_forwards_only_an_untouched_parameter_on_its_straight_line`
   and `receiver_routes_are_matched_as_tokens`.
 - Twin `probus-virtual-helper-forwarded-later-getter` in

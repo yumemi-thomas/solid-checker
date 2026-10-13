@@ -390,12 +390,18 @@ fn direct_eval_in(file: &solid_facts::FileFacts, within: Span) -> bool {
     })
 }
 
-/// Whether `span` lies in a class written inside `within`: a field
-/// initializer runs at instantiation, not where the class is defined.
+/// Whether `span` lies in a class or JSX element written inside `within`. A
+/// field initializer runs at instantiation, and the compiler wraps a dynamic
+/// JSX prop or child in a getter its consumer runs; neither runs where it is
+/// written.
 fn inside_class_in(ast: &solid_facts::ast::AstFacts, within: Span, span: Span) -> bool {
     ast.classes
         .iter()
         .any(|class| within.contains(class.span) && class.span.contains(span))
+        || ast
+            .jsx_elements
+            .iter()
+            .any(|element| within.contains(element.span) && element.span.contains(span))
 }
 
 /// The value-enumeration rows a call of a local helper performs (ADR 0274).
@@ -525,10 +531,10 @@ mod tests {
 
     fn file(source: &str) -> solid_facts::FileFacts {
         use solid_facts::core::{Generation, SourceHash, SourcePath};
-        let ast = solid_facts::ast::extract("helper.ts", source).unwrap();
+        let ast = solid_facts::ast::extract("helper.tsx", source).unwrap();
         solid_facts::FileFacts {
             generation: Generation::new(1).unwrap(),
-            path: SourcePath::new("helper.ts").unwrap(),
+            path: SourcePath::new("helper.tsx").unwrap(),
             source_hash: SourceHash::of(source),
             source: std::sync::Arc::from(source),
             ast: std::sync::Arc::new(ast),
@@ -602,6 +608,7 @@ mod tests {
                 "function h(o) { class Later { value = new V(o); } return Later; }",
                 None,
             ),
+            ("function h(o) { return <P value={new V(o)} />; }", None),
         ] {
             let facts = file(source);
             let function = facts
