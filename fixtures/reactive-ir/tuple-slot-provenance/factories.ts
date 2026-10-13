@@ -101,3 +101,10 @@ export function makeForward() {
 // A module-level destructuring another file imports: the call site and the
 // pattern are in different files.
 export const [, modulePeek] = makePeek();
+
+// An accessor after a spread: the spread holds two plain functions, so the
+// accessor is at runtime index 2, not 1.
+export function makeSpreadAccessor() {
+  const head = [() => 0, () => 0] as const;
+  return [...head, count] as const;
+}

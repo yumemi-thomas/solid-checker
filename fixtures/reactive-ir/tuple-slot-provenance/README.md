@@ -28,6 +28,7 @@ stays.
 | `DefaultedSlot`, `RestPattern`, `NestedPattern` | none | a default, a rest or a nested pattern |
 | `HoledLiteral`, `SpreadLiteral` | none | a hole or a spread in the returned literal moves positions |
 | `AliasedTuple` | none | `const t = make(); const [, s] = t` destructures a held array |
+| `SpreadAccessor` | none | the returned literal spreads two plain functions before its accessor, so slot 1 is a plain function |
 | `IndexedTuple` | `SC9012` uncertifiable (unchanged) | `t[1]()` keeps its computed-callee obligation |
 | `StoredLiteral` | none | the literal is stored, then returned |
 | `ExpressionSlot` | none | a `function` expression slot: arrows only, as in `member_value` |

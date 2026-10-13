@@ -30302,9 +30302,9 @@ Open:
 - an Unknown typed callee (`declare const`, an import) inside a helper is
   still silent at its callers, not an obligation;
 - (review round 1) the tuple-slot judge refuses a slot after a spread or a
-  hole. The contract tuple projection in `interproc.rs` (`result[{index}]`
-  in `StructuredReturnDiscovery`) indexes the same syntactic elements and is
-  not yet checked for a preceding spread;
+  hole. The structured tuple return (`discover_structured_returns`) places
+  no element after a hole or a spread either; `tuple-slot-provenance`
+  `SpreadAccessor` pins it, though it was already silent there;
 - `Setter`/`StoreSetter` type roles still feed write rules from the type;
 - against published rc.13 the fallback is not reached at all (no alias
   origin module), so `const get: Accessor<number> = count; get()` is silent

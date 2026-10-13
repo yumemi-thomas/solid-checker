@@ -5381,12 +5381,20 @@ fn discover_structured_returns(
             .collect::<Vec<_>>();
         let resolve = |returned: &&solid_facts::ast::ReturnFact| {
             if !returned.elements().is_empty() {
+                // A missing element is a hole or a spread. After a spread the
+                // syntactic position is not the runtime index, so no later
+                // element is placed.
+                let placed = returned
+                    .elements()
+                    .iter()
+                    .position(Option::is_none)
+                    .unwrap_or(returned.elements().len());
                 let elements = returned
                     .elements()
                     .iter()
                     .enumerate()
                     .map(|(index, element)| {
-                        element.and_then(|span| {
+                        element.filter(|_| index < placed).and_then(|span| {
                             discovery.leaf(file, span, &format!("result[{index}]"))
                         })
                     })

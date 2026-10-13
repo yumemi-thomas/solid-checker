@@ -11,6 +11,7 @@ import makeDefault, {
   makeReplaceable,
   makeShared,
   makeSpread,
+  makeSpreadAccessor,
   makeStored,
   modulePeek,
 } from "./factories";
@@ -187,5 +188,11 @@ export function AccessorSlot() {
 
 export function ImportedSlot() {
   modulePeek();
+  return <main />;
+}
+
+export function SpreadAccessor() {
+  const [, plain] = makeSpreadAccessor();
+  plain();
   return <main />;
 }
