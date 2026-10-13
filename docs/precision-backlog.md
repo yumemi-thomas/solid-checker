@@ -30211,7 +30211,10 @@ these must hold:
 - the `default` names a proven synchronous component declared in the loader
   and referenced nowhere else;
 - the wrapper is an unexported `const` used only as a JSX tag;
-- no reflective prototype write.
+- no reflective prototype write;
+- (review round 1) the module object has no own `then`: a thenable is
+  assimilated when the async return resolves, so `lazy` may never see its
+  `default`. Such a default keeps the refusal (uncertifiable).
 
 app-game's `rapier-2d-physics-engine/index.tsx:80` `start()` is now SC1001 in
 dependency mode, matching contract mode (+1 true positive). rc.13 corpus,
@@ -30229,7 +30232,9 @@ unmoved. Open:
   violation. This ADR does not cover it;
 - the direct-read path reports a lazy body's reads (`local()`) as violations
   on rc.9 too, where that release's `lazy` opens no strict-read window. This
-  predates the ADR and is pinned in `lazy-default-consumer-rc9`.
+  predates the ADR and is pinned in `lazy-default-consumer-rc9`;
+- a module object whose `then` is inherited (a patched `Object.prototype`)
+  rests on the unpatched-prototype premise and its reflective-write veto.
 
 ## A store Get warns by its key (2026-10-13, ADR 0293)
 

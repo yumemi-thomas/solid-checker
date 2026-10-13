@@ -122,3 +122,22 @@ Not claimed:
 - a read in a callback nested in the loaded body keeps its refusal;
 - `{ default: flag ? A : B }` never met the retention guard and was already a
   violation; this ADR neither covers nor changes it.
+
+## Review round 1
+
+One false violation, fixed:
+- **A thenable module object.** `return { default: Loaded, then: (resolve)
+  => resolve({ default: Other }) }` passes every premise, but resolving the
+  async loader's return assimilates the object's own `then`: the promise
+  `lazy` reads `default` from fulfills with what `then` delivers (here
+  `Other`), or never settles. `Loaded` is never rendered, and its read was
+  reported as a violation. The witness now also refuses a module object with
+  an own `then`. `closed_properties` already refused a `then` getter, method
+  or computed key; the new check refuses the data property, quoted or not.
+  Such a default keeps the object-retention refusal (uncertifiable).
+
+Fixture: `lazy-default-consumer` gains `Thenable.tsx`: the reviewer's
+`Loaded`, a quoted `"then"` and a `then` method that never settles, all
+uncertifiable. `tsc --noEmit` is clean against the stub and against installed
+rc.13. rc.13 corpus, base and `--dependency-source '*'` modes: no violation
+moved.

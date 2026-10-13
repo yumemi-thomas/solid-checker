@@ -3538,8 +3538,10 @@ pub(crate) fn returned_callback_invocation_sites(
 ///   `async` non-generator function literal, so nothing but the call holds it;
 /// - its one unconditional return (its own, not a nested function's) is a
 ///   closed object literal: data properties only, no spread, computed key,
-///   duplicate key or `__proto__`. Its `default` property's value, under
-///   transparent TypeScript wrappers, is a plain identifier;
+///   duplicate key or `__proto__`, and no `then` (a thenable is assimilated
+///   when the async return resolves, so it is not what `lazy` receives).
+///   Its `default` property's value, under transparent TypeScript wrappers,
+///   is a plain identifier;
 /// - that identifier names a proven, synchronous, non-generator component
 ///   declared directly in the loader: a function declaration or a `const`
 ///   initialized with the function literal itself, unwritten, and referenced
@@ -3597,6 +3599,17 @@ fn lazy_default_render_witness(
     }
     let module = file.ast.peel_ts_sugar_span(single_return(file, loader)?);
     let properties = closed_properties(file, module)?;
+    // Review round 1: an own `then` makes the module object a thenable. The
+    // async loader's return resolves through it, so the promise `lazy` reads
+    // `default` from fulfills with whatever `then` delivers, or never.
+    // `closed_properties` already refuses a `then` getter, method or
+    // computed key; this refuses the data property, quoted or not.
+    if properties.iter().any(|property| {
+        file.source_text(property.key)
+            .is_some_and(|key| key.trim_matches(['\'', '"']) == "then")
+    }) {
+        return None;
+    }
     let property = properties
         .into_iter()
         .find(|property| file.source_text(property.key) == Some("default"))?;

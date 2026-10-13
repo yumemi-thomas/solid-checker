@@ -200,6 +200,36 @@
       "start": 362,
       "end": 369,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 626,
+      "end": 637,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 982,
+      "end": 989,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/lazy-default-consumer/Thenable.tsx",
+      "start": 1375,
+      "end": 1382,
+      "fixes": 0
     }
   ]
 }

@@ -42,6 +42,7 @@ which contract mode reported and `--dependency-source` left uncertifiable.
 | `Shadow.tsx` module `ShadowCube` | uncertifiable | held by an exported registry; the loader's own `ShadowCube` shadows it |
 | `LocalLazy.tsx` `LocalCube` | uncertifiable | a project function spelled `lazy` |
 | `FakeLazy.tsx` `PackageCube` | uncertifiable | another package's `lazy` |
+| `Thenable.tsx` `Loaded`, `QuotedCube`, `QuietCube` | uncertifiable | review round 1: an own `then` (data, quoted, method) makes the module a thenable, assimilated when the async return resolves, so `default` may never render |
 
 Twin: `lazy-default-consumer-rc9` is `Default.tsx` over `solid-js@2.0.0-rc.9`,
 whose `lazy` renders the member without `createComponent`, so no witness
