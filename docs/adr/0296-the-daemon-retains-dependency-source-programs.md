@@ -99,3 +99,38 @@ runs one-shot.
 - **Unit tests:** the sibling is keyed by its bytes and never rewritten; the
   selection domain is part of the socket identity.
 - **Coverage:** no snapshot moved.
+
+## Review round 1
+
+Five defects, all reproduced as process tests and fixed. Three were in the
+base daemon too, and are fixed there.
+- **A failed refresh consumed its edits.** A refresh records each file as it
+  reads it, and the project's own program took its edits before preparation
+  could still refuse. A later request then saw nothing new and returned the
+  answer from before the edit. Now any request that fails discards the whole
+  retained state (session, trackers, cached answer, sibling), and the next
+  request opens it from scratch. Base mode had the same defect for a file
+  refused as not UTF-8 after another file's edit was read.
+- **Program membership was fixed at open.** An edited import can add a file
+  to a program or drop one without any file changing on disk. The project's
+  program now compares its module list after every edit, and the analyzed
+  program does the same around its own edits; any change opens the program
+  again. Both directions, and base mode, are tested.
+- **Relative paths were the first caller's.** The client now makes
+  `--accepted-contracts`, `--receipt-trust-configuration` and the Type Facts
+  path absolute against its own directory before it computes the socket or
+  sends the request. A bare producer name is resolved through the client's
+  `PATH`. A JSON request with a relative project id stays one-shot.
+- **The idle watchdog could end a request, and a short body was an
+  answer.** The watchdog now skips while a request is being served. The
+  client reads the whole body, compares its length with the header's, and
+  writes nothing until it has. A short body falls back to one-shot. A failed
+  write to stdout is reported and does not fall back.
+- **Fields the daemon drops were accepted.** A request is retained only with
+  generation 1, and, in both modes, without `--contract-package-root`,
+  runtime module resolutions, a proposal catalog, contract batches, a module
+  inventory, `--feedback-facts` or producer arguments. Before, base mode
+  answered these without them.
+
+Evidence: six new process tests in `tests/dependency_daemon_process.rs`,
+each failing before its fix. No snapshot moved.

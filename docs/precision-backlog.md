@@ -30348,6 +30348,16 @@ A warm unchanged check of `probus-hk` under `*` takes 0.24 s instead of
 - contract-emission inputs, `--feedback-facts` and producer arguments keep a
   check one-shot.
 
+Review round 1 fixed five daemon defects, three of them in base mode too: a
+failed request now discards the retained state instead of keeping edits it
+read but never applied; an edit that changes a program's file membership
+reopens it; relative catalog, trust and producer paths are made absolute by
+the client; the idle watchdog spares a request in progress, and a body
+shorter than its header is a daemon failure; and fields the daemon drops
+(generation other than 1, `--feedback-facts`, producer arguments, contract
+inputs) keep a check one-shot in both modes. Still open: a request that fails
+costs the next one a full reopen.
+
 ## Source is the default under a declared host (2026-10-14, ADR 0297)
 
 An ordinary analysis with both `--runtime-target` and `--runtime-build` and no

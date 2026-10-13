@@ -138,15 +138,22 @@ pub fn eligible(request: &Request) -> bool {
         // the retained identity (ADR 0220).
         && !request.runtime_resolution
         && retained_format(&request.format)
-        && (request.dependency_sources.is_empty() || dependency_eligible(request))
+        && carried(request)
 }
 
-/// ADR 0296: a dependency-source check is retained only where the daemon's
-/// program is the one-shot program. Anything a retained session does not
-/// carry stays one-shot.
-fn dependency_eligible(request: &Request) -> bool {
-    // ADR 0295's Window realm is not part of the retained identity.
-    !request.window_realm
+/// A check is retained only where the daemon's program is the one-shot
+/// program (ADR 0296). Anything a retained session does not carry stays
+/// one-shot, where it is honored or refused; review round 1 found these
+/// dropped in base mode too.
+fn carried(request: &Request) -> bool {
+    // A retained session numbers its own generations from 1; the one-shot
+    // path is what validates any other.
+    request.generation == 1
+        // The project id is the daemon's identity and the answer's spelling;
+        // a relative one would be the first caller's.
+        && Path::new(&request.project_id).is_absolute()
+        // ADR 0295's Window realm is not part of the retained identity.
+        && !request.window_realm
         && request.contract_package_root.is_empty()
         && request.runtime_module_resolutions.is_empty()
         && request.proposal_dependency_catalog.is_empty()
@@ -466,6 +473,10 @@ struct State {
     last: Option<CachedAnswer>,
     cache_retention: CacheRetention,
     dependency: Option<DependencyState>,
+    /// Every file the analyzed program holds, read before its first edit.
+    /// `session`'s source set is fixed when it opens, so an edit that
+    /// changes this reopens the program (review round 1 of ADR 0296).
+    modules: Option<Vec<String>>,
 }
 
 /// What a retained dependency-source program (ADR 0296) holds beside the
@@ -491,6 +502,10 @@ struct OriginalProgram {
     /// The producer's own order of `sources`, which preparation reads in: it
     /// decides the order notes are printed in.
     order: Vec<String>,
+    /// Every file the program holds. `sources` is a path-decided subset of
+    /// it, so while this is unchanged so is which files `sources` holds; an
+    /// edited import that changes it rebuilds (review round 1).
+    modules: Vec<PathBuf>,
     tracking: Tracking,
 }
 
@@ -504,6 +519,7 @@ impl OriginalProgram {
             .iter()
             .map(|source| source.path.clone())
             .collect();
+        let modules = super::dependency_program::program_modules(&mut typescript)?;
         let mut sources = configured;
         sources.sort_by(|left, right| left.path.cmp(&right.path));
         let tracking = Tracking::new(&project, &sources)?;
@@ -512,6 +528,7 @@ impl OriginalProgram {
             typescript,
             sources,
             order,
+            modules,
             tracking,
         })
     }
@@ -535,14 +552,13 @@ impl OriginalProgram {
         dialect: &'static solid_facts_backend::dialect::Dialect,
     ) -> Result<PreparedDependencies, Box<dyn Error>> {
         let host = super::dependency_program::host(&request.runtime)?;
-        let modules = super::dependency_program::program_modules(&mut self.typescript)?;
         let (notes, program) = super::dependency_program::prepare_from(
             &self.project,
             &request.dependency_sources,
             &host,
             dialect,
             &self.ordered_sources(),
-            &modules,
+            &self.modules,
         );
         Ok(PreparedDependencies {
             notes,
@@ -757,6 +773,7 @@ impl State {
             last: None,
             cache_retention,
             dependency,
+            modules: None,
         })
     }
 
@@ -888,6 +905,13 @@ impl State {
                     })
                     .collect();
                 if original.typescript.update(edits).is_err() {
+                    return Ok(Sync::Rebuild);
+                }
+                // An edited import can add a file to the program or drop
+                // one, and the inventory preparation reads is the open
+                // program's: reacquire it whole rather than patch it.
+                let modules = super::dependency_program::program_modules(&mut original.typescript)?;
+                if modules != original.modules {
                     return Ok(Sync::Rebuild);
                 }
             }
@@ -1038,33 +1062,48 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
     let _ = fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket)?;
     let mut state = match State::open(request) {
-        Ok(state) => state,
+        Ok(state) => Some(state),
         Err(error) => {
             let _ = fs::remove_file(&socket);
             return Err(error);
         }
     };
-    own_program(state.generated());
+    own_program(state.as_ref().and_then(State::generated));
     // Blocking accept keeps request latency free of poll sleeps; a
     // watchdog thread ends the whole process after the idle limit.
     let idle = idle_limit();
     let memory_limit = memory_limit_bytes();
     let process_id = std::process::id();
-    let last_activity = std::sync::Arc::new(std::sync::Mutex::new(Instant::now()));
-    let watchdog_activity = std::sync::Arc::clone(&last_activity);
+    let activity = std::sync::Arc::new(std::sync::Mutex::new(Activity {
+        last: Instant::now(),
+        serving: false,
+    }));
+    let watchdog_activity = std::sync::Arc::clone(&activity);
     let watchdog_socket = socket.clone();
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(Duration::from_secs(5).min(idle));
-            let idle_for = watchdog_activity
-                .lock()
-                .map(|instant| instant.elapsed())
-                .unwrap_or(idle);
-            if idle_for >= idle {
-                let _ = fs::remove_file(&watchdog_socket);
-                remove_owned_program();
-                std::process::exit(0);
+            {
+                // Decided and acted on under the lock, so a request the loop
+                // has begun to serve is never ended as idle (review round 1
+                // of ADR 0296). One accepted after this exit sees no header,
+                // which its client answers one-shot.
+                let activity = watchdog_activity.lock();
+                let idle_for = activity.as_ref().map_or(idle, |activity| {
+                    if activity.serving {
+                        Duration::ZERO
+                    } else {
+                        activity.last.elapsed()
+                    }
+                });
+                if idle_for >= idle {
+                    let _ = fs::remove_file(&watchdog_socket);
+                    remove_owned_program();
+                    std::process::exit(0);
+                }
             }
+            // The memory limit holds even mid-request: its client then reads
+            // a short or absent body, which it never takes as an answer.
             if memory_limit.is_some_and(|limit| {
                 process_tree_resident_bytes(process_id).is_some_and(|resident| resident > limit)
             }) {
@@ -1077,14 +1116,15 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
     loop {
         match listener.accept() {
             Ok((stream, _)) => {
-                if let Ok(mut instant) = last_activity.lock() {
-                    *instant = Instant::now();
+                if let Ok(mut activity) = activity.lock() {
+                    activity.serving = true;
                 }
                 if let Err(error) = handle(&mut state, request, stream) {
                     eprintln!("solid-checker daemon: {error}");
                 }
-                if let Ok(mut instant) = last_activity.lock() {
-                    *instant = Instant::now();
+                if let Ok(mut activity) = activity.lock() {
+                    activity.serving = false;
+                    activity.last = Instant::now();
                 }
             }
             Err(error) => {
@@ -1096,7 +1136,18 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
     }
 }
 
-fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<(), Box<dyn Error>> {
+/// What the idle watchdog reads: when the last request ended, and whether
+/// one is being served now.
+struct Activity {
+    last: Instant,
+    serving: bool,
+}
+
+fn handle(
+    state: &mut Option<State>,
+    request: &Request,
+    stream: UnixStream,
+) -> Result<(), Box<dyn Error>> {
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
@@ -1122,7 +1173,7 @@ fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<()
     if !request.dependency_sources.is_empty() && check.runtime != request.runtime {
         return respond_error(&mut stream, "daemon serves a different runtime host");
     }
-    let outcome = answer(state, request, &check);
+    let outcome = answer_retained(state, request, &check);
     match outcome {
         Ok(answer) => {
             let materialized = !answer.cache_hit;
@@ -1178,6 +1229,39 @@ fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn E
     stream.write_all(b"\n")?;
     stream.flush()?;
     Ok(())
+}
+
+/// Answer from the retained state, opening it first when an earlier request
+/// discarded it.
+///
+/// A request that fails part-way may already have read edits it never
+/// applied: a refresh records each file as it reads it, and the project's own
+/// program takes its edits before preparation can still refuse. So the state
+/// a failed request leaves is never trusted again. It is discarded whole --
+/// session, trackers, cached answer and sibling -- and the next request opens
+/// the program from scratch, as a one-shot check would (review round 1 of
+/// ADR 0296).
+fn answer_retained(
+    slot: &mut Option<State>,
+    request: &Request,
+    check: &CheckRequest,
+) -> Result<Answer, Box<dyn Error>> {
+    if slot.is_none() {
+        let opened = State::open(request)?;
+        own_program(opened.generated());
+        *slot = Some(opened);
+    }
+    let Some(state) = slot.as_mut() else {
+        return Err("daemon state was not opened".into());
+    };
+    let outcome = answer(state, request, check);
+    if outcome.is_err() {
+        if let Some(generated) = slot.take().as_ref().and_then(State::generated) {
+            let _ = fs::remove_file(generated);
+        }
+        own_program(None);
+    }
+    outcome
 }
 
 fn answer(
@@ -1236,23 +1320,42 @@ fn answer(
             analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
         });
     }
-    let semantic_demand_options = semantic_demand_options_for_enablement(
-        state.dialect,
-        &state.project,
-        RequestedRuleEnablement {
-            presets: &check.presets,
-            rules: &check.enable_rules,
-            runtime: check.runtime.clone(),
-            feedback_facts: false,
-        },
-    )?;
-    state
-        .session
-        .set_semantic_demand_options(semantic_demand_options);
+    let demand = |state: &mut State| -> Result<(), Box<dyn Error>> {
+        let options = semantic_demand_options_for_enablement(
+            state.dialect,
+            &state.project,
+            RequestedRuleEnablement {
+                presets: &check.presets,
+                rules: &check.enable_rules,
+                runtime: check.runtime.clone(),
+                feedback_facts: false,
+            },
+        )?;
+        state.session.set_semantic_demand_options(options);
+        Ok(())
+    };
     let facts = if changes.is_empty() {
+        demand(state)?;
         state.session.analyze()?
     } else {
-        state.session.edit(changes, None)?
+        // Read before the edit reaches the program, so it is the program
+        // the session's sources were taken from.
+        if state.modules.is_none() {
+            state.modules = Some(state.session.program_modules()?);
+        }
+        demand(state)?;
+        let facts = state.session.edit(changes, None)?;
+        let modules = state.session.program_modules()?;
+        if state.modules.as_ref() == Some(&modules) {
+            facts
+        } else {
+            // An edited import added a file to the program or dropped one,
+            // which the session's fixed source set does not follow.
+            let previous = state.generated().map(Path::to_path_buf);
+            replace_state(state, State::open(request)?, previous);
+            demand(state)?;
+            state.session.analyze()?
+        }
     };
     let directory = state
         .project
@@ -1629,6 +1732,7 @@ fn contract_files(
 
 pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     let started = Instant::now();
+    let request = &absolute_paths(request)?;
     // Resolved exactly once and threaded through every use -- the socket
     // hash, the spawned daemon's --dialect, the emission. Detection reads
     // the filesystem, so resolving again later could answer differently (an
@@ -1670,40 +1774,100 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     if !header.ok {
         return Err(header.error.into());
     }
+    // The whole body, and exactly as long as the header says, before anything
+    // reaches the terminal: a daemon that exits while writing it (an idle or
+    // memory limit) leaves an ordinary EOF after a partial body, and a partial
+    // body is a failed answer, which falls back to one-shot with nothing of it
+    // printed (review round 1 of ADR 0296).
+    let mut body = Vec::new();
+    reader.read_to_end(&mut body)?;
+    let received = u64::try_from(body.len()).unwrap_or(u64::MAX);
+    if received != header.response_bytes {
+        return Err(format!(
+            "daemon response has {received} of its {} bytes",
+            header.response_bytes
+        )
+        .into());
+    }
+    let (output, code) = if request.format == "json" {
+        // The daemon caches the canonical JSON emission; it is the output.
+        (
+            body,
+            i32::from(request.certify && header.status != "certified"),
+        )
+    } else {
+        let snapshot: solid_facts_backend::Snapshot = serde_json::from_slice(&body)?;
+        if snapshot.status != header.status {
+            return Err("daemon response status does not match snapshot".into());
+        }
+        let emission = snapshot_emission::emit(
+            dialect,
+            &request.format,
+            &request.project_id,
+            &snapshot,
+            request.certify,
+            started.elapsed(),
+        )?;
+        (emission.output, emission.exit_code)
+    };
     match &header.notice {
         Some(notice) if !notice.is_empty() => eprintln!("{notice}"),
         Some(_) => {}
         None => report_withheld_catalogs(request),
     }
-    if request.format == "json" {
-        // The daemon caches the canonical JSON emission. Stream it directly:
-        // parsing and serializing the multi-megabyte snapshot again made the
-        // payload itself dominate otherwise constant-time cache hits.
-        let response_bytes = io::copy(&mut reader, &mut io::stdout())?;
-        report_timings(&header, started.elapsed(), response_bytes);
-        return Ok(i32::from(request.certify && header.status != "certified"));
+    // Past here the answer is this check's: a failed write is reported, never
+    // followed by a one-shot answer on the same stdout.
+    if let Err(error) = io::stdout().write_all(&output) {
+        eprintln!("solid-checker: could not write the answer: {error}");
+        return Ok(2);
     }
-    let mut body = Vec::new();
-    reader.read_to_end(&mut body)?;
-    let snapshot: solid_facts_backend::Snapshot = serde_json::from_slice(&body)?;
-    if snapshot.status != header.status {
-        return Err("daemon response status does not match snapshot".into());
+    report_timings(&header, started.elapsed(), received);
+    Ok(code)
+}
+
+/// `request` with every path the daemon reads for it made absolute against
+/// this caller's working directory (review round 1 of ADR 0296). A daemon
+/// outlives the client that spawned it and keeps that client's working
+/// directory, so a relative path would name the first caller's file, and
+/// equal relative spellings from two directories would share a cached answer.
+/// The project id is already absolute (`eligible`); `--dependency-source`
+/// names bare specifiers, and no other field the daemon reads is a path.
+fn absolute_paths(request: &Request) -> Result<Request, Box<dyn Error>> {
+    let mut request = request.clone();
+    request.typefacts_executable = executable_path(&request.typefacts_executable)?;
+    for path in [
+        &mut request.accepted_contract_catalog,
+        &mut request.receipt_trust_configuration,
+    ] {
+        if !path.is_empty() {
+            *path = absolute(path)?;
+        }
     }
-    let emission = snapshot_emission::emit(
-        dialect,
-        &request.format,
-        &request.project_id,
-        &snapshot,
-        request.certify,
-        started.elapsed(),
-    )?;
-    io::stdout().write_all(&emission.output)?;
-    report_timings(
-        &header,
-        started.elapsed(),
-        u64::try_from(body.len()).unwrap_or(u64::MAX),
-    );
-    Ok(emission.exit_code)
+    Ok(request)
+}
+
+fn absolute(path: &str) -> Result<String, Box<dyn Error>> {
+    Ok(std::path::absolute(path)?.to_string_lossy().into_owned())
+}
+
+/// The producer this caller would run: a path made absolute, or a bare name
+/// resolved through this caller's `PATH` as `Command` would resolve it.
+/// The daemon would otherwise search its first caller's.
+fn executable_path(executable: &str) -> Result<String, Box<dyn Error>> {
+    if executable.contains(std::path::MAIN_SEPARATOR) {
+        return absolute(executable);
+    }
+    let search = std::env::var_os("PATH").unwrap_or_default();
+    std::env::split_paths(&search)
+        .map(|directory| directory.join(executable))
+        .find(|candidate| {
+            fs::metadata(candidate).is_ok_and(|metadata| {
+                metadata.is_file()
+                    && std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o111 != 0
+            })
+        })
+        .ok_or_else(|| format!("Type Facts executable {executable:?} is not on PATH").into())
+        .and_then(|found| absolute(&found.to_string_lossy()))
 }
 
 /// The client's copy of the one-shot notice for catalogs withheld for want of

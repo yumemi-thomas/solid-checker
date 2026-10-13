@@ -1374,6 +1374,19 @@ impl NativeIncrementalSession {
         self.typescript.cancellation_handle()
     }
 
+    /// Every file the open program holds, by path. This session's source set
+    /// is fixed when it opens, so a retained caller compares this across an
+    /// edit: an edited import can add a file to the program or drop one.
+    pub fn program_modules(&mut self) -> Result<Vec<String>, BackendError> {
+        Ok(self
+            .typescript
+            .module_graph(&typefacts::ModuleGraphDemand::default())?
+            .modules
+            .into_iter()
+            .map(|module| module.path.to_string())
+            .collect())
+    }
+
     /// Recovery is the session's own concern now.
     ///
     /// `typefacts::Session` restarts the producer and replays every retained

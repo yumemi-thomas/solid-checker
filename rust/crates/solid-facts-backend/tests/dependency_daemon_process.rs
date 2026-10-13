@@ -114,7 +114,7 @@ impl Run {
     }
 }
 
-fn check(typefacts: &str, project: &Path, selection: &[&str], retained: bool) -> Run {
+fn command(typefacts: &str, project: &Path, selection: &[&str], retained: bool) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
     command
         .env("SOLID_TYPEFACTS_BIN", typefacts)
@@ -132,6 +132,15 @@ fn check(typefacts: &str, project: &Path, selection: &[&str], retained: bool) ->
     for specifier in selection {
         command.args(["--dependency-source", specifier]);
     }
+    command
+}
+
+fn check(typefacts: &str, project: &Path, selection: &[&str], retained: bool) -> Run {
+    finish(command(typefacts, project, selection, retained), retained)
+}
+
+/// Run `command`, which must succeed, through a daemon iff `retained`.
+fn finish(mut command: Command, retained: bool) -> Run {
     let output = command.output().unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(output.status.success(), "{stderr}");
@@ -550,4 +559,314 @@ fn a_retained_default_check_is_the_one_shot_check() {
     assert!(retained.cache_hit().is_some(), "{}", retained.stderr);
     assert_same(&retained, &one_shot, "opted out");
     assert!(source_notes(&retained).is_empty(), "{}", retained.stderr);
+}
+
+// Review round 1 of ADR 0296.
+
+/// Finding 1: a refresh that fails part-way has already read the edits it
+/// failed on. The request after it must still answer them.
+#[test]
+fn an_aborted_refresh_does_not_consume_its_edits() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    for selection in [&["dep-hooks"][..], &[][..]] {
+        let tag = format!("aborted-{}", selection.len());
+        let scratch = Scratch::new("dependency-source", &tag);
+        // A second project file, after `App.tsx` in the order a refresh
+        // reads them.
+        fs::write(scratch.path("Zed.tsx"), "export {};\n").unwrap();
+        let before = check(&typefacts, &scratch.project, selection, true);
+        let warm = check(&typefacts, &scratch.project, selection, true);
+        assert_eq!(warm.cache_hit(), Some(true), "{tag}");
+        edit(
+            &scratch.path("App.tsx"),
+            "const label = useLabel(name);",
+            "const label = useLabelMemo(name);",
+        );
+        // Broken in place, so no directory stamp moves: the dependency's
+        // manifest, which preparation reads after both programs took the
+        // edit, or a project file the refresh reads after `App.tsx` and
+        // refuses as not UTF-8.
+        let broken = if selection.is_empty() {
+            scratch.path("Zed.tsx")
+        } else {
+            scratch.path("node_modules/dep-hooks/package.json")
+        };
+        let original = fs::read(&broken).unwrap();
+        if selection.is_empty() {
+            fs::write(&broken, b"export {};\n// \xff\xfe\n").unwrap();
+        } else {
+            fs::write(&broken, b"{ not json").unwrap();
+        }
+        let failed = command(&typefacts, &scratch.project, selection, true)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&failed.stderr);
+        assert!(stderr.contains("daemon unavailable"), "{tag}: {stderr}");
+        fs::write(&broken, &original).unwrap();
+        let recovered = check(&typefacts, &scratch.project, selection, true);
+        let fresh = check(&typefacts, &scratch.project, selection, false);
+        assert_same(&recovered, &fresh, &tag);
+        assert_ne!(
+            before.json()["findings"],
+            fresh.json()["findings"],
+            "{tag}: the edit moved nothing"
+        );
+    }
+}
+
+const HELPER_TSCONFIG: &str = r#"{
+  "compilerOptions": {
+    "jsx": "preserve", "module": "ESNext", "moduleResolution": "Bundler",
+    "strict": true, "target": "ES2022"
+  },
+  "files": ["App.tsx", "solid-js.d.ts"],
+  "include": []
+}
+"#;
+
+/// `Helper.tsx` holds the fixture's components and enters the program only
+/// through an import from `App.tsx`, which says `app`.
+fn helper_program(scratch: &Scratch, app: &str) {
+    fs::rename(scratch.path("App.tsx"), scratch.path("Helper.tsx")).unwrap();
+    fs::write(scratch.path("App.tsx"), app).unwrap();
+    fs::write(scratch.path("tsconfig.json"), HELPER_TSCONFIG).unwrap();
+}
+
+/// Finding 2: an edit that changes which files the project's own program
+/// holds, without touching the file set on disk.
+#[test]
+fn an_import_edit_that_changes_program_membership_is_the_one_shot_answer() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    const IMPORTS: &str = "export * from \"./Helper\";\n";
+    const ALONE: &str = "export {};\n";
+    for (direction, from, to) in [("removed", IMPORTS, ALONE), ("added", ALONE, IMPORTS)] {
+        mutation_case(
+            &typefacts,
+            "dependency-source",
+            &format!("membership-{direction}"),
+            &["dep-hooks"],
+            Taken::Reopened,
+            |scratch| helper_program(scratch, from),
+            |scratch| fs::write(scratch.path("App.tsx"), to).unwrap(),
+        );
+        // The same edit without a selection.
+        let tag = format!("membership-base-{direction}");
+        let scratch = Scratch::new("dependency-source", &tag);
+        helper_program(&scratch, from);
+        let before = check(&typefacts, &scratch.project, &[], true);
+        fs::write(scratch.path("App.tsx"), to).unwrap();
+        let retained = check(&typefacts, &scratch.project, &[], true);
+        let fresh = check(&typefacts, &scratch.project, &[], false);
+        assert_same(&retained, &fresh, &tag);
+        assert_ne!(
+            before.json()["findings"],
+            fresh.json()["findings"],
+            "{tag}: the mutation moved nothing"
+        );
+    }
+}
+
+/// Finding 3: a relative path is the caller's, not the daemon's.
+#[test]
+fn a_relative_catalog_path_is_read_from_the_callers_directory() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    for selection in [&["dep-hooks"][..], &[][..]] {
+        let tag = format!("relative-{}", selection.len());
+        let scratch = Scratch::new("dependency-source", &tag);
+        let with_catalog = scratch.root.join("a");
+        let without = scratch.root.join("b");
+        fs::create_dir_all(&with_catalog).unwrap();
+        fs::create_dir_all(&without).unwrap();
+        fs::write(
+            with_catalog.join("catalog.json"),
+            r#"{"format":"solid-checker-accepted-contract-catalog","catalogVersion":2,"contracts":[]}"#,
+        )
+        .unwrap();
+        let from = |directory: &Path, retained: bool| {
+            let mut command = command(&typefacts, &scratch.project, selection, retained);
+            command
+                .current_dir(directory)
+                .args(["--accepted-contracts", "catalog.json"]);
+            command
+        };
+        let warm = finish(from(&with_catalog, true), true);
+        assert_same(&warm, &finish(from(&with_catalog, false), false), &tag);
+        let fresh = from(&without, false).output().unwrap();
+        assert!(
+            !fresh.status.success(),
+            "{tag}: one-shot read a missing catalog"
+        );
+        let retained = from(&without, true).output().unwrap();
+        assert!(
+            !retained.status.success(),
+            "{tag}: the daemon read the first caller's catalog: {}",
+            String::from_utf8_lossy(&retained.stderr)
+        );
+    }
+}
+
+/// A private `TMPDIR`, short enough for a socket path, so a test can find
+/// its own daemon's socket.
+struct SocketDir(PathBuf);
+
+impl SocketDir {
+    fn new(tag: &str) -> Self {
+        let directory = PathBuf::from(format!("/tmp/scd-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        Self(directory)
+    }
+
+    fn socket(&self) -> PathBuf {
+        let sockets = fs::read_dir(&self.0)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension == "sock")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(sockets.len(), 1, "{sockets:?}");
+        sockets.into_iter().next().unwrap()
+    }
+}
+
+impl Drop for SocketDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Finding 4: a request the daemon is still serving is not idle time.
+#[test]
+fn the_idle_watchdog_spares_an_active_request() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = Scratch::new("dependency-source", "idle");
+    let sockets = SocketDir::new("idle");
+    let retained = || {
+        let mut command = command(&typefacts, &scratch.project, &["dep-hooks"], true);
+        command
+            .env("TMPDIR", &sockets.0)
+            .env("SOLID_CHECKER_DAEMON_IDLE_SECS", "1");
+        command
+    };
+    let cold = finish(retained(), true);
+    assert_eq!(cold.cache_hit(), Some(false));
+    // A client that has connected and not yet sent its request is being
+    // served: the daemon is reading it.
+    let socket = sockets.socket();
+    let slow = std::os::unix::net::UnixStream::connect(&socket).unwrap();
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    assert!(socket.exists(), "the watchdog ended a request in progress");
+    drop(slow);
+    let warm = finish(retained(), true);
+    assert_eq!(warm.cache_hit(), Some(true), "{}", warm.stderr);
+}
+
+/// Finding 4: a body shorter than its header says is a failed answer, never
+/// a successful one, and nothing of it reaches stdout.
+#[test]
+fn a_truncated_daemon_response_is_not_an_answer() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::os::unix::net::{UnixListener, UnixStream};
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = Scratch::new("dependency-source", "truncated");
+    let sockets = SocketDir::new("truncated");
+    let retained = || {
+        let mut command = command(&typefacts, &scratch.project, &["dep-hooks"], true);
+        command.env("TMPDIR", &sockets.0);
+        command
+    };
+    finish(retained(), true);
+    // Stand between the client and its live daemon, and drop the end of the
+    // body the daemon sends.
+    let socket = sockets.socket();
+    let daemon = sockets.0.join("daemon.sock.real");
+    fs::rename(&socket, &daemon).unwrap();
+    let proxy = UnixListener::bind(&socket).unwrap();
+    let relay = std::thread::spawn(move || {
+        let (client, _) = proxy.accept().unwrap();
+        let mut client_reader = BufReader::new(client.try_clone().unwrap());
+        let mut line = String::new();
+        client_reader.read_line(&mut line).unwrap();
+        let mut upstream = UnixStream::connect(&daemon).unwrap();
+        upstream.write_all(line.as_bytes()).unwrap();
+        let mut upstream = BufReader::new(upstream);
+        let mut header = String::new();
+        upstream.read_line(&mut header).unwrap();
+        let mut body = Vec::new();
+        upstream.read_to_end(&mut body).unwrap();
+        assert!(body.len() > 16);
+        let mut client = client;
+        client.write_all(header.as_bytes()).unwrap();
+        client.write_all(&body[..body.len() - 16]).unwrap();
+    });
+    let output = retained().output().unwrap();
+    relay.join().unwrap();
+    let fresh = check(&typefacts, &scratch.project, &["dep-hooks"], false);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&fresh.stdout),
+        "{stderr}"
+    );
+    assert!(stderr.contains("daemon unavailable"), "{stderr}");
+}
+
+/// Finding 5: a JSON request the one-shot path refuses is refused retained
+/// too.
+#[test]
+fn a_json_request_with_generation_zero_is_refused_by_both_paths() {
+    use std::io::Write;
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    for selection in [&["dep-hooks"][..], &[][..]] {
+        let tag = format!("generation-{}", selection.len());
+        let scratch = Scratch::new("dependency-source", &tag);
+        // A warm generation-1 daemon for the same project and selection.
+        check(&typefacts, &scratch.project, selection, true);
+        let request = serde_json::json!({
+            "projectId": scratch.path("tsconfig.json"),
+            "generation": 0,
+            "sources": [],
+            "typefactsExecutable": typefacts,
+            "dependencySources": selection,
+            "format": "json",
+            "runtime": {"target": "browser", "build": "development"},
+        })
+        .to_string();
+        for retained in [false, true] {
+            let mut child = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+                .env("SOLID_CHECKER_DAEMON", if retained { "1" } else { "0" })
+                .env("SOLID_CHECKER_DAEMON_IDLE_SECS", "20")
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(request.as_bytes())
+                .unwrap();
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                !output.status.success(),
+                "{tag} retained={retained}: generation 0 was answered: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
+    }
 }
