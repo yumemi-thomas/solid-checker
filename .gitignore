@@ -458,6 +458,10 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/host-dead-return-server/node_modules/**
 !fixtures/reactive-ir/host-dead-return-wildcard/node_modules/
 !fixtures/reactive-ir/host-dead-return-wildcard/node_modules/**
+!fixtures/reactive-ir/lazy-default-consumer/node_modules/
+!fixtures/reactive-ir/lazy-default-consumer/node_modules/**
+!fixtures/reactive-ir/lazy-default-consumer-rc9/node_modules/
+!fixtures/reactive-ir/lazy-default-consumer-rc9/node_modules/**
 !fixtures/reactive-ir/host-dead-return-prototype/node_modules/
 !fixtures/reactive-ir/host-dead-return-prototype/node_modules/**
 !fixtures/reactive-ir/dependency-source-context-reprovided/node_modules/

@@ -2628,6 +2628,34 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// The argument of a call of `primitive` with exactly `arguments`
+    /// arguments that is a **component loader whose `default` it renders**:
+    /// the call returns a component that, when rendered, awaits the promise
+    /// that loader returns and renders that module object's `default` member
+    /// as a component, with the body's own render semantics. The call runs
+    /// nothing synchronously, and the returned component's only other way to
+    /// the module object is the one the engine must enumerate itself (2.0's
+    /// `.preload()`, which hands the same promise to its caller).
+    ///
+    /// Like [`Dialect::renders_component_argument`], this is one fact about
+    /// control flow and nothing about reactivity. The engine uses it only to
+    /// withdraw an object-retention refusal from a project function whose one
+    /// reference is that `default` member, and only after proving every other
+    /// premise itself (ADR 0292). A call form that selects another member
+    /// (2.0's `{ export: "Name" }` option) answers `None`, rather than letting
+    /// the engine guess which member renders.
+    ///
+    /// Solid 2.0's one-argument `lazy(loader)` is the case. The default is
+    /// `None`.
+    fn renders_loaded_default_argument(
+        &self,
+        primitive: Primitive,
+        arguments: usize,
+    ) -> Option<usize> {
+        let _ = (primitive, arguments);
+        None
+    }
+
     /// The part the export declared as `name` plays in this vocabulary's
     /// context mechanism (ADR 0153), or `None`.
     ///

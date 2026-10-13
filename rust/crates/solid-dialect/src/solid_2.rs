@@ -99,6 +99,18 @@ pub struct Solid2 {
     /// the owned-scope write guard at all
     /// ([`Dialect::optimistic_store_setter_guarded`]).
     optimistic_store_setter: releases::OptimisticStoreSetterGuard,
+    /// ADR 0292, from `solid-js`: whether `lazy` renders the loaded `default`
+    /// through `createComponent` ([`Dialect::renders_loaded_default_argument`]).
+    ///
+    /// A runtime difference. `solid-js@2.0.0-rc.13`'s wrapper renders
+    /// `createComponent(Comp, props)` (`dist/solid.dev.js:1425`), whose
+    /// `observedComponent` runs the body as `untrack(() => Comp(props),
+    /// label)` (`:59`), the strict-read window a JSX-rendered component body
+    /// has. rc.3 and rc.9 call `untrack(() => Comp(props))` themselves, with
+    /// no label (rc.9 `dist/solid.dev.js:1175-1179`), so the loaded body opens
+    /// no strict-read window there. `true` on rc.13 alone; every other
+    /// release, unread and unresolved included, keeps `false`.
+    lazy_renders_component: bool,
 }
 
 /// The Solid 2 language's own vocabulary, [`Solid2::CONSERVATIVE`], spelled
@@ -8597,6 +8609,42 @@ impl Dialect for Solid2 {
     /// never again.
     fn renders_component_argument(&self, name: &str) -> Option<usize> {
         (name == "createComponent").then_some(0)
+    }
+
+    /// ADR 0292, read on the published `solid-js@2.0.0-rc.13` builds
+    /// (`dist/solid.js`, `dist/solid.observe.js` and `dist/solid.dev.js`, which
+    /// adds only a throw for a string second argument; `dist/server.js`
+    /// selects the same member):
+    ///
+    /// ```js
+    /// function lazy(fn, options, moduleUrl) {
+    ///   const exportName = options?.export;
+    ///   ...
+    ///   const load = () => { ... const cur = p = fn();
+    ///     cur.then(mod => { comp = () => exportName ? mod[exportName] : mod.default; }, ...);
+    ///     return cur; };
+    ///   const wrap = props => { ...
+    ///     local = createMemo$1(() => load().then(mod => exportName ? mod[exportName] : mod.default));
+    ///     ...
+    ///     return createMemo$1(() => (Comp = (comp || local)()) ? createComponent(Comp, props) : "", { sync: true }); };
+    ///   wrap.preload = load;
+    ///   ...
+    ///   return wrap; }
+    /// ```
+    ///
+    /// `fn` is called only by `load`, which the wrapper and `.preload()`
+    /// reach; the selected member is `default` exactly when no `options`
+    /// object is passed, and it is rendered through `createComponent`. With a
+    /// second argument the selected member is data, so only the one-argument
+    /// form answers. Earlier releases render the member without
+    /// `createComponent` (`Solid2::lazy_renders_component`), so only a
+    /// vocabulary read on rc.13 answers at all.
+    fn renders_loaded_default_argument(
+        &self,
+        primitive: Primitive,
+        arguments: usize,
+    ) -> Option<usize> {
+        (self.lazy_renders_component && primitive == Primitive::Lazy && arguments == 1).then_some(0)
     }
 
     /// ADR 0153, read on every bundle of the audited `solid-js` archives

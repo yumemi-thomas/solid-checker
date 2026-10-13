@@ -446,17 +446,55 @@ fn runs_in_unproven_stored_literal(
 /// its definition a body role. Its summary still projects reads at exact
 /// calls, with those calls' own execution roles.
 fn runs_in_object_callable(file: &solid_facts::FileFacts, span: Span) -> bool {
-    file.ast.functions_body_containing(span).any(|function| {
-        let binding = function_binding_name(file, function).map(|name| name.span);
-        file.ast.object_properties.iter().any(|property| {
-            let value = file
-                .ast
-                .peel_ts_sugar_span(property.shorthand_binding.unwrap_or(property.value));
-            value == function.span
-                || binding.is_some_and(|binding| {
-                    value == binding || file.ast.reference_declaration(value) == Some(binding)
+    object_retention_witnesses(file, span).next().is_some()
+}
+
+/// Every `(function, property)` pair behind [`runs_in_object_callable`]: an
+/// enclosing function of `span` and an object property holding it.
+fn object_retention_witnesses(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> impl Iterator<
+    Item = (
+        &solid_facts::ast::FunctionFact,
+        &solid_facts::ast::ObjectPropertyFact,
+    ),
+> {
+    file.ast
+        .functions_body_containing(span)
+        .flat_map(move |function| {
+            let binding = function_binding_name(file, function).map(|name| name.span);
+            file.ast
+                .object_properties
+                .iter()
+                .filter(move |property| {
+                    let value = file
+                        .ast
+                        .peel_ts_sugar_span(property.shorthand_binding.unwrap_or(property.value));
+                    value == function.span
+                        || binding.is_some_and(|binding| {
+                            value == binding
+                                || file.ast.reference_declaration(value) == Some(binding)
+                        })
                 })
+                .map(move |property| (function, property))
         })
+}
+
+/// [`runs_in_object_callable`] less one disposition (ADR 0292): a witness
+/// that is the `default` of a module object a dialect component loader
+/// renders, and the function's one reference, is a render of that function,
+/// not a retention. It is withdrawn only for a call written directly in that
+/// function's own body; every other witness, an enclosing function's
+/// included, stays in force.
+fn runs_in_unrendered_object_callable(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    object_retention_witnesses(file, span).any(|(function, property)| {
+        !(crate::owners::written_directly_in(&file.ast, function, span)
+            && lookup.is_lazy_default_render_witness(file, function.span, property.span))
     })
 }
 
@@ -6421,7 +6459,7 @@ fn interprocedural_result_reads_for_file(
         ) {
             dispatch_obligations.truncate(obligations_before);
         }
-        let object_callable = runs_in_object_callable(file, call.callee);
+        let object_callable = runs_in_unrendered_object_callable(file, call.callee, lookup);
         if !object_callable
             && (inside_non_component_function(file, call.callee, lookup)
                 || runs_in_unproven_stored_literal(

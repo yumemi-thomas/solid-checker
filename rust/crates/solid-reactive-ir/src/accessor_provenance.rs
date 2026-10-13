@@ -124,13 +124,7 @@ impl MemberStability {
                     continue;
                 };
                 let site = location(file.path.shared(), call.span);
-                // A spread can supply any target, a prototype included.
-                if call.arguments.first().is_some_and(|target| {
-                    target.spread
-                        || file
-                            .source_text(target.span)
-                            .is_some_and(|text| text.contains("prototype"))
-                }) {
+                if targets_prototype(file, call) {
                     prototype_target.get_or_insert_with(|| site.clone());
                 }
                 // A spread argument shifts every later position (a tuple can
@@ -270,6 +264,30 @@ impl MemberStability {
             }
         }
     }
+}
+
+/// Whether a reflective write's target may be spelled through a `prototype`.
+/// A spread can supply any target, a prototype included.
+fn targets_prototype(file: &FileFacts, call: &ast::CallFact) -> bool {
+    call.arguments.first().is_some_and(|target| {
+        target.spread
+            || file
+                .source_text(target.span)
+                .is_some_and(|text| text.contains("prototype"))
+    })
+}
+
+/// ADR 0292: whether any analyzed file holds a reflective write
+/// (`Object.assign`, `defineProperty`, `Reflect.set`, ...) whose target is
+/// spelled through a `prototype`, the one write [`MemberStability`] lets reach
+/// a fresh literal nothing else holds (ADR 0282, narrowed by ADR 0288's
+/// review). The same visible veto, for a fresh module object.
+pub(crate) fn reflective_prototype_write(lookup: &SemanticLookup<'_>) -> bool {
+    lookup.files().iter().any(|file| {
+        file.ast.calls.iter().any(|call| {
+            targets_prototype(file, call) && mutation_builtin(file, call, lookup).is_some()
+        })
+    })
 }
 
 /// Signature and runtime receiver identities are independent, as in ADR 0272.
@@ -2212,7 +2230,7 @@ fn array_iteration_receiver(
     Some(file.ast.peel_ts_sugar_span(member.object))
 }
 
-fn single_return(file: &FileFacts, function: &ast::FunctionFact) -> Option<Span> {
+pub(crate) fn single_return(file: &FileFacts, function: &ast::FunctionFact) -> Option<Span> {
     if let Some(returned) = &function.expression_return {
         return returned.argument;
     }
@@ -2280,7 +2298,10 @@ fn direct_data_properties(file: &FileFacts, span: Span) -> Vec<&ast::ObjectPrope
 
 /// Literal syntax supplies member identity only when its entire own property
 /// set is closed. Nested properties/callback objects are never siblings.
-fn closed_properties(file: &FileFacts, span: Span) -> Option<Vec<&ast::ObjectPropertyFact>> {
+pub(crate) fn closed_properties(
+    file: &FileFacts,
+    span: Span,
+) -> Option<Vec<&ast::ObjectPropertyFact>> {
     let shape = file
         .ast
         .object_get_shapes

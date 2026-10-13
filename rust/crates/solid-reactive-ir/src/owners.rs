@@ -3519,6 +3519,189 @@ pub(crate) fn returned_callback_invocation_sites(
     sites
 }
 
+/// ADR 0292: `(path, function span, property span)` for each object property
+/// proven to be the one route by which a project component reaches anything:
+/// the `default` member of the module object a dialect component loader
+/// renders ([`Dialect::renders_loaded_default_argument`]).
+///
+/// ```tsx
+/// const Page = lazy(async () => {
+///   function Cube() { start(); return <div />; }
+///   return { default: Cube };
+/// });
+/// <Page />
+/// ```
+///
+/// The witness holds only when all of these do:
+///
+/// - the loader is the call's whole argument at the dialect's slot, an
+///   `async` non-generator function literal, so nothing but the call holds it;
+/// - its one unconditional return (its own, not a nested function's) is a
+///   closed object literal: data properties only, no spread, computed key,
+///   duplicate key or `__proto__`. Its `default` property's value, under
+///   transparent TypeScript wrappers, is a plain identifier;
+/// - that identifier names a proven, synchronous, non-generator component
+///   declared directly in the loader: a function declaration or a `const`
+///   initialized with the function literal itself, unwritten, and referenced
+///   nowhere else;
+/// - the call initializes an unexported, unwritten `const`, and every
+///   reference to it is a JSX tag name (an opening or closing name, never a
+///   dotted one), with at least one opening tag. A `.preload()` would hand
+///   the module promise to its caller, and any other use could reach it;
+/// - no analyzed file holds a reflective write through a `prototype`, the
+///   visible veto ADR 0288 keeps for a fresh literal.
+///
+/// The module object is then fresh, reachable only by the runtime that
+/// selects its `default` and renders it, so the component's only invocations
+/// are those renders.
+pub(crate) fn lazy_default_render_witnesses<'a>(
+    lookup: &SemanticLookup<'a>,
+) -> HashSet<(&'a str, Span, Span)> {
+    let mut witnesses = HashSet::new();
+    for file in lookup.files() {
+        for call in &file.ast.calls {
+            if let Some((function, property)) = lazy_default_render_witness(file, call, lookup) {
+                witnesses.insert((file.path.as_str(), function, property));
+            }
+        }
+    }
+    if !witnesses.is_empty()
+        && crate::interproc::accessor_provenance::reflective_prototype_write(lookup)
+    {
+        witnesses.clear();
+    }
+    witnesses
+}
+
+fn lazy_default_render_witness(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(Span, Span)> {
+    use crate::interproc::accessor_provenance::{closed_properties, single_return};
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    let slot = lookup
+        .dialect
+        .renders_loaded_default_argument(primitive, call.arguments.len())?;
+    if call.arguments.iter().any(|argument| argument.spread) {
+        return None;
+    }
+    let loader_span = file.ast.peel_ts_sugar_span(call.arguments.get(slot)?.span);
+    let loader = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == loader_span)?;
+    if !loader.r#async || loader.generator || !lazy_wrapper_only_rendered(file, call) {
+        return None;
+    }
+    let module = file.ast.peel_ts_sugar_span(single_return(file, loader)?);
+    let properties = closed_properties(file, module)?;
+    let property = properties
+        .into_iter()
+        .find(|property| file.source_text(property.key) == Some("default"))?;
+    if property.shorthand_binding.is_some() {
+        return None;
+    }
+    let value = file.ast.peel_ts_sugar_span(property.value);
+    let declaration = file.ast.reference_declaration(value)?;
+    // The value's one reference: no registry, call, tag or alias elsewhere.
+    if file
+        .ast
+        .reference_declarations
+        .iter()
+        .any(|(reference, target)| *target == declaration && *reference != value)
+        || crate::indexes::binding_written(file, declaration)
+    {
+        return None;
+    }
+    let function = file.ast.functions.iter().find(|function| {
+        let named = match function.kind {
+            solid_facts::ast::FunctionKind::Declaration => function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration),
+            _ => file.ast.bindings.iter().any(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && binding.names[0].span == declaration
+                    && binding.initializer.is_some_and(|initializer| {
+                        file.ast.peel_ts_sugar_span(initializer) == function.span
+                    })
+            }),
+        };
+        // Declared in the loader's own body, inside no other function there.
+        named
+            && loader.body.contains(function.span)
+            && !file.ast.functions_within(loader.body).any(|outer| {
+                outer.span != function.span
+                    && outer.span != loader.span
+                    && outer.span.contains(function.span)
+            })
+    })?;
+    (!function.r#async
+        && !function.generator
+        && lookup.function_value_is_current(file, function)
+        && lookup.function_component_status(file, function)
+            == crate::indexes::ComponentStatus::Proven)
+        .then_some((function.span, property.span))
+}
+
+/// Whether the loader call initializes an unexported, unwritten `const` whose
+/// every reference is a JSX tag name, with at least one opening tag.
+fn lazy_wrapper_only_rendered(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    let Some(binding) = file.ast.bindings.iter().find(|binding| {
+        binding
+            .initializer
+            .is_some_and(|initializer| file.ast.peel_ts_sugar_span(initializer) == call.span)
+    }) else {
+        return false;
+    };
+    if !binding.immutable
+        || binding.shape != solid_facts::ast::BindingShape::Identifier
+        || binding.names.len() != 1
+        || file
+            .ast
+            .exports
+            .iter()
+            .any(|export| export.span.contains(binding.declaration))
+    {
+        return false;
+    }
+    let name = binding.names[0].span;
+    if crate::indexes::binding_written(file, name) {
+        return false;
+    }
+    let mut opened = false;
+    for (reference, _) in file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, target)| *target == name)
+    {
+        let mut tag = false;
+        for element in &file.ast.jsx_elements {
+            if element.member_object.is_some() {
+                continue;
+            }
+            if element.name.span == *reference {
+                opened = true;
+                tag = true;
+            } else if element.closing_name == Some(*reference) {
+                tag = true;
+            }
+        }
+        if !tag {
+            return false;
+        }
+    }
+    opened
+}
+
 pub(crate) fn returned_binding_references(
     lookup: &SemanticLookup<'_>,
     bindings: &HashSet<SymbolId>,

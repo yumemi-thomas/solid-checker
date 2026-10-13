@@ -30176,3 +30176,35 @@ initialization-dominance proof for a module-level `var`, because hoisting
 makes a never-written `var` insufficient. The payoff is 2 `prefer-show`
 findings in spotify-desk-thing. Parked until the realm declaration and the
 `var` proof are worth building.
+
+## A `lazy` module's `default` is rendered, not retained (2026-10-13, ADR 0292)
+
+The object-retention refusal no longer forces callback timing on calls written
+directly in a component that is a `lazy` loader's module `default`. All of
+these must hold:
+- `solid-js@2.0.0-rc.13`'s one-argument `lazy`. A new release digit,
+  `lazy-renders-component`, is set because rc.3 and rc.9 render the member
+  without `createComponent`;
+- an `async` loader literal with one unconditional closed-literal return;
+- the `default` names a proven synchronous component declared in the loader
+  and referenced nowhere else;
+- the wrapper is an unexported `const` used only as a JSX tag;
+- no reflective prototype write.
+
+app-game's `rapier-2d-physics-engine/index.tsx:80` `start()` is now SC1001 in
+dependency mode, matching contract mode (+1 true positive). rc.13 corpus,
+release binary, measured against HEAD 1b46a444f's own sweep:
+- base mode: unchanged (562/3,737, every finding identical);
+- `--dependency-source '*'`: 560/3,288 → 561/3,287, that one row only.
+
+Fixtures `reactive-ir/lazy-default-consumer` and `-rc9`; coverage otherwise
+unmoved. Open:
+- `lazy(fn, { export })`, a referenced (non-literal) loader, an aliased,
+  spread or conditional module object, and exported, preloaded or aliased
+  wrappers all keep the refusal;
+- a read in a callback nested in the loaded body keeps the refusal;
+- `{ default: flag ? A : B }` never met the retention guard and is already a
+  violation. This ADR does not cover it;
+- the direct-read path reports a lazy body's reads (`local()`) as violations
+  on rc.9 too, where that release's `lazy` opens no strict-read window. This
+  predates the ADR and is pinned in `lazy-default-consumer-rc9`.

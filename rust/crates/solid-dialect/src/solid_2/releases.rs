@@ -15,6 +15,7 @@
 //! | N3: does the dev store-setter guard reject a root owner? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.9) | the installed `solid-js` |
 //! | N4: does `flush` throw `FLUSH_IN_ACTION` inside an action step? | `@solidjs/signals` (`dist/dev-shared.js`, from rc.8) | the installed `solid-js` |
 //! | N5: does an optimistic-store setter meet the owned-scope write guard? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.1) | the installed `solid-js` |
+//! | ADR 0292: does `lazy` render its loaded `default` through `createComponent`? | `solid-js` (`lazy`, rc.13 of the read releases) | the installed `solid-js` |
 //!
 //! Every `solid-js@2.0.0-rc.N` depends on `@solidjs/signals: ^2.0.0-rc.N`, a
 //! range, so a fresh install of the audited `solid-js@2.0.0-rc.3` resolves
@@ -264,6 +265,7 @@ impl Solid2 {
         store_setter_roots: StoreSetterRootGuard::Exempt,
         flush_in_action: false,
         optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
+        lazy_renders_component: false,
     };
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
@@ -290,19 +292,23 @@ impl Solid2 {
         store_setter_roots: StoreSetterRootGuard::Guarded,
         flush_in_action: true,
         optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
+        lazy_renders_component: false,
     };
 
     /// rc.13 adds one audited strict store-key premise; older reviews
-    /// grant none, even though their other answers coincide with rc.13.
+    /// grant none, even though their other answers coincide with rc.13. Its
+    /// `lazy` renders the loaded `default` through `createComponent` (ADR
+    /// 0292), which rc.3 and rc.9 do not.
     pub const RC13: Self = Self {
         store_strict_keys_audited: true,
+        lazy_renders_component: true,
         ..Self::RC9
     };
 
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
     /// `0`: digit `0` of every answer is its conservative one. A new
@@ -311,6 +317,7 @@ impl Solid2 {
     const fn from_index(index: usize) -> Self {
         Self {
             store_strict_keys_audited: (index / 192) % 2 == 1,
+            lazy_renders_component: (index / 384) % 2 == 1,
             store_root: if index % 2 == 1 {
                 StoreRootTyping::Mutable
             } else {
@@ -366,6 +373,7 @@ impl Solid2 {
             + 48 * flush
             + 96 * optimistic
             + 192 * (if self.store_strict_keys_audited { 1 } else { 0 })
+            + 384 * (if self.lazy_renders_component { 1 } else { 0 })
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -431,6 +439,9 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     }
     if vocabulary.optimistic_store_setter == OptimisticStoreSetterGuard::Unguarded {
         tokens.push("optimistic-store-setter-unguarded");
+    }
+    if vocabulary.lazy_renders_component {
+        tokens.push("lazy-renders-component");
     }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
@@ -619,6 +630,10 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
     Solid2 {
         // The new premise was read only on exact rc.13 signals bytes.
         store_strict_keys_audited: matches!(signals, Release::Read(13)),
+        // ADR 0292. `lazy` is `solid-js`'s own, and rc.13 is the one read
+        // release whose wrapper renders through `createComponent`; rc.3 and
+        // rc.9 call the loaded member themselves without a strict-read label.
+        lazy_renders_component: matches!(solid_js, Release::Read(13)),
         // B1. An unread or unresolved signals keeps `Readonly` (module docs).
         store_root: match signals {
             Release::Read(number) if number >= 7 => StoreRootTyping::Mutable,
@@ -1201,6 +1216,47 @@ mod tests {
         }
     }
 
+    /// ADR 0292: only rc.13's `solid-js` renders `lazy`'s loaded `default`
+    /// through `createComponent`, and only for the one-argument form, so only
+    /// that answer names a loader slot; mixed triples follow `solid-js`.
+    #[test]
+    fn lazy_renders_its_loaded_default_only_on_solid_js_rc13() {
+        let (audited, _) = analyzed(&same("2.0.0-rc.13"));
+        assert_eq!(
+            audited.renders_loaded_default_argument(Primitive::Lazy, 1),
+            Some(0)
+        );
+        assert_eq!(
+            audited.renders_loaded_default_argument(Primitive::Lazy, 2),
+            None
+        );
+        assert_eq!(
+            audited.renders_loaded_default_argument(Primitive::CreateMemo, 1),
+            None
+        );
+        for release in ["2.0.0-rc.3", "2.0.0-rc.9", "2.0.0-rc.14"] {
+            assert_eq!(
+                analyzed(&same(release))
+                    .0
+                    .renders_loaded_default_argument(Primitive::Lazy, 1),
+                None,
+                "{release}"
+            );
+        }
+        assert_eq!(
+            Solid2::CONSERVATIVE.renders_loaded_default_argument(Primitive::Lazy, 1),
+            None
+        );
+        assert!(
+            vocabulary_for(Release::Read(13), Release::Read(9), Release::Read(9))
+                .lazy_renders_component
+        );
+        assert!(
+            !vocabulary_for(Release::Read(9), Release::Read(13), Release::Read(13))
+                .lazy_renders_component
+        );
+    }
+
     /// ADR 0138: `Dynamic` renders `component` on every release the reviews
     /// read, and only a one-argument `createMemo` is a holder a rendered value
     /// may be followed through. `dynamic`'s returned component, the store and
@@ -1441,6 +1497,7 @@ mod tests {
             conservative.optimistic_store_setter,
             OptimisticStoreSetterGuard::Guarded
         );
+        assert!(!conservative.lazy_renders_component);
         // It is exactly what an installation with nothing resolved reads as.
         assert_eq!(
             vocabulary_for(

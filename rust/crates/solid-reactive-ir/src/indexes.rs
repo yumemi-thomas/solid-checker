@@ -538,6 +538,10 @@ pub(super) struct SemanticLookup<'a> {
     /// of its own parameters in a condition or a logical operand, the only
     /// functions a call's arguments can decide anything in.
     parameter_testing_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    /// ADR 0292: `(path, function span, property span)` for each object
+    /// property that is a proven component's one route, the `default` of the
+    /// module a dialect component loader renders.
+    lazy_default_render_witnesses: OnceLock<HashSet<(&'a str, Span, Span)>>,
 }
 
 /// Which parts of the returned-adapter contract this build's dialect can
@@ -669,6 +673,7 @@ impl<'a> SemanticLookup<'a> {
             parameter_completion_calls: OnceLock::new(),
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: OnceLock::new(),
+            lazy_default_render_witnesses: OnceLock::new(),
         }
     }
 
@@ -1892,6 +1897,20 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn files(&self) -> &'a [FileFacts] {
         &self.facts.files
+    }
+
+    /// ADR 0292: whether `property` holding `function` is the `default` of a
+    /// module object a dialect component loader renders, and that function's
+    /// one reference ([`crate::owners::lazy_default_render_witnesses`]).
+    pub(super) fn is_lazy_default_render_witness(
+        &self,
+        file: &FileFacts,
+        function: Span,
+        property: Span,
+    ) -> bool {
+        self.lazy_default_render_witnesses
+            .get_or_init(|| crate::owners::lazy_default_render_witnesses(self))
+            .contains(&(file.path.as_str(), function, property))
     }
 
     pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
