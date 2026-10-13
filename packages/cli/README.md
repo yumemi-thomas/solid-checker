@@ -287,6 +287,16 @@ set `settings.solidChecker.runtime` with explicit `target`, `build`,
 contradictory selections remain uncertifiable; the adapter includes the full
 selection in its analysis cache identity.
 
+With both `target` and `build` set, the analysis reads every installed Solid
+package the project loads from its runtime source instead of its contract
+(ADR 0297); packages it cannot read that way keep their contracts. Nothing in
+the adapter's cache identity follows installed package bytes, so such a run is
+reused only by the rules of one file's lint pass and analyzed again on the
+next. Set `settings.solidChecker.dependencySource` to `false` to bind every
+package through its contract instead (`--no-dependency-source`); the snapshot
+is then cached across passes as before. The `browser-v2` config sets a target
+without a build, so it keeps contracts.
+
 Package contracts reach the adapter the way they reach the CLI: the analysis
 discovers the project's `.solid-checker/` catalogs itself, and
 `settings.solidChecker.acceptedContracts` names one catalog instead. A catalog

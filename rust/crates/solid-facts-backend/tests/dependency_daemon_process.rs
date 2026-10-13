@@ -401,3 +401,153 @@ fn an_edited_folded_package_file_is_the_one_shot_answer() {
         },
     );
 }
+
+/// ADR 0297: one check with exactly `args` after the project, retained or
+/// one-shot, whatever its exit status.
+fn invoke(typefacts: &str, project: &Path, args: &[&str], retained: bool) -> (bool, Run) {
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", typefacts)
+        .env("SOLID_CHECKER_DAEMON", if retained { "1" } else { "0" })
+        .env("SOLID_CHECKER_DAEMON_IDLE_SECS", "20")
+        .env("SOLID_CHECKER_TIMINGS", "1")
+        .args(["--format", "json", "--project"])
+        .arg(project.join("tsconfig.json"))
+        .args(args)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(!stderr.contains("daemon unavailable"), "{stderr}");
+    (
+        output.status.success(),
+        Run {
+            stdout: output.stdout,
+            stderr,
+        },
+    )
+}
+
+const HOST: [&str; 4] = [
+    "--runtime-target",
+    "browser",
+    "--runtime-build",
+    "development",
+];
+
+fn with_host(rest: &[&'static str]) -> Vec<&'static str> {
+    HOST.iter().chain(rest).copied().collect()
+}
+
+fn source_notes(run: &Run) -> Vec<&str> {
+    run.notes()
+        .into_iter()
+        .filter(|note| note.contains("dependency source"))
+        .collect()
+}
+
+#[test]
+fn a_declared_host_analyzes_every_solid_package_from_source_by_default() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = Scratch::new("dependency-source-all", "default-source");
+    let ok = |args: &[&str]| {
+        let (success, run) = invoke(&typefacts, &scratch.project, args, false);
+        assert!(success, "{args:?}: {}", run.stderr);
+        run
+    };
+    let explicit = ok(&with_host(&["--dependency-source", "*"]));
+    let defaulted = ok(&HOST);
+    assert_same(&defaulted, &explicit, "the default is `*`");
+    // `dep-array`'s `exports` array is refused with a note naming it: the
+    // selection ran.
+    assert!(
+        source_notes(&defaulted)
+            .iter()
+            .any(|note| note.contains("dep-array")),
+        "{}",
+        defaulted.stderr
+    );
+
+    // The opt-out is contract mode, and contract mode answers differently
+    // here, so the agreement above is not vacuous.
+    let opted_out = ok(&with_host(&["--no-dependency-source"]));
+    assert!(source_notes(&opted_out).is_empty(), "{}", opted_out.stderr);
+    assert_ne!(
+        String::from_utf8_lossy(&opted_out.stdout),
+        String::from_utf8_lossy(&defaulted.stdout),
+        "contract mode answers differently here"
+    );
+
+    // Without both a target and a build nothing is selected: the answer is
+    // the opted-out one, without a note.
+    for partial in [
+        &["--runtime-target", "browser"][..],
+        &["--runtime-build", "development"][..],
+        &[][..],
+    ] {
+        let run = ok(partial);
+        assert!(source_notes(&run).is_empty(), "{partial:?}: {}", run.stderr);
+        let mut opted = partial.to_vec();
+        opted.push("--no-dependency-source");
+        assert_same(&run, &ok(&opted), &format!("{partial:?} is contract mode"));
+    }
+
+    // Contract inspection keeps contracts under a declared host. It exits 1
+    // for the packages here that have none.
+    let inspect = |args: &[&str]| invoke(&typefacts, &scratch.project, args, false);
+    let (inspected_ok, inspected) = inspect(&with_host(&["--check-contracts"]));
+    assert!(source_notes(&inspected).is_empty(), "{}", inspected.stderr);
+    let (opted_ok, opted) = inspect(&with_host(&["--check-contracts", "--no-dependency-source"]));
+    assert_eq!(inspected_ok, opted_ok);
+    assert!(!inspected.stdout.is_empty(), "{}", inspected.stderr);
+    assert_same(&inspected, &opted, "--check-contracts");
+
+    // The opt-out and a selection contradict each other.
+    let (success, refused) = invoke(
+        &typefacts,
+        &scratch.project,
+        &with_host(&["--no-dependency-source", "--dependency-source", "*"]),
+        false,
+    );
+    assert!(!success);
+    assert!(
+        refused
+            .stderr
+            .contains("--no-dependency-source cannot be combined with --dependency-source"),
+        "{}",
+        refused.stderr
+    );
+}
+
+#[test]
+fn a_retained_default_check_is_the_one_shot_check() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = Scratch::new("dependency-source-all", "default-retained");
+    let fresh = invoke(&typefacts, &scratch.project, &HOST, false).1;
+    let (cold_ok, cold) = invoke(&typefacts, &scratch.project, &HOST, true);
+    let (warm_ok, warm) = invoke(&typefacts, &scratch.project, &HOST, true);
+    assert!(cold_ok && warm_ok, "{}\n{}", cold.stderr, warm.stderr);
+    assert_eq!(cold.cache_hit(), Some(false), "{}", cold.stderr);
+    assert_eq!(warm.cache_hit(), Some(true), "{}", warm.stderr);
+    assert_same(&cold, &fresh, "default cold");
+    assert_same(&warm, &fresh, "default warm");
+    // The retained default is the explicit `*` selection's daemon.
+    let explicit = invoke(
+        &typefacts,
+        &scratch.project,
+        &with_host(&["--dependency-source", "*"]),
+        true,
+    )
+    .1;
+    assert_eq!(explicit.cache_hit(), Some(true), "{}", explicit.stderr);
+    assert_same(&explicit, &fresh, "explicit `*` against the default");
+    // An opted-out retained check is a contract-mode daemon's answer.
+    let opted_out = with_host(&["--no-dependency-source"]);
+    let retained = invoke(&typefacts, &scratch.project, &opted_out, true).1;
+    let one_shot = invoke(&typefacts, &scratch.project, &opted_out, false).1;
+    assert!(retained.cache_hit().is_some(), "{}", retained.stderr);
+    assert_same(&retained, &one_shot, "opted out");
+    assert!(source_notes(&retained).is_empty(), "{}", retained.stderr);
+}

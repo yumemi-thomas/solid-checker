@@ -30347,3 +30347,30 @@ A warm unchanged check of `probus-hk` under `*` takes 0.24 s instead of
   analyzed program;
 - contract-emission inputs, `--feedback-facts` and producer arguments keep a
   check one-shot.
+
+## Source is the default under a declared host (2026-10-14, ADR 0297)
+
+An ordinary analysis with both `--runtime-target` and `--runtime-build` and no
+`--dependency-source` now runs as `--dependency-source '*'`;
+`--no-dependency-source` (fixtures: `"dependencySource": false`; ESLint:
+`settings.solidChecker.dependencySource: false`) restores contract mode.
+Emission, inspection, probe, certification, feedback and runtime-resolution
+runs keep contracts. Over the rc.13 corpus: 562 violations, 3,287
+uncertifiable, every finding equal to the same binary's explicit `*` run.
+No snapshot moved. Against contract mode, by site:
+- lost: kui `frontend/packages/feature-topics/src/TopicsRoute.tsx:425:75`
+  (`SC1001`; the package getter is an obligation, ADR 0289) and
+  spotify-desk-thing `PlayerControlIcon.tsx:26:5` and
+  `PlayerControls.tsx:133:5` (`SC8015`; solid-query's `typeof window` branch
+  blocks the proxy proof unless a Window realm is declared, ADR 0295). Each
+  needs `--no-dependency-source` to be reported;
+- added: probus-hk `src/routes/RouteDetail.tsx:2214:7`,
+  `src/routes/Search.tsx:302:42` and `:317:11` (`SC1001`).
+
+Open:
+- a run without both host fields, including ESLint's `browser-v2` config, is
+  still contract mode; host inference does not select source;
+- WASM has no source mode;
+- the ESLint adapter now analyzes once per linted file under a declared host
+  instead of once per process, because its cache identity does not follow
+  installed package bytes.

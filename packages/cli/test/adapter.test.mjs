@@ -966,3 +966,61 @@ process.exit(2);
   );
   plugin._testing.snapshotCache.clear();
 });
+
+test("a run that reads package source is reused within one file's pass only (ADR 0297)", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-source-"));
+  try {
+    const project = join(root, "tsconfig.json");
+    writeFileSync(project, "{}\n");
+    const { command, commandArgs, invocations } = recordingAnalyzer(root);
+    const context = (settings, extraArgs = []) => ({
+      filename: join(root, "App.tsx"),
+      physicalFilename: join(root, "App.tsx"),
+      sourceCode: sourceCode("export {};"),
+      settings: { solidChecker: {
+        command, commandArgs: [...commandArgs, ...extraArgs], project, ...settings
+      } },
+      options: []
+    });
+    const host = { runtime: { target: "browser", build: "development" } };
+    plugin._testing.snapshotCache.clear();
+
+    // Under a declared target and build: one analysis per pass, none reused
+    // across passes, and the native default is left alone.
+    const first = context(host);
+    plugin._testing.loadSnapshot(first);
+    plugin._testing.loadSnapshot(Object.create(first));
+    assert.equal(invocations().length, 1, "every rule of one pass shares its analysis");
+    assert.equal(invocations()[0].includes("--no-dependency-source"), false);
+    plugin._testing.loadSnapshot(context(host));
+    assert.equal(invocations().length, 2, "a later pass analyzes again");
+    assert.equal(plugin._testing.snapshotCache.size, 0, "nothing enters the cross-pass cache");
+
+    // The opt-out reaches native and restores the cross-pass cache.
+    const optOut = { ...host, dependencySource: false };
+    plugin._testing.loadSnapshot(context(optOut));
+    plugin._testing.loadSnapshot(context(optOut));
+    assert.equal(invocations().length, 3);
+    assert.equal(invocations()[2].includes("--no-dependency-source"), true);
+
+    // A target alone selects nothing, so the cross-pass cache stands.
+    plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }));
+    plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }));
+    assert.equal(invocations().length, 4);
+
+    // A host or selection spelled in commandArgs counts as reading source.
+    for (const extra of [["--runtime-build", "development"], ["--dependency-source", "*"]]) {
+      plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }, extra));
+      plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }, extra));
+    }
+    assert.equal(invocations().length, 8);
+
+    assert.throws(
+      () => plugin._testing.loadSnapshot(context({ dependencySource: "off" })),
+      /settings\.solidChecker\.dependencySource must be a boolean/
+    );
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -274,6 +274,15 @@ function runtimeArguments(tsconfig) {
   for (const specifier of runtime.dependencySources ?? []) {
     args.push("--dependency-source", specifier);
   }
+  // ADR 0297: a declared target and build analyze every Solid package from
+  // source by default; `"dependencySource": false` keeps a fixture whose claim
+  // is about contract binding on contracts.
+  if (runtime.dependencySource !== undefined) {
+    if (typeof runtime.dependencySource !== "boolean") {
+      throw new Error(`${metadata}: dependencySource must be a boolean`);
+    }
+    if (runtime.dependencySource === false) args.push("--no-dependency-source");
+  }
   return args;
 }
 

@@ -341,8 +341,9 @@ export function inspectDevelopmentFeedback(project, { capture = null, analyze, f
     "--project", snapshot.manifest.project, "--format", "json", ...(feedbackFacts ? ["--feedback-facts"] : []),
     // The runtime the caller executes: `feedback run` serves a client-rendered
     // development build to Chromium, so package claims are answered for that
-    // runtime rather than for every host.
-    ...(runtime ? ["--runtime-target", runtime.target, "--runtime-build", runtime.build, "--rendering", runtime.rendering] : [])
+    // runtime rather than for every host. Feedback keeps package contracts:
+    // the source default of a declared host (ADR 0297) is not migrated here.
+    ...(runtime ? ["--runtime-target", runtime.target, "--runtime-build", runtime.build, "--rendering", runtime.rendering, "--no-dependency-source"] : [])
   ], { timeoutMs });
   const context = { binary, timeoutMs };
   if (native.error || native.signal || ![0, 1].includes(native.status)) throw nativeFailure(snapshot.manifest.project, snapshot, native, context);

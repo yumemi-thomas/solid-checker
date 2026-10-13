@@ -124,6 +124,12 @@ struct Request {
     /// `--runtime-target browser` and `--dependency-source`.
     #[serde(default)]
     window_realm: bool,
+    /// ADR 0297: `--no-dependency-source`. An ordinary analysis under a
+    /// declared target and build analyzes every Solid package from source
+    /// (`*`) unless this is set; with it, packages bind through contracts as
+    /// they did before that default. Refused beside `--dependency-source`.
+    #[serde(default)]
+    no_dependency_source: bool,
     /// Full Phase-7 exact package resolution for the artifact being emitted.
     #[serde(default)]
     contract_resolution: String,
@@ -3250,6 +3256,26 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     request.presets.dedup();
     request.enable_rules.sort();
     request.enable_rules.dedup();
+    // ADR 0297: the effective dependency selection, decided once and before
+    // any mode or the daemon branch reads it, so a retained check serves the
+    // selection a one-shot check analyzes.
+    if request.no_dependency_source && !request.dependency_sources.is_empty() {
+        return Err(
+            "--no-dependency-source cannot be combined with --dependency-source: \
+             one asks for contracts, the other for source"
+                .into(),
+        );
+    }
+    if defaults_to_dependency_sources(&request) {
+        request.dependency_sources = vec!["*".into()];
+    }
+    if request.window_realm && request.dependency_sources.is_empty() {
+        return Err(
+            "--runtime-realm window applies only to dependency-source packages, \
+             and this run analyzes none"
+                .into(),
+        );
+    }
     let emits_contract = !request.emit_contract.is_empty();
     let emits_contract_batch = !request.emit_contract_batch.is_empty();
     if emits_contract && emits_contract_batch {
@@ -4311,6 +4337,196 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     Ok(0)
 }
 
+/// ADR 0297: an ordinary analysis whose host declares both a target and a
+/// build analyzes every Solid package from source, as `--dependency-source
+/// '*'` does, unless `--no-dependency-source` or an explicit selection says
+/// otherwise. A package `*` does not select or refuses keeps its contract.
+///
+/// Every other mode keeps the selection it was given. Contract emission and
+/// its batch, the module inventory and resolutions it reads, probe and
+/// certification planning, contract inspection and validation, feedback
+/// facts, bundler runtime resolution, caller-supplied sources and the daemon
+/// server (which serves its client's selection verbatim) are not ordinary
+/// analyses, and none of them has been shown to mean the same thing under a
+/// source selection.
+fn defaults_to_dependency_sources(request: &Request) -> bool {
+    let declared_host = request.runtime.target.is_some() && request.runtime.build.is_some();
+    let ordinary = !request.serve
+        && !request.help
+        && request.sources.is_empty()
+        && request.emit_contract.is_empty()
+        && request.emit_contract_batch.is_empty()
+        && request.contract_batch_results.is_empty()
+        && request.declaration_probe_plan.is_empty()
+        && request.emit_module_inventory.is_empty()
+        && request.runtime_module_resolutions.is_empty()
+        && request.contract_resolution.is_empty()
+        && request.emit_proposal_plan.is_empty()
+        && request.contract_package_root.is_empty()
+        && request.contract_entry_file.is_empty()
+        && request.proposal_dependency_catalog.is_empty()
+        && request.package_name.is_empty()
+        && request.package_version.is_empty()
+        && !request.check_contracts
+        && !request.feedback_facts
+        && !request.runtime_resolution
+        && request.validate_contract_paths.is_empty()
+        && request.merge_contract_paths.is_empty()
+        && request.merge_contract_output.is_empty()
+        && request.merge_proposal_plan_paths.is_empty()
+        && request.merge_proposal_plan_output.is_empty()
+        && request.review_contract.is_empty()
+        && request.review_output.is_empty()
+        && request.runtime_probe_proposal.is_empty()
+        && request.runtime_probe_proposal_plan.is_empty()
+        && request.runtime_probe_request.is_empty()
+        && request.runtime_probe_plan_output.is_empty()
+        && request.runtime_probe_runs.is_empty()
+        && request.runtime_probe_evaluation_output.is_empty()
+        && request.plan_contract_certification.is_empty()
+        && request.certification_plan_output.is_empty()
+        && request.execute_contract_certification.is_empty()
+        && request.verify_policy2_discovery.is_empty()
+        && env!("CARGO_BIN_NAME") == "solid-checker-rust";
+    declared_host
+        && ordinary
+        && request.dependency_sources.is_empty()
+        && !request.no_dependency_source
+}
+
+#[cfg(test)]
+mod default_dependency_source_tests {
+    use super::{Request, defaults_to_dependency_sources};
+    use solid_reactive_ir::{RuntimeBuild, RuntimeTarget};
+
+    fn request(target: bool, build: bool) -> Request {
+        let mut request: Request = serde_json::from_value(serde_json::json!({
+            "projectId": "/project/tsconfig.json",
+            "generation": 1,
+            "sources": [],
+            "typefactsExecutable": "solid-typefacts",
+        }))
+        .unwrap();
+        request.runtime.target = target.then_some(RuntimeTarget::Browser);
+        request.runtime.build = build.then_some(RuntimeBuild::Development);
+        request
+    }
+
+    #[test]
+    fn only_an_ordinary_analysis_under_a_declared_target_and_build_defaults_to_source() {
+        assert!(defaults_to_dependency_sources(&request(true, true)));
+        assert!(!defaults_to_dependency_sources(&request(true, false)));
+        assert!(!defaults_to_dependency_sources(&request(false, true)));
+        assert!(!defaults_to_dependency_sources(&request(false, false)));
+        let mut opted_out = request(true, true);
+        opted_out.no_dependency_source = true;
+        assert!(!defaults_to_dependency_sources(&opted_out));
+        let mut named = request(true, true);
+        named.dependency_sources = vec!["dep".into()];
+        assert!(!defaults_to_dependency_sources(&named));
+    }
+
+    #[test]
+    fn no_other_mode_defaults_to_source() {
+        const P: &str = "/somewhere";
+        type Mode = (&'static str, fn(&mut Request));
+        let modes: &[Mode] = &[
+            ("serve", |r| r.serve = true),
+            ("help", |r| r.help = true),
+            ("emit-contract", |r| r.emit_contract = P.into()),
+            ("emit-contract-batch", |r| r.emit_contract_batch = P.into()),
+            ("contract-batch-results", |r| {
+                r.contract_batch_results = P.into()
+            }),
+            ("declaration-probe-plan", |r| {
+                r.declaration_probe_plan = P.into()
+            }),
+            ("emit-module-inventory", |r| {
+                r.emit_module_inventory = P.into()
+            }),
+            ("runtime-module-resolutions", |r| {
+                r.runtime_module_resolutions = P.into()
+            }),
+            ("contract-resolution", |r| r.contract_resolution = P.into()),
+            ("emit-proposal-plan", |r| r.emit_proposal_plan = P.into()),
+            ("contract-package-root", |r| {
+                r.contract_package_root = P.into()
+            }),
+            ("contract-entry-file", |r| r.contract_entry_file = P.into()),
+            ("proposal-dependencies", |r| {
+                r.proposal_dependency_catalog = P.into()
+            }),
+            ("package-name", |r| r.package_name = P.into()),
+            ("package-version", |r| r.package_version = P.into()),
+            ("check-contracts", |r| r.check_contracts = true),
+            ("feedback-facts", |r| r.feedback_facts = true),
+            ("runtime-resolution", |r| r.runtime_resolution = true),
+            ("validate-contract", |r| {
+                r.validate_contract_paths = vec![P.into()]
+            }),
+            ("merge-contract", |r| {
+                r.merge_contract_paths = vec![P.into()]
+            }),
+            ("merge-contract-output", |r| {
+                r.merge_contract_output = P.into()
+            }),
+            ("merge-proposal-plan", |r| {
+                r.merge_proposal_plan_paths = vec![P.into()]
+            }),
+            ("merge-proposal-plan-output", |r| {
+                r.merge_proposal_plan_output = P.into()
+            }),
+            ("review-contract", |r| r.review_contract = P.into()),
+            ("review-output", |r| r.review_output = P.into()),
+            ("runtime-probe-proposal", |r| {
+                r.runtime_probe_proposal = P.into()
+            }),
+            ("runtime-probe-proposal-plan", |r| {
+                r.runtime_probe_proposal_plan = P.into()
+            }),
+            ("runtime-probe-request", |r| {
+                r.runtime_probe_request = P.into()
+            }),
+            ("runtime-probe-plan-output", |r| {
+                r.runtime_probe_plan_output = P.into()
+            }),
+            ("runtime-probe-runs", |r| r.runtime_probe_runs = P.into()),
+            ("runtime-probe-evaluation-output", |r| {
+                r.runtime_probe_evaluation_output = P.into()
+            }),
+            ("plan-contract-certification", |r| {
+                r.plan_contract_certification = P.into()
+            }),
+            ("certification-plan-output", |r| {
+                r.certification_plan_output = P.into()
+            }),
+            ("execute-contract-certification", |r| {
+                r.execute_contract_certification = P.into()
+            }),
+            ("verify-policy2-discovery", |r| {
+                r.verify_policy2_discovery = P.into()
+            }),
+        ];
+        for (mode, set) in modes {
+            let mut request = request(true, true);
+            set(&mut request);
+            assert!(!defaults_to_dependency_sources(&request), "{mode}");
+        }
+        let mut supplied = request(true, true);
+        supplied.sources = vec![
+            serde_json::from_value(serde_json::json!({
+                "path": "/project/App.tsx",
+                "source": "",
+            }))
+            .unwrap(),
+        ];
+        assert!(
+            !defaults_to_dependency_sources(&supplied),
+            "caller-supplied sources"
+        );
+    }
+}
+
 fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
     let mut project = PathBuf::from("tsconfig.json");
@@ -4363,6 +4579,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut contract_package_root = String::new();
     let mut runtime = RuntimeEnvironment::default();
     let mut window_realm = false;
+    let mut no_dependency_source = false;
     let mut help = false;
     let mut serve = false;
     let mut args = arguments.into_iter();
@@ -4633,6 +4850,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                 args.next()
                     .ok_or("--dependency-source needs a package specifier")?,
             ),
+            "--no-dependency-source" => no_dependency_source = true,
             "--runtime-realm" => {
                 window_realm =
                     parse_runtime_realm(&args.next().ok_or("--runtime-realm needs a value")?)?;
@@ -4768,13 +4986,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     // ADR 0295: the realm is a premise about the selected packages' runtime
     // in a browser; `--runtime-target browser` alone states no realm, and no
     // other analysis reads one.
+    // Whether any package is selected is decided in `run`, after the default
+    // selection of ADR 0297.
     if window_realm && runtime.target != Some(RuntimeTarget::Browser) {
         return Err("--runtime-realm window needs --runtime-target browser".into());
-    }
-    if window_realm && dependency_sources.is_empty() {
-        return Err(
-            "--runtime-realm window applies only to --dependency-source packages; name one".into(),
-        );
     }
     let project = if !help
         && validate_contract_paths.is_empty()
@@ -4821,6 +5036,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         runtime_module_resolutions,
         dependency_sources,
         window_realm,
+        no_dependency_source,
         contract_resolution,
         emit_proposal_plan,
         merge_contract_paths,
@@ -4939,7 +5155,14 @@ fn print_help() {
                                         Select the runtime target explicitly\n\
            --runtime-build <development|production>\n\
                                         Select the build mode explicitly\n\
-           --runtime-realm <window>     Declare that the --dependency-source packages run\n\
+           --dependency-source <SPECIFIER>\n\
+                                        Analyze an installed package from its runtime source\n\
+                                        instead of its contract (repeatable; `*` selects every\n\
+                                        Solid package). Requires --runtime-target and\n\
+                                        --runtime-build; with both declared, `*` is the default\n\
+           --no-dependency-source       Bind every package through its contract even under a\n\
+                                        declared target and build\n\
+           --runtime-realm <window>     Declare that the dependency-source packages run\n\
                                         in an HTML Window realm, which decides their\n\
                                         `typeof window`/`typeof document` guards.\n\
                                         Requires --runtime-target browser\n\

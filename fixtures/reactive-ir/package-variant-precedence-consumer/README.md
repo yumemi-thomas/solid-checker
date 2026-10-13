@@ -28,5 +28,12 @@ The runtime selection is required: with no environment selected,
 `matches_conditions` matches nothing and both exports fail closed, which would
 make the resolved half untestable.
 
+The claim is about contract binding, so `"dependencySource": false` keeps the
+fixture on contracts (`--no-dependency-source`): a declared target and build
+otherwise analyze installed Solid packages from source (ADR 0297). The package
+names no Solid dependency and ships no runtime source, so source mode selects
+nothing here today and the findings are the same either way; the pin keeps the
+claim from depending on that.
+
 The declarations are exact for this fixture package; every finding depends on
 the runtime contract, not on trusting the declaration as runtime evidence.

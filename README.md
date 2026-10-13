@@ -189,6 +189,9 @@ Run `solid-checker --help` for the full list. The options you'll reach for most:
 | `--preset <NAME>` | Enable a catalog preset (repeatable; the compatibility `preferences` preset is currently available). |
 | `--enable-rule <NAME>` | Explicitly enable one rule (repeatable). |
 | `--check-contracts` | Report imported Solid packages whose reactivity contract is missing, unverified, stale, or bound to no import, with the command that fixes each. Also spelled `solid-checker contract check`. |
+| `--runtime-target <browser\|node>`, `--runtime-build <development\|production>` | Declare where and how the analyzed code runs. With both declared, every installed Solid package the project loads is analyzed from its runtime source instead of its contract (ADR 0297). A package that cannot be read that way, a namespace import, and every non-Solid package keep their contracts. |
+| `--dependency-source <SPECIFIER>` | Analyze only the named installed packages from source (repeatable; `*` is every Solid package, the default under a declared target and build). Requires both host flags. |
+| `--no-dependency-source` | Bind every package through its contract even under a declared target and build. Cannot be combined with `--dependency-source`. |
 | `-h`, `--help` | Print help. |
 
 Authoring a package contract (see [Publishing a Solid library?](#publishing-a-solid-library)):

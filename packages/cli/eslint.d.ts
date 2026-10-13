@@ -49,6 +49,16 @@ export interface SolidCheckerSettings {
   dialect?: "solid-v2" | (string & {});
   /** Exact runtime selection used for artifact cases and rendering proofs. */
   runtime?: SolidCheckerRuntimeSettings;
+  /**
+   * Whether installed Solid packages are analyzed from their runtime source.
+   * When `runtime` declares both `target` and `build`, the checker does so by
+   * default and keeps package contracts for what it cannot read (ADR 0297).
+   * `false` passes `--no-dependency-source`, binding every package through its
+   * contract. A run reading package source reuses its analysis within one
+   * file's lint pass only, so an edited installed package is seen on the next
+   * pass.
+   */
+  dependencySource?: boolean;
   /** Opt-in Vite client resolver observation; executes project config. Off by default. */
   runtimeResolution?: "required" | "off";
   /** Read a canonical JSON snapshot instead of starting an analysis process. */

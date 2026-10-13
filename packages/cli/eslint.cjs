@@ -253,6 +253,56 @@ function inferenceFingerprint(project, runtime) {
   return hash.digest("hex");
 }
 
+/**
+ * `settings.solidChecker.dependencySource`: `false` passes
+ * `--no-dependency-source`, binding every package through its contract;
+ * unset or `true` leaves the native default (ADR 0297).
+ */
+function dependencySourceSetting(config) {
+  const value = config.dependencySource;
+  if (value == null) return null;
+  if (typeof value !== "boolean") {
+    throw new Error("settings.solidChecker.dependencySource must be a boolean");
+  }
+  return value;
+}
+
+/**
+ * Whether the native run may analyze installed package source (ADR 0297):
+ * under a declared target and build it does unless opted out, and any
+ * selection or host spelled in `commandArgs` may make it so. Over-answering
+ * is the safe side; it only costs the cross-pass cache.
+ */
+function readsPackageSource(commandArgs, runtime, dependencySource) {
+  if (dependencySource === false || commandArgs.includes("--no-dependency-source")) return false;
+  if (runtime?.target && runtime?.build) return true;
+  return commandArgs.some(argument =>
+    /^--(?:dependency-source|runtime-target|runtime-build|daemon-runtime)(?:=|$)/.test(argument));
+}
+
+/**
+ * One analysis per linted file's pass, for a run that reads package source.
+ *
+ * The cross-pass cache keys on settings alone, and nothing in that key moves
+ * when an installed package's file does, so a persistent editor session would
+ * serve a snapshot of package bytes that are gone. Every rule of one file's
+ * pass shares ESLint's one `SourceCode` object, so keying on it reuses one
+ * analysis within the pass -- as a single run would -- and never across
+ * files or passes. A context without one simply analyzes again.
+ */
+const passSnapshots = new WeakMap();
+
+function passCache(context) {
+  const sourceCode = context.sourceCode ?? context.getSourceCode?.();
+  if (sourceCode == null || typeof sourceCode !== "object") return null;
+  let cache = passSnapshots.get(sourceCode);
+  if (!cache) {
+    cache = new Map();
+    passSnapshots.set(sourceCode, cache);
+  }
+  return cache;
+}
+
 function loadSnapshot(context) {
   const config = configuration(context);
   if (config.snapshot != null) return config.snapshot;
@@ -275,6 +325,7 @@ function loadSnapshot(context) {
   const dialect = config.dialect ?? null;
   const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
   const runtime = runtimeConfiguration(config);
+  const dependencySource = dependencySourceSetting(config);
   const runtimeResolution = config.runtimeResolution ?? "off";
   if (!["required", "off"].includes(runtimeResolution)) {
     throw new Error("settings.solidChecker.runtimeResolution must be required or off");
@@ -295,13 +346,25 @@ function loadSnapshot(context) {
     presets,
     enableRules,
     runtime,
+    dependencySource,
     runtimeResolution,
     inferredHostInputs
   });
+  // ADR 0297: a run that reads installed package source is reused within one
+  // file's pass only (`passCache`). An observed runtime is never reused.
+  const pass = !observesRuntime && readsPackageSource(commandArgs, runtime, dependencySource)
+    ? passCache(context) ?? new Map()
+    : null;
+  const store = (value) => (pass ?? snapshotCache).set(key, value);
+  if (pass?.has(key)) {
+    const cached = pass.get(key);
+    if (cached instanceof Error) throw cached;
+    return cached;
+  }
   // Inference now depends on installed transitive plugin bytes. Let native
   // validate that closure on every request instead of duplicating its resolver
   // and allowlist in this adapter's in-process cache.
-  if (!observesRuntime && inferredHostInputs === null && snapshotCache.has(key)) {
+  if (pass === null && !observesRuntime && inferredHostInputs === null && snapshotCache.has(key)) {
     const cached = snapshotCache.get(key);
     if (cached instanceof Error) throw cached;
     return cached;
@@ -309,10 +372,12 @@ function loadSnapshot(context) {
 
   // Failures share the snapshot cache and its process lifetime: a persistent
   // editor session with a broken binary reports the cached error to every
-  // rule of every lint pass instead of re-spawning the checker each time.
+  // rule of every lint pass instead of re-spawning the checker each time. A
+  // run reading package source keeps its failure for the pass alone, so an
+  // install that fixes it recovers on the next pass.
   const failure = message => {
     const error = new Error(message);
-    snapshotCache.set(key, error);
+    store(error);
     return error;
   };
 
@@ -325,6 +390,7 @@ function loadSnapshot(context) {
   ];
   if (dialect) args.push("--dialect", dialect);
   if (runtimeResolution === "required") args.push("--runtime-resolution", "required");
+  if (dependencySource === false) args.push("--no-dependency-source");
   if (acceptedContracts) args.push("--accepted-contracts", acceptedContracts);
   if (trust) args.push("--receipt-trust-configuration", trust.path);
   for (const preset of presets) args.push("--preset", preset);
@@ -377,7 +443,7 @@ function loadSnapshot(context) {
   if (notices.length > 0 && snapshot && typeof snapshot === "object") {
     snapshotNotices.set(snapshot, notices);
   }
-  snapshotCache.set(key, snapshot);
+  store(snapshot);
   return snapshot;
 }
 
@@ -799,6 +865,7 @@ module.exports._testing = {
   findProject,
   findingMessage,
   loadSnapshot,
+  passSnapshots,
   manifests,
   manifestEntriesByRule,
   deprecatedRuleKeys: DEPRECATED_RULE_KEYS,

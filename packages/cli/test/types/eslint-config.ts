@@ -6,6 +6,7 @@ const settings: SolidCheckerSettings = {
   dialect: "solid-v2",
   acceptedContracts: ".solid-checker/accepted-contracts.json",
   receiptTrustConfiguration: "../trust.json",
+  dependencySource: false,
   runtime: {
     target: "browser",
     rendering: "csr",

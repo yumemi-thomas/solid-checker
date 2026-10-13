@@ -1,7 +1,8 @@
 # ADR 0291: Every Solid package is analyzed from source
 
 - Status: accepted and implemented; opt-in as `--dependency-source '*'`
-  (2026-10-13).
+  (2026-10-13). The default of an ordinary analysis under a declared target
+  and build since ADR 0297 (2026-10-14).
 - Owner: `dependency_sources::prepare_all` and its request collection in
   `main.rs`.
 - Step 2 of moving dependency analysis from contracts to source (ADR 0284).
