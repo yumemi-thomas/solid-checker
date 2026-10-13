@@ -63,6 +63,25 @@ impl Scratch {
         self.project.join(relative)
     }
 
+    /// Installs a manifest-only `package` at `node_modules/<package>`.
+    fn install(&self, package: &str) {
+        let directory = self.project.join("node_modules").join(package);
+        fs::create_dir_all(&directory).unwrap();
+        let name = package.rsplit("node_modules/").next().unwrap();
+        fs::write(
+            directory.join("package.json"),
+            format!(r#"{{"name":"{name}","version":"3.0.0-next.44"}}"#),
+        )
+        .unwrap();
+    }
+
+    /// ADR 0297 review round 1: the Solid Vite plugin that establishes the
+    /// resolver the default selection reads.
+    fn with_solid_vite_plugin(self) -> Self {
+        self.install("@solidjs/vite-plugin");
+        self
+    }
+
     fn siblings(&self) -> Vec<String> {
         fs::read_dir(&self.project)
             .unwrap()
@@ -458,7 +477,7 @@ fn a_declared_host_analyzes_every_solid_package_from_source_by_default() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    let scratch = Scratch::new("dependency-source-all", "default-source");
+    let scratch = Scratch::new("dependency-source-all", "default-source").with_solid_vite_plugin();
     let ok = |args: &[&str]| {
         let (success, run) = invoke(&typefacts, &scratch.project, args, false);
         assert!(success, "{args:?}: {}", run.stderr);
@@ -533,7 +552,8 @@ fn a_retained_default_check_is_the_one_shot_check() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    let scratch = Scratch::new("dependency-source-all", "default-retained");
+    let scratch =
+        Scratch::new("dependency-source-all", "default-retained").with_solid_vite_plugin();
     let fresh = invoke(&typefacts, &scratch.project, &HOST, false).1;
     let (cold_ok, cold) = invoke(&typefacts, &scratch.project, &HOST, true);
     let (warm_ok, warm) = invoke(&typefacts, &scratch.project, &HOST, true);
@@ -869,4 +889,323 @@ fn a_json_request_with_generation_zero_is_refused_by_both_paths() {
             );
         }
     }
+}
+
+fn stdout(run: &Run) -> std::borrow::Cow<'_, str> {
+    String::from_utf8_lossy(&run.stdout)
+}
+
+const NO_PLUGIN: &str = "no Solid Vite plugin";
+
+/// Review round 1 of ADR 0297: a target and a build do not establish the
+/// Vite + Solid plugin resolver source selection reads, so without the
+/// plugin the default is contract mode, with a note. An explicit selection
+/// states the premise and is unchanged.
+#[test]
+fn the_default_needs_a_solid_vite_plugin() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch = Scratch::new("dependency-source-all", "default-plugin");
+    let ok = |args: &[&str]| {
+        let (success, run) = invoke(&typefacts, &scratch.project, args, false);
+        assert!(success, "{args:?}: {}", run.stderr);
+        run
+    };
+    let explicit = ok(&with_host(&["--dependency-source", "*"]));
+    assert!(
+        source_notes(&explicit)
+            .iter()
+            .any(|note| note.contains("dep-array")),
+        "an explicit selection needs no plugin: {}",
+        explicit.stderr
+    );
+    let opted_out = ok(&with_host(&["--no-dependency-source"]));
+    assert_ne!(stdout(&opted_out), stdout(&explicit), "not vacuous");
+    assert!(
+        !opted_out.stderr.contains(NO_PLUGIN),
+        "{}",
+        opted_out.stderr
+    );
+
+    let contract_mode = |run: &Run, context: &str| {
+        assert_eq!(stdout(run), stdout(&opted_out), "{context}");
+        assert!(source_notes(run).is_empty(), "{context}: {}", run.stderr);
+        assert!(run.stderr.contains(NO_PLUGIN), "{context}: {}", run.stderr);
+    };
+    contract_mode(&ok(&HOST), "no plugin installed");
+    // A manifest naming no version is no installation, as for `solid-js`.
+    let versionless = scratch.path("node_modules/vite-plugin-solid");
+    fs::create_dir_all(&versionless).unwrap();
+    fs::write(
+        versionless.join("package.json"),
+        r#"{"name":"vite-plugin-solid"}"#,
+    )
+    .unwrap();
+    contract_mode(&ok(&HOST), "a versionless plugin manifest");
+    // SolidStart alone is not the plugin; the one it ships is.
+    scratch.install("@solidjs/start");
+    contract_mode(&ok(&HOST), "SolidStart without its plugin");
+    scratch.install("@solidjs/start/node_modules/vite-plugin-solid");
+    assert_same(&ok(&HOST), &explicit, "the plugin SolidStart ships");
+    fs::remove_dir_all(scratch.path("node_modules/@solidjs/start")).unwrap();
+    contract_mode(&ok(&HOST), "SolidStart removed");
+    for plugin in ["vite-plugin-solid", "@solidjs/vite-plugin"] {
+        let _ = fs::remove_dir_all(scratch.path("node_modules").join("vite-plugin-solid"));
+        let _ = fs::remove_dir_all(scratch.path("node_modules/@solidjs/vite-plugin"));
+        scratch.install(plugin);
+        assert_same(&ok(&HOST), &explicit, plugin);
+    }
+}
+
+/// Restores a directory's mode when dropped, so a failed assertion still
+/// lets `Scratch` remove the tree.
+#[cfg(unix)]
+struct ReadOnly(PathBuf);
+
+#[cfg(unix)]
+impl ReadOnly {
+    fn new(directory: &Path) -> Self {
+        use std::os::unix::fs::PermissionsExt as _;
+        fs::set_permissions(directory, fs::Permissions::from_mode(0o555)).unwrap();
+        Self(directory.to_path_buf())
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ReadOnly {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+    }
+}
+
+/// Review round 1 of ADR 0297: contract mode writes nothing into the
+/// project, so the default does not make a read-only project fail. It is
+/// contract mode there, one-shot and retained, with a note; an explicit
+/// selection keeps its write requirement and its error.
+#[cfg(unix)]
+#[test]
+fn a_read_only_project_keeps_contracts_by_default() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch =
+        Scratch::new("dependency-source-all", "default-read-only").with_solid_vite_plugin();
+    let opted_out = invoke(
+        &typefacts,
+        &scratch.project,
+        &with_host(&["--no-dependency-source"]),
+        false,
+    )
+    .1;
+    let _read_only = ReadOnly::new(&scratch.project);
+    for retained in [false, true] {
+        let (success, run) = invoke(&typefacts, &scratch.project, &HOST, retained);
+        assert!(success, "retained {retained}: {}", run.stderr);
+        assert_eq!(stdout(&run), stdout(&opted_out), "retained {retained}");
+        assert!(
+            run.stderr.contains("is not writable"),
+            "retained {retained}: {}",
+            run.stderr
+        );
+    }
+    let (success, refused) = invoke(
+        &typefacts,
+        &scratch.project,
+        &with_host(&["--dependency-source", "*"]),
+        false,
+    );
+    assert!(!success, "{}", refused.stderr);
+    assert!(
+        refused.stderr.contains("--dependency-source: cannot write"),
+        "{}",
+        refused.stderr
+    );
+    assert!(scratch.siblings().is_empty());
+}
+
+/// The closure digest of a one-manifest fixture resolution, as
+/// `artifact_resolution::closure_digest` computes it.
+fn manifest_closure_digest(manifest: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:artifact-closure:v1");
+    hash.update(1u64.to_be_bytes());
+    for text in ["Manifest", "./package.json", manifest] {
+        hash.update(u64::try_from(text.len()).unwrap().to_be_bytes());
+        hash.update(text.as_bytes());
+    }
+    hash.update([0]);
+    hash.update(0u64.to_be_bytes());
+    hash.update(0u64.to_be_bytes());
+    format!("{:x}", hash.finalize())
+}
+
+/// `package-plain-return-consumer` with its `reactive-package` made a Solid
+/// package with runtime source, its fixture resolution rebound to the new
+/// manifest, `App.tsx` replaced by `app`, and its accepted contract
+/// authorized: `isReady` closes `returns`, `isReadyOpen` leaves it open.
+/// Answers the scratch and the trust configuration, outside the project.
+fn accepted_solid_package(tag: &str, app: &str) -> (Scratch, PathBuf) {
+    use sha2::{Digest, Sha256};
+    use solid_facts_backend::fixture_authorization::{
+        authorize_fixture_contract, read_fixture_contract_request,
+    };
+    let scratch = Scratch::new("package-plain-return-consumer", tag).with_solid_vite_plugin();
+    let package = scratch.path("node_modules/reactive-package");
+    let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
+    let old = digest(&fs::read(package.join("package.json")).unwrap());
+    let manifest = r#"{"name":"reactive-package","version":"1.0.0","types":"index.d.ts","module":"index.js","peerDependencies":{"solid-js":"*"}}"#;
+    fs::write(package.join("package.json"), manifest).unwrap();
+    fs::write(
+        package.join("index.js"),
+        "export function isReady() { return true; }\nexport function isReadyOpen() { return true; }\n",
+    )
+    .unwrap();
+    let new = digest(manifest.as_bytes());
+    let rebind = |path: PathBuf| {
+        let text = fs::read_to_string(&path)
+            .unwrap()
+            .replace(&old, &new)
+            .replace(
+                &manifest_closure_digest(&format!("sha256:{old}")),
+                &manifest_closure_digest(&format!("sha256:{new}")),
+            );
+        fs::write(path, text).unwrap();
+    };
+    rebind(scratch.path(".solid-checker/authorize-contract.json"));
+    rebind(package.join("solid-reactivity.json"));
+    fs::write(scratch.path("App.tsx"), app).unwrap();
+    let authorization = authorize_fixture_contract(
+        &scratch.project,
+        &read_fixture_contract_request(&scratch.project).unwrap(),
+    )
+    .unwrap();
+    let trust = scratch.root.join("trust.json");
+    fs::write(&trust, authorization.trust_configuration).unwrap();
+    (scratch, trust)
+}
+
+const NAMED_APP: &str = r#"import { isReady, isReadyOpen } from "reactive-package";
+
+export function Status() {
+  return <div>{isReady() ? "ready" : "waiting"}</div>;
+}
+
+export function StatusOpen() {
+  return <div>{isReadyOpen() ? "ready" : "waiting"}</div>;
+}
+"#;
+
+const NAMESPACE_APP: &str = r#"import * as reactive from "reactive-package";
+
+export function Status() {
+  return <div>{reactive.isReady() ? "ready" : "waiting"}</div>;
+}
+
+export function StatusOpen() {
+  return <div>{reactive.isReadyOpen() ? "ready" : "waiting"}</div>;
+}
+"#;
+
+/// Review round 1 of ADR 0297: a package imported through a namespace
+/// binding is not selected, so the namespace keeps its accepted contract.
+/// Selecting it removed the contract, which nothing redirects a namespace
+/// member to, and `isReadyOpen`'s open `returns` was then reported nowhere.
+#[test]
+fn a_namespace_import_keeps_its_accepted_contract() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let answers = |tag: &str, app: &str| {
+        let (scratch, trust) = accepted_solid_package(tag, app);
+        let trust = trust.to_string_lossy().into_owned();
+        let run = |rest: &[&str]| {
+            let mut args = with_host(&[]);
+            args.extend(["--receipt-trust-configuration", trust.as_str()]);
+            args.extend(rest);
+            let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
+            assert!(success, "{tag} {rest:?}: {}", run.stderr);
+            run
+        };
+        (run(&[]), run(&["--no-dependency-source"]))
+    };
+    // The control: named imports are redirected, so the package is selected
+    // and its contract unbound.
+    let (named, named_contracts) = answers("namespace-control", NAMED_APP);
+    assert!(
+        stdout(&named_contracts).contains("SC9005"),
+        "{}",
+        named_contracts.stderr
+    );
+    assert_ne!(
+        stdout(&named),
+        stdout(&named_contracts),
+        "the package is selectable"
+    );
+
+    let (namespace, namespace_contracts) = answers("namespace", NAMESPACE_APP);
+    assert!(
+        stdout(&namespace_contracts).contains("isReadyOpen"),
+        "{}",
+        stdout(&namespace_contracts)
+    );
+    assert_eq!(stdout(&namespace), stdout(&namespace_contracts));
+    assert!(
+        namespace.notes().iter().any(|note| note
+            .contains("dependency source reactive-package: imported through a namespace binding")),
+        "{}",
+        namespace.stderr
+    );
+}
+
+/// The same for a namespace import inside a selected package's own source:
+/// the package it names keeps its contract, and nothing proves the call.
+#[test]
+fn a_namespace_import_in_package_source_keeps_that_package_on_contracts() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let scratch =
+        Scratch::new("dependency-source-all", "default-closure-namespace").with_solid_vite_plugin();
+    edit(
+        &scratch.path("node_modules/dep-hooks/src/index.jsx"),
+        "import { readInner } from \"dep-inner\";",
+        "import * as inner from \"dep-inner\";",
+    );
+    edit(
+        &scratch.path("node_modules/dep-hooks/src/index.jsx"),
+        "return readInner(source);",
+        "return inner.readInner(source);",
+    );
+    let (success, run) = invoke(&typefacts, &scratch.project, &HOST, false);
+    assert!(success, "{}", run.stderr);
+    assert!(
+        run.notes().iter().any(|note| note
+            .contains("dependency source dep-inner: imported through a namespace binding")),
+        "{}",
+        run.stderr
+    );
+    let app = fs::read_to_string(scratch.path("App.tsx")).unwrap();
+    let line = app
+        .lines()
+        .position(|line| line.contains("useInner(name)"))
+        .unwrap()
+        + 1;
+    let findings = run.json()["findings"].as_array().unwrap().clone();
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding["kind"] == "violation"
+                && finding["primaryLocation"]["line"] == line),
+        "{findings:#?}"
+    );
+    // `useLabel` in the same package is still analyzed from source.
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["kind"] == "violation"),
+        "{findings:#?}"
+    );
 }

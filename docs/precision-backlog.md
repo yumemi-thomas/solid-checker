@@ -30384,3 +30384,48 @@ Open:
 - the ESLint adapter now analyzes once per linted file under a declared host
   instead of once per process, because its cache identity does not follow
   installed package bytes.
+
+### Review round 1 (2026-10-14)
+
+Fixed:
+- **Resolver premise.** The default now also needs a Solid Vite plugin
+  (`@solidjs/vite-plugin`, `vite-plugin-solid`, or the one `@solidjs/start`
+  ships) resolvable from the project, because selection reads `exports` with
+  `solid`, `import` and `module` set; without one the run is contract mode
+  with a note. Whether `vite.config` registers the plugin, or overrides
+  `resolve.conditions`, is still not observed.
+- **Read-only projects.** Without a writable tsconfig directory the default
+  is contract mode with a note (checked with `access(2)` before dispatch, and
+  a failed one-shot write falls back too). Explicit `--dependency-source`
+  keeps the write error.
+- **Namespace imports.** A package any project or selected package file
+  imports through a runtime namespace binding is no longer selected, in any
+  selection, so it keeps its accepted contract. Before, its contract was
+  removed and its namespace members were not redirected, and an accepted
+  contract's open claim (`returns` left unknown) was then reported nowhere: a
+  silent certification, not only a lost proof.
+- **ESLint.** The within-pass snapshot keys on ESLint's per-pass file
+  context, not the reusable `SourceCode`, and adapter rules drop it at
+  `Program:exit`. `commandArgs` are read at native's option positions; an
+  option the adapter does not know counts as reading source.
+
+rc.13 corpus after the round: 562 violations at the same sites, 3,248
+uncertifiable (was 3,287). en-passant has no plugin (nor any install) and is
+contract mode; `*` selected nothing there before either. `@kobalte/core`
+(finds-team, jibe-run, openbot, pekochan-blog) and
+`@solid-primitives/controlled-signal` (compass-ui, error-menu-web, readingroom,
+solid-validation-site) are kept on contracts for a namespace import. That
+removes 44 source-mode obligations in openbot (42 `SC1001`, 2 `SC9012`) and
+adds 5 `SC9005` in openbot and jibe-run; all 5 added rows, and none of the 44
+removed ones, are contract mode's (`sweep-m-base.json`).
+
+Open, found in this round and not fixed:
+- **A re-export of a selected package loses its accepted contract the same
+  way.** `export { isReady, isReadyOpen } from "reactive-package"` in a
+  project barrel, with a contract accepted for the barrel's import that leaves
+  `isReadyOpen`'s `returns` unknown: contract mode reports `SC9005`; under
+  `*` the package is selected, the re-export is not redirected (only
+  named/default import bindings are), and nothing is reported. The same holds
+  for a re-export between packages inside a selected closure. Without an
+  accepted contract the call keeps its `SC9011` when it passes a reactive
+  value.

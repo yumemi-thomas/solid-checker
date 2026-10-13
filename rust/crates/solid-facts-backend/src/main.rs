@@ -3266,7 +3266,23 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .into(),
         );
     }
-    if defaults_to_dependency_sources(&request) {
+    // Review round 1: the default holds only where the project establishes
+    // the resolver source selection reads and can take the sibling tsconfig;
+    // otherwise it stays contract mode and says why. An explicit selection
+    // states the premise itself and is never second-guessed.
+    let implicit_dependency_sources = defaults_to_dependency_sources(&request)
+        && match implicit_dependency_source_refusal(Path::new(&request.project_id)) {
+            None => true,
+            Some(reason) => {
+                eprintln!(
+                    "solid-checker: note: packages are not analyzed from source by default: \
+                     {reason}; every package binds through its contract \
+                     (--dependency-source '*' selects source anyway)"
+                );
+                false
+            }
+        };
+    if implicit_dependency_sources {
         request.dependency_sources = vec!["*".into()];
     }
     if request.window_realm && request.dependency_sources.is_empty() {
@@ -3564,11 +3580,22 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             }
             match prepared? {
                 None => (None, None),
-                Some(program) => {
-                    let generated = program.write_for_process()?;
-                    request.project_id = generated.path().to_string_lossy().into_owned();
-                    (Some(program), Some(generated))
-                }
+                Some(program) => match program.write_for_process() {
+                    Ok(generated) => {
+                        request.project_id = generated.path().to_string_lossy().into_owned();
+                        (Some(program), Some(generated))
+                    }
+                    // Review round 1 of ADR 0297: the default adds no write
+                    // requirement a contract-mode run did not have.
+                    Err(error) if implicit_dependency_sources => {
+                        eprintln!(
+                            "solid-checker: note: packages are not analyzed from source by \
+                             default: {error}; every package binds through its contract"
+                        );
+                        (None, None)
+                    }
+                    Err(error) => return Err(error.into()),
+                },
             }
         }
     };
@@ -4392,6 +4419,37 @@ fn defaults_to_dependency_sources(request: &Request) -> bool {
         && ordinary
         && request.dependency_sources.is_empty()
         && !request.no_dependency_source
+}
+
+/// Review round 1 of ADR 0297: why the default selection does not apply to
+/// `project`, or `None` when it does.
+///
+/// Source selection reads `exports` as Vite with the Solid plugin does
+/// (`solid`, `import` and `module` always set), and a target and build do
+/// not say that is how the project is built: a Node host never sets
+/// `solid`. The default therefore needs that plugin resolvable from the
+/// project (`dependency_sources::solid_vite_plugin`). And contract mode
+/// writes nothing into the project, so the default also needs the sibling
+/// tsconfig's directory writable. `--dependency-source` states the premise
+/// and keeps its write requirement.
+fn implicit_dependency_source_refusal(project: &Path) -> Option<String> {
+    use solid_facts_backend::dependency_sources::{sibling_writable, solid_vite_plugin};
+    if solid_vite_plugin(project).is_none() {
+        return Some(
+            "no Solid Vite plugin (@solidjs/vite-plugin, vite-plugin-solid, or one \
+             @solidjs/start ships) resolves from the project, so nothing establishes the \
+             resolver source selection reads `exports` with"
+                .into(),
+        );
+    }
+    if !sibling_writable(project) {
+        let directory = project.parent().unwrap_or(project);
+        return Some(format!(
+            "{} is not writable, and source analysis writes a tsconfig there",
+            directory.display()
+        ));
+    }
+    None
 }
 
 #[cfg(test)]

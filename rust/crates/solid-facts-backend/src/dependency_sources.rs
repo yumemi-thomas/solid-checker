@@ -39,7 +39,91 @@ use crate::host_constants::{Ordered, find_package_root, split_bare_specifier};
 /// The conditions every Vite + `vite-plugin-solid` build sets, beside the
 /// host's: `exports` is read in its own document order.
 const BUILD_CONDITIONS: &[&str] = &["solid", "import", "module", "default"];
+/// The Vite plugins for Solid. Each adds `solid` to Vite's resolve
+/// conditions, which is the resolver [`BUILD_CONDITIONS`] reads.
+const SOLID_VITE_PLUGINS: &[&str] = &["@solidjs/vite-plugin", "vite-plugin-solid"];
+/// Frameworks that ship one of [`SOLID_VITE_PLUGINS`] as their own
+/// dependency rather than the project's.
+const SOLID_VITE_FRAMEWORKS: &[&str] = &["@solidjs/start"];
 const MAX_CLOSURE_FILES: usize = 4000;
+
+/// Review round 1 of ADR 0297: the manifest of the Solid Vite plugin that
+/// establishes this module's resolver premise for `project` (a tsconfig).
+/// That is the nearest `node_modules/<plugin>/package.json` above the
+/// project carrying a `version` string, walked as dialect detection walks
+/// for `solid-js`, or else one a SolidStart install resolves from its own
+/// directory. `None` when neither resolves: a declared target and build
+/// alone do not say the project is built by Vite with the Solid plugin, so
+/// nothing establishes that `exports` is read with `solid`, `import` and
+/// `module` set.
+///
+/// Installed is all this reads. Whether `vite.config` registers the plugin,
+/// or overrides `resolve.conditions`, is not observed.
+#[must_use]
+pub fn solid_vite_plugin(project: &Path) -> Option<PathBuf> {
+    let start = project.parent()?;
+    SOLID_VITE_PLUGINS
+        .iter()
+        .find_map(|plugin| nearest_versioned_manifest(start, plugin))
+        .or_else(|| {
+            SOLID_VITE_FRAMEWORKS.iter().find_map(|framework| {
+                let manifest = nearest_versioned_manifest(start, framework)?;
+                let directory = manifest.parent()?.canonicalize().ok()?;
+                SOLID_VITE_PLUGINS
+                    .iter()
+                    .find_map(|plugin| nearest_versioned_manifest(&directory, plugin))
+            })
+        })
+}
+
+/// The nearest `node_modules/<package>/package.json` at or above `start`
+/// whose `version` is a string; a manifest without one does not stop the
+/// walk.
+fn nearest_versioned_manifest(start: &Path, package: &str) -> Option<PathBuf> {
+    start.ancestors().find_map(|directory| {
+        let manifest = directory
+            .join("node_modules")
+            .join(package)
+            .join("package.json");
+        let bytes = fs::read(&manifest).ok()?;
+        serde_json::from_slice::<serde_json::Value>(&bytes)
+            .ok()?
+            .get("version")?
+            .as_str()?;
+        Some(manifest)
+    })
+}
+
+/// Review round 1 of ADR 0297: whether this process may create the sibling
+/// tsconfig beside `tsconfig` ([`PreparedDependencyProgram::write_for_process`]),
+/// as `access(2)` answers for the directory. A project on a read-only mount
+/// or in a directory the checker cannot write is analyzed without any write
+/// in contract mode, so the implicit default must not add one. Not a proof:
+/// the write itself can still fail, and its caller falls back then too.
+#[must_use]
+pub fn sibling_writable(tsconfig: &Path) -> bool {
+    let Some(directory) = tsconfig.parent() else {
+        return false;
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt as _;
+        let directory = if directory.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            directory
+        };
+        let Ok(path) = std::ffi::CString::new(directory.as_os_str().as_bytes()) else {
+            return false;
+        };
+        // SAFETY: `path` is a valid NUL-terminated path for the call.
+        unsafe { libc::access(path.as_ptr(), libc::W_OK) == 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        directory.is_dir()
+    }
+}
 /// Vite's `resolve.extensions` order (`DEFAULT_EXTENSIONS`, minus `.json`):
 /// a relative import that matches two files loads the first (review round 1
 /// of ADR 0290, Sol: `./read` with `read.js` and `read.mjs` loads `.mjs`).
@@ -233,18 +317,43 @@ pub fn prepare_program(
                     .any(|component| component.as_os_str() == "node_modules")
         })
         .collect::<BTreeSet<_>>();
+    let project_imports = project_sources
+        .iter()
+        .map(|source| {
+            let facts = solid_facts::ast::extract(source.path.clone(), &source.source).ok();
+            let bare = facts.as_ref().map(runtime_bare_imports).unwrap_or_default();
+            let namespaced = facts.as_ref().map(namespace_packages).unwrap_or_default();
+            (PathBuf::from(&source.path), bare, namespaced)
+        })
+        .collect::<Vec<_>>();
+    // Review round 1 of ADR 0297: a namespace binding is never redirected to
+    // source, so a package any importer -- a project file or a selected
+    // closure file -- binds through one is not selected at all and keeps its
+    // contract. Selecting it removed the contract its namespace members bind
+    // through, and an accepted contract was then neither applied nor
+    // obligated.
+    let mut namespaced = project_imports
+        .iter()
+        .flat_map(|(_, _, namespaced)| namespaced.iter().cloned())
+        .collect::<BTreeSet<_>>();
     // ADR 0291: `*` selects every package the project loads at run time,
     // and every package those load, except the dialect's own runtime.
     let selected = if selection.iter().any(|source| source == "*") {
-        let requests = project_sources
+        let requests = project_imports
             .iter()
-            .flat_map(|source| {
-                runtime_bare_imports_of(&source.path, &source.source)
-                    .into_iter()
-                    .map(|specifier| (PathBuf::from(&source.path), specifier))
+            .flat_map(|(path, bare, _)| {
+                bare.iter()
+                    .map(|specifier| (path.clone(), specifier.clone()))
             })
             .collect::<Vec<_>>();
-        prepare_all(requests, host, excluded, ecosystem_scopes, notes)?
+        prepare_all(
+            requests,
+            host,
+            excluded,
+            ecosystem_scopes,
+            &mut namespaced,
+            notes,
+        )?
     } else {
         // Every subpath of a selected package the project loads is selected
         // too, so an unselected subpath sharing a declaration cannot be bound
@@ -254,17 +363,20 @@ pub fn prepare_program(
             .filter_map(|specifier| package_name(specifier))
             .collect::<BTreeSet<_>>();
         let mut specifiers = selection.iter().cloned().collect::<BTreeSet<_>>();
-        for source in project_sources {
-            specifiers.extend(imported_subpaths(&source.path, &source.source, &packages));
+        for (_, bare, _) in &project_imports {
+            specifiers.extend(subpaths_of(bare, &packages));
         }
         prepare(
             tsconfig,
             &specifiers.into_iter().collect::<Vec<_>>(),
             host,
+            &mut namespaced,
             notes,
         )?
     };
-    let Some(selection) = selected else {
+    let Some(selection) =
+        selected.and_then(|selection| without_namespaced_packages(selection, &namespaced, notes))
+    else {
         return Ok(None);
     };
     let document = program_document(tsconfig, &project_files, &selection.files)?;
@@ -283,6 +395,7 @@ pub fn prepare(
     tsconfig: &Path,
     specifiers: &[String],
     host: &Host,
+    namespaced: &mut BTreeSet<String>,
     notes: &mut Vec<String>,
 ) -> Result<Option<DependencySelection>, String> {
     let mut roots = Vec::new();
@@ -310,8 +423,15 @@ pub fn prepare(
             specifier: specifier.clone(),
             target: entry.clone(),
         });
-        walk(&root, &entry, &mut files, &mut resolutions, &mut Vec::new())
-            .map_err(|reason| format!("--dependency-source {specifier:?}: {reason}"))?;
+        walk(
+            &root,
+            &entry,
+            &mut files,
+            &mut resolutions,
+            &mut Vec::new(),
+            namespaced,
+        )
+        .map_err(|reason| format!("--dependency-source {specifier:?}: {reason}"))?;
         package_names.insert(name);
         if !roots.contains(&root) {
             roots.push(root);
@@ -348,6 +468,7 @@ pub fn prepare_all(
     host: &Host,
     excluded: &BTreeSet<String>,
     ecosystem_scopes: &[&str],
+    namespaced: &mut BTreeSet<String>,
     notes: &mut Vec<String>,
 ) -> Result<Option<DependencySelection>, String> {
     let solid_package = |root: &Path| {
@@ -404,6 +525,12 @@ pub fn prepare_all(
             not_solid.insert(root);
             continue;
         }
+        // A package bound through a namespace somewhere keeps its contract
+        // (`without_namespaced_packages`): one known to be is not walked.
+        if namespaced.contains(&name) {
+            push_note(notes, namespaced_note(&name));
+            continue;
+        }
         let entry = match select_entry(&root, &subpath, host) {
             Ok(entry) => entry,
             Err(reason) => {
@@ -431,6 +558,7 @@ pub fn prepare_all(
                 &mut closure,
                 &mut closure_resolutions,
                 &mut bare,
+                namespaced,
             ) {
                 Ok(()) => {
                     files.extend(closure);
@@ -569,18 +697,15 @@ pub fn imported_subpaths(
     let Ok(facts) = solid_facts::ast::extract(path.to_owned(), source) else {
         return BTreeSet::new();
     };
-    runtime_bare_imports(&facts)
-        .into_iter()
-        .filter(|module| package_name(module).is_some_and(|name| packages.contains(&name)))
-        .collect()
+    subpaths_of(&runtime_bare_imports(&facts), packages)
 }
 
-/// Every bare specifier `path` loads at run time, for [`prepare_all`].
-#[must_use]
-pub fn runtime_bare_imports_of(path: &str, source: &str) -> BTreeSet<String> {
-    solid_facts::ast::extract(path.to_owned(), source)
-        .map(|facts| runtime_bare_imports(&facts))
-        .unwrap_or_default()
+/// The specifiers among `bare` that name one of `packages`.
+fn subpaths_of(bare: &BTreeSet<String>, packages: &BTreeSet<String>) -> BTreeSet<String> {
+    bare.iter()
+        .filter(|module| package_name(module).is_some_and(|name| packages.contains(&name)))
+        .cloned()
+        .collect()
 }
 
 /// The bare specifiers a module loads with a runtime binding, or
@@ -608,6 +733,77 @@ fn runtime_bare_imports(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> 
         .filter(|module| split_bare_specifier(module).is_some())
         .map(str::to_owned)
         .collect()
+}
+
+/// The packages a module binds through a runtime namespace import
+/// (`import * as ns from "pkg"`), which is never redirected to source.
+fn namespace_packages(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> {
+    facts
+        .imports
+        .iter()
+        .filter(|import| {
+            !import.type_only
+                && import.bindings.iter().any(|binding| {
+                    !binding.type_only
+                        && binding.runtime_referenced
+                        && binding.kind == solid_facts::ast::ImportKind::Namespace
+                })
+        })
+        .filter_map(|import| package_name(&import.module))
+        .collect()
+}
+
+/// `selection` without the packages named in `namespaced`, every copy of
+/// each: none of its files, redirects or names, so each keeps its contract
+/// exactly as without this mode (review round 1 of ADR 0297). A contract
+/// binds by package name, so a name is taken out whole. `None` when nothing
+/// is left.
+fn without_namespaced_packages(
+    mut selection: DependencySelection,
+    namespaced: &BTreeSet<String>,
+    notes: &mut Vec<String>,
+) -> Option<DependencySelection> {
+    let removed = selection
+        .roots
+        .iter()
+        .filter(|root| package_name_of_root(root).is_some_and(|name| namespaced.contains(&name)))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut names = removed
+        .iter()
+        .filter_map(|root| package_name_of_root(root))
+        .collect::<BTreeSet<_>>();
+    names.extend(
+        selection
+            .package_names
+            .iter()
+            .filter(|name| namespaced.contains(*name))
+            .cloned(),
+    );
+    for name in &names {
+        push_note(notes, namespaced_note(name));
+    }
+    let inside = |path: &Path| removed.iter().any(|root| path.starts_with(root));
+    selection.roots.retain(|root| !removed.contains(root));
+    selection.files.retain(|file| !inside(file));
+    selection.resolutions.retain(|resolution| {
+        !inside(&resolution.target) && !resolution.importer.as_deref().is_some_and(&inside)
+    });
+    selection.package_names.retain(|name| !names.contains(name));
+    (!selection.roots.is_empty()).then_some(selection)
+}
+
+fn namespaced_note(name: &str) -> String {
+    format!(
+        "solid-checker: note: dependency source {name}: imported through a namespace \
+         binding, which source analysis does not redirect; its contract stays"
+    )
+}
+
+fn push_note(notes: &mut Vec<String>, note: String) {
+    if !notes.contains(&note) {
+        notes.push(note);
+    }
 }
 
 fn is_source(path: &Path) -> bool {
@@ -725,14 +921,15 @@ fn select(entry: &Ordered, host: &Host, depth: usize, star: Option<&str>) -> Opt
 }
 
 /// Every file `entry` reaches through relative static imports and
-/// re-exports, inside `root`, and the bare runtime imports of those files
-/// into `bare`.
+/// re-exports, inside `root`, the bare runtime imports of those files into
+/// `bare`, and the packages they bind through a namespace into `namespaced`.
 fn walk(
     root: &Path,
     entry: &Path,
     files: &mut BTreeSet<PathBuf>,
     resolutions: &mut BTreeSet<ImportResolution>,
     bare: &mut Vec<(PathBuf, String)>,
+    namespaced: &mut BTreeSet<String>,
 ) -> Result<(), String> {
     let mut queue = VecDeque::from([entry.to_path_buf()]);
     while let Some(file) = queue.pop_front() {
@@ -751,6 +948,7 @@ fn walk(
                 .into_iter()
                 .map(|module| (file.clone(), module)),
         );
+        namespaced.extend(namespace_packages(&facts));
         let modules = facts
             .imports
             .iter()
@@ -1022,6 +1220,7 @@ mod tests {
             &host(&["browser", "development"]),
             &["solid-js".to_owned()].into_iter().collect(),
             &["@solidjs/"],
+            &mut BTreeSet::new(),
             &mut Vec::new(),
         )
         .unwrap()

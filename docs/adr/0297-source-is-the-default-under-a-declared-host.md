@@ -22,6 +22,20 @@ and names no `--dependency-source`, runs as `--dependency-source '*'`. The
 selection is decided once, at the top of `run`, before any mode or the
 daemon branch reads it, so a retained check is the explicit `*` daemon.
 
+**Premise (review round 1).** Source selection reads `exports` as Vite with
+the Solid plugin does: `solid`, `import` and `module` are always set, beside
+the host's conditions. A target and a build do not say the project is built
+that way, so the default also needs the plugin: `@solidjs/vite-plugin` or
+`vite-plugin-solid` installed at the nearest `node_modules` above the
+project's tsconfig (walked as dialect detection walks for `solid-js`), or one
+an installed `@solidjs/start` resolves from its own directory. Whether
+`vite.config` registers the plugin is not observed. The default also needs
+the tsconfig's directory writable, because source analysis writes its
+sibling tsconfig there and contract mode writes nothing. Without either, the
+run is contract mode and prints a note naming the reason; a one-shot write
+that fails anyway falls back the same way. An explicit `--dependency-source`
+states the premise itself and keeps both its selection and its write error.
+
 **Ordinary only.** Every other mode keeps the selection it was given:
 contract emission and its batch, the module inventory and runtime-module
 resolutions, contract resolution and proposal plans, the package root and
@@ -41,17 +55,19 @@ beside `--dependency-source`, which asks for the opposite. A fixture says
 
 **Fallback.** Nothing is deleted. A package `*` does not select (non-Solid
 packages, workspace packages, Solid's own runtime) or refuses (an `exports`
-array, a `browser` map, an oversized closure) keeps its contract, and so does
-a namespace import. A run without both a target and a build, including
-ESLint's `browser-v2` config, is contract mode as before.
+array, a `browser` map, an oversized closure) keeps its contract. A package
+any project or selected package file imports through a namespace binding is
+not selected, in any selection, and keeps its contract too (review round 1):
+a namespace is never redirected to source. A run without both a target and
+a build, including ESLint's `browser-v2` config, is contract mode as before.
 
 **ESLint.** The adapter's snapshot cache keys on settings, and nothing in
 that key moves when an installed package's file does. A persistent editor
 session would serve a snapshot of package bytes that are gone. A run that may
 read package source (both host fields, or a host or selection in
-`commandArgs`, and no opt-out) is therefore reused only within one file's
-lint pass, keyed on ESLint's `SourceCode` object, and analyzed again on the
-next pass. The opt-out restores the cross-pass cache.
+`commandArgs`, and no opt-out) is therefore reused only within one lint pass
+over a file, keyed on ESLint's per-pass file context, and analyzed again on
+the next pass. The opt-out restores the cross-pass cache.
 
 ## Consequences
 
@@ -101,3 +117,54 @@ next pass. The opt-out restores the cross-pass cache.
   contract variant precedence. Its package is not a Solid package, so the
   default selects nothing there; it is pinned with `"dependencySource":
   false` anyway.
+
+## Review round 1
+
+Five findings, all fixed:
+- **The resolver premise.** Selection reads `exports` with `solid`,
+  `import` and `module` set, as Vite with the Solid plugin does, and a target
+  and build alone do not establish that build: a Node host never sets
+  `solid`. The default now needs a Solid Vite plugin resolvable from the
+  project (see Premise above); without one it is contract mode with a note.
+- **A `SourceCode` linted again.** `Linter.verify` accepts a `SourceCode`
+  object and lints it again, so keying the pass on it served the previous
+  pass's snapshot. The pass is now ESLint's per-pass file context (one
+  `FileContext` per `runRules` call, the prototype of every rule context of
+  that pass), and each adapter rule drops the entry at `Program:exit`, after
+  every `Program` read of the traversal.
+- **A flag-shaped value.** `--runtime-condition --no-dependency-source` is a
+  condition, but the adapter took it as the opt-out and cached across passes.
+  `commandArgs` are now read at native's option positions, from a table a
+  test checks against `request_from_args`; an option the table does not know
+  counts as reading source.
+- **Namespace imports.** This ADR promised a namespace import its contract;
+  selection removed it, and nothing redirects a namespace member to source.
+  With an accepted contract whose `returns` was open, the call was then
+  reported nowhere. A package any project or selected package file imports
+  through a runtime namespace binding is now not selected, in any selection,
+  and keeps its contract exactly as in contract mode. Keeping the contract
+  beside a selected package was not chosen: the contract index binds by
+  importer and specifier, which a redirected named import of the same
+  package shares, and nothing shows the two answers cannot both apply.
+- **Read-only projects.** The default no longer adds a write requirement:
+  without a writable tsconfig directory, or when the one-shot write fails, it
+  is contract mode with a note. An explicit selection keeps the error.
+
+rc.13 corpus (release binary, same flags): 562 violations at the same sites,
+3,248 uncertifiable (3,287 before). en-passant has no plugin, and no install,
+so it is contract mode; `*` selected nothing there before either.
+`@kobalte/core` in four projects and `@solid-primitives/controlled-signal`
+in four are kept on contracts for a namespace import, which turns 44 openbot
+source-mode obligations into contract mode's answer and adds 5 `SC9005`
+that contract mode reports too.
+
+Found, not fixed: a re-export of a selected package (`export { x } from
+"pkg"`, in a project barrel or between packages) is not redirected either,
+and loses an accepted contract the same way. See docs/precision-backlog.md.
+
+Evidence: process tests `the_default_needs_a_solid_vite_plugin`,
+`a_read_only_project_keeps_contracts_by_default`,
+`a_namespace_import_keeps_its_accepted_contract` and
+`a_namespace_import_in_package_source_keeps_that_package_on_contracts`, each
+failing on the reviewed commit; adapter tests for a re-linted `SourceCode`,
+option positions and the option table.
