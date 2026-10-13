@@ -299,6 +299,10 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/summary-completion-read/node_modules/**
 !fixtures/reactive-ir/callback-parameter-completion/node_modules/
 !fixtures/reactive-ir/callback-parameter-completion/node_modules/**
+!fixtures/reactive-ir/argument-sensitive-reads/node_modules/
+!fixtures/reactive-ir/argument-sensitive-reads/node_modules/**
+!fixtures/reactive-ir/returned-store-nested-read/node_modules/
+!fixtures/reactive-ir/returned-store-nested-read/node_modules/**
 !fixtures/reactive-ir/feedback-tiers/node_modules/
 !fixtures/reactive-ir/feedback-tiers/node_modules/**
 !fixtures/reactive-ir/feedback-tiers-open/node_modules/

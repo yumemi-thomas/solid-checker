@@ -2899,6 +2899,37 @@ fn member_runs_declared_method(
     let Some(initializer) = binding.initializer else {
         return false;
     };
+    // The receiver must not escape: `Object.assign(bus, …)` or
+    // `Object.defineProperty(bus, "run", …)` replaces the method without an
+    // assignment (review round 4). Every reference reads a member of it, and
+    // no module export exposes it to an importer.
+    let Some(declaration) = binding.names.first().map(|name| name.span) else {
+        return false;
+    };
+    let only_member_reads = binding_file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, bound)| *bound == declaration)
+        .all(|(reference, _)| {
+            binding_file
+                .ast
+                .members
+                .iter()
+                .any(|member| binding_file.ast.peel_ts_sugar_span(member.object) == *reference)
+        });
+    // Only a module-level binding can be exported: an exported function's
+    // span contains its whole body (as in `property_gets::receiver`).
+    let module_level = containing_ast_function(&binding_file.ast, declaration).is_none();
+    let exported = binding_file.ast.exports.iter().any(|export| {
+        (module_level && export.span.contains(declaration))
+            || export.specifiers.iter().any(|specifier| {
+                binding_file.ast.reference_declaration(specifier.local.span) == Some(declaration)
+            })
+    });
+    if !only_member_reads || exported {
+        return false;
+    }
     let initializer = binding_file.ast.peel_ts_sugar_span(initializer);
     if binding.initializer_value_kind == solid_facts::ast::RuntimeValueKind::Object {
         return binding_file.path == method_file.path && initializer.contains(method.span);
@@ -2916,9 +2947,103 @@ fn member_runs_declared_method(
     else {
         return false;
     };
+    // Nor may the class's prototype be reachable for patching.
+    let class_exposed = class.name.as_ref().is_some_and(|class_name| {
+        class_file
+            .ast
+            .reference_declarations
+            .iter()
+            .filter(|(_, bound)| *bound == class_name.span)
+            .any(|(reference, _)| {
+                class_file.ast.members.iter().any(|member| {
+                    class_file.ast.peel_ts_sugar_span(member.object) == *reference
+                        && class_file.source_text(member.property) == Some("prototype")
+                }) || class_file.ast.calls.iter().any(|call| {
+                    call.arguments.iter().any(|argument| {
+                        class_file.ast.peel_ts_sugar_span(argument.span) == *reference
+                    })
+                })
+            })
+    });
     class_file.path == method_file.path
         && class.span.contains(method.span)
+        && !class_exposed
         && lookup.class_instance_is_exact(class_file, class, name, 4)
+}
+
+/// ADR 0280: how the calls of `function`'s parameter `index` stand on
+/// `call`, given what its arguments prove. `Guaranteed` when one of them
+/// always runs, `Unreachable` when none can, `None` when the arguments prove
+/// nothing or the parameter is written.
+pub(crate) fn parameter_call_standing(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    function_file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<solid_facts::ast::SiteStanding> {
+    use solid_facts::ast::SiteStanding;
+    let parameter = function.parameters.get(index)?;
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+        return None;
+    }
+    let name = parameter.names.first()?;
+    if crate::indexes::binding_written(function_file, name.span) {
+        return None;
+    }
+    let symbol = lookup
+        .entities()
+        .at(function_file.path.as_str(), name.span)?;
+    let sites = function_file
+        .ast
+        .calls
+        .iter()
+        .filter(|inner| {
+            crate::owners::written_directly_in(&function_file.ast, function, inner.span)
+                && lookup.callee_symbol(function_file, inner.callee) == Some(symbol.as_str())
+        })
+        .map(|inner| inner.span)
+        .collect::<Vec<_>>();
+    if sites.is_empty() {
+        return None;
+    }
+    let values =
+        crate::argument_values::parameter_values(file, call, function_file, function, lookup)
+            .filter(|values| !values.is_empty())?;
+    let standings = solid_facts::ast::argument_site_standings(
+        std::path::Path::new(function_file.path.as_str()),
+        &function_file.source,
+        function.span,
+        &values,
+        &lookup.never_returning_calls_within(function_file, function),
+        &sites,
+    )?;
+    // Every other reference -- an alias, an argument (`list.forEach(cb)`),
+    // a member -- may run the callback too, so ruling out the direct calls
+    // proves no absence (review round 4).
+    let only_direct_calls = function_file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, declaration)| *declaration == name.span)
+        .all(|(reference, _)| {
+            function_file.ast.calls.iter().any(|inner| {
+                sites.contains(&inner.span)
+                    && function_file.ast.peel_ts_sugar_span(inner.callee) == *reference
+            })
+        });
+    if standings.contains(&SiteStanding::Guaranteed) {
+        Some(SiteStanding::Guaranteed)
+    } else if only_direct_calls
+        && standings
+            .iter()
+            .all(|standing| *standing == SiteStanding::Unreachable)
+    {
+        Some(SiteStanding::Unreachable)
+    } else {
+        Some(SiteStanding::Possible)
+    }
 }
 
 /// Whether the synchronous project function `function` calls its parameter

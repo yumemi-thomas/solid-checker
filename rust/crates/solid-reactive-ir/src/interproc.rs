@@ -242,6 +242,9 @@ pub(super) struct SummaryNode {
     pub(super) parameters: Vec<SymbolId>,
     pub(super) exported: bool,
     pub(super) r#async: bool,
+    /// ADR 0280: the declaring file's source hash, for results that read
+    /// the function's branches against a call's arguments.
+    pub(super) source_hash: solid_facts::core::SourceHash,
 }
 
 /// A parameter-member invocation and the execution provenance retained for
@@ -659,6 +662,7 @@ fn discover_summary_nodes(
                     |function| function.exported,
                 ),
                 r#async: source_function.map_or(function.r#async, |function| function.r#async),
+                source_hash: file.source_hash.clone(),
             });
         }
     }
@@ -5681,6 +5685,14 @@ impl InterproceduralResultView<'_> {
                     InterproceduralResultDependencyState::Missing
                 }
             }
+            InterproceduralResultDependency::FunctionSource(path, span) => self
+                .indexes
+                .get(&(path.clone(), *span))
+                .map_or(InterproceduralResultDependencyState::Missing, |index| {
+                    InterproceduralResultDependencyState::Source(
+                        self.nodes[*index].source_hash.clone(),
+                    )
+                }),
             InterproceduralResultDependency::InlineFunction(path, span) => {
                 self.indexes.get(&(path.clone(), *span)).map_or(
                     InterproceduralResultDependencyState::Missing,
@@ -5721,6 +5733,14 @@ impl InterproceduralResultView<'_> {
                         InterproceduralResultDependencyState::Returned(previous)
                             if previous == summary
                     )
+                } else {
+                    matches!(retained, InterproceduralResultDependencyState::Missing)
+                }
+            }
+            InterproceduralResultDependency::FunctionSource(path, span) => {
+                if let Some(index) = self.indexes.get(&(path.clone(), *span)) {
+                    matches!(retained, InterproceduralResultDependencyState::Source(previous)
+                        if previous == &self.nodes[*index].source_hash)
                 } else {
                     matches!(retained, InterproceduralResultDependencyState::Missing)
                 }
@@ -6055,6 +6075,7 @@ fn interprocedural_result_reads_for_file(
                 // stays, as one this call is not proven to perform.
                 // ADR 0278: an inexact mapping (`f.call`, a replaced binding,
                 // an earlier spread) proves the invocation on no path.
+                let mut decided_source = None;
                 let invocation = crate::execution_role::project_callee_at_parameter(
                     file, call, *parameter, lookup,
                 )
@@ -6068,16 +6089,38 @@ fn interprocedural_result_reads_for_file(
                         lookup,
                     ) {
                         Some(true)
-                    } else {
-                        crate::execution_role::calls_parameter_in_body(
+                    } else if crate::execution_role::calls_parameter_in_body(
+                        callee_file,
+                        callee,
+                        *parameter,
+                        lookup,
+                    ) {
+                        // ADR 0280: this call's arguments may decide the
+                        // branch the parameter call sits in.
+                        let standing = crate::execution_role::parameter_call_standing(
+                            file,
+                            call,
                             callee_file,
                             callee,
                             *parameter,
                             lookup,
-                        )
-                        .then_some(false)
+                        );
+                        if standing.is_some() {
+                            decided_source = Some((callee_file.path.to_string(), callee.span));
+                        }
+                        match standing {
+                            Some(solid_facts::ast::SiteStanding::Guaranteed) => Some(true),
+                            Some(solid_facts::ast::SiteStanding::Unreachable) => None,
+                            _ => Some(false),
+                        }
+                    } else {
+                        None
                     }
                 });
+                if let Some((path, span)) = decided_source {
+                    dependencies
+                        .insert(InterproceduralResultDependency::FunctionSource(path, span));
+                }
                 if ambiguous_candidates.is_none()
                     && !argument.spread
                     && source_kinds.get(argument_symbol.as_str())
@@ -6924,6 +6967,76 @@ fn interprocedural_result_reads_for_file(
                         ))))
                 && body_site_runs_during_call(owner_file, owner, origin)
         };
+        // ADR 0280: a read the callee performs on some of its completions is
+        // decided for this call when its arguments decide the branch: dropped
+        // where it cannot run, proven where it always does. Only rows the
+        // callee itself discovered, with no hop below it, are decided.
+        if let (Some((callee_file, callee)), Some(target)) = (direct_callee, target)
+            && let Some(owner) = nodes[target].symbol.as_ref()
+        {
+            let candidates = effective
+                .iter()
+                .enumerate()
+                .filter(|(_, read)| {
+                    read.local
+                        && !read.conditional
+                        && read.owner.as_ref() == Some(owner)
+                        && read.origin.path.as_ref() == callee_file.path.as_str()
+                })
+                .filter_map(|(index, read)| {
+                    Some((
+                        index,
+                        Span::new(
+                            u32::try_from(read.origin.start_byte).ok()?,
+                            u32::try_from(read.origin.end_byte).ok()?,
+                        ),
+                    ))
+                })
+                .collect::<Vec<_>>();
+            if !candidates.is_empty()
+                && let Some(values) = crate::argument_values::parameter_values(
+                    file,
+                    call,
+                    callee_file,
+                    callee,
+                    lookup,
+                )
+                .filter(|values| !values.is_empty())
+                && let Some(standings) = solid_facts::ast::argument_site_standings(
+                    std::path::Path::new(callee_file.path.as_str()),
+                    &callee_file.source,
+                    callee.span,
+                    &values,
+                    &lookup.never_returning_calls_within(callee_file, callee),
+                    &candidates.iter().map(|(_, span)| *span).collect::<Vec<_>>(),
+                )
+            {
+                dependencies.insert(InterproceduralResultDependency::FunctionSource(
+                    callee_file.path.to_string(),
+                    callee.span,
+                ));
+                let mut unreachable = HashSet::new();
+                for ((index, _), standing) in candidates.iter().zip(standings) {
+                    match standing {
+                        solid_facts::ast::SiteStanding::Unreachable => {
+                            unreachable.insert(*index);
+                        }
+                        solid_facts::ast::SiteStanding::Guaranteed => {
+                            effective[*index].local = false;
+                        }
+                        solid_facts::ast::SiteStanding::Possible => {}
+                    }
+                }
+                if !unreachable.is_empty() {
+                    effective = effective
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(index, _)| !unreachable.contains(index))
+                        .map(|(_, read)| read)
+                        .collect();
+                }
+            }
+        }
         // One finding per symbol at this call (`seen` below). A symbol read
         // both directly and only through a nested default or closure keeps
         // the direct origin, so the proof is not lost to the order the

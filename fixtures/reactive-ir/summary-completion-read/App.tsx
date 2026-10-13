@@ -14,6 +14,11 @@ import {
   readWhenUnset,
 } from "./helpers";
 
+// Arguments that prove nothing, so these cases test the rule without
+// argument facts (ADR 0280 is pinned by `argument-sensitive-reads`).
+declare const flag: boolean;
+declare const either: number | (() => number);
+
 // ---- Proven: the read runs on every normal completion of the call.
 
 export function CallsReadAlways() {
@@ -28,27 +33,27 @@ export function CallsReadThroughAlways() {
 // ---- Not proven: the read is on some paths of the call only.
 
 export function CallsReadWhen() {
-  const value = readWhen(5);
+  const value = readWhen(either);
   return <main>{value}</main>;
 }
 export function CallsReadGuarded() {
-  const value = readGuarded(false);
+  const value = readGuarded(flag);
   return <main>{value}</main>;
 }
 export function CallsReadStoreGuarded() {
-  const value = readStoreGuarded(false);
+  const value = readStoreGuarded(flag);
   return <main>{value}</main>;
 }
 export function CallsReadThroughWhen() {
-  const value = readThroughWhen(false);
+  const value = readThroughWhen(flag);
   return <main>{value}</main>;
 }
 export function CallsReadDefaultGuarded() {
-  const value = readDefaultGuarded(false);
+  const value = readDefaultGuarded(flag);
   return <main>{value}</main>;
 }
 export function CallsReadAfterThrowGuard() {
-  const value = readAfterThrowGuard(true);
+  const value = readAfterThrowGuard(flag);
   return <main>{value}</main>;
 }
 export function CallsReadWhenUnset() {
@@ -62,7 +67,7 @@ export function CallsReadAfterLoop() {
 export function CallsReadAfterFail() {
   let value = 0;
   try {
-    value = readAfterFail(false);
+    value = readAfterFail(flag);
   } catch {
     value = -1;
   }
@@ -71,7 +76,7 @@ export function CallsReadAfterFail() {
 export function CallsReadAfterAssert() {
   let value = 0;
   try {
-    value = readAfterAssert(false);
+    value = readAfterAssert(flag);
   } catch {
     value = -1;
   }
@@ -80,7 +85,7 @@ export function CallsReadAfterAssert() {
 export function CallsReadAfterFailingDefault() {
   let value = 0;
   try {
-    value = readAfterFailingDefault(false);
+    value = readAfterFailingDefault(flag);
   } catch {
     value = -1;
   }

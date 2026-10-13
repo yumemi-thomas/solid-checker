@@ -528,6 +528,10 @@ pub(super) struct SemanticLookup<'a> {
     /// `never`, or (ADR 0279) to an `asserts` signature, per path. Such a call never completes normally, so a caller
     /// that catches its throw carries on with the rest of the body skipped.
     never_returning_calls: OnceLock<HashMap<&'a str, Vec<Span>>>,
+    /// ADR 0280: `(path, function span)` for each function that tests one
+    /// of its own parameters in a condition or a logical operand, the only
+    /// functions a call's arguments can decide anything in.
+    parameter_testing_functions: OnceLock<HashSet<(&'a str, Span)>>,
 }
 
 /// Which parts of the returned-adapter contract this build's dialect can
@@ -658,6 +662,7 @@ impl<'a> SemanticLookup<'a> {
             cross_file_proof_digest: OnceLock::new(),
             parameter_completion_calls: OnceLock::new(),
             never_returning_calls: OnceLock::new(),
+            parameter_testing_functions: OnceLock::new(),
         }
     }
 
@@ -1436,6 +1441,74 @@ impl<'a> SemanticLookup<'a> {
                         })
                 })
             })
+    }
+
+    /// ADR 0280: the `never` and `asserts` calls written in `function`'s
+    /// body or parameter list, outside nested functions.
+    pub(crate) fn never_returning_calls_within(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> Vec<Span> {
+        self.never_returning_calls()
+            .get(file.path.as_str())
+            .map(|calls| {
+                calls
+                    .iter()
+                    .copied()
+                    .filter(|call| {
+                        function.span.contains(*call)
+                            && !file.ast.functions_within(function.span).any(|nested| {
+                                nested.span != function.span && nested.span.contains(*call)
+                            })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// ADR 0280: whether `function` tests one of its parameters, so that a
+    /// call's arguments may decide one of its branches.
+    pub(crate) fn tests_its_parameters(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        self.parameter_testing_functions
+            .get_or_init(|| {
+                let facts: &'a ProjectFacts = self.facts;
+                let mut testing = HashSet::new();
+                for file in &facts.files {
+                    let ast = &file.ast;
+                    let mut owners = HashMap::<Span, Span>::new();
+                    for function in &ast.functions {
+                        for parameter in &function.parameters {
+                            for name in &parameter.names {
+                                owners.insert(name.span, function.span);
+                            }
+                        }
+                    }
+                    if owners.is_empty() {
+                        continue;
+                    }
+                    let tests = ast
+                        .conditional_tests
+                        .iter()
+                        .copied()
+                        .chain(ast.logical_expressions.iter().map(|logical| logical.left))
+                        .collect::<Vec<_>>();
+                    for (reference, declaration) in &ast.reference_declarations {
+                        if let Some(function) = owners.get(declaration)
+                            && function.contains(*reference)
+                            && tests.iter().any(|test| test.contains(*reference))
+                        {
+                            testing.insert((file.path.as_str(), *function));
+                        }
+                    }
+                }
+                testing
+            })
+            .contains(&(file.path.as_str(), function.span))
     }
 
     fn never_returning_calls(&self) -> &HashMap<&'a str, Vec<Span>> {

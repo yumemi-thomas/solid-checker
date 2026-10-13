@@ -29816,3 +29816,38 @@ Open:
 - throwers typed `void`, which are outside the premise by owner decision
   (ADR 0279, option (b));
 - recall loss for `assertNever` exhaustiveness guards before a read.
+
+## A call's arguments decide its helper's branches (2026-10-13, ADR 0280)
+
+Recall recovery for ADRs 0275–0279. On the first hop, a call's literal,
+function-literal, callable-typed and omitted arguments decide its helper's
+`typeof`, truthiness and nullishness tests. A guaranteed effect is a
+violation, an unreachable one is not reported, and the rest stay obligations.
+This covers the leaf walk, the helper's own reads and by-reference callbacks.
+Corpus unchanged (562/3,731); about 2% slower in an A/B. Open:
+- deeper hops;
+- the inline-arrow role;
+- host constants in the evaluator, which is why the vendored timer's
+  `if (isServer) return;` stays undecided;
+- values through local `const` bindings.
+
+## ADR 0280 review round 4, and returned stores read inside arguments (2026-10-13, ADR 0281)
+
+ADR 0280's review round 4 found six silences and three false violations, all
+fixed. The silences came from:
+- defaulted parameters;
+- `var` redeclarations;
+- escaped string text;
+- types without `strictNullChecks`;
+- callbacks reached by other channels;
+- methods patched by `Object.assign` or `defineProperty`.
+
+The false violations came from:
+- optional-chain short-circuits;
+- exit calls earlier in the same statement or in a default.
+
+A method receiver must now be a non-exported, never-escaping `const`.
+
+ADR 0281 narrows ADR 0222's escape check: a store member chain consumed
+inside a callback argument is not an escape, so a hook that reads its store
+in an effect (`@tanstack/solid-query` `useMutation`) keeps its returned store.

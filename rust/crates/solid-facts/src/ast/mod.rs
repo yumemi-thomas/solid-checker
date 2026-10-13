@@ -31,6 +31,7 @@ use thiserror::Error;
 
 pub const AST_FACTS_SCHEMA: u32 = 59;
 
+mod argument_completion;
 mod binding_references;
 mod class_obligation;
 mod completion_call_cover;
@@ -51,6 +52,7 @@ mod span_index;
 mod super_argument;
 mod unconditional_calls;
 
+pub use argument_completion::{ParameterValue, SiteStanding, argument_site_standings};
 pub use binding_references::import_binding_references;
 pub use class_obligation::{ClassObligation, ClassObligationKind, class_obligation};
 pub use completion_call_cover::{completion_call_cover, completion_return_cover};
@@ -4511,7 +4513,7 @@ fn chain_link<'e, 'a>(
 /// ADR 0276: the parts of an optional chain its `?.` links may skip. A link
 /// is skipped, with what only it evaluates, when it or a link below it on the
 /// spine is optional; the spine below the lowest `?.` always runs.
-fn skippable_chain_parts(
+pub(super) fn skippable_chain_parts(
     element: &oxc_ast::ast::ChainElement<'_>,
     sites: &mut Vec<Span>,
     ranges: &mut Vec<Span>,

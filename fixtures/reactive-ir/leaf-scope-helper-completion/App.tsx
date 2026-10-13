@@ -1,5 +1,10 @@
 import { createEffect, onCleanup, onSettled } from "solid-js";
 
+// Arguments that prove nothing, so these cases test the rule without
+// argument facts (ADR 0280 is pinned by `argument-sensitive-leaf`).
+declare const flag: boolean;
+declare const delay: number | (() => number);
+
 function register() {
   onCleanup(() => {});
 }
@@ -51,7 +56,7 @@ export function Unconditional() {
 // catch it and carry on.
 export function AfterGuardThrow() {
   onSettled(() => {
-    afterGuardThrow(true);
+    afterGuardThrow(flag);
   });
   return <div />;
 }
@@ -68,7 +73,7 @@ export function NestedUnconditional() {
 // the effect; neither runs on every completion of the helper.
 export function ArgumentBranch() {
   onSettled(() => {
-    createTimer(() => {}, 30_000);
+    createTimer(() => {}, delay);
   });
   return <div />;
 }
@@ -76,7 +81,7 @@ export function ArgumentBranch() {
 // Uncertifiable: the registration is behind the helper's own branch.
 export function Guarded() {
   onSettled(() => {
-    guarded(false);
+    guarded(flag);
   });
   return <div />;
 }
@@ -92,7 +97,7 @@ export function Looped() {
 // Uncertifiable: the second hop is conditional in the first.
 export function NestedConditional() {
   onSettled(() => {
-    forwardsWhen(false);
+    forwardsWhen(flag);
   });
   return <div />;
 }
@@ -123,7 +128,7 @@ async function maybeWaits(flag: boolean) {
 // scope only when the helper did not suspend first.
 export function ConditionalAwait() {
   onSettled(() => {
-    void maybeWaits(false);
+    void maybeWaits(flag);
   });
   return <div />;
 }
@@ -155,7 +160,7 @@ function registerAfterFail(ready: boolean) {
 export function AfterFail() {
   onSettled(() => {
     try {
-      registerAfterFail(false);
+      registerAfterFail(flag);
     } catch {
       // carry on
     }
@@ -177,7 +182,7 @@ function registerAfterAssert(ready: boolean) {
 export function AfterAssert() {
   onSettled(() => {
     try {
-      registerAfterAssert(false);
+      registerAfterAssert(flag);
     } catch {
       // carry on
     }

@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 399,
-      "end": 415,
+      "start": 569,
+      "end": 585,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 549,
-      "end": 556,
+      "start": 719,
+      "end": 726,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 736,
-      "end": 757,
+      "start": 906,
+      "end": 926,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 877,
-      "end": 899,
+      "start": 1046,
+      "end": 1067,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 1036,
-      "end": 1043,
+      "start": 1203,
+      "end": 1210,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 1178,
-      "end": 1185,
+      "start": 1345,
+      "end": 1352,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 1340,
-      "end": 1347,
+      "start": 1507,
+      "end": 1514,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 1587,
-      "end": 1593,
+      "start": 1753,
+      "end": 1759,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 1887,
-      "end": 1894,
+      "start": 2052,
+      "end": 2059,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 2050,
-      "end": 2070,
+      "start": 2215,
+      "end": 2235,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 2212,
-      "end": 2219,
+      "start": 2377,
+      "end": 2384,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 2407,
-      "end": 2414,
+      "start": 2572,
+      "end": 2579,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 2565,
-      "end": 2572,
+      "start": 2730,
+      "end": 2737,
       "fixes": 0
     },
     {
@@ -137,8 +137,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 2735,
-      "end": 2742,
+      "start": 2900,
+      "end": 2907,
       "fixes": 0
     },
     {
@@ -147,18 +147,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 2945,
-      "end": 2952,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 3115,
-      "end": 3122,
+      "start": 3324,
+      "end": 3331,
       "fixes": 0
     },
     {
@@ -167,8 +157,38 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
-      "start": 3350,
-      "end": 3357,
+      "start": 3616,
+      "end": 3623,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 3763,
+      "end": 3770,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 3933,
+      "end": 3940,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 4168,
+      "end": 4175,
       "fixes": 0
     }
   ]

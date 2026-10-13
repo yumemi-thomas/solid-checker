@@ -279,6 +279,9 @@ pub(crate) struct CachedInterproceduralGraph {
 pub(crate) enum InterproceduralResultDependency {
     Symbol(SymbolId),
     InlineFunction(String, Span),
+    /// ADR 0280: a result decided a callee's branches from this call's
+    /// arguments, so it depends on the callee's source text itself.
+    FunctionSource(String, Span),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -291,6 +294,7 @@ pub(crate) enum InterproceduralResultDependencyState {
         invoked_parameter_members: Vec<crate::interproc::ParameterMemberInvocation>,
     },
     Returned(Vec<SummaryRead>),
+    Source(solid_facts::core::SourceHash),
 }
 
 pub(crate) struct CachedInterproceduralResultFile {

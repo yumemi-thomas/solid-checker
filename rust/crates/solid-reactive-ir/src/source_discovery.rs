@@ -420,25 +420,26 @@ fn project_returned_source<'a>(
                 || entities.at(file.path.as_str(), id.span) == Some(source))
     }) {
         let at = reference.span;
-        if file.ast.calls.iter().any(|call| {
+        if (file.ast.calls.iter().any(|call| {
             call.arguments
                 .iter()
                 .any(|argument| argument.span.contains(at))
-        }) || !(returns.iter().any(|returned| {
-            returned
-                .argument
-                .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == at)
-        }) || file
-            .ast
-            .members
-            .iter()
-            .any(|member| file.ast.peel_ts_sugar_span(member.object) == at)
-            || (returned.kind == "accessor"
-                && file
-                    .ast
-                    .calls
-                    .iter()
-                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == at)))
+        }) && member_chain_escapes(file, at))
+            || !(returns.iter().any(|returned| {
+                returned
+                    .argument
+                    .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == at)
+            }) || file
+                .ast
+                .members
+                .iter()
+                .any(|member| file.ast.peel_ts_sugar_span(member.object) == at)
+                || (returned.kind == "accessor"
+                    && file
+                        .ast
+                        .calls
+                        .iter()
+                        .any(|call| file.ast.peel_ts_sugar_span(call.callee) == at)))
         {
             return None;
         }
@@ -450,6 +451,46 @@ fn project_returned_source<'a>(
         &sites,
     ) == Some(true))
     .then_some((file, created, primitive))
+}
+
+/// ADR 0281: whether a reference to a returned source root written inside a
+/// call argument can hand the root, or a sub-proxy of it, to other code.
+/// Only a member chain rooted at the reference and consumed where it is
+/// written (a statement, a declaration initializer, an operand inside a
+/// callback the argument holds) is not an escape. The bare root, a chain that
+/// is itself a call argument or a callee (which receives the proxy as
+/// `this`), and a chain a function returns all are.
+fn member_chain_escapes(file: &solid_facts::FileFacts, at: solid_facts::core::Span) -> bool {
+    let ast = &file.ast;
+    let mut chain = at;
+    while let Some(member) = ast
+        .members
+        .iter()
+        .find(|member| ast.peel_ts_sugar_span(member.object) == chain)
+    {
+        chain = member.span;
+    }
+    chain == at
+        || ast.calls.iter().any(|call| {
+            ast.peel_ts_sugar_span(call.callee) == chain
+                || call
+                    .arguments
+                    .iter()
+                    .any(|argument| ast.peel_ts_sugar_span(argument.span) == chain)
+        })
+        || ast
+            .returns
+            .iter()
+            .chain(
+                ast.functions
+                    .iter()
+                    .filter_map(|function| function.expression_return.as_ref()),
+            )
+            .any(|returned| {
+                returned
+                    .argument
+                    .is_some_and(|value| ast.peel_ts_sugar_span(value) == chain)
+            })
 }
 
 /// Follow an exact immutable identity into a proved source-producing call.

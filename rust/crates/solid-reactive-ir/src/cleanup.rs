@@ -565,7 +565,7 @@ fn record(kinds: &mut Reached, kind: crate::LeafOwnerOperationKind, guaranteed: 
 
 /// How the walk entered a function body (ADR 0275).
 #[derive(Clone, Copy)]
-enum Entry {
+enum Entry<'v> {
     /// The leaf callback itself. Every call written directly in it is
     /// reached, under the statically-present-code premise.
     LeafBody,
@@ -573,6 +573,13 @@ enum Entry {
     /// when it runs on every normal completion of the body and the hop here
     /// was itself `guaranteed`: a branch may depend on this call's arguments.
     Called { guaranteed: bool },
+    /// ADR 0280: called from the leaf scope by a call whose arguments prove
+    /// `values` for the body's parameters, so a branch they decide is
+    /// decided for this call.
+    CalledWith {
+        guaranteed: bool,
+        values: &'v [solid_facts::ast::ParameterValue],
+    },
 }
 
 /// Whether `inner`, written directly in `function`, runs on every call that
@@ -582,12 +589,18 @@ fn reached_on_every_call(
     file: &FileFacts,
     function: &solid_facts::ast::FunctionFact,
     inner: Span,
-    entry: Entry,
+    entry: Entry<'_>,
 ) -> bool {
     match entry {
         Entry::LeafBody => true,
-        Entry::Called { guaranteed: false } => false,
-        Entry::Called { guaranteed: true } => {
+        Entry::Called { guaranteed: false }
+        | Entry::CalledWith {
+            guaranteed: false, ..
+        } => false,
+        Entry::Called { guaranteed: true }
+        | Entry::CalledWith {
+            guaranteed: true, ..
+        } => {
             resolution
             .completions
             .borrow_mut()
@@ -785,6 +798,14 @@ fn helper_forbidden_operations(
             resolution, call_file, call, resolved, kinds, visited, depth, guaranteed,
         );
     };
+    // ADR 0280: the values this call's arguments prove decide the helper's
+    // own parameter tests.
+    let values =
+        crate::argument_values::parameter_values(call_file, call, helper_file, helper, lookup);
+    let entry = match values.as_deref() {
+        Some(values) if !values.is_empty() => Entry::CalledWith { guaranteed, values },
+        _ => Entry::Called { guaranteed },
+    };
     function_forbidden_operations(
         resolution,
         helper_file,
@@ -793,7 +814,7 @@ fn helper_forbidden_operations(
         visited,
         depth,
         None,
-        Entry::Called { guaranteed },
+        entry,
     )
 }
 
@@ -1137,7 +1158,7 @@ fn function_forbidden_operations(
     visited: &mut Vec<(String, Span)>,
     depth: usize,
     exact_this: ExactThis,
-    entry: Entry,
+    entry: Entry<'_>,
 ) -> bool {
     let LeafScopeResolution {
         lookup,
@@ -1199,6 +1220,30 @@ fn function_forbidden_operations(
             )
             && possible.is_empty();
     }
+    // ADR 0280: each direct call's standing on this call, when its arguments
+    // prove anything about the helper's parameters.
+    let standings = match entry {
+        Entry::CalledWith { values, .. } => {
+            let sites = helper_file
+                .ast
+                .calls_within(helper.body)
+                .filter(|inner| {
+                    crate::owners::written_directly_in(&helper_file.ast, helper, inner.span)
+                })
+                .map(|inner| inner.span)
+                .collect::<Vec<_>>();
+            solid_facts::ast::argument_site_standings(
+                std::path::Path::new(helper_file.path.as_str()),
+                &helper_file.source,
+                helper.span,
+                values,
+                &lookup.never_returning_calls_within(helper_file, helper),
+                &sites,
+            )
+            .map(|standings| sites.into_iter().zip(standings).collect::<HashMap<_, _>>())
+        }
+        _ => None,
+    };
     for inner in helper_file.ast.calls_within(helper.body) {
         // A call inside a nested function -- its body or its parameter list
         // (ADR 0204) -- is not executed by calling the helper; it belongs to
@@ -1223,7 +1268,26 @@ fn function_forbidden_operations(
         {
             continue;
         }
-        let guaranteed = reached_on_every_call(resolution, helper_file, helper, inner.span, entry);
+        let guaranteed = match standings
+            .as_ref()
+            .and_then(|standings| standings.get(&inner.span))
+        {
+            // Not on this call: nothing to report, nothing left open.
+            Some(solid_facts::ast::SiteStanding::Unreachable) => continue,
+            Some(solid_facts::ast::SiteStanding::Guaranteed) => {
+                // The walk read this body's `never`/`asserts` calls as exits,
+                // and skipped the ones in arms the arguments rule out.
+                matches!(
+                    entry,
+                    Entry::CalledWith {
+                        guaranteed: true,
+                        ..
+                    }
+                )
+            }
+            Some(solid_facts::ast::SiteStanding::Possible) => false,
+            None => reached_on_every_call(resolution, helper_file, helper, inner.span, entry),
+        };
         let primitive = call_primitive_name(helper_file, inner, entities, symbol_names, dialect);
         let Some(primitive) = primitive else {
             complete &= helper_forbidden_operations(

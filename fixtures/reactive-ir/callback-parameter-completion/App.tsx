@@ -15,6 +15,10 @@ import {
   runner,
 } from "./helpers";
 
+// Arguments that prove nothing, so these cases test the rule without
+// argument facts (ADR 0280 is pinned by `argument-sensitive-reads`).
+declare const flag: boolean;
+
 // ---- Proven: the helper calls the callback on every completion.
 
 export function PassedAlways() {
@@ -32,17 +36,17 @@ export function ArrowAlways() {
 
 export function PassedWhen() {
   const [count] = createSignal(1);
-  const value = runWhen(false, count);
+  const value = runWhen(flag, count);
   return <main>{value}</main>;
 }
 export function PassedTernary() {
   const [count] = createSignal(1);
-  const value = callWhen(count, false);
+  const value = callWhen(count, flag);
   return <main>{value}</main>;
 }
 export function ArrowWhen() {
   const [count] = createSignal(1);
-  const value = runWhen(false, () => count());
+  const value = runWhen(flag, () => count());
   return <main>{value}</main>;
 }
 export function ArrowEach() {
@@ -59,7 +63,7 @@ export function ArrowWhenUnset() {
 // SC5001 error.
 export function AsyncArrowWhen() {
   const user = createMemo(async () => 1);
-  const value = runWhen(false, () => user());
+  const value = runWhen(flag, () => user());
   return <main>{value}</main>;
 }
 
@@ -70,7 +74,7 @@ export function AfterFailArrow() {
   const [count] = createSignal(1);
   let value = 0;
   try {
-    value = runAfterFail(false, () => count());
+    value = runAfterFail(flag, () => count());
   } catch {
     value = -1;
   }
@@ -104,10 +108,34 @@ export function ReplacedRunner() {
   return <main>{value}</main>;
 }
 
-// Proven: an exact object-literal method and an exact class instance.
-export function BusMethod() {
+const localBus = {
+  run(cb: () => number) {
+    return cb();
+  },
+};
+const patchedBus = {
+  run(cb: () => number) {
+    return cb();
+  },
+};
+Object.assign(patchedBus, { run: (_cb: () => number) => 0 });
+
+// Proven: an unexported object-literal method and an exact class instance.
+export function LocalBus() {
+  const [count] = createSignal(1);
+  const value = localBus.run(() => count());
+  return <main>{value}</main>;
+}
+// Not proven: an importer may patch an exported object, and `Object.assign`
+// replaces `run` without an assignment by name (ADR 0280 review round 4).
+export function ExportedBus() {
   const [count] = createSignal(1);
   const value = bus.run(() => count());
+  return <main>{value}</main>;
+}
+export function AssignedBus() {
+  const [count] = createSignal(1);
+  const value = patchedBus.run(() => count());
   return <main>{value}</main>;
 }
 export function ExactInstance() {

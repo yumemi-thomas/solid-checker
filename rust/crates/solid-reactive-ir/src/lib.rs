@@ -1,3 +1,4 @@
+mod argument_values;
 mod attribution;
 mod cache;
 mod callback_return;
@@ -3244,6 +3245,7 @@ mod tests {
             parameters: Vec::new(),
             exported: false,
             r#async: false,
+            source_hash: solid_facts::core::SourceHash::of(""),
         }
     }
 
