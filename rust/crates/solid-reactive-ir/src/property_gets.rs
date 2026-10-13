@@ -289,7 +289,19 @@ fn helper_forwards(
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<ContractCallback> {
-    if function.r#async || function.generator || !lookup.function_value_is_current(file, function) {
+    // A directive (`"use server"`, …) can hand the function to a compiler or
+    // host that replaces it, so its body need not run at the call.
+    let directive = |value: &str| value != "use strict";
+    if function.r#async
+        || function.generator
+        || !lookup.function_value_is_current(file, function)
+        || function.directives.iter().any(|value| directive(value))
+        || file
+            .ast
+            .module_directives
+            .iter()
+            .any(|fact| directive(&fact.value))
+    {
         return Vec::new();
     }
     let mut forwarded = Vec::new();
@@ -327,6 +339,32 @@ fn unconditional_in(
         } else {
             ast.straight_line_calls.contains(&inner.span)
         }
+        && statement_level(ast, function, inner.span)
+}
+
+/// Whether `span` is the whole value of a `const` initializer or of an
+/// unconditional `return` written directly in `function`. An allowlist: such
+/// an expression is not a JSX child, a class member, an operand or a branch
+/// arm that the compiler or the language could defer.
+fn statement_level(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    let direct = |at: Span| crate::owners::written_directly_in(ast, function, at);
+    ast.bindings.iter().any(|binding| {
+        binding.immutable
+            && binding
+                .initializer
+                .map(|value| ast.peel_ts_sugar_span(value))
+                == Some(span)
+            && direct(binding.declaration)
+    }) || ast.returns.iter().any(|returned| {
+        returned.argument.map(|value| ast.peel_ts_sugar_span(value)) == Some(span)
+            && !returned.conditional
+            && returned.control_tests.is_empty()
+            && direct(returned.span)
+    })
 }
 
 /// The index of `function`'s parameter that `inner` receives, untouched, at
@@ -402,6 +440,10 @@ fn inside_class_in(ast: &solid_facts::ast::AstFacts, within: Span, span: Span) -
             .jsx_elements
             .iter()
             .any(|element| within.contains(element.span) && element.span.contains(span))
+        || ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| within.contains(*fragment) && fragment.contains(span))
 }
 
 /// The value-enumeration rows a call of a local helper performs (ADR 0274).
@@ -609,6 +651,10 @@ mod tests {
                 None,
             ),
             ("function h(o) { return <P value={new V(o)} />; }", None),
+            ("function h(o) { return <>{new V(o)}</>; }", None),
+            ("function h(o) { use(new V(o)); return o; }", None),
+            ("function h(o) { const v = [new V(o)]; return v; }", None),
+            ("function h(o) { let v = new V(o); return v; }", None),
         ] {
             let facts = file(source);
             let function = facts

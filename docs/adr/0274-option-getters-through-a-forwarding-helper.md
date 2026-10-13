@@ -28,7 +28,10 @@ real corpus call open:
    - the helper resolves exactly, is current, and is neither async nor a
      generator;
    - its body calls the package directly and unconditionally (straight-line
-     flow, no nested function, no optional chain);
+     flow, no nested function, no optional chain), and the call is the whole
+     value of a `const` initializer or of an unconditional `return` written
+     directly in the helper. This allowlist excludes operands, branch arms,
+     JSX children and fragments, class members and argument positions;
    - it passes that parameter itself as the enumerated argument;
    - the parameter is a plain, unwritten, default-less identifier;
    - nothing references the parameter before that call. A reference inside
@@ -40,10 +43,13 @@ real corpus call open:
      file holds no direct `eval`, which reaches the parameter with no static
      reference. A callee spelled `eval` under transparent TypeScript wrappers
      (`(eval as typeof eval)(…)`, `eval!(…)`) is direct too;
-   - the package call is not inside a class body or a JSX element. A field
-     initializer runs at instantiation, and the compiler wraps a dynamic JSX
-     prop or child in a getter its consumer runs, so neither runs where it
-     is written.
+   - the package call is not inside a class body, JSX element or fragment.
+     A field initializer runs at instantiation, and the compiler wraps a
+     dynamic JSX prop or child in a getter its consumer runs, so neither
+     runs where it is written;
+   - neither the helper nor its module carries a directive other than
+     `"use strict"`. `"use server"` makes the compiler replace a client
+     helper with an RPC reference, so its body does not run at the call.
 
    The caller's argument must then be the same exact receiver ADR 0225
    requires, and the getters run with the caller's call role. `new`
@@ -57,9 +63,9 @@ real corpus call open:
    literal, so it is reachable only as the getter's receiver: `this`, `super`
    (whose member calls receive the literal), or code `eval` builds. Any such
    token, an escaped identifier, or an `eval` in a getter leaves every later
-   getter possible rather than guaranteed. A read inside a class or JSX
-   element written in the getter body is deferred, so it stays an
-   obligation.
+   getter possible rather than guaranteed. A read inside a class, JSX
+   element or fragment written in the getter body is deferred, so it stays
+   an obligation.
 3. **Result reuse.** A file holding such a helper is call-role syntax, so
    editing it invalidates its callers' retained results.
 
@@ -85,8 +91,10 @@ real corpus call open:
   escaped `arguments` and `super.valueOf()` in a getter. Round 3 (REVIEW-3.md)
   found direct `eval` behind TypeScript wrappers, in the helper and in a
   getter. Round 4 (REVIEW-4.md) found a construction or read inside a JSX
-  prop, which the compiler defers to its consumer. Each now stays
-  uncertifiable, and the unit tests pin them.
+  prop, which the compiler defers to its consumer. Round 5 (REVIEW-5.md)
+  found JSX fragments and a `"use server"` helper. Each now stays
+  uncertifiable, and the unit tests pin the syntactic shapes. The helper-side
+  rule became an allowlist after round 5.
 - Unit tests: `a_helper_forwards_only_an_untouched_parameter_on_its_straight_line`
   and `receiver_routes_are_matched_as_tokens`.
 - Twin `probus-virtual-helper-forwarded-later-getter` in
