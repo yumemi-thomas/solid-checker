@@ -29864,3 +29864,24 @@ rc.13 corpus is unchanged in both modes. Open:
   destructured parameters, which ADR 0277's by-reference read
   (`call.arguments.get(parameter)`) also relies on. That index mismatch is
   pre-existing and not audited here.
+
+## Dependency source mode (2026-10-13, ADR 0284, experimental)
+
+`--dependency-source <specifier>` analyzes an installed package's runtime
+source, selected by the `solid`/`browser`/`development`/`import`/`module`/
+`default` conditions in document order, as project code. Its contract is not
+bound, findings located in it are not reported, and its internals veto
+neither the runtime-configuration premise nor ADR 0273 member stability for
+project objects. Over the rc.13 corpus with 11 packages: violations
+562 → 559 (+3 router reads, −6 losses), uncertifiable 3,731 → 3,557, no false
+positive found. Open:
+- `new Proxy(store, { get })` results (solid-query `useQuery`);
+- returned tuple slots (`@solid-primitives/raf`);
+- a context-provided value read through a package hook (kui);
+- attributing a package-located finding to the project call that causes it
+  (`createTimer` → `onCleanup` without an owner);
+- `exports` patterns (`./*`) and arrays;
+- `any`-typed package parameters, since package JavaScript is not
+  type-checked;
+- the "rendering function" label on summary-propagated apply reads, which
+  base mode shares.

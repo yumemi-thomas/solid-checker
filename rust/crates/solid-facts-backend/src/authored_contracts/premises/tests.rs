@@ -141,6 +141,7 @@ fn facts(source: &str, resolved: bool) -> ProjectFacts {
         resolved_imports: Some(imports),
         runtime_resolutions: None,
         runtime_symbol_redirects: HashMap::new(),
+        dependency_source_roots: Vec::new(),
     }
 }
 

@@ -59,6 +59,11 @@ pub(super) struct Resolver<'a, 'facts> {
 struct MemberStability {
     written: HashMap<String, Location>,
     all: Option<Location>,
+    /// ADR 0284: the vetoes written inside a package analyzed as source, by
+    /// its root. Dependency internals are outside ADR 0273's premise, as when
+    /// only the package's declarations are seen, so a write there vetoes
+    /// only members of objects that package creates.
+    dependencies: HashMap<String, MemberStability>,
 }
 
 enum Stability<'a> {
@@ -74,9 +79,26 @@ impl MemberStability {
         }
     }
 
+    /// [`Self::state`] for a member of an object created in `owner`: the
+    /// project's vetoes, and those of the package analyzed as source that
+    /// holds `owner`, if one does.
+    fn state_of(&self, facts: &ProjectFacts, owner: &str, name: &str) -> Stability<'_> {
+        match self.state(name) {
+            Stability::Assumed => facts
+                .dependency_source_root(owner)
+                .and_then(|root| self.dependencies.get(root))
+                .map_or(Stability::Assumed, |package| package.state(name)),
+            vetoed => vetoed,
+        }
+    }
+
     fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
-        let mut index = Self::default();
+        let mut project = Self::default();
         for file in &facts.files {
+            let index = match facts.dependency_source_root(file.path.as_str()) {
+                Some(root) => project.dependencies.entry(root.to_owned()).or_default(),
+                None => &mut project,
+            };
             index.syntax(file);
             for call in &file.ast.calls {
                 let Some(method) = mutation_builtin(file, call, lookup) else {
@@ -178,7 +200,7 @@ impl MemberStability {
                 }
             }
         }
-        index
+        project
     }
 
     fn syntax(&mut self, file: &FileFacts) {
@@ -1067,11 +1089,6 @@ impl Resolver<'_, '_> {
         {
             return None;
         }
-        if matches!(self.member_stability.state("map"), Stability::Vetoed(_))
-            || matches!(self.member_stability.state("forEach"), Stability::Vetoed(_))
-        {
-            return None;
-        }
         if call.arguments.len() != 1 || call.arguments[0].spread {
             return None;
         }
@@ -1127,12 +1144,18 @@ impl Resolver<'_, '_> {
             return None;
         }
         let name = file.source_text(member.property)?;
-        if matches!(self.member_stability.state(name), Stability::Vetoed(_)) {
-            return None;
-        }
         let Value::Array { path, elements } = self.value(file, receiver, 24, &mut false)? else {
             return None;
         };
+        // The array and its element objects are created in `path`.
+        if ["map", "forEach", name].into_iter().any(|member| {
+            matches!(
+                self.member_stability.state_of(self.facts, &path, member),
+                Stability::Vetoed(_)
+            )
+        }) {
+            return None;
+        }
         let array_file = self.lookup.file_by_path(&path)?;
         let mut targets = Vec::new();
         for element in elements {
@@ -1454,7 +1477,10 @@ impl Resolver<'_, '_> {
         depth: usize,
         transported: &mut bool,
     ) -> Option<Value> {
-        if let Stability::Vetoed(_site) = self.member_stability.state(name) {
+        if let Stability::Vetoed(_site) =
+            self.member_stability
+                .state_of(self.facts, file.path.as_str(), name)
+        {
             return None;
         }
         let property = closed_properties(file, object)?

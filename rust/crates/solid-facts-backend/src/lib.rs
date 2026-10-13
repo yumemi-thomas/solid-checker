@@ -91,6 +91,7 @@ mod contract_document;
 mod contract_interface;
 mod contract_workflow;
 mod demand_plan;
+pub mod dependency_sources;
 mod diagnostics;
 pub mod dialect;
 mod evidence_sidecars;

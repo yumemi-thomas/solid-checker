@@ -242,7 +242,11 @@ pub(crate) fn captured_lookup_has_visible_runtime_hazard(
     dialect: &dyn Dialect,
 ) -> bool {
     let roots = package_roots(facts);
-    for file in &facts.files {
+    for file in facts
+        .files
+        .iter()
+        .filter(|file| !is_dependency_source(facts, file))
+    {
         let mut symbols = HashMap::new();
         for entity in facts.typescript.entities_for_path(file.path.as_str()) {
             let key = (entity.location.start_byte, entity.location.end_byte);
@@ -287,10 +291,21 @@ pub(crate) fn captured_lookup_has_visible_runtime_hazard(
     false
 }
 
+/// ADR 0284: a file of a package analyzed as source. Its own use of `DEV`,
+/// `OBSERVE` or a hydration host is the package's development tooling, not
+/// the project's runtime configuration, so it vetoes nothing.
+fn is_dependency_source(facts: &ProjectFacts, file: &solid_facts::FileFacts) -> bool {
+    facts.dependency_source_root(file.path.as_str()).is_some()
+}
+
 pub(crate) fn scan(facts: &ProjectFacts, dialect: &dyn Dialect) -> RuntimeConfigurationPremise {
     let roots = package_roots(facts);
     let mut identities = HashMap::new();
-    for file in &facts.files {
+    for file in facts
+        .files
+        .iter()
+        .filter(|file| !is_dependency_source(facts, file))
+    {
         // Index only entities already supplied by the analysis. A duplicate
         // exact span is ambiguous; contained entities are never substitutes.
         let mut symbols = HashMap::new();
@@ -562,6 +577,7 @@ mod tests {
             resolved_imports: None,
             runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
+            dependency_source_roots: Vec::new(),
         }
     }
 
@@ -727,6 +743,7 @@ mod tests {
             resolved_imports: None,
             runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
+            dependency_source_roots: Vec::new(),
         };
         assert_eq!(
             scan(&facts, &solid_dialect::Solid2),

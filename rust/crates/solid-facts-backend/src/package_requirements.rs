@@ -30,6 +30,13 @@ pub fn external_package_contract_requirements(
             if is_package_local_edge(&mut owners, importer, import) {
                 continue;
             }
+            // ADR 0284: a package analyzed as source needs no contract.
+            if facts
+                .dependency_source_root(&import.resolved_path)
+                .is_some()
+            {
+                continue;
+            }
             if import.resolution == solid_facts::ImportResolution::Unresolved
                 && local_proposal_exists(project, &import.text)
             {

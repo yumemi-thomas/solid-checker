@@ -3311,6 +3311,7 @@ mod tests {
             resolved_imports: None,
             runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
+            dependency_source_roots: Vec::new(),
         }
     }
 

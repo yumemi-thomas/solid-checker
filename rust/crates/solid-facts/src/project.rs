@@ -56,6 +56,13 @@ pub struct ProjectFacts {
     /// joins add no redirect and preserve the existing fail-closed result.
     #[serde(skip)]
     pub runtime_symbol_redirects: HashMap<String, String>,
+    /// ADR 0284, experimental: canonical directories of the installed
+    /// packages whose runtime source is analyzed as project code. Their
+    /// files take part in every proof, but a finding located in one is not
+    /// reported, and their own runtime-configuration uses do not veto the
+    /// project's findings. Empty for ordinary analysis.
+    #[serde(skip)]
+    pub dependency_source_roots: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -457,6 +464,17 @@ impl FileFacts {
 }
 
 impl ProjectFacts {
+    /// ADR 0284: the package directory, among
+    /// [`Self::dependency_source_roots`], that holds `path`, compared by path
+    /// component so `/x/router-extra` is not inside `/x/router`.
+    #[must_use]
+    pub fn dependency_source_root(&self, path: &str) -> Option<&str> {
+        self.dependency_source_roots
+            .iter()
+            .find(|root| std::path::Path::new(path).starts_with(root.as_str()))
+            .map(String::as_str)
+    }
+
     pub fn join(
         generation: Generation,
         project_id: impl Into<String>,
@@ -495,6 +513,7 @@ impl ProjectFacts {
             resolved_imports: None,
             runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
+            dependency_source_roots: Vec::new(),
         })
     }
 }

@@ -411,6 +411,16 @@ impl DiagnosticSession {
         let solve_started = Instant::now();
         let mut findings = self.dialect.solve(&program);
         retain_enabled(self.dialect, &rule_options, &mut findings)?;
+        // ADR 0284: a package analyzed as source is not the project's code.
+        // Its own findings are not reported; what it does to project values
+        // is reported at the project's call sites.
+        if !facts.dependency_source_roots.is_empty() {
+            findings.retain(|finding| {
+                facts
+                    .dependency_source_root(&finding.primary_location.path)
+                    .is_none()
+            });
+        }
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
         // After enablement, like the refusal: the notice is about the installed
         // runtime, not a site, so there is nothing to suppress it at.
@@ -4432,6 +4442,7 @@ mod tests {
             resolved_imports: None,
             runtime_resolutions: None,
             runtime_symbol_redirects: Default::default(),
+            dependency_source_roots: Vec::new(),
         };
         let mut session = DiagnosticSession::default();
         let contracts = AcceptedContractIndex::default();
@@ -4479,6 +4490,7 @@ mod tests {
             resolved_imports: None,
             runtime_resolutions: None,
             runtime_symbol_redirects: Default::default(),
+            dependency_source_roots: Vec::new(),
         };
         let mut session = DiagnosticSession::default();
         let contracts = AcceptedContractIndex::default();

@@ -575,6 +575,35 @@ impl AcceptedContractIndex {
     /// This is the only supported composition rule for project catalogs and
     /// receipt-issued built-ins: project acquisition wins per importer and
     /// specifier, while a built-in may fill only a genuinely absent key.
+    /// ADR 0284: this index with no acceptance for the packages named, in
+    /// every view and scope, so their imports are analyzed from the
+    /// package's own source instead of bound through a contract.
+    #[must_use]
+    pub fn without_packages(mut self, names: &std::collections::BTreeSet<String>) -> Self {
+        if names.is_empty() {
+            return self;
+        }
+        let keep = |contract: &AcceptedContract| !names.contains(&contract.package().name);
+        for contracts in self.imports.values_mut() {
+            contracts.retain(keep);
+        }
+        self.imports.retain(|_, contracts| !contracts.is_empty());
+        for contracts in self.by_artifact.values_mut() {
+            contracts.retain(keep);
+        }
+        self.by_artifact
+            .retain(|_, contracts| !contracts.is_empty());
+        self.admitted.retain(|_, contract| keep(contract));
+        self.admitted_at.retain(|_, contract| keep(contract));
+        if let Some(browser) = self.inferred_browser.as_mut() {
+            browser.contracts = std::mem::take(&mut browser.contracts).without_packages(names);
+        }
+        for scope in &mut self.scopes {
+            scope.index = std::mem::take(&mut scope.index).without_packages(names);
+        }
+        self
+    }
+
     pub fn with_fallback(mut self, fallback: Self) -> Self {
         for (key, contracts) in fallback.imports {
             self.imports.entry(key).or_insert(contracts);

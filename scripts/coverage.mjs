@@ -231,6 +231,10 @@ function runtimeArguments(tsconfig) {
   for (const transform of runtime.frameworkTransforms ?? []) {
     args.push("--framework-transform", transform);
   }
+  // ADR 0284: installed packages whose runtime source is analyzed as project code.
+  for (const specifier of runtime.dependencySources ?? []) {
+    args.push("--dependency-source", specifier);
+  }
   return args;
 }
 

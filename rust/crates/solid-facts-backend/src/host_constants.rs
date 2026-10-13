@@ -183,7 +183,7 @@ pub fn host_constants_of_module(
 }
 
 /// `@scope/name/sub` → (`@scope/name`, `./sub`); `name` → (`name`, `.`).
-fn split_bare_specifier(specifier: &str) -> Option<(String, String)> {
+pub(crate) fn split_bare_specifier(specifier: &str) -> Option<(String, String)> {
     let mut parts = specifier.split('/');
     let first = parts.next()?;
     let name = if first.starts_with('@') {
@@ -206,7 +206,11 @@ fn split_bare_specifier(specifier: &str) -> Option<(String, String)> {
 /// Node's lookup: the first `node_modules/<name>` directory above `importer`,
 /// stopping after `boundary` when one is given (an importer outside it finds
 /// nothing).
-fn find_package_root(importer: &Path, name: &str, boundary: Option<&Path>) -> Option<PathBuf> {
+pub(crate) fn find_package_root(
+    importer: &Path,
+    name: &str,
+    boundary: Option<&Path>,
+) -> Option<PathBuf> {
     if boundary.is_some_and(|boundary| !importer.starts_with(boundary)) {
         return None;
     }
@@ -302,14 +306,14 @@ fn conditional_targets(
 /// A JSON value that keeps object keys in document order, which an `exports`
 /// map's meaning depends on (`serde_json::Value` sorts them).
 #[derive(Clone, Debug)]
-enum Ordered {
+pub(crate) enum Ordered {
     String(String),
     Object(Vec<(String, Ordered)>),
     Other,
 }
 
 impl Ordered {
-    fn get(&self, key: &str) -> Option<&Ordered> {
+    pub(crate) fn get(&self, key: &str) -> Option<&Ordered> {
         match self {
             Self::Object(entries) => {
                 let mut found = entries.iter().filter(|(name, _)| name == key);
@@ -321,7 +325,7 @@ impl Ordered {
         }
     }
 
-    fn as_str(&self) -> Option<&str> {
+    pub(crate) fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(value) => Some(value),
             _ => None,

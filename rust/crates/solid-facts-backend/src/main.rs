@@ -112,6 +112,11 @@ struct Request {
     /// Empty outside package-contract generation.
     #[serde(default)]
     runtime_module_resolutions: String,
+    /// ADR 0284, experimental: installed packages, by bare specifier, whose
+    /// runtime source is analyzed as project code instead of being bound
+    /// through a package contract.
+    #[serde(default)]
+    dependency_sources: Vec<String>,
     /// Full Phase-7 exact package resolution for the artifact being emitted.
     #[serde(default)]
     contract_resolution: String,
@@ -3436,7 +3441,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         if request.serve {
             return daemon::serve(&request);
         }
-        if daemon::enabled() && daemon::eligible(&request) {
+        if daemon::enabled() && daemon::eligible(&request) && request.dependency_sources.is_empty()
+        {
             match daemon::check(&request) {
                 Ok(code) => return Ok(code),
                 Err(error) => {
@@ -3462,6 +3468,21 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // live, so `sidecarSpawnNs` measures startup plus handshake rather than
     // the TypeScript program build — that lands on the first request needing
     // the built program, which is the source fetch below.
+    // ADR 0284: the selected packages' runtime closure enters the program
+    // through a sibling tsconfig, removed again when `dependency_sources`
+    // drops.
+    let dependency_sources = if request.dependency_sources.is_empty() {
+        None
+    } else {
+        let prepared = solid_facts_backend::dependency_sources::prepare(
+            Path::new(&request.project_id),
+            &request.dependency_sources,
+        )?;
+        if let Some(prepared) = &prepared {
+            request.project_id = prepared.tsconfig.to_string_lossy().into_owned();
+        }
+        prepared
+    };
     let mut typescript = TypeFactsSession::open(
         &request.typefacts_executable,
         &request.project_id,
@@ -3780,10 +3801,38 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         return Ok(0);
     }
     let (mut facts, native_timings) = {
-        let (sources, program_hashes) = if request.emit_contract.is_empty() {
-            (request.sources.clone(), HashMap::new())
-        } else {
+        let (sources, program_hashes) = if !request.emit_contract.is_empty() {
             fold_emission_host_constants(request.sources.clone(), &request.runtime.conditions)
+        } else if let Some(dependencies) = &dependency_sources {
+            // ADR 0284: under a declared host, a selected package's own
+            // host constants (`isServer`) fold as they do for contract
+            // emission, matching the browser entry the mode selected. The
+            // project's files are analyzed as before.
+            let mut program_hashes = HashMap::new();
+            let sources = request
+                .sources
+                .iter()
+                .cloned()
+                .map(|file| {
+                    let inside = Path::new(&file.path)
+                        .canonicalize()
+                        .is_ok_and(|path| dependencies.contains(&path));
+                    if !inside {
+                        return file;
+                    }
+                    // The conditions `--runtime-target` and its siblings select,
+                    // not only explicit `--runtime-condition`s.
+                    let (mut folded, hashes) = fold_emission_host_constants(
+                        vec![file],
+                        &request.runtime.selected_conditions(),
+                    );
+                    program_hashes.extend(hashes);
+                    folded.remove(0)
+                })
+                .collect();
+            (sources, program_hashes)
+        } else {
+            (request.sources.clone(), HashMap::new())
         };
         let (facts, timings) = build_project_native_measured_with_program_hashes(
             dialect,
@@ -3813,6 +3862,21 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Path::new(&request.contract_package_root),
             Path::new(&request.runtime_module_resolutions),
         )?;
+    }
+    // ADR 0284: bind the selected packages' imports to their runtime files.
+    if let Some(sources) = &dependency_sources {
+        facts.dependency_source_roots = sources
+            .roots
+            .iter()
+            .map(|root| root.to_string_lossy().into_owned())
+            .collect();
+        facts
+            .runtime_symbol_redirects
+            .extend(dependency_source_redirects(
+                &facts,
+                &mut typescript,
+                sources,
+            )?);
     }
     let facts_complete_ns = started.elapsed().as_nanos();
     // Contracts are bound to the installed package an import resolves to, not
@@ -4120,6 +4184,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             ))?
             .with_fallback(contracts)
         };
+        // ADR 0284: a package analyzed as source binds through no contract.
+        let contracts = match &dependency_sources {
+            Some(sources) => contracts.without_packages(&sources.package_names),
+            None => contracts,
+        };
         let (analysis, diagnostic_timings) = analyze_project_accepted_measured_with_enablement(
             dialect,
             Path::new(&facts.project_id),
@@ -4237,6 +4306,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut declaration_probe_plan = String::new();
     let mut emit_module_inventory = String::new();
     let mut runtime_module_resolutions = String::new();
+    let mut dependency_sources = Vec::new();
     let mut contract_resolution = String::new();
     let mut emit_proposal_plan = String::new();
     let mut merge_contract_paths = Vec::new();
@@ -4515,6 +4585,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--emit-module-inventory" => {
                 emit_module_inventory = args.next().ok_or("--emit-module-inventory needs a path")?
             }
+            "--dependency-source" => dependency_sources.push(
+                args.next()
+                    .ok_or("--dependency-source needs a package specifier")?,
+            ),
             "--runtime-module-resolutions" => {
                 runtime_module_resolutions = args
                     .next()
@@ -4686,6 +4760,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         declaration_probe_plan,
         emit_module_inventory,
         runtime_module_resolutions,
+        dependency_sources,
         contract_resolution,
         emit_proposal_plan,
         merge_contract_paths,
@@ -6943,10 +7018,82 @@ fn runtime_symbol_redirects(
         )
         .into());
     }
-    let import_paths = document
+    let rows = document
         .resolutions
+        .into_iter()
+        .map(|resolution| {
+            Ok((
+                Path::new(&resolution.importer).canonicalize()?,
+                resolution.specifier,
+                Path::new(&resolution.target).canonicalize()?,
+            ))
+        })
+        .collect::<Result<Vec<_>, std::io::Error>>()?;
+    symbol_redirects(facts, typescript, rows, |importer, target| {
+        importer.starts_with(&package_root) && target.starts_with(&package_root)
+    })
+}
+
+/// ADR 0284: the redirects for the dependency-source mode. Every project file
+/// importing a selected package by its bare specifier is bound to the entry
+/// the package loads, and each relative import inside a package to the file
+/// it loads, when the compiler resolved them to declarations.
+fn dependency_source_redirects(
+    facts: &solid_facts::ProjectFacts,
+    typescript: &mut TypeFactsSession,
+    sources: &solid_facts_backend::dependency_sources::DependencySources,
+) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+    let mut rows = Vec::new();
+    for resolution in &sources.resolutions {
+        match &resolution.importer {
+            Some(importer) => {
+                rows.push((
+                    importer.clone(),
+                    resolution.specifier.clone(),
+                    resolution.target.clone(),
+                ));
+            }
+            None => {
+                for file in &facts.files {
+                    let Ok(path) = Path::new(file.path.as_str()).canonicalize() else {
+                        continue;
+                    };
+                    if sources.contains(&path)
+                        || !file
+                            .ast
+                            .imports
+                            .iter()
+                            .any(|import| import.module.as_str() == resolution.specifier)
+                    {
+                        continue;
+                    }
+                    rows.push((
+                        path,
+                        resolution.specifier.clone(),
+                        resolution.target.clone(),
+                    ));
+                }
+            }
+        }
+    }
+    symbol_redirects(facts, typescript, rows, |_, target| {
+        sources.contains(target)
+    })
+}
+
+/// The redirects `rows` (importer, specifier, runtime target, all canonical)
+/// state, for the rows `admitted` accepts: each runtime-referenced value
+/// import the compiler resolved to declarations is bound to the export entity
+/// of the runtime file it loads. A source bound to two targets binds none.
+fn symbol_redirects(
+    facts: &solid_facts::ProjectFacts,
+    typescript: &mut TypeFactsSession,
+    rows: Vec<(PathBuf, String, PathBuf)>,
+    admitted: impl Fn(&Path, &Path) -> bool,
+) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+    let import_paths = rows
         .iter()
-        .map(|resolution| resolution.importer.clone())
+        .map(|(importer, _, _)| importer.to_string_lossy().into_owned())
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
@@ -6965,14 +7112,12 @@ fn runtime_symbol_redirects(
     };
     let mut redirects = HashMap::<String, String>::new();
     let mut ambiguous = HashSet::new();
-    for resolution in document.resolutions {
-        let importer_path = Path::new(&resolution.importer).canonicalize()?;
-        let target_path = Path::new(&resolution.target).canonicalize()?;
-        if !importer_path.starts_with(&package_root) || !target_path.starts_with(&package_root) {
+    for (importer_path, specifier, target_path) in rows {
+        if !admitted(&importer_path, &target_path) {
             continue;
         }
         let declaration_redirect = graph.imports.iter().any(|import| {
-            import.text.as_ref() == resolution.specifier
+            import.text.as_ref() == specifier
                 && same_canonical_path(Path::new(import.specifier.path.as_ref()), &importer_path)
                 && import.included_path.is_empty()
                 && (import.resolved_path.ends_with(".d.ts")
@@ -6989,10 +7134,11 @@ fn runtime_symbol_redirects(
         else {
             continue;
         };
-        let imports =
-            importer.ast.imports.iter().filter(|import| {
-                !import.type_only && import.module.as_str() == resolution.specifier
-            });
+        let imports = importer
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only && import.module.as_str() == specifier);
         for import in imports {
             let bindings = import.bindings.iter().filter(|binding| {
                 binding.runtime_referenced

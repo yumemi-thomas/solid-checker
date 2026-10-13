@@ -6378,6 +6378,7 @@ mod export_kind_proof_tests {
             resolved_imports: None,
             runtime_resolutions: None,
             runtime_symbol_redirects: Default::default(),
+            dependency_source_roots: Vec::new(),
         };
         export_kind_proof(&facts, &location)
     }
