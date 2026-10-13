@@ -187,6 +187,12 @@ pub(super) fn reads(
             crate::owners::written_directly_in(&context.file.ast, getter, call.span)
                 && getter.body.contains(call.span)
         }) {
+            // A class written in the getter defers its field initializers to
+            // instantiation; nothing proves when, or that, they run.
+            if inside_class_in(&context.file.ast, getter.body, call.span) {
+                unresolved = true;
+                continue;
+            }
             let Some(symbol) = context
                 .entities
                 .get(&location(context.file.path.shared(), call.callee))
@@ -314,6 +320,7 @@ fn unconditional_in(
 ) -> bool {
     function.body.contains(inner.span)
         && crate::owners::written_directly_in(ast, function, inner.span)
+        && !inside_class_in(ast, function.body, inner.span)
         && if inner.construct {
             ast.straight_line_constructs.contains(&inner.span)
         } else {
@@ -342,10 +349,36 @@ fn forwarded_parameter(
             && parameter.names[0].span == declaration
             && parameter.initializer.is_none()
     })?;
+    // A reference written after the call runs after it, unless it sits in a
+    // hoisted function declaration, which may be called before the call
+    // however late it is written. A function expression or class written
+    // later does not exist yet.
     let touched_before = ast.reference_declarations.iter().any(|(reference, bound)| {
-        *bound == declaration && *reference != passed && reference.start < inner.span.end
+        *bound == declaration
+            && *reference != passed
+            && (reference.start < inner.span.end
+                || ast.functions.iter().any(|nested| {
+                    nested.kind == solid_facts::ast::FunctionKind::Declaration
+                        && function.body.contains(nested.span)
+                        && nested.span.contains(*reference)
+                }))
     });
-    (!touched_before && !crate::indexes::binding_written(file, declaration)).then_some(index)
+    // `arguments` aliases every parameter without a reference bound to it.
+    let aliased = ast.identifiers.iter().any(|identifier| {
+        identifier.role == solid_facts::ast::IdentifierRole::Reference
+            && function.span.contains(identifier.span)
+            && file.source_text(identifier.span) == Some("arguments")
+    });
+    (!touched_before && !aliased && !crate::indexes::binding_written(file, declaration))
+        .then_some(index)
+}
+
+/// Whether `span` lies in a class written inside `within`: a field
+/// initializer runs at instantiation, not where the class is defined.
+fn inside_class_in(ast: &solid_facts::ast::AstFacts, within: Span, span: Span) -> bool {
+    ast.classes
+        .iter()
+        .any(|class| within.contains(class.span) && class.span.contains(span))
 }
 
 /// The value-enumeration rows a call of a local helper performs (ADR 0274).
@@ -514,6 +547,27 @@ mod tests {
             ("function h(o) { return new V(...rest, o); }", None),
             (
                 "function h(o) { const copy = { ...o }; return new V(copy); }",
+                None,
+            ),
+            (
+                "function h(o) { touch(arguments[0]); return new V(o); }",
+                None,
+            ),
+            ("function h(o, p = arguments[0]) { return new V(o); }", None),
+            (
+                "function h(o) { mutate(); return new V(o); function mutate() { o.x = 1; } }",
+                None,
+            ),
+            (
+                "function h(o) { const v = new V(o); later(() => o); return v; }",
+                Some(0),
+            ),
+            (
+                "function h(o) { const v = new V(o); keep(o); return v; }",
+                Some(0),
+            ),
+            (
+                "function h(o) { class Later { value = new V(o); } return Later; }",
                 None,
             ),
         ] {

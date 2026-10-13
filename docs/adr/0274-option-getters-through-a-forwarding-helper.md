@@ -31,7 +31,13 @@ real corpus call open:
      flow, no nested function, no optional chain);
    - it passes that parameter itself as the enumerated argument;
    - the parameter is a plain, unwritten, default-less identifier;
-   - nothing references the parameter before that call.
+   - nothing references the parameter before that call. A reference inside
+     a nested function declaration counts wherever it is written, because a
+     hoisted declaration may run first;
+   - the helper (its parameters included) never names `arguments`, which
+     aliases the parameter without a reference bound to it;
+   - the package call is not inside a class body, where a field initializer
+     runs at instantiation, not at definition.
 
    The caller's argument must then be the same exact receiver ADR 0225
    requires, and the getters run with the caller's call role. `new`
@@ -43,7 +49,9 @@ real corpus call open:
    getter body inside it, not only its first call. A getter that may reach
    the receiver mutates the enumeration. The receiver is a fresh unaliased
    literal, so `this` is its only route, and any `this` token in a getter
-   leaves every later getter possible rather than guaranteed.
+   leaves every later getter possible rather than guaranteed. A read inside
+   a class written in the getter body is deferred to instantiation, so it
+   stays an obligation.
 3. **Result reuse.** A file holding such a helper is call-role syntax, so
    editing it invalidates its callers' retained results.
 
@@ -63,6 +71,10 @@ real corpus call open:
 
 ## Evidence
 
+- Review round 1 (rust/target/research/adr-0274/REVIEW-1.md) found three false
+  violations: an `arguments[0]` alias, a hoisted mutating declaration, and an
+  instance field initializer. Each now stays uncertifiable, and the forwarding
+  test pins them.
 - Unit tests: `a_helper_forwards_only_an_untouched_parameter_on_its_straight_line`
   and `this_is_matched_only_as_a_token`.
 - Twin `probus-virtual-helper-forwarded-later-getter` in
