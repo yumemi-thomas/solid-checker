@@ -29657,9 +29657,12 @@ element's member aborts `map`. A direct read under `if (false)`, a read after
 SC1001 violations before this work. Review round 1 showed the provider-array
 and intermediate-context channels inherit the premise
 (rust/target/research/provenance-2/REVIEW-1.md). Reachability-sensitive proof
-would be its own project-wide slice. Handoff joins now require the argument or
-destructured initializer to be exactly one identifier: `f(model.read())` hands
-over the read's result, not `model`, and no longer marks `model` escaped.
+would be its own project-wide slice. The joins that hand an existing binding's
+census to a parameter or destructuring now require the argument or initializer
+to be exactly one identifier. `f(model.read())` hands over the read's result,
+not `model`, and no longer marks `model` escaped. Call-valued context
+initializers (`const { a } = useTabs()`) keep their context-wide census through
+the context origin, which does not use that edge.
 
 Reactive IR carries source-discovered synchronous arrow member identities from
 one factory's single returned array literal of closed object literals to an

@@ -119,3 +119,15 @@ export function CompositeArgument() {
   const n = model.read();
   return <p>{n}</p>;
 }
+
+// The destructuring edge is gated the same way: a composite initializer hands
+// over its value, not `model`, so aliasing the destructured member keeps
+// both untracked reads SC1001.
+export function CompositeDestructuring() {
+  const model = makeCounter();
+  const { read: other } = (model.read(), { read: () => 0 });
+  const alias = other;
+  void alias;
+  const n = model.read();
+  return <p>{n}</p>;
+}

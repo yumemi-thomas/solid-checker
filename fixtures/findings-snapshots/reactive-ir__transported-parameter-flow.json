@@ -100,6 +100,26 @@
       "start": 6475,
       "end": 6487,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-parameter-flow/App.tsx",
+      "start": 6799,
+      "end": 6811,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/transported-parameter-flow/App.tsx",
+      "start": 6882,
+      "end": 6894,
+      "fixes": 0
     }
   ]
 }
