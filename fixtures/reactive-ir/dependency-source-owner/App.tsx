@@ -94,3 +94,41 @@ export function SecondSite() {
 export function AfterAwait() {
   return <button onClick={() => void later()}>later</button>;
 }
+
+declare function save(): Promise<void>;
+
+// Violation at the call: readingroom's shape. The `try` block runs to its end
+// under the normal-completion premise, and the handler has no owner.
+export function InTryBlock() {
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await save();
+          useTicker(() => {}, 1000);
+        } catch {
+          /* unavailable */
+        }
+      }}
+    >
+      try
+    </button>
+  );
+}
+
+// Uncertifiable at the call: a `catch` clause runs on some invocations only.
+export function InCatch() {
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await save();
+        } catch {
+          useTicker(() => {}, 1000);
+        }
+      }}
+    >
+      catch
+    </button>
+  );
+}

@@ -1001,12 +1001,21 @@ mod tests {
             ),
             ("function h(o) { return o.a ?? 0; }", vec![(0, "a")]),
             ("function h(o) { return o.a.b; }", vec![(0, "a")]),
+            // A `try` block runs to its end under the normal-completion
+            // premise (ADR 0279, option (b)); its `catch` stays conditional.
+            (
+                "function h(o) { try { return o.a; } finally {} }",
+                vec![(0, "a")],
+            ),
+            (
+                "function h(o) { try { return 0; } catch { return o.a; } }",
+                vec![],
+            ),
             // Some paths only: the parameter is proven only read, but no Get
             // runs on every completion.
             ("function h(f, o) { if (f) return o.a; return 0; }", vec![]),
             ("function h(o) { return c && o.a; }", vec![]),
             ("function h(o) { return () => o.a; }", vec![]),
-            ("function h(o) { try { return o.a; } finally {} }", vec![]),
             (
                 "function h(o) { for (const x of xs) { o.b; } return o.a; }",
                 vec![(0, "a")],

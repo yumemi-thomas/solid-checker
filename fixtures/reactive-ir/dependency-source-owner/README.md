@@ -22,6 +22,8 @@ path, or the project call's arguments must decide the branch it sits in.
 | `OwnerGuard` | `if (!getOwner()) return;` before the call | uncertifiable: the guard may return first |
 | `SecondSite` | `choice(false)`, whose cleanup runs from a second call site | violation: every site in `choice` is weighed |
 | `AfterAwait` | `later()`, whose cleanup follows an `await` | uncertifiable: attributed whatever the caller's owner |
+| `InTryBlock` | the call in a `try` block after an `await` (readingroom's shape) | violation: a `try` block runs to its end under the normal-completion premise |
+| `InCatch` | the call in a `catch` clause | uncertifiable: the clause runs on some invocations only |
 
 Without the flag, the package has no contract, and only `AccessorInHandler`
 reports an uncertifiable (`reactive-source-uncaptured`).

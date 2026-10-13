@@ -90,6 +90,26 @@
       "start": 3243,
       "end": 3250,
       "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-owner/App.tsx",
+      "start": 3592,
+      "end": 3617,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-owner/App.tsx",
+      "start": 3946,
+      "end": 3971,
+      "fixes": 0
     }
   ]
 }

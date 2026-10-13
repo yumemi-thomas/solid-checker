@@ -137,3 +137,17 @@ Recorded, not fixed:
   which is a base-mode limitation too;
 - a package hop through `runWithOwner(null, f)`;
 - members of an exported object (`timer.useTicker()` from a named import).
+
+### A `try` block is on every completion (AST facts schema 60)
+
+Requiring the project call on its every-completion path turned readingroom's
+`createTimer` cleanup, written in a `try` block after an `await`, into an
+obligation. ADR 0276's completion sites treated a whole `try` statement as
+conditional. Under the normal-completion premise (ADR 0279, option (b)) a
+`try` block runs to its end, and only its `catch` and `finally` are
+conditional. Completion sites now discount the block, and only completion
+sites: straight-line calls and unconditional awaits keep the whole
+statement conditional. The violation is back. Base mode is unchanged
+(562/3,737). `dependency-source-owner`'s `InTryBlock` and `InCatch` pin both
+sides. ADR 0283's `function h(o) { try { return o.a; } finally {} }` now
+yields its Get.

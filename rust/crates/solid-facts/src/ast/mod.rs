@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 59;
+pub const AST_FACTS_SCHEMA: u32 = 60;
 
 mod argument_completion;
 mod binding_references;
@@ -1781,6 +1781,11 @@ struct Collector<'s, 'semantic> {
     /// Whether each enclosing function, innermost last, has so far written a
     /// `return`, `break` or `continue` that may skip what follows it.
     function_exits: Vec<bool>,
+    /// For each enclosing function, innermost last, how many `try` blocks of
+    /// its own enclose the walk. Under the normal-completion premise
+    /// (ADR 0279, option (b)) a `try` block runs to its end, so its depth does
+    /// not make a completion site conditional; its `catch` and `finally` do.
+    function_try_blocks: Vec<usize>,
     /// ADR 0276: the chain elements an enclosing optional chain's `?.` links
     /// may skip, as exact spans, and the argument and computed-key ranges
     /// they own. What precedes a chain's first link always runs.
@@ -1888,6 +1893,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 .iter()
                 .any(|range| range.contains(site))
             && self.conditional_flow_depth
+                - self.function_try_blocks.last().copied().unwrap_or_default()
                 == self
                     .function_flow_depths
                     .last()
@@ -1974,6 +1980,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             conditional_flow_depth: 0,
             function_flow_depths: Vec::new(),
             function_exits: Vec::new(),
+            function_try_blocks: Vec::new(),
             skippable_chain_sites: Vec::new(),
             skippable_chain_ranges: Vec::new(),
             logical_assignment_depth: 0,
@@ -2987,7 +2994,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         }
         self.function_flow_depths.push(self.conditional_flow_depth);
         self.function_exits.push(false);
+        self.function_try_blocks.push(0);
         walk::walk_function(self, function, flags);
+        self.function_try_blocks.pop();
         self.function_exits.pop();
         self.function_flow_depths.pop();
     }
@@ -3116,6 +3125,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         });
         self.function_flow_depths.push(self.conditional_flow_depth);
         self.function_exits.push(false);
+        self.function_try_blocks.push(0);
         let concise = function.get_expression().map(GetSpan::span);
         if let Some(concise) = concise {
             self.concise_arrow_bodies.push(concise);
@@ -3124,6 +3134,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         if concise.is_some() {
             self.concise_arrow_bodies.pop();
         }
+        self.function_try_blocks.pop();
         self.function_exits.pop();
         self.function_flow_depths.pop();
     }
@@ -3710,7 +3721,22 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_try_statement(&mut self, statement: &oxc_ast::ast::TryStatement<'a>) {
         self.conditional_flow_depth += 1;
-        walk::walk_try_statement(self, statement);
+        // The `try` block runs to its end under the normal-completion premise:
+        // discount it for completion sites only (straight-line calls and
+        // unconditional awaits keep the whole statement conditional).
+        if let Some(blocks) = self.function_try_blocks.last_mut() {
+            *blocks += 1;
+        }
+        self.visit_block_statement(&statement.block);
+        if let Some(blocks) = self.function_try_blocks.last_mut() {
+            *blocks -= 1;
+        }
+        if let Some(handler) = &statement.handler {
+            self.visit_catch_clause(handler);
+        }
+        if let Some(finalizer) = &statement.finalizer {
+            self.visit_block_statement(finalizer);
+        }
         self.conditional_flow_depth -= 1;
     }
 
@@ -4603,6 +4629,36 @@ mod tests {
     /// ADR 0276: a completion site is straight-line in its own function and
     /// no earlier `return`, `break` or `continue` of that function may skip
     /// it. A jump in a nested function does not count.
+    /// A `try` block runs to its end under the normal-completion premise; its
+    /// `catch` and `finally` stay conditional, and a `try` inside a branch is
+    /// still conditional.
+    #[test]
+    fn a_try_block_is_on_every_completion() {
+        let source = concat!(
+            "declare function s(): number; declare const c: boolean;\n",
+            "async function g() {\n",
+            "  try {\n",
+            "    await Promise.resolve();\n",
+            "    s();\n",
+            "  } catch {\n",
+            "    s();\n",
+            "  } finally {\n",
+            "    s();\n",
+            "  }\n",
+            "  if (c) { try { s(); } catch {} }\n",
+            "  s();\n",
+            "}\n",
+        );
+        let facts = super::extract("try.ts", source).unwrap();
+        let lines = facts
+            .completion_sites
+            .iter()
+            .filter(|span| &source[span.start as usize..span.end as usize] == "s()")
+            .map(|span| source[..span.start as usize].matches('\n').count() + 1)
+            .collect::<Vec<_>>();
+        assert_eq!(lines, [5, 12], "{lines:?}");
+    }
+
     #[test]
     fn completion_sites_stop_at_a_possible_exit() {
         let source = concat!(

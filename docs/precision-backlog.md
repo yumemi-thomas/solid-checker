@@ -30158,3 +30158,21 @@ are obligations now, not silently certified. Open:
 - a caller-side `await` is not on owner edges (base mode too);
 - `runWithOwner(null, f)` hops;
 - exported-object members.
+
+## Completion sites in a `try` block (2026-10-13, AST facts schema 60)
+
+A `try` block's sites are completion sites under the normal-completion
+premise; `catch` and `finally` stay conditional. Base mode is unchanged.
+Dependency mode recovers readingroom's attributed cleanup.
+
+## Parked: `typeof window` under a browser host (2026-10-13)
+
+The owner approved it "if correct". Research
+(`rust/target/research/typeof-window-premise.md`) finds it correct only under
+an explicit Window-realm declaration, not `--runtime-target browser` alone:
+browser conditions also select worker and SSR code. Recovering solid-query
+(`var isServer2 = typeof window === "undefined"`) also needs an
+initialization-dominance proof for a module-level `var`, because hoisting
+makes a never-written `var` insufficient. The payoff is 2 `prefer-show`
+findings in spotify-desk-thing. Parked until the realm declaration and the
+`var` proof are worth building.
