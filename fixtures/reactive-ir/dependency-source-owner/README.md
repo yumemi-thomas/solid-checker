@@ -16,6 +16,8 @@ path, or the project call's arguments must decide the branch it sits in.
 | `MaybeInHandler` | `useMaybe(flag, fn)` | uncertifiable, `onCleanup` on some calls |
 | `LaterInHandler` | `useLater(fn)` | not attributed: the package schedules the unowned callback itself |
 | `ArrowInHandler` | `useTicker(fn, () => 1000)` | violation, the effect; the cleanup branch is unreachable |
+| `MemberInHandler` | `useTicker.bind(…)`, `useTicker.length` | clean: a member of the function does not run it |
+| `ScheduledAndCalled` | owned `useMaybe(true, fn)` beside `setTimeout(useMaybe, …)` | clean: the scheduled reference, not the direct call, runs unowned |
 
 Without the flag, the package has no contract, and only `AccessorInHandler`
 reports an uncertifiable (`reactive-source-uncaptured`).

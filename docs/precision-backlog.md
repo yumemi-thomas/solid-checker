@@ -30131,3 +30131,19 @@ review:
   in base mode with no source evidence (the typed fallback);
 - two contrived ADR 0287 shapes: a trap that throws for every string key,
   and a monkeypatched `Reflect.get`.
+
+## Review round 1 of ADRs 0288, 0290 and 0291 (2026-10-13)
+
+Fixed three owner-attribution false violations:
+- member calls of a package function;
+- `bind`;
+- a scheduled reference beside an owned direct call.
+
+Also fixed the same member-call flaw in the base-mode owner edge builder
+(`owner-member-call-edge`). Its edges now skip receiver-named member calls,
+except `call` and `apply`. Nothing was found in ADR 0291. Unconfirmed, from
+the review:
+- Vite's relative-extension order;
+- a peer dependency on `solid-js` that exists only for build tooling;
+- a null `exports` condition, which Node treats as a stop;
+- TypeScript `this` parameters in argument mapping.

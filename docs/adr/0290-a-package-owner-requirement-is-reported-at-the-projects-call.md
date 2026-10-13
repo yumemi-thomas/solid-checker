@@ -84,3 +84,24 @@ is the operation in the package's source.
 - **rc.13 corpus, dependency mode** (11 packages): violations 559 → 560, the
   readingroom cleanup. Uncertifiable is unchanged at 3,556, and there were no
   errors. Base mode returns before any work.
+
+## Review round 1
+
+Three false-violation shapes, all fixed:
+- **A member of the package function counted as a call of it**
+  (`useA.reset()`, `useA.toString()`, `useA.bind(…)`). The attribution
+  ignored the callee resolution's `exact` flag; it now requires it.
+- **A scheduled reference blamed the direct call.** With `setTimeout(useA)`
+  beside an owned `useA(f)` in the same function, the direct call was
+  reported. An edge the project caller creates the bit on itself, because it
+  schedules the function, attributes nothing.
+- **The owner edge builder had the first flaw in base mode too.** An entity at
+  a member callee's composite span names its receiver, so `projA.reset()` and
+  `projA.bind(…)` gave `projA` an edge, and its `onCleanup` was taken as
+  running unowned. `call_edge_symbol` gives such a call no edge, except the
+  standard library's `call` and `apply`, which run their receiver.
+
+Fixtures: `dependency-source-owner` gains `MemberInHandler` and
+`ScheduledAndCalled`, both clean, and `owner-member-call-edge` pins the base
+case. A `const AP = Array.prototype` alias that defeats ADR 0288's veto was
+also found; ADR 0288 already places it outside the premise.

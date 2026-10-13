@@ -38,3 +38,22 @@ export function LaterInHandler() {
 export function ArrowInHandler() {
   return <button onClick={() => useTicker(() => {}, () => 1000)}>start</button>;
 }
+
+// Clean: a member of the package function (`useTicker.length`, `.bind(…)`)
+// does not run its body (ADR 0290 review round 1).
+export function MemberInHandler() {
+  const keep: Array<() => void> = [];
+  return (
+    <button onClick={() => keep.push(useTicker.bind(null, () => {}, 1000))}>
+      {String(useTicker.length)}
+    </button>
+  );
+}
+
+// Clean: scheduling the package function (`setTimeout(useMaybe, …)`) is the
+// reference's unowned run, not the direct call's; the direct call is owned.
+export function ScheduledAndCalled() {
+  useMaybe(true, () => {});
+  setTimeout(useMaybe, 0, true, () => {});
+  return <p>scheduled</p>;
+}

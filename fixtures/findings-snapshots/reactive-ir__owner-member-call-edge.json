@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-member-call-edge/App.tsx",
+      "start": 175,
+      "end": 184,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-member-call-edge/App.tsx",
+      "start": 237,
+      "end": 246,
+      "fixes": 0
+    }
+  ]
+}

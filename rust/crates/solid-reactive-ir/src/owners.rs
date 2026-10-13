@@ -753,8 +753,7 @@ pub(crate) fn find_missing_owners(
         for (call_index, call) in file.ast.calls.iter().enumerate() {
             let owner =
                 containing_function_indexed(&nodes, &nodes_by_path, file.path.as_str(), call.span);
-            if let Some(target_index) = entities
-                .get(&location(file.path.shared(), call.callee))
+            if let Some(target_index) = call_edge_symbol(file, call, entities, lookup)
                 .and_then(|symbol| by_symbol.get(symbol))
                 .copied()
             {
@@ -1164,6 +1163,48 @@ pub(crate) fn find_missing_owners(
     (requirements, settled_gates)
 }
 
+/// The function symbol a call runs, for an owner edge. An entity at a member
+/// callee's composite span can name its receiver (`f.reset()`, `f.bind(…)`
+/// carry `f`'s symbol), and such a call does not run the receiver
+/// (ADR 0290 review round 1): it gets no edge, unless the member is the
+/// standard library's `call` or `apply`, which run it before they return.
+fn call_edge_symbol<'e>(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    entities: &'e EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'e SymbolId> {
+    let symbol = entities.get(&location(file.path.shared(), call.callee))?;
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let receiver = file
+        .ast
+        .members
+        .iter()
+        .find(|member| member.span == callee)
+        .map(|member| file.ast.peel_ts_sugar_span(member.object));
+    if receiver
+        .is_some_and(|object| entities.get(&location(file.path.shared(), object)) == Some(symbol))
+    {
+        let invokes_receiver = lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .is_some_and(|declaration| {
+                declaration.standard_library
+                    && matches!(
+                        declaration.qualified_name.as_ref(),
+                        "Function.call"
+                            | "Function.apply"
+                            | "CallableFunction.call"
+                            | "CallableFunction.apply"
+                            | "NewableFunction.call"
+                            | "NewableFunction.apply"
+                    )
+            });
+        return invokes_receiver.then_some(symbol);
+    }
+    Some(symbol)
+}
+
 /// ADR 0290: report an owner requirement located in a package analyzed as
 /// source (ADR 0284) at the project's call that runs it there.
 ///
@@ -1313,11 +1354,15 @@ pub(crate) fn attribute_dependency_requirements(
                     .filter(|call| {
                         containing_ast_function(&file.ast, call.span)
                             .is_some_and(|function| function.span == nodes[caller].span)
+                            // An exact invocation of the function: not a
+                            // member of it (`f.reset()`, `f.bind(…)`) nor a
+                            // replaced binding (review round 1).
                             && crate::execution_role::project_callee_at_parameter(
                                 file, call, 0, lookup,
                             )
-                            .is_some_and(|(callee_file, callee, _)| {
-                                *callee_file.path.as_str() == *nodes[node].path
+                            .is_some_and(|(callee_file, callee, exact)| {
+                                exact
+                                    && *callee_file.path.as_str() == *nodes[node].path
                                     && callee.span == nodes[node].span
                             })
                     })
@@ -1346,6 +1391,12 @@ pub(crate) fn attribute_dependency_requirements(
                         best.insert(caller, entry);
                         queue.push_back(caller);
                     }
+                    continue;
+                }
+                // The project caller creates the bit itself (it schedules the
+                // package function, `setTimeout(f)`): the unowned run is that
+                // reference's, not a direct call's (review round 1).
+                if created {
                     continue;
                 }
                 for call in calls {
@@ -1471,7 +1522,7 @@ pub(crate) fn discover_owner_file(
     let mut requirements = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = owner_at(call.span);
-        if let Some(symbol) = entities.get(&location(file.path.shared(), call.callee)) {
+        if let Some(symbol) = call_edge_symbol(file, call, entities, lookup) {
             edges.push(SymbolicOwnerEdge {
                 source: owner.map(|span| OwnerSource {
                     path: file.path.to_string(),
