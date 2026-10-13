@@ -571,6 +571,13 @@ pub struct StaticViolation {
 /// `solid-facts-backend/src/main.rs`.
 pub const EXPORTED_PARAMETER_MEMBER_DISPATCH: &str = "exported-parameter-member-dispatch";
 
+/// ADR 0289: the `analysis_context` prefix of a dispatch obligation at a
+/// project Get of a member that a package analyzed as source (ADR 0284)
+/// defines as a reactive getter, where no proof carries the object to the
+/// Get. Its `callee` is the Get's text. Producer: `interproc.rs`; consumer:
+/// `projection.rs`, which words it.
+pub const DEPENDENCY_SOURCE_GETTER: &str = "dependency-source-getter:";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticDefect {

@@ -7425,6 +7425,137 @@ pub(crate) fn site_on_every_completion(
 /// (`function_value_is_current`, ADR 0221), or a bare identifier or `new Proxy` return whose
 /// source identity discovery follows (ADR 0222). A file without any of these moves
 /// no such proof.
+/// ADR 0289: a project Get, in a role that reports an untracked read, of a
+/// member a package analyzed as source (ADR 0284) defines as a getter that
+/// reads an accessor. No proof transports a getter through that package
+/// (only callables are projected, never through a nested member, and the
+/// package's own open writes veto the members of the objects it creates), so
+/// the Get is an uncertifiable obligation rather than silence. Contract mode
+/// states the same Get through the contract's getter rows (ADR 0272).
+fn dependency_getter_obligations(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    provenance: &accessor_provenance::Resolver<'_, '_>,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+) -> Vec<StaticDefect> {
+    let mut obligations = Vec::new();
+    for file in &facts.files {
+        if facts.dependency_source_root(file.path.as_str()).is_some() {
+            continue;
+        }
+        let mut allowed = None;
+        let mut untracked = |span: Span| {
+            let allowed = allowed.get_or_insert_with(|| allowed_callback_spans(file, lookup));
+            semantic_execution_role(file, span, allowed, entities, symbol_names, lookup)
+                .reports_untracked_read()
+        };
+        let targets = file
+            .ast
+            .write_targets
+            .iter()
+            .chain(&file.ast.deleted_targets)
+            .chain(&file.ast.iteration_targets)
+            .chain(file.ast.assignments.iter().map(|a| &a.target))
+            .map(|span| file.ast.peel_ts_sugar_span(*span))
+            .collect::<HashSet<_>>();
+        let callees = file
+            .ast
+            .calls
+            .iter()
+            .map(|call| file.ast.peel_ts_sugar_span(call.callee))
+            .collect::<HashSet<_>>();
+        let mut push = |span: Span, getters: &[Location]| {
+            let Some(getter) = getters.first() else {
+                return;
+            };
+            let package =
+                facts
+                    .dependency_source_root(getter.path.as_ref())
+                    .map_or("a dependency", |root| {
+                        root.rsplit_once("node_modules/")
+                            .map_or(root, |(_, name)| name)
+                    });
+            obligations.push(StaticDefect {
+                kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: file.source_text(span).unwrap_or("this Get").to_owned(),
+                    member: None,
+                },
+                location: location(file.path.shared(), span),
+                analysis_context: format!(
+                    "{}{package} defines the member as a getter that reads an accessor, line {} of {}",
+                    crate::DEPENDENCY_SOURCE_GETTER,
+                    getter_line(lookup, getter),
+                    getter
+                        .path
+                        .rsplit_once("node_modules/")
+                        .map_or(getter.path.as_ref(), |(_, rest)| rest),
+                ),
+                fixes: vec![],
+                uncertain: true,
+            });
+        };
+        for member in &file.ast.members {
+            if targets.contains(&member.span)
+                || callees.contains(&member.span)
+                || !enclosing_render_function(file, member.span, lookup)
+            {
+                continue;
+            }
+            // A literal computed key names its member as a dotted one does.
+            let name = if file.ast.computed_members.contains(&member.span) {
+                file.ast
+                    .literal_computed_members
+                    .iter()
+                    .find(|key| key.span == member.span)
+                    .map(|key| key.key.as_str())
+            } else {
+                file.source_text(member.property)
+            };
+            let Some(name) = name else {
+                continue;
+            };
+            let getters = provenance.dependency_getters(file, member.object, name);
+            if !getters.is_empty() && untracked(member.span) {
+                push(member.span, &getters);
+            }
+        }
+        for binding in &file.ast.bindings {
+            let Some(initializer) = binding.initializer.filter(|_| {
+                binding.shape == solid_facts::ast::BindingShape::Object
+                    && enclosing_render_function(file, binding.pattern, lookup)
+            }) else {
+                continue;
+            };
+            let getters = binding
+                .object_slots
+                .iter()
+                .flat_map(|slot| {
+                    provenance.dependency_getters(file, initializer, slot.property.as_str())
+                })
+                .collect::<Vec<_>>();
+            if !getters.is_empty() && untracked(binding.pattern) {
+                push(binding.pattern, &getters);
+            }
+        }
+    }
+    obligations
+}
+
+/// The one-based line of `site` in its analyzed file, for an obligation's
+/// context.
+fn getter_line(lookup: &SemanticLookup<'_>, site: &Location) -> usize {
+    lookup
+        .file_by_path(site.path.as_ref())
+        .and_then(|file| {
+            let start = usize::try_from(site.start_byte).ok()?;
+            file.source
+                .get(..start)
+                .map(|prefix| prefix.matches('\n').count() + 1)
+        })
+        .unwrap_or(0)
+}
+
 fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
     crate::indexes::returns_source_root(file)
         || !file.ast.object_get_shapes.is_empty()
@@ -8909,6 +9040,17 @@ fn interprocedural_reads(
             result.extend(reads);
             dispatch_obligations.extend(obligations);
         }
+    }
+    // ADR 0289: computed fresh on every analysis, never retained per file:
+    // the derivation reads other files' literals and the provider census.
+    if !facts.dependency_source_roots.is_empty() {
+        dispatch_obligations.extend(dependency_getter_obligations(
+            facts,
+            context.lookup,
+            &provenance,
+            entities,
+            symbol_names,
+        ));
     }
     // Keep definition-site obligations even when one consumer is proven.
     // Another instance or opaque consumer of the same callable can remain

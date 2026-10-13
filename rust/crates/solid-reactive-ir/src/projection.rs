@@ -218,6 +218,20 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "If {callee} comes from a package, add a receipt-issued stable-v1 contract for its exact artifact and callback operation. Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit. See docs/package-contracts.md."
             ),
         ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect
+            .analysis_context
+            .starts_with(crate::DEPENDENCY_SOURCE_GETTER) =>
+        {
+            (
+                format!(
+                    "{callee} may run a getter that a package analyzed as source defines and that reads reactive state, but no proof carries the object, its member and this read's execution from the package to this Get; whether the read is untracked can be neither proven nor ruled out"
+                ),
+                "Read the member inside JSX or a memo, or analyze the package through an accepted contract, whose getter rows state this Get (ADR 0272).".into(),
+            )
+        }
         StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (
             if let Some(member) = member {
                 format!(

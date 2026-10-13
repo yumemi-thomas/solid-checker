@@ -1766,6 +1766,218 @@ impl Resolver<'_, '_> {
         self.context_origin(bound_file, binding.initializer?, depth - 1)
     }
 
+    /// ADR 0289: derivation only, like [`Self::context_origin`]. The getters
+    /// a Get of `name` on the value at `span` may run, when a package analyzed
+    /// as source (ADR 0284) defines them and they read an exact accessor.
+    ///
+    /// The walk follows exact bindings, a resolved function's every return
+    /// (a returned parameter continues at this call's argument), the data
+    /// members of object literals and every provider of an exact context. It
+    /// ignores every closure, census and member-stability requirement, so it
+    /// is never a proof: its one consumer is an uncertifiable obligation.
+    pub fn dependency_getters(&self, file: &FileFacts, span: Span, name: &str) -> Vec<Location> {
+        let mut objects = Vec::new();
+        let mut visited = HashSet::new();
+        self.derived_objects(file, span, 24, &mut visited, &mut objects);
+        let mut getters = Vec::new();
+        for (path, object) in objects {
+            if self.facts.dependency_source_root(&path).is_none() {
+                continue;
+            }
+            let Some(object_file) = self.lookup.file_by_path(&path) else {
+                continue;
+            };
+            let Some(shape) = object_file
+                .ast
+                .object_get_shapes
+                .iter()
+                .find(|shape| shape.span == object)
+            else {
+                continue;
+            };
+            for getter in shape
+                .properties
+                .iter()
+                .filter(|property| property.key.as_str() == name)
+                .filter_map(|property| property.getter)
+            {
+                let site = location(object_file.path.shared(), getter);
+                if !getters.contains(&site) && self.getter_reads_accessor(object_file, getter) {
+                    getters.push(site);
+                }
+            }
+        }
+        getters
+    }
+
+    /// Whether the getter function at `getter` calls an exact accessor
+    /// directly in its body: the read a Get of it may perform.
+    fn getter_reads_accessor(&self, file: &FileFacts, getter: Span) -> bool {
+        let Some(function) = file.ast.functions.iter().find(|f| f.span == getter) else {
+            return false;
+        };
+        file.ast.calls.iter().any(|call| {
+            function.body.contains(call.span)
+                && crate::owners::written_directly_in(&file.ast, function, call.span)
+                && self.source_call(file, call.callee).is_some()
+        })
+    }
+
+    /// The object literals the value at `span` may be, for
+    /// [`Self::dependency_getters`]. `visited` breaks recursion through
+    /// mutually recursive bindings and functions.
+    fn derived_objects(
+        &self,
+        file: &FileFacts,
+        span: Span,
+        depth: usize,
+        visited: &mut HashSet<Location>,
+        objects: &mut Vec<(String, Span)>,
+    ) {
+        let span = file.ast.peel_ts_sugar_span(span);
+        if depth == 0 || !visited.insert(location(file.path.shared(), span)) {
+            return;
+        }
+        let declaration = file.ast.reference_declaration(span).unwrap_or(span);
+        if let Some((path, argument)) = self
+            .parameter_inputs
+            .get(&location(file.path.shared(), declaration))
+        {
+            if let Some(argument_file) = self.lookup.file_by_path(path) {
+                self.derived_objects(argument_file, *argument, depth - 1, visited, objects);
+            }
+            return;
+        }
+        if file
+            .ast
+            .object_get_shapes
+            .iter()
+            .any(|shape| shape.span == span)
+        {
+            objects.push((file.path.to_string(), span));
+            return;
+        }
+        if let Some(member) = file.ast.members.iter().find(|m| m.span == span) {
+            if file.ast.computed_members.contains(&span) {
+                return;
+            }
+            let Some(name) = file.source_text(member.property) else {
+                return;
+            };
+            let mut receivers = Vec::new();
+            self.derived_objects(file, member.object, depth - 1, visited, &mut receivers);
+            for (path, object) in receivers {
+                let Some(object_file) = self.lookup.file_by_path(&path) else {
+                    continue;
+                };
+                for property in direct_data_properties(object_file, object) {
+                    if object_file
+                        .source_text(property.key)
+                        .map(|key| key.trim_matches(['\'', '"']))
+                        == Some(name)
+                    {
+                        self.derived_objects(
+                            object_file,
+                            property.shorthand_binding.unwrap_or(property.value),
+                            depth - 1,
+                            visited,
+                            objects,
+                        );
+                    }
+                }
+            }
+            return;
+        }
+        if let Some(call) = file.ast.call_at(span) {
+            if call.construct {
+                return;
+            }
+            if self.role(file, call) == Some(ContextRole::Read) {
+                let Some(argument) = call
+                    .arguments
+                    .first()
+                    .filter(|argument| call.arguments.len() == 1 && !argument.spread)
+                    .map(|argument| file.ast.peel_ts_sugar_span(argument.span))
+                    .filter(|argument| exact_identifier(file, *argument))
+                else {
+                    return;
+                };
+                let Some(key) = self.binding_key(file, argument) else {
+                    return;
+                };
+                for (path, value) in self.providers.get(&key).into_iter().flatten().flatten() {
+                    if let Some(provider_file) = self.lookup.file_by_path(path) {
+                        self.derived_objects(provider_file, *value, depth - 1, visited, objects);
+                    }
+                }
+                return;
+            }
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            let Some((target_file, function)) = self
+                .lookup
+                .function_called_at(file.path.as_str(), callee)
+                .or_else(|| self.lookup.namespace_member_function(file, callee))
+            else {
+                return;
+            };
+            if function.r#async || function.generator {
+                return;
+            }
+            let returns = function
+                .expression_return
+                .iter()
+                .chain(target_file.ast.returns.iter().filter(|r| {
+                    containing_ast_function(&target_file.ast, r.span)
+                        .is_some_and(|f| f.span == function.span)
+                }))
+                .filter_map(|r| r.argument)
+                .collect::<Vec<_>>();
+            for returned in returns {
+                let returned = target_file.ast.peel_ts_sugar_span(returned);
+                // A returned parameter is this call's argument.
+                let position =
+                    target_file
+                        .ast
+                        .reference_declaration(returned)
+                        .and_then(|declaration| {
+                            function.parameters.iter().position(|parameter| {
+                                parameter.pattern == declaration
+                                    && parameter.shape == ast::BindingShape::Identifier
+                            })
+                        });
+                match position {
+                    Some(position) => {
+                        if let Some(argument) = call
+                            .arguments
+                            .get(position)
+                            .filter(|argument| !argument.spread)
+                        {
+                            self.derived_objects(file, argument.span, depth - 1, visited, objects);
+                        }
+                    }
+                    None => {
+                        self.derived_objects(target_file, returned, depth - 1, visited, objects);
+                    }
+                }
+            }
+            return;
+        }
+        if !exact_identifier(file, span) {
+            return;
+        }
+        let Some((bound_file, binding, _)) =
+            self.lookup.binding_at_reference(file.path.as_str(), span)
+        else {
+            return;
+        };
+        if binding.shape == ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && let Some(initializer) = binding.initializer
+        {
+            self.derived_objects(bound_file, initializer, depth - 1, visited, objects);
+        }
+    }
+
     fn created_accessor(&self, file: &FileFacts, span: Span, depth: usize) -> bool {
         if depth == 0 {
             return false;
@@ -2036,6 +2248,25 @@ fn returned_array_elements(file: &FileFacts, span: Span) -> Option<Vec<Span>> {
         .map(|s| {
             let s = file.ast.peel_ts_sugar_span((*s)?);
             closed_properties(file, s).map(|_| s)
+        })
+        .collect()
+}
+
+/// ADR 0289: the own data properties written directly in the object literal
+/// at `span`, whatever else the literal holds. Derivation only.
+fn direct_data_properties(file: &FileFacts, span: Span) -> Vec<&ast::ObjectPropertyFact> {
+    file.ast
+        .object_properties
+        .iter()
+        .filter(|p| {
+            p.data
+                && !p.computed
+                && span.contains(p.span)
+                && !file.ast.object_properties.iter().any(|parent| {
+                    parent.span != p.span
+                        && span.contains(parent.span)
+                        && parent.span.contains(p.span)
+                })
         })
         .collect()
 }

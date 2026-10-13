@@ -2911,6 +2911,18 @@ impl<'a> SemanticLookup<'a> {
     /// supports `<contexts.ValueContext.Provider>` without confusing it with
     /// `<ValueContext.someObject.Provider>`.
     pub(super) fn is_context_reference(&self, path: &str, span: Span) -> bool {
+        // ADR 0289: under runtime redirects (ADR 0186, ADR 0284) the compiler
+        // binds an import to the declaration file beside the runtime one, so
+        // it lists the reference under the declaration's symbol. The entity
+        // at the span carries the redirected runtime binding, which decides.
+        if !self.facts.runtime_symbol_redirects.is_empty()
+            && self
+                .entities
+                .at(path, span)
+                .is_some_and(|symbol| self.context_symbols().contains(symbol.as_str()))
+        {
+            return true;
+        }
         self.context_symbols().iter().any(|symbol| {
             self.symbols_by_id
                 .get_or_init(|| {

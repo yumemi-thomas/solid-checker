@@ -29879,6 +29879,10 @@ positive found. Open:
 - returned tuple slots (`@solid-primitives/raf`; ADR 0288: the wildcard
   veto, not the `isServer` return);
 - a context-provided value read through a package hook (kui);
+
+- returned tuple slots (`@solid-primitives/raf`);
+- a context-provided value read through a package hook (kui); an SC9012
+  obligation since ADR 0289, still no violation;
 - attributing a package-located finding to the project call that causes it
   (`createTimer` → `onCleanup` without an owner);
 - `exports` patterns (`./*`) and arrays;
@@ -30083,3 +30087,34 @@ through a `prototype`, or a spread target, still refuses. The raf loop in
 app-game's `renderer.tsx` is reported in dependency mode (+1 true positive),
 and base mode gains 6 uncertifiable rows. Outside the premise: a prototype
 reached through an alias.
+
+## A Get of a package-defined reactive getter is an obligation (2026-10-13, ADR 0289)
+
+Dependency source mode was silent where kui reads `useLocation().search`
+(`TopicsRoute.tsx:425`, a violation in contract mode). The refusal is
+right: no step carries a getter through a package (only callable members of
+data-only literals, one level deep), and the router's own
+`Object.assign(obj, written)` vetoes every member of the objects it creates
+(ADR 0284 decision 8). The silence was not. Now:
+- the context census follows runtime redirects, so a provider whose import
+  the compiler bound to a `.d.ts` beside the runtime file is seen (the
+  router's `<RouterContextObj value={routerState}>` was invisible and its tag
+  counted as an escape);
+- a project Get, in a role that reports an untracked read, whose receiver
+  derives to a getter that a package analyzed as source defines and that
+  calls an exact accessor, is an SC9012 obligation, never a violation.
+
+Fixture `reactive-ir/dependency-source-context-getter`: 4 obligations, 0
+violations. Coverage otherwise unmoved. rc.13 corpus, release binary:
+base unchanged (562/3,731, every finding identical); dependency mode with
+the 11 packages: violations 559 → 559 (identical rows), uncertifiable
+3,556 → 3,583 (+27, all `dependency-source-getter` `@solidjs/router`
+location Gets in 10 apps, none removed). Open:
+- a Get of a getter object the project creates (`makeLocation().search`)
+  is silent in every mode;
+- getters that read only through a helper, a parameter or a store member;
+- spreads and `Object.assign` copies of such an object, and receivers that
+  arrive through a parameter of a multiply-called function;
+- inside a package, `export { x } from "./f.js"` with `f.d.ts` beside it is
+  not redirected (only import statements are), so a hook bound only that way
+  stays unbound and silent.

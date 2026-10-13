@@ -87,7 +87,8 @@ installed package as project code.
     `typeof window`, which no host fold decides, so this loss remains;
   - tuple slots returned by a hook (`@solid-primitives/raf`; ADR 0282 covers
     destructured closures);
-  - a context-provided value read through a package hook (kui's location);
+  - a context-provided value read through a package hook (kui's location).
+    ADR 0289 reports its Get as an SC9012 obligation; the refusal stands;
   - a finding a package call causes but that is located in the package (an
     `onCleanup` without an owner reached from `createTimer`). It is dropped,
     not attributed to the project's call.
