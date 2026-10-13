@@ -362,6 +362,12 @@ func (p *project) resolveCallRunLocked(
 		}
 		if returnType := checker.Checker_getReturnTypeOfSignature(p.checker, signature); returnType != nil {
 			call.ReturnTypeText = p.typeDescriptorFor(returnType).Text
+			call.NeverReturns = returnType.Flags()&checker.TypeFlagsNever != 0
+		}
+		if predicate := checker.Checker_getTypePredicateOfSignature(p.checker, signature); predicate != nil {
+			kind := checker.TypePredicate_kind(predicate)
+			call.AssertionSignature = kind == checker.TypePredicateKindAssertsIdentifier ||
+				kind == checker.TypePredicateKindAssertsThis
 		}
 		if call.Validity != typefacts.ResolvedCallValid {
 			fillUnresolvedArgumentMappings(call.Arguments, typefacts.ArgumentMappingRecoverySignature)

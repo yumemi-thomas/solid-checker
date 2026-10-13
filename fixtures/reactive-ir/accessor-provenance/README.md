@@ -87,3 +87,8 @@ premise, three review examples, exact builtin identity and wildcard refusal.
 
 The fixture is an application (`package.json` `"private": true`): an open
 program closes no context's provider census (see `context-member-identity-open`).
+
+ADR 0276: in `DbBody`, the provider's `cached` reads `initial()` as the right
+operand of `??`, which runs only when `live()` is nullish. That read is not on
+every completion of `cached`, so it is uncertifiable through `db`, while
+`live` stays a violation.

@@ -85,6 +85,14 @@ pub(super) struct SummaryRead {
     /// it is the row's fail-closed value, and the projection publishes nothing
     /// for it.
     pub(super) owner: Option<SymbolId>,
+    /// ADR 0276: the read is not proven to run on every normal completion of
+    /// a call of the function whose summary holds this row. For a row found
+    /// in that function's body, its origin is off the completion path; for a
+    /// row that reached it over a call edge, no call of that edge is on it.
+    pub(super) local: bool,
+    /// ADR 0276: some hop below the function whose summary holds this row
+    /// was not proven to run on every completion of its caller.
+    pub(super) conditional: bool,
 }
 
 struct DirectReferenceContribution {
@@ -114,11 +122,14 @@ impl SummaryReads {
     }
 
     pub(super) fn push_unique(&mut self, read: SummaryRead) -> bool {
+        // A row proven on more paths already covers this one (ADR 0276).
         if !self.seen.insert(Self::key(&read))
             && self.ordered.iter().any(|previous| {
                 Self::key(previous) == Self::key(&read)
                     && previous.contract_read_context == read.contract_read_context
                     && previous.transported == read.transported
+                    && (!previous.local || read.local)
+                    && (!previous.conditional || read.conditional)
             })
         {
             return false;
@@ -529,6 +540,8 @@ fn discover_typed_accessors(
                 origin: call_location,
                 origin_context: nodes[owner].name.clone().unwrap_or_default(),
                 owner: nodes[owner].symbol.clone(),
+                local: !site_on_every_completion(lookup, file, nodes[owner].span, call.span),
+                conditional: false,
             },
         });
     }
@@ -1582,6 +1595,7 @@ fn discover_interprocedural_graph(
             continue;
         };
         let owner_span = nodes[owner].span;
+        let call_completes = site_on_every_completion(lookup, file, owner_span, call.span);
         let in_owner_body = containing_ast_function(&file.ast, call.span)
             .is_some_and(|function| function.body == nodes[owner].body);
         // `reader.read(value)` where `reader` is this function's parameter.
@@ -1707,6 +1721,13 @@ fn discover_interprocedural_graph(
                         origin: location(file.path.shared(), call.span),
                         origin_context: nodes[owner].name.clone().unwrap_or_default(),
                         owner: nodes[owner].symbol.clone(),
+                        local: !site_on_every_completion(
+                            lookup,
+                            file,
+                            nodes[owner].span,
+                            call.span,
+                        ),
+                        conditional: false,
                     },
                 ));
             }
@@ -1762,11 +1783,23 @@ fn discover_interprocedural_graph(
                     owner_span,
                     InterproceduralGraphTarget::LocalSpan(nodes[target].span),
                 ));
+                if call_completes {
+                    contribution.guaranteed_edges.push((
+                        owner_span,
+                        InterproceduralGraphTarget::LocalSpan(nodes[target].span),
+                    ));
+                }
             } else if call.direct_callee || project_function {
                 contribution.edges.push((
                     owner_span,
                     InterproceduralGraphTarget::Symbol(SymbolId::from(symbol)),
                 ));
+                if call_completes {
+                    contribution.guaranteed_edges.push((
+                        owner_span,
+                        InterproceduralGraphTarget::Symbol(SymbolId::from(symbol)),
+                    ));
+                }
             }
         }
         if call.direct_callee
@@ -2161,6 +2194,12 @@ fn discover_interprocedural_graph(
                                 owner_span,
                                 InterproceduralGraphTarget::Symbol(member_symbol.clone()),
                             ));
+                            if call_completes {
+                                contribution.guaranteed_edges.push((
+                                    owner_span,
+                                    InterproceduralGraphTarget::Symbol(member_symbol.clone()),
+                                ));
+                            }
                         }
                         // The member is the owner's own parameter: the owner's
                         // caller's value is what gets called, as if the owner
@@ -2247,6 +2286,12 @@ fn discover_interprocedural_graph(
                             owner_span,
                             InterproceduralGraphTarget::Symbol(argument_symbol.clone()),
                         ));
+                        if call_completes {
+                            contribution.guaranteed_edges.push((
+                                owner_span,
+                                InterproceduralGraphTarget::Symbol(argument_symbol.clone()),
+                            ));
+                        }
                     }
                     if let Some(&(callback_owner, parameter)) =
                         function_lookup.parameter_owner.get(argument_symbol)
@@ -5439,6 +5484,7 @@ struct InterproceduralGraphAssembly<'a> {
     contract_generation_obligations: &'a mut [Vec<ContractGenerationObligation>],
     contract_consumer_obligations: &'a mut Vec<StaticDefect>,
     edges: &'a mut [Vec<usize>],
+    guaranteed_edges: &'a mut HashSet<(usize, usize)>,
     invoked_parameters: &'a mut [Vec<usize>],
     direct_callback_parameters: &'a mut [Vec<usize>],
     guaranteed_callback_parameters: &'a mut [Vec<usize>],
@@ -5476,6 +5522,18 @@ impl InterproceduralGraphAssembly<'_> {
             };
             if let Some(target) = target {
                 self.edges[owner].push(target);
+            }
+        }
+        for (owner, target) in &contribution.guaranteed_edges {
+            let Some(owner) = node_index(*owner) else {
+                continue;
+            };
+            let target = match target {
+                InterproceduralGraphTarget::Symbol(symbol) => self.by_symbol.get(symbol).copied(),
+                InterproceduralGraphTarget::LocalSpan(span) => node_index(*span),
+            };
+            if let Some(target) = target {
+                self.guaranteed_edges.insert((owner, target));
             }
         }
         for (owner, parameter) in &contribution.invoked_parameters {
@@ -5992,21 +6050,40 @@ fn interprocedural_result_reads_for_file(
                 // may enclose a timer callback or a returned closure -- so
                 // the read is claimed only when the callee's own synchronous
                 // body calls the parameter. One callee, not a dispatch.
+                // ADR 0277: a body call of the parameter off the callee's
+                // every-completion path still reads on some calls, so the row
+                // stays, as one this call is not proven to perform.
+                // ADR 0278: an inexact mapping (`f.call`, a replaced binding,
+                // an earlier spread) proves the invocation on no path.
+                let invocation = crate::execution_role::project_callee_at_parameter(
+                    file, call, *parameter, lookup,
+                )
+                .and_then(|(callee_file, callee, exact)| {
+                    if !exact {
+                        Some(false)
+                    } else if crate::execution_role::invokes_parameter_during_call(
+                        callee_file,
+                        callee,
+                        *parameter,
+                        lookup,
+                    ) {
+                        Some(true)
+                    } else {
+                        crate::execution_role::calls_parameter_in_body(
+                            callee_file,
+                            callee,
+                            *parameter,
+                            lookup,
+                        )
+                        .then_some(false)
+                    }
+                });
                 if ambiguous_candidates.is_none()
                     && !argument.spread
                     && source_kinds.get(argument_symbol.as_str())
                         == Some(&ReactiveSourceKind::Accessor)
                     && let Some((display, declaration)) = accessors.get(argument_symbol.as_str())
-                    && lookup
-                        .function_for_symbol(symbol)
-                        .is_some_and(|(callee_file, callee)| {
-                            crate::execution_role::invokes_parameter_during_call(
-                                callee_file,
-                                callee,
-                                *parameter,
-                                lookup,
-                            )
-                        })
+                    && let Some(guaranteed) = invocation
                 {
                     push_unique_summary_read(
                         &mut effective,
@@ -6020,6 +6097,8 @@ fn interprocedural_result_reads_for_file(
                             origin: location(file.path.shared(), call.span),
                             origin_context: label.clone(),
                             owner: None,
+                            local: !guaranteed,
+                            conditional: false,
                         },
                     );
                 }
@@ -6079,6 +6158,8 @@ fn interprocedural_result_reads_for_file(
                                 origin: location(file.path.shared(), call.span),
                                 origin_context: label.clone(),
                                 owner: None,
+                                local: false,
+                                conditional: false,
                             },
                         );
                     } else if !crate::local_access::argument_proves_non_reactive(
@@ -6425,6 +6506,8 @@ fn interprocedural_result_reads_for_file(
                             origin: location(file.path.shared(), call.span),
                             origin_context: label.clone(),
                             owner: None,
+                            local: false,
+                            conditional: false,
                         })
                     })
                     .flatten();
@@ -6633,6 +6716,13 @@ fn interprocedural_result_reads_for_file(
                             origin: location(callee_file.path.shared(), read_call.span),
                             origin_context: label.clone(),
                             owner: None,
+                            // A branch inside the default itself (ADR 0276).
+                            local: callee_file
+                                .ast
+                                .completion_sites
+                                .binary_search(&read_call.span)
+                                .is_err(),
+                            conditional: false,
                         },
                     );
                 }
@@ -6684,6 +6774,12 @@ fn interprocedural_result_reads_for_file(
                             origin: location(callee_file.path.shared(), member.span),
                             origin_context: label.clone(),
                             owner: None,
+                            local: callee_file
+                                .ast
+                                .completion_sites
+                                .binary_search(&member.span)
+                                .is_err(),
+                            conditional: false,
                         },
                     );
                 }
@@ -6714,6 +6810,11 @@ fn interprocedural_result_reads_for_file(
                         .any(|key| array_member_bodies.contains(key))
             }));
         let read_is_direct = |read: &SummaryRead| -> bool {
+            // ADR 0276: a read the callee, or a hop below it, performs only
+            // on some of its completions is not performed by this call.
+            if read.local || read.conditional {
+                return false;
+            }
             let proven_origin = || {
                 provenance.has_runtime_source_origin(&read.symbol)
                     || provenance.has_source_origin(&read.symbol)
@@ -6830,7 +6931,11 @@ fn interprocedural_result_reads_for_file(
         let mut effective = effective
             .into_iter()
             .map(|read| (read_is_direct(&read), read))
-            .chain(activated_defaults.into_iter().map(|read| (true, read)))
+            .chain(
+                activated_defaults
+                    .into_iter()
+                    .map(|read| (!read.local, read)),
+            )
             .collect::<Vec<_>>();
         effective.sort_by_key(|(direct, read)| (!*direct, read.transported));
         for (direct, read) in effective {
@@ -7096,6 +7201,25 @@ pub(super) fn body_site_runs_during_call(
                 && function.body.contains(*looped)
                 && suspensions.iter().any(|span| looped.contains(*span))
         })
+}
+
+/// ADR 0276: whether `site`, written directly in the function at
+/// `function_span`, runs on every normal completion of a call of it, before
+/// any suspension. A site outside the completion fact, or one
+/// [`body_site_runs_during_call`] withholds, is not proven.
+pub(crate) fn site_on_every_completion(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function_span: Span,
+    site: Span,
+) -> bool {
+    file.ast.completion_sites.binary_search(&site).is_ok()
+        && containing_ast_function(&file.ast, site)
+            .filter(|function| function.span == function_span)
+            .is_some_and(|function| {
+                body_site_runs_during_call(file, function, site)
+                    && !lookup.never_returning_call_before(file, function, site)
+            })
 }
 
 /// Whether `file` holds syntax that a caller's call-role proof reads beyond
@@ -7447,6 +7571,8 @@ fn direct_reference_contributions(
                 origin: location(file.path.shared(), call.span),
                 origin_context: nodes[owner].name.clone().unwrap_or_default(),
                 owner: nodes[owner].symbol.clone(),
+                local: !site_on_every_completion(lookup, file, nodes[owner].span, call.span),
+                conditional: false,
             };
             contributions.push(DirectReferenceContribution {
                 owner,
@@ -7477,6 +7603,13 @@ fn direct_reference_contributions(
                             origin: location(file.path.shared(), member.span),
                             origin_context: nodes[owner].name.clone().unwrap_or_default(),
                             owner: nodes[owner].symbol.clone(),
+                            local: !site_on_every_completion(
+                                lookup,
+                                file,
+                                nodes[owner].span,
+                                member.span,
+                            ),
+                            conditional: false,
                         },
                         unique: false,
                     }),
@@ -7676,6 +7809,7 @@ fn interprocedural_reads(
         vec![Vec::<ContractGenerationObligation>::new(); nodes.len()];
     let mut dispatch_obligations = Vec::new();
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
+    let mut guaranteed_edges = HashSet::<(usize, usize)>::new();
     let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut direct_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut guaranteed_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
@@ -7701,6 +7835,7 @@ fn interprocedural_reads(
             contract_generation_obligations: &mut contract_generation_obligations,
             contract_consumer_obligations: &mut dispatch_obligations,
             edges: &mut edges,
+            guaranteed_edges: &mut guaranteed_edges,
             invoked_parameters: &mut invoked_parameters,
             direct_callback_parameters: &mut direct_callback_parameters,
             guaranteed_callback_parameters: &mut guaranteed_callback_parameters,
@@ -7821,6 +7956,8 @@ fn interprocedural_reads(
                 accessor_provenance::Callable::Accessor(symbol) => {
                     if let Some(mut read) = provenance.read(symbol, file, call.span) {
                         read.owner = nodes[owner].symbol.clone();
+                        read.local =
+                            !site_on_every_completion(lookup, file, nodes[owner].span, call.span);
                         summaries[owner].push_unique(read);
                     }
                 }
@@ -7830,6 +7967,9 @@ fn interprocedural_reads(
                     {
                         transported_edges.insert((owner, *target));
                         edges[owner].push(*target);
+                        if site_on_every_completion(lookup, file, nodes[owner].span, call.span) {
+                            guaranteed_edges.insert((owner, *target));
+                        }
                     }
                 }
                 accessor_provenance::Callable::ArrayMembers(targets) => {
@@ -7839,6 +7979,10 @@ fn interprocedural_reads(
                         {
                             transported_edges.insert((owner, *target));
                             edges[owner].push(*target);
+                            if site_on_every_completion(lookup, file, nodes[owner].span, call.span)
+                            {
+                                guaranteed_edges.insert((owner, *target));
+                            }
                         }
                     }
                 }
@@ -8151,6 +8295,8 @@ fn interprocedural_reads(
                                 origin: returned_location,
                                 origin_context: node.name.clone().unwrap_or_default(),
                                 owner: None,
+                                local: false,
+                                conditional: false,
                             });
                         } else if let Some(target) = by_symbol.get(symbol).copied()
                             && target != index
@@ -8195,6 +8341,8 @@ fn interprocedural_reads(
                                     origin: location(file.path.shared(), call.span),
                                     origin_context: node.name.clone().unwrap_or_default(),
                                     owner: None,
+                                    local: false,
+                                    conditional: false,
                                 });
                             }
                         }
@@ -8240,6 +8388,7 @@ fn interprocedural_reads(
         &reverse_edges,
         &mut propagated_lengths,
         &transported_edges,
+        &guaranteed_edges,
     );
 
     // Composite structural dispatch is intentionally a second phase. The
@@ -8288,6 +8437,7 @@ fn interprocedural_reads(
             &reverse_edges,
             &mut propagated_lengths,
             &transported_edges,
+            &guaranteed_edges,
         );
     }
 
@@ -8363,6 +8513,7 @@ fn interprocedural_reads(
                 &reverse_edges,
                 &mut propagated_lengths,
                 &transported_edges,
+                &guaranteed_edges,
             );
         }
     }
@@ -8868,6 +9019,8 @@ mod tests {
             origin: location(origin),
             origin_context: "test".to_owned(),
             owner: None,
+            local: false,
+            conditional: false,
         }
     }
 

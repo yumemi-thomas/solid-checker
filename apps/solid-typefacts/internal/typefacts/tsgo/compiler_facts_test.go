@@ -2991,3 +2991,78 @@ register(fn);
 		t.Errorf("Function-typed parameter callability = %q, want untypedCallable", got)
 	}
 }
+
+// ADR 0279: a resolved call states, from the selected signature itself, an
+// `asserts` predicate and a `never` return type -- not from display text.
+func TestResolvedCallFlagsAssertionAndNeverSignatures(t *testing.T) {
+	dir := t.TempDir()
+	source := `function fail(message: string): never { throw new Error(message); }
+type Bottom = never;
+function failAlias(message: string): Bottom { throw new Error(message); }
+function assertReady(ready: boolean): asserts ready { if (!ready) throw new Error("x"); }
+function assertString(value: unknown): asserts value is string {}
+function isString(value: unknown): value is string { return typeof value === "string"; }
+function plain(value: number): void { void value; }
+const box = { check(ready: boolean): asserts ready {} };
+fail("a");
+failAlias("b");
+assertReady(true);
+assertString("c");
+isString(1);
+plain(1);
+box.check(true);
+`
+	sourcePath := filepath.Join(dir, "calls.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+	demandAt := func(needle string) typefacts.EntityDemand {
+		start := strings.LastIndex(source, needle)
+		if start < 0 {
+			t.Fatalf("%q not found", needle)
+		}
+		return typefacts.EntityDemand{
+			Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(needle)},
+			ResolvedCall: true,
+		}
+	}
+	cases := []struct {
+		call            string
+		asserts, never_ bool
+	}{
+		{`fail("a")`, false, true},
+		{`failAlias("b")`, false, true},
+		{`assertReady(true)`, true, false},
+		{`assertString("c")`, true, false},
+		{`isString(1)`, false, false},
+		{`plain(1)`, false, false},
+		{`box.check(true)`, true, false},
+	}
+	demands := make([]typefacts.EntityDemand, len(cases))
+	for index, item := range cases {
+		demands[index] = demandAt(item.call)
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, item := range cases {
+		call := entities[index].ResolvedCall
+		if call == nil {
+			t.Fatalf("%s has no resolved-call fact", item.call)
+		}
+		if call.AssertionSignature != item.asserts || call.NeverReturns != item.never_ {
+			t.Errorf("%s: assertion=%v never=%v, want %v %v",
+				item.call, call.AssertionSignature, call.NeverReturns, item.asserts, item.never_)
+		}
+	}
+}

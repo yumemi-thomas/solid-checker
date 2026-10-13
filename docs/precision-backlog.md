@@ -29721,3 +29721,98 @@ identity), virtual-core 3.17.10/3.17.11 (no identity), and a getter that
 mentions `this` (later getters stay possible). The getter declarations keep
 their callback-consumer obligation beside the call-site violation, as in the
 direct case.
+
+## A helper's forbidden operation off its every-completion path (2026-10-13, ADR 0275)
+
+A forbidden leaf-scope operation reached through a helper was a violation
+wherever it was written in the helper's synchronous extent. Vendoring
+`@solid-primitives/timer`'s shipped JavaScript into readingroom showed the
+false positive: `createTimer(fn, 30_000, setInterval)` inside `onSettled`
+reported both `onCleanup` and `createEffect`, though a numeric delay takes the
+`onCleanup` branch and returns. It reproduced in app code with a local helper.
+Now an operation in a called body is a violation only when that body runs it
+on every normal completion (`synchronously_unconditional_calls`) and every hop
+to it was itself unconditional. Otherwise it is projected as uncertifiable
+(`possible`). A branch written in the leaf callback itself stays under the
+statically-present-code premise. An inline standard-library callback inherits
+its call's standing (ADR 0210 unchanged), so `list.forEach(register)` still
+counts as run though the list may be empty.
+
+Measured on the rc.13 corpus (browser host): 573 → 573 violations, 3,719 →
+3,719 uncertifiable, nothing moved. Remaining: no argument sensitivity, so the
+numeric-delay `onCleanup` above is an obligation natively (its authored
+contract still proves it), and an operation reached through a helper that is
+first visited on a conditional path stays possible on a later unconditional
+one.
+
+## A helper's read off its every-completion path (2026-10-13, ADR 0276)
+
+ADR 0275's rule, applied to strict reads attributed through a called
+function's summary. A read is a violation through the call only when it is a
+completion site of the function holding it (`AstFacts::completion_sites`,
+schema 59), and every hop down to it is a completion site of its caller.
+Measured on the rc.13 corpus (browser host): 573 → 564 violations, 3,719 →
+3,729 uncertifiable, nothing added. All nine moved reads are on some paths
+only: right operands of `||`/`??`, reads inside conditions, reads after early
+returns. Logical assignments and thrown guards are not sites either (review
+round 1), for ADR 0275's leaf walk too.
+
+Open false-violation paths that predate this work, confirmed in that review:
+- `run(flag, count)` where the helper calls its parameter only conditionally
+  (`invokes_parameter_during_call`);
+- `run(flag, () => count())` (`direct_own_call` → `"inline"`), including an
+  SC5001 error variant;
+- a class instance-field initializer in a component or leaf body.
+
+Remaining approximations:
+- no argument sensitivity;
+- a `break`/`continue` reads as a possible exit;
+- loop bodies are never sites;
+- conditional parameter invocations, composite dispatch and
+  callback-forwarding edges keep their previous standing or count as
+  unproven;
+- SC5001 async reads do not consult the flags.
+
+## A callback its helper calls on some paths (2026-10-13, ADR 0277)
+
+The first two open paths from ADR 0276's review round 1 are fixed. A helper
+calls its callback parameter during the call only at a completion site of its
+body. Before, any call written directly in the body counted, including one
+in a nested arrow's default parameter. This covers the parameter passed by
+reference, as an inline arrow, and the SC5001 async variant. A body call off
+that path keeps an uncertifiable row for a by-reference accessor. Corpus: 564
+→ 562 violations, 3,729 → 3,731 uncertifiable, nothing added; app-game's call
+inside a JSX attribute and inferay's call in a nested default both move. The
+class instance-field initializer path from that review stays open, and
+`cb?.()` is not a site.
+
+## Exact callback mapping and never-returning guards (2026-10-13, ADR 0278)
+
+Review round 2 for ADRs 0275–0277 found five false-violation paths, all now
+uncertifiable:
+- a `never`-returning guard call before the site, caught by the caller;
+- a parameter written before it is called;
+- a spread argument before the callback;
+- `f.call(thisArg, …)` read with unshifted arguments;
+- an inline arrow passed to a replaceable `let` helper.
+
+Corpus unchanged (562/3,731). Open:
+- `asserts` guard functions, which need a TypeFacts producer field;
+- SC2001 stays silent, not uncertifiable, for a callback a helper calls on
+  some paths;
+- the class instance-field initializer path from round 1.
+
+## Assertion and never signatures, exact method callees (2026-10-13, ADR 0279)
+
+TypeFacts table schema v19 states `assertionSignature` and `neverReturns`
+on resolved calls, so an `asserts` guard and a `never` guard are exits by the
+compiler's own signature facts. ADR 0278's `never` no longer reads display
+text. Method callees now need an exact receiver: a namespace member, or an
+unreassigned member of a `const` object literal or exact `new C()`. A `never`
+call in a parameter default counts. Corpus unchanged (562/3,731).
+
+Open:
+- `fail!()`, `(fail as F)()` and `fail?.()` callee forms;
+- throwers typed `void`, which are outside the premise by owner decision
+  (ADR 0279, option (b));
+- recall loss for `assertNever` exhaustiveness guards before a read.

@@ -12,7 +12,7 @@ import checker "github.com/microsoft/typescript-go/internal/checker"
 import jsnum "github.com/microsoft/typescript-go/internal/jsnum"
 import "math"
 import "sync"
-import _ "unsafe"
+import "unsafe"
 
 const CheckModeNormal = checker.CheckModeNormal
 
@@ -35,6 +35,31 @@ func Checker_getBaseTypes(recv *checker.Checker, t *checker.Type) []*checker.Typ
 
 //go:linkname Checker_getReturnTypeOfSignature github.com/microsoft/typescript-go/internal/checker.(*Checker).getReturnTypeOfSignature
 func Checker_getReturnTypeOfSignature(recv *checker.Checker, sig *checker.Signature) *checker.Type
+
+// A signature's type predicate, and the kind field the checker keeps
+// unexported (ADR 0279). The mirror struct is tsgolint's generated
+// `extra_TypePredicate`; its layout must match `TypePredicate` in
+// internal/checker/types.go at the pinned revision, field for field.
+//
+//go:linkname Checker_getTypePredicateOfSignature github.com/microsoft/typescript-go/internal/checker.(*Checker).getTypePredicateOfSignature
+func Checker_getTypePredicateOfSignature(recv *checker.Checker, sig *checker.Signature) *checker.TypePredicate
+
+type TypePredicate = checker.TypePredicate
+type extra_TypePredicate struct {
+	kind           checker.TypePredicateKind
+	parameterIndex int32
+	parameterName  string
+	t              *checker.Type
+}
+
+func TypePredicate_kind(v *checker.TypePredicate) checker.TypePredicateKind {
+	return ((*extra_TypePredicate)(unsafe.Pointer(v))).kind
+}
+
+type TypePredicateKind = checker.TypePredicateKind
+
+const TypePredicateKindAssertsIdentifier = checker.TypePredicateKindAssertsIdentifier
+const TypePredicateKindAssertsThis = checker.TypePredicateKindAssertsThis
 
 //go:linkname Checker_getTypeAtPosition github.com/microsoft/typescript-go/internal/checker.(*Checker).getTypeAtPosition
 func Checker_getTypeAtPosition(recv *checker.Checker, signature *checker.Signature, pos int) *checker.Type

@@ -1572,12 +1572,12 @@ fn call_argument_invocation_unproven(
     }
     let argument = &call.arguments[index];
     let direct = !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span;
-    if let Some((callee_file, callee)) = lookup
-        .callee_symbol(file, call.callee)
-        .and_then(|symbol| lookup.function_for_symbol(symbol))
-        .or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))
+    if let Some((callee_file, callee, exact)) =
+        project_callee_at_parameter(file, call, index, lookup)
     {
-        return !(direct && invokes_parameter_during_call(callee_file, callee, index, lookup));
+        return !(direct
+            && exact
+            && invokes_parameter_during_call(callee_file, callee, index, lookup));
     }
     if let Some(resolved) = lookup
         .resolved_callee_call(file, call.callee)
@@ -2543,14 +2543,15 @@ fn callee_callback_timing_within(
         let argument = &call.arguments[index];
         // Resolved by symbol, members included (`bus.addEventListener` of a
         // project object resolves to its method's declaration).
-        if let Some((callee_file, callee)) = lookup
-            .callee_symbol(file, call.callee)
-            .and_then(|symbol| lookup.function_for_symbol(symbol))
-            .or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))
+        if let Some((callee_file, callee, exact)) =
+            project_callee_at_parameter(file, call, index, lookup)
         {
             let direct =
                 !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span;
-            if !(direct && invokes_parameter_during_call(callee_file, callee, index, lookup)) {
+            if !(direct
+                && exact
+                && invokes_parameter_during_call(callee_file, callee, index, lookup))
+            {
                 return true;
             }
             // The call contains the literal strictly, so the walk terminates.
@@ -2806,9 +2807,158 @@ fn parameter_default_owner(
         .min_by_key(|function| function.span.end - function.span.start)
 }
 
+/// ADR 0278: the project function `call` runs, resolved as the call sites
+/// here always have, and whether argument `index` provably lands in that
+/// function's parameter `index`. `None` when no project function resolves.
+/// `Some((_, false))` when one does but the mapping is not exact:
+/// - the callee is a member whose own declaration is not that function
+///   (`f.call(thisArg, …)` shifts every argument);
+/// - its binding may have been replaced since (ADR 0221);
+/// - a spread argument before `index` may fill that parameter.
+pub(crate) fn project_callee_at_parameter<'a>(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
+    let declared = lookup
+        .callee_symbol(file, call.callee)
+        .and_then(|symbol| lookup.function_for_symbol(symbol));
+    let (callee_file, callee) =
+        declared.or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))?;
+    // A member callee resolves to its own declaration above. Reaching a
+    // function only through the entity at the whole member span names the
+    // receiver's root instead: `f` in `f.call(thisArg, …)`.
+    let callee_span = file.ast.peel_ts_sugar_span(call.callee);
+    let member = file
+        .ast
+        .members
+        .iter()
+        .any(|member| member.span == callee_span)
+        || file
+            .ast
+            .computed_members
+            .binary_search(&callee_span)
+            .is_ok();
+    let exact = !(member && declared.is_none())
+        && (!member || member_runs_declared_method(file, callee_span, callee_file, callee, lookup))
+        && lookup.function_value_is_current(callee_file, callee)
+        && !call
+            .arguments
+            .iter()
+            .take(index.saturating_add(1))
+            .any(|argument| argument.spread);
+    Some((callee_file, callee, exact))
+}
+
+/// ADR 0279: whether a member call `receiver.name(…)` runs the declared
+/// method `method`, rather than an override or a replacement. A module
+/// namespace member qualifies. Otherwise no assignment anywhere may write a
+/// member of that name, and the receiver is a `const` bound to the object
+/// literal that holds the method, or to `new C()` of the exact class that
+/// declares it.
+fn member_runs_declared_method(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    method_file: &solid_facts::FileFacts,
+    method: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    // A module namespace member: the namespace object is frozen, and the
+    // export binding's own currency is checked by the caller.
+    if lookup
+        .namespace_member_function(file, callee)
+        .is_some_and(|(namespace_file, function)| {
+            namespace_file.path == method_file.path && function.span == method.span
+        })
+    {
+        return true;
+    }
+    let Some(member) = file.ast.members.iter().find(|member| member.span == callee) else {
+        return false;
+    };
+    let Some(name) = file.source_text(member.property) else {
+        return false;
+    };
+    if lookup.member_name_may_be_reassigned(name) {
+        return false;
+    }
+    let receiver = file.ast.peel_ts_sugar_span(member.object);
+    let Some((binding_file, binding, _)) =
+        lookup.binding_at_reference(file.path.as_str(), receiver)
+    else {
+        return false;
+    };
+    if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
+        return false;
+    }
+    let Some(initializer) = binding.initializer else {
+        return false;
+    };
+    let initializer = binding_file.ast.peel_ts_sugar_span(initializer);
+    if binding.initializer_value_kind == solid_facts::ast::RuntimeValueKind::Object {
+        return binding_file.path == method_file.path && initializer.contains(method.span);
+    }
+    let Some(construction) = binding_file
+        .ast
+        .call_at(initializer)
+        .filter(|construction| construction.construct)
+    else {
+        return false;
+    };
+    let Some((class_file, class)) = lookup
+        .callee_symbol(binding_file, construction.callee)
+        .and_then(|symbol| lookup.class_for_symbol(symbol))
+    else {
+        return false;
+    };
+    class_file.path == method_file.path
+        && class.span.contains(method.span)
+        && lookup.class_instance_is_exact(class_file, class, name, 4)
+}
+
 /// Whether the synchronous project function `function` calls its parameter
-/// `index` in its own body -- not in a closure it creates -- by the
-/// parameter's symbol. Destructured, rest and missing parameters prove
+/// `index` anywhere written directly in its own body, by the parameter's
+/// symbol: the call may run during a call of `function`, on some paths
+/// (ADR 0277). [`invokes_parameter_during_call`] is the every-completion
+/// subset.
+pub(crate) fn calls_parameter_in_body(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if function.r#async || function.generator {
+        return false;
+    }
+    let Some(parameter) = function.parameters.get(index) else {
+        return false;
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+        return false;
+    }
+    let Some(symbol) = parameter
+        .names
+        .first()
+        .and_then(|name| lookup.entities().at(file.path.as_str(), name.span))
+    else {
+        return false;
+    };
+    file.ast.calls.iter().any(|call| {
+        containing_ast_function(&file.ast, call.span)
+            .is_some_and(|owner| owner.span == function.span)
+            && lookup.callee_symbol(file, call.callee) == Some(symbol.as_str())
+    })
+}
+
+/// Whether the synchronous project function `function` calls its parameter
+/// `index` on every completion of its own body -- not in a closure it
+/// creates, not behind a branch, loop or early exit -- by the parameter's
+/// symbol. Destructured, rest and missing parameters prove
 /// nothing, and neither does an async function or a generator, whose body may
 /// run after the call returns.
 pub(crate) fn invokes_parameter_during_call(
@@ -2829,14 +2979,18 @@ pub(crate) fn invokes_parameter_during_call(
     let Some(name) = parameter.names.first() else {
         return false;
     };
-    let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) else {
+    if lookup
+        .entities()
+        .at(file.path.as_str(), name.span)
+        .is_none()
+    {
         return false;
-    };
-    file.ast.calls.iter().any(|call| {
-        containing_ast_function(&file.ast, call.span)
-            .is_some_and(|owner| owner.span == function.span)
-            && lookup.callee_symbol(file, call.callee) == Some(symbol.as_str())
-    })
+    }
+    // ADR 0277: a call of the parameter on the function's every-completion
+    // path, not merely one written in its body. `if (flag) cb()` or a loop
+    // body may never call it. The table is bound into the cross-file proof
+    // digest, so moving that call invalidates retained caller results.
+    lookup.parameter_called_on_every_completion(file.path.as_str(), function.span, index)
 }
 
 /// Whether `span` lies inside an argument the dialect says runs on reads of

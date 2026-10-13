@@ -372,6 +372,13 @@ composite, and unresolved signatures still expose no parameter shape.
 `TypeDescriptor.text` and `returnTypeText` are display metadata. They do not
 participate in declaration identity, mapping, validity, or callability.
 
+Table schema v19 adds two resolved-call flags, read off the selected
+signature rather than its text. `assertionSignature` is set when the signature
+carries an `asserts` type predicate (`asserts x`, `asserts this`,
+`asserts x is T`). `neverReturns` is set when its return type is the `never`
+type itself. Either way the call may leave its caller by throwing, which
+TypeScript's own reachability analysis also uses.
+
 These facts say nothing about callback timing or retention. TypeScript's type
 system cannot prove whether a callback runs inline, later, or at all.
 
@@ -551,7 +558,7 @@ negatives:
 `unknownImportPaths` names requested files the program does not hold, so an empty
 import list is distinguishable from an unanalyzed file.
 
-The active lifecycle schema is V1 and the active Wire table model is v17. The
+The active lifecycle schema is V1 and the active Wire table model is v19. The
 `modules` and `invocations` operations carry no Wire table transition: their
 answers belong to the open program generation rather than to a retained fact
 table. The packed transition framing remains version 1. Handshake protocol 4

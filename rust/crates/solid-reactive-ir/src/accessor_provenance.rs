@@ -1185,6 +1185,8 @@ impl Resolver<'_, '_> {
             origin: location(file.path.shared(), span),
             origin_context: crate::owners::enclosing_function_label(file, span),
             owner: None,
+            local: false,
+            conditional: false,
         })
     }
 

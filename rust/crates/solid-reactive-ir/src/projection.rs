@@ -1203,7 +1203,7 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             {
                 finding.kind = "uncertifiable".into();
                 finding.message = format!(
-                    "{}; this read happens inside {}'s body, and nothing proves it runs while this call does rather than later (from a timer, listener, getter, returned accessor or effect), so it is not proven to be read untracked here",
+                    "{}; this read happens inside {}'s body, and nothing proves it runs while this call does, rather than only on some of its paths or later (from a timer, listener, getter, returned accessor or effect), so it is not proven to be read untracked here",
                     finding.message, read.via
                 );
             }

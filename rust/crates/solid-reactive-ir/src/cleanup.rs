@@ -13,6 +13,7 @@
 //! not expressible as a type. See `docs/precision-backlog.md` for the ledger
 //! entry and the `tsc` evidence.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use solid_dialect::{CleanupRule, Primitive};
@@ -65,11 +66,13 @@ pub(super) fn leaf_owner_operations_for_file(
     };
     let entities = lookup.entities();
     let dialect = lookup.dialect;
+    let completions = RefCell::default();
     let resolution = LeafScopeResolution {
         lookup,
         symbol_names,
         safe_call_symbols,
         setter_symbols,
+        completions: &completions,
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
@@ -162,12 +165,13 @@ pub(super) fn leaf_owner_operations_for_file(
                     &mut visited,
                     8,
                     None,
+                    Entry::LeafBody,
                 );
                 let via = file
                     .source_text(callback_span)
                     .unwrap_or_default()
                     .to_owned();
-                for kind in kinds {
+                for (kind, guaranteed) in kinds {
                     operations.push(LeafOwnerOperation {
                         through_contract: false,
                         kind,
@@ -176,7 +180,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: false,
-                        possible: false,
+                        possible: !guaranteed,
                         via: Some(via.clone()),
                     });
                 }
@@ -296,6 +300,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     &mut visited,
                     8,
                     None,
+                    true,
                 );
                 if kinds.is_empty() && complete {
                     continue;
@@ -304,7 +309,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     .source_text(call.callee)
                     .unwrap_or_default()
                     .to_owned();
-                for kind in kinds {
+                for (kind, guaranteed) in kinds {
                     operations.push(LeafOwnerOperation {
                         through_contract: false,
                         kind,
@@ -313,7 +318,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: false,
-                        possible: false,
+                        possible: !guaranteed,
                         via: Some(via.clone()),
                     });
                 }
@@ -542,6 +547,73 @@ struct LeafScopeResolution<'a, 'lookup> {
     safe_call_symbols: &'a HashSet<SymbolId>,
     /// The setters among them, whose function argument runs (ADR 0210).
     setter_symbols: &'a HashSet<SymbolId>,
+    /// ADR 0275: per function, the calls it runs on every normal completion.
+    completions: &'a RefCell<HashMap<(String, Span), Vec<Span>>>,
+}
+
+/// A forbidden operation the walk reached, and whether the leaf scope's call
+/// runs it on every normal completion (ADR 0275). Only a guaranteed one is a
+/// violation; the others are proof obligations.
+type Reached = Vec<(crate::LeafOwnerOperationKind, bool)>;
+
+fn record(kinds: &mut Reached, kind: crate::LeafOwnerOperationKind, guaranteed: bool) {
+    match kinds.iter_mut().find(|(known, _)| *known == kind) {
+        Some((_, known)) => *known |= guaranteed,
+        None => kinds.push((kind, guaranteed)),
+    }
+}
+
+/// How the walk entered a function body (ADR 0275).
+#[derive(Clone, Copy)]
+enum Entry {
+    /// The leaf callback itself. Every call written directly in it is
+    /// reached, under the statically-present-code premise.
+    LeafBody,
+    /// Called from the leaf scope. A call in the body runs at that call only
+    /// when it runs on every normal completion of the body and the hop here
+    /// was itself `guaranteed`: a branch may depend on this call's arguments.
+    Called { guaranteed: bool },
+}
+
+/// Whether `inner`, written directly in `function`, runs on every call that
+/// enters `function` the way `entry` says.
+fn reached_on_every_call(
+    resolution: LeafScopeResolution<'_, '_>,
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    inner: Span,
+    entry: Entry,
+) -> bool {
+    match entry {
+        Entry::LeafBody => true,
+        Entry::Called { guaranteed: false } => false,
+        Entry::Called { guaranteed: true } => {
+            resolution
+            .completions
+            .borrow_mut()
+            .entry((file.path.as_str().to_owned(), function.span))
+            .or_insert_with(|| {
+                // Under a declared host the analysed source's host-constant
+                // conditions are already literals (ADR 0166), as for the
+                // owner requirements of ADR 0161. An `async` function states
+                // its calls before its first `await`; a generator or an
+                // unparsable file states nothing.
+                solid_facts::ast::synchronously_unconditional_calls(
+                    std::path::Path::new(file.path.as_str()),
+                    &file.source,
+                    function.span,
+                    &[],
+                )
+                .unwrap_or_default()
+            })
+            .contains(&inner)
+            // ADR 0278: a `never`-returning guard before it may throw into a
+            // caller that catches and carries on.
+            && !resolution
+                .lookup
+                .never_returning_call_before(file, function, inner)
+        }
+    }
 }
 
 /// ADR 0209: the class a call's `this` is exactly an instance of, when the
@@ -633,14 +705,18 @@ fn exact_instance_method<'a>(
     Some((method_file, method, own.then_some(class)))
 }
 
+/// `guaranteed`: the leaf scope's call runs `call` on every normal completion
+/// (ADR 0275).
+#[allow(clippy::too_many_arguments)]
 fn helper_forbidden_operations(
     resolution: LeafScopeResolution<'_, '_>,
     call_file: &FileFacts,
     call: &solid_facts::ast::CallFact,
-    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    kinds: &mut Reached,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
     exact_this: ExactThis,
+    guaranteed: bool,
 ) -> bool {
     let LeafScopeResolution {
         lookup,
@@ -661,6 +737,7 @@ fn helper_forbidden_operations(
             visited,
             depth,
             method_this,
+            Entry::Called { guaranteed },
         );
     }
     let callee = call_file.ast.peel_ts_sugar_span(call.callee);
@@ -671,7 +748,9 @@ fn helper_forbidden_operations(
             .binary_search(&callee)
             .is_ok()
     {
-        return member_call_operations(resolution, call_file, call, callee, kinds, visited, depth);
+        return member_call_operations(
+            resolution, call_file, call, callee, kinds, visited, depth, guaranteed,
+        );
     }
     let Some(symbol) = lookup.entities().at(call_file.path.as_str(), call.callee) else {
         return false;
@@ -679,7 +758,9 @@ fn helper_forbidden_operations(
     if resolution.setter_symbols.contains(symbol) {
         // A setter runs a function argument -- the updater -- before it
         // returns (ADR 0210).
-        return setter_updater_operations(resolution, call_file, call, kinds, visited, depth);
+        return setter_updater_operations(
+            resolution, call_file, call, kinds, visited, depth, guaranteed,
+        );
     }
     if safe_call_symbols.contains(symbol) {
         return true;
@@ -701,10 +782,19 @@ fn helper_forbidden_operations(
             return false;
         };
         return standard_library_argument_operations(
-            resolution, call_file, call, resolved, kinds, visited, depth,
+            resolution, call_file, call, resolved, kinds, visited, depth, guaranteed,
         );
     };
-    function_forbidden_operations(resolution, helper_file, helper, kinds, visited, depth, None)
+    function_forbidden_operations(
+        resolution,
+        helper_file,
+        helper,
+        kinds,
+        visited,
+        depth,
+        None,
+        Entry::Called { guaranteed },
+    )
 }
 
 /// A member call that is not an exact instance's method (ADR 0210).
@@ -717,14 +807,16 @@ fn helper_forbidden_operations(
 /// symbol. Otherwise a standard-library member's arguments are followed by
 /// [`standard_library_argument_operations`], and the receiver itself when the
 /// member is `call` or `apply`, which run it before they return.
+#[allow(clippy::too_many_arguments)]
 fn member_call_operations(
     resolution: LeafScopeResolution<'_, '_>,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
     callee: Span,
-    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    kinds: &mut Reached,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
+    guaranteed: bool,
 ) -> bool {
     if !call.construct
         && let Some((helper_file, helper)) =
@@ -738,6 +830,7 @@ fn member_call_operations(
             visited,
             depth,
             None,
+            Entry::Called { guaranteed },
         );
     }
     let Some((resolved, declaration)) = resolution
@@ -749,7 +842,7 @@ fn member_call_operations(
         return false;
     };
     let mut complete = standard_library_argument_operations(
-        resolution, file, call, resolved, kinds, visited, depth,
+        resolution, file, call, resolved, kinds, visited, depth, guaranteed,
     );
     let invokes_receiver = matches!(
         declaration.qualified_name.as_ref(),
@@ -767,7 +860,15 @@ fn member_call_operations(
             .iter()
             .find(|member| member.span == callee)
             .is_some_and(|member| {
-                argument_body_operations(resolution, file, member.object, kinds, visited, depth)
+                argument_body_operations(
+                    resolution,
+                    file,
+                    member.object,
+                    kinds,
+                    visited,
+                    depth,
+                    guaranteed,
+                )
             });
     }
     complete
@@ -802,14 +903,20 @@ fn member_call_operations(
 /// value. Implicit invocation through getters, `toString`, `valueOf`, an
 /// iterator or a thenable is not modeled, as it is not for the rest of the
 /// standard-library trust here.
+///
+/// An inline callback inherits `guaranteed` from the call that hands it over,
+/// as ADR 0210 reads it; ADR 0275 changes only what a body's own control flow
+/// decides.
+#[allow(clippy::too_many_arguments)]
 fn standard_library_argument_operations(
     resolution: LeafScopeResolution<'_, '_>,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
     resolved: &typefacts::ResolvedCall,
-    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    kinds: &mut Reached,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
+    guaranteed: bool,
 ) -> bool {
     use crate::runtime_semantics::RuntimeArgumentBehavior;
     use typefacts::Callability;
@@ -877,6 +984,7 @@ fn standard_library_argument_operations(
                     kinds,
                     visited,
                     depth,
+                    guaranteed,
                 );
             }
             Some(
@@ -918,9 +1026,10 @@ fn setter_updater_operations(
     resolution: LeafScopeResolution<'_, '_>,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
-    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    kinds: &mut Reached,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
+    guaranteed: bool,
 ) -> bool {
     let mut complete = true;
     for argument in &call.arguments {
@@ -958,8 +1067,15 @@ fn setter_updater_operations(
         if callability == Some(typefacts::Callability::NonCallable) {
             continue;
         }
-        complete &=
-            argument_body_operations(resolution, file, argument.span, kinds, visited, depth);
+        complete &= argument_body_operations(
+            resolution,
+            file,
+            argument.span,
+            kinds,
+            visited,
+            depth,
+            guaranteed,
+        );
     }
     complete
 }
@@ -972,9 +1088,10 @@ fn argument_body_operations(
     resolution: LeafScopeResolution<'_, '_>,
     file: &FileFacts,
     argument: Span,
-    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    kinds: &mut Reached,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
+    guaranteed: bool,
 ) -> bool {
     if let Some(literal) = callback_argument_literal(file, argument) {
         return function_forbidden_operations(
@@ -985,6 +1102,7 @@ fn argument_body_operations(
             visited,
             depth - 1,
             None,
+            Entry::Called { guaranteed },
         );
     }
     let lookup = resolution.lookup;
@@ -1006,17 +1124,20 @@ fn argument_body_operations(
         visited,
         depth - 1,
         None,
+        Entry::Called { guaranteed },
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn function_forbidden_operations(
     resolution: LeafScopeResolution<'_, '_>,
     helper_file: &FileFacts,
     helper: &solid_facts::ast::FunctionFact,
-    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    kinds: &mut Reached,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
     exact_this: ExactThis,
+    entry: Entry,
 ) -> bool {
     let LeafScopeResolution {
         lookup,
@@ -1074,6 +1195,7 @@ fn function_forbidden_operations(
                 &mut scratch,
                 depth - 1,
                 exact_this.clone(),
+                false,
             )
             && possible.is_empty();
     }
@@ -1101,6 +1223,7 @@ fn function_forbidden_operations(
         {
             continue;
         }
+        let guaranteed = reached_on_every_call(resolution, helper_file, helper, inner.span, entry);
         let primitive = call_primitive_name(helper_file, inner, entities, symbol_names, dialect);
         let Some(primitive) = primitive else {
             complete &= helper_forbidden_operations(
@@ -1111,6 +1234,7 @@ fn function_forbidden_operations(
                 visited,
                 depth - 1,
                 exact_this.clone(),
+                guaranteed,
             );
             continue;
         };
@@ -1119,10 +1243,8 @@ fn function_forbidden_operations(
         // arriving at it. Kinds arrive interleaved across hops, so an
         // adjacent-only `dedup` would leave byte-identical operations in the
         // serialized IR — reject at the push instead.
-        if let Some(kind) = forbidden_operation_kind(dialect, helper_file, inner, &primitive)
-            && !kinds.contains(&kind)
-        {
-            kinds.push(kind);
+        if let Some(kind) = forbidden_operation_kind(dialect, helper_file, inner, &primitive) {
+            record(kinds, kind, guaranteed);
         }
     }
     complete

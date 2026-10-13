@@ -641,6 +641,8 @@ mod tests {
         ResolvedCall {
             target: Arc::from(name),
             return_type_text: Arc::from("unknown"),
+            assertion_signature: false,
+            never_returns: false,
             targets: None,
             validity: ResolvedCallValidity::Valid,
             kind: if name == "construct" {

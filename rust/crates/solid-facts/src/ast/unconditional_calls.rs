@@ -36,6 +36,33 @@ pub fn unconditional_calls(
     function: Span,
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
+    calls_on_every_completion(path, source, function, folds, false)
+}
+
+/// The calls a call of the function at `function` runs before it returns, on
+/// every completion its caller can continue from (ADR 0275). These are
+/// [`unconditional_calls`], except that an earlier `throw` is a way out
+/// (ADR 0276): a caller may catch it. An `async` function returns at its first `await`,
+/// so only the calls on every completion that no `await`, `for await` or
+/// `await using` of its own precedes or contains run before it returns. A
+/// generator states nothing.
+#[must_use]
+pub fn synchronously_unconditional_calls(
+    path: &Path,
+    source: &str,
+    function: Span,
+    folds: &[HostConstantFold],
+) -> Option<Vec<Span>> {
+    calls_on_every_completion(path, source, function, folds, true)
+}
+
+fn calls_on_every_completion(
+    path: &Path,
+    source: &str,
+    function: Span,
+    folds: &[HostConstantFold],
+    synchronous_prefix: bool,
+) -> Option<Vec<Span>> {
     if source.len() > 4 * 1024 * 1024 {
         return None;
     }
@@ -60,14 +87,31 @@ pub fn unconditional_calls(
                 AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
             )
     })?;
-    let plain = match owner.kind() {
-        AstKind::Function(function) => !function.r#async && !function.generator,
-        AstKind::ArrowFunctionExpression(arrow) => !arrow.r#async,
-        _ => false,
+    let (asynchronous, generator) = match owner.kind() {
+        AstKind::Function(function) => (function.r#async, function.generator),
+        AstKind::ArrowFunctionExpression(arrow) => (arrow.r#async, false),
+        _ => return Some(Vec::new()),
     };
-    if !plain {
+    if generator || (asynchronous && !synchronous_prefix) {
         return Some(Vec::new());
     }
+    // Where this function's own first suspension point starts: an `await`,
+    // a `for await` loop or an `await using` declaration not nested in
+    // another function.
+    let first_suspension = nodes
+        .iter()
+        .filter(|_| asynchronous)
+        .filter(|node| match node.kind() {
+            AstKind::AwaitExpression(_) => true,
+            AstKind::ForOfStatement(statement) => statement.r#await,
+            AstKind::VariableDeclaration(declaration) => {
+                declaration.kind == oxc_ast::ast::VariableDeclarationKind::AwaitUsing
+            }
+            _ => false,
+        })
+        .filter(|node| innermost_function(nodes, node.id()) == Some(owner.id()))
+        .map(|node| node.kind().span().start)
+        .min();
     let calls = nodes
         .iter()
         .filter(|node| {
@@ -78,9 +122,13 @@ pub fn unconditional_calls(
         })
         .filter(|node| {
             let span = node.kind().span();
-            span.start >= function.start && span.end <= function.end
+            span.start >= function.start
+                && span.end <= function.end
+                && first_suspension.is_none_or(|suspension| span.end <= suspension)
         })
-        .filter(|node| runs_on_every_completion(nodes, scope, node.id(), owner.id()))
+        .filter(|node| {
+            runs_on_every_completion(nodes, scope, node.id(), owner.id(), synchronous_prefix)
+        })
         .map(|node| {
             let span = node.kind().span();
             Span::new(span.start, span.end)
@@ -89,11 +137,32 @@ pub fn unconditional_calls(
     Some(calls)
 }
 
+/// The nearest function node strictly enclosing `node`.
+fn innermost_function(nodes: &AstNodes<'_>, node: NodeId) -> Option<NodeId> {
+    let mut child = node;
+    loop {
+        let parent = nodes.parent_id(child);
+        if parent == child {
+            return None;
+        }
+        if matches!(
+            nodes.kind(parent),
+            AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
+        ) {
+            return Some(parent);
+        }
+        child = parent;
+    }
+}
+
+/// `throws_exit`: a `throw` before the call counts as a way out (ADR 0276),
+/// because a caller may catch it and carry on.
 fn runs_on_every_completion(
     nodes: &AstNodes<'_>,
     scope: Option<&HostConstantScope<'_, '_>>,
     call: NodeId,
     owner: NodeId,
+    throws_exit: bool,
 ) -> bool {
     if let AstKind::CallExpression(expression) = nodes.kind(call)
         && expression.optional
@@ -110,7 +179,7 @@ fn runs_on_every_completion(
             return matches!(nodes.kind(child), AstKind::FunctionBody(_))
                 || matches!(nodes.kind(owner), AstKind::ArrowFunctionExpression(arrow) if arrow.expression);
         }
-        if !evaluates_child_once(nodes, scope, parent, child) {
+        if !evaluates_child_once(nodes, scope, parent, child, throws_exit) {
             return false;
         }
         child = parent;
@@ -124,16 +193,17 @@ fn evaluates_child_once(
     scope: Option<&HostConstantScope<'_, '_>>,
     parent: NodeId,
     child: NodeId,
+    throws_exit: bool,
 ) -> bool {
     let child_span = nodes.kind(child).span();
     let is = |span: oxc_span::Span| span == child_span;
     let decided = |test: &Expression<'_>| scope.and_then(|scope| scope.truthiness(test));
     match nodes.kind(parent) {
         AstKind::FunctionBody(body) => {
-            statements_before_exit_free(scope, &body.statements, child_span)
+            statements_before_exit_free(scope, &body.statements, child_span, throws_exit)
         }
         AstKind::BlockStatement(block) => {
-            statements_before_exit_free(scope, &block.body, child_span)
+            statements_before_exit_free(scope, &block.body, child_span, throws_exit)
         }
         AstKind::IfStatement(statement) => {
             is(statement.test.span())
@@ -198,6 +268,7 @@ fn statements_before_exit_free(
     scope: Option<&HostConstantScope<'_, '_>>,
     statements: &[Statement<'_>],
     child: oxc_span::Span,
+    throws_exit: bool,
 ) -> bool {
     for statement in statements {
         if statement.span() == child {
@@ -205,6 +276,7 @@ fn statements_before_exit_free(
         }
         let mut exits = EarlyExit {
             scope,
+            throws_exit,
             found: false,
         };
         exits.visit_statement(statement);
@@ -221,6 +293,7 @@ fn statements_before_exit_free(
 /// live arm only: a `return` in the dead arm is no path out (ADR 0166).
 struct EarlyExit<'f, 's, 'a> {
     scope: Option<&'f HostConstantScope<'s, 'a>>,
+    throws_exit: bool,
     found: bool,
 }
 
@@ -252,6 +325,10 @@ impl<'v> Visit<'v> for EarlyExit<'_, '_, '_> {
     fn visit_continue_statement(&mut self, _: &oxc_ast::ast::ContinueStatement<'v>) {
         self.found = true;
     }
+    fn visit_throw_statement(&mut self, statement: &oxc_ast::ast::ThrowStatement<'v>) {
+        self.found |= self.throws_exit;
+        oxc_ast_visit::walk::walk_throw_statement(self, statement);
+    }
     fn visit_function(&mut self, _: &oxc_ast::ast::Function<'v>, _: oxc_syntax::scope::ScopeFlags) {
     }
     fn visit_arrow_function_expression(&mut self, _: &oxc_ast::ast::ArrowFunctionExpression<'v>) {}
@@ -279,6 +356,53 @@ mod tests {
             .into_iter()
             .map(|span| source[span.start as usize..span.end as usize].to_owned())
             .collect()
+    }
+
+    fn synchronous(source: &str, name: &str) -> Vec<String> {
+        let start = source
+            .find(&format!("function {name}"))
+            .expect("the function");
+        let start = if source[..start].ends_with("async ") {
+            start - "async ".len()
+        } else {
+            start
+        };
+        let end = source[start..]
+            .find("\n}")
+            .map(|offset| start + offset + 2)
+            .expect("the end");
+        synchronously_unconditional_calls(
+            Path::new("test.js"),
+            source,
+            Span::new(start as u32, end as u32),
+            &[],
+        )
+        .expect("parses")
+        .into_iter()
+        .map(|span| source[span.start as usize..span.end as usize].to_owned())
+        .collect()
+    }
+
+    /// ADR 0275: an `async` function returns at its own first suspension.
+    #[test]
+    fn an_async_function_states_its_calls_before_its_first_suspension() {
+        let source = "async function before(cb) {\n  onCleanup(cb);\n  await load();\n  onCleanup(cb);\n}\n\
+async function inside(cb) {\n  onCleanup(await load(cb));\n}\n\
+async function looped(cb, list) {\n  for await (const x of list) {}\n  onCleanup(cb);\n}\n\
+async function nested(cb) {\n  const later = async () => { await load(); };\n  onCleanup(cb);\n}\n\
+async function *generated(cb) {\n  onCleanup(cb);\n}\n\
+function plain(cb) {\n  onCleanup(cb);\n}\n\
+function guarded(cb, ready) {\n  if (!ready) throw new Error('x');\n  onCleanup(cb);\n}\n";
+        assert_eq!(synchronous(source, "before"), ["onCleanup(cb)"]);
+        assert!(synchronous(source, "inside").is_empty());
+        assert!(synchronous(source, "looped").is_empty());
+        assert_eq!(synchronous(source, "nested"), ["onCleanup(cb)"]);
+        assert!(synchronous(source, "*generated").is_empty());
+        assert_eq!(synchronous(source, "plain"), ["onCleanup(cb)"]);
+        assert!(unconditional(source, "before").is_empty());
+        // A caller may catch the thrown guard and carry on (ADR 0276).
+        assert!(synchronous(source, "guarded").is_empty());
+        assert_eq!(unconditional(source, "guarded"), ["onCleanup(cb)"]);
     }
 
     #[test]

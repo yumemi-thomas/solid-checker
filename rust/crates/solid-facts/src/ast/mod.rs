@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 58;
+pub const AST_FACTS_SCHEMA: u32 = 59;
 
 mod binding_references;
 mod class_obligation;
@@ -86,7 +86,7 @@ pub use super_argument::{
     SuperArgumentFunction, SuperArgumentSite, super_argument_function,
     super_argument_sites_of_binding,
 };
-pub use unconditional_calls::unconditional_calls;
+pub use unconditional_calls::{synchronously_unconditional_calls, unconditional_calls};
 
 pub use emission::{
     EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, has_export_assignment,
@@ -227,6 +227,15 @@ pub struct AstFacts {
     /// apart so that table's existing consumers keep their meaning.
     #[serde(default)]
     pub straight_line_constructs: Vec<Span>,
+    /// The call, `new` and member expressions written in their innermost
+    /// enclosing function's straight-line flow, outside any logical
+    /// assignment and after no optional-chain link, that no earlier `return`,
+    /// `break`, `continue` or `throw` of that function may skip (facts schema
+    /// 59, ADR 0276). Such a site runs on every normal
+    /// completion of that function that reaches it without suspending; JSX,
+    /// classes, binding patterns and parameter lists are left to the reader.
+    #[serde(default)]
+    pub completion_sites: Vec<Span>,
     pub returns: Vec<ReturnFact>,
     pub jsx_elements: Vec<JsxElementFact>,
     /// JSX fragment spans (`<>…</>`). A fragment's children are as tracked
@@ -1561,6 +1570,7 @@ impl AstFacts {
             unconditional_awaits: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
+            completion_sites: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
@@ -1722,6 +1732,7 @@ struct Collector<'s, 'semantic> {
     unconditional_awaits: Vec<Span>,
     straight_line_calls: Vec<Span>,
     straight_line_constructs: Vec<Span>,
+    completion_sites: Vec<Span>,
     returns: Vec<ReturnFact>,
     jsx_elements: Vec<JsxElementFact>,
     jsx_fragments: Vec<Span>,
@@ -1763,6 +1774,18 @@ struct Collector<'s, 'semantic> {
     /// The [`Collector::conditional_flow_depth`] at each enclosing function's
     /// entry, innermost last.
     function_flow_depths: Vec<usize>,
+    /// Whether each enclosing function, innermost last, has so far written a
+    /// `return`, `break` or `continue` that may skip what follows it.
+    function_exits: Vec<bool>,
+    /// ADR 0276: the chain elements an enclosing optional chain's `?.` links
+    /// may skip, as exact spans, and the argument and computed-key ranges
+    /// they own. What precedes a chain's first link always runs.
+    skippable_chain_sites: Vec<Span>,
+    skippable_chain_ranges: Vec<Span>,
+    /// ADR 0276: how many logical assignments (`??=`, `||=`, `&&=`) enclose
+    /// the current node. Their right side runs only when the target allows,
+    /// and their target is read conservatively the same way.
+    logical_assignment_depth: usize,
     /// How many optional chains enclose the current node. Kept apart from
     /// [`Collector::conditional_flow_depth`], whose answer for awaits is
     /// unchanged; read only for [`AstFacts::straight_line_calls`].
@@ -1850,6 +1873,37 @@ struct BindingMetadata {
 }
 
 impl<'s, 'semantic> Collector<'s, 'semantic> {
+    /// ADR 0276: a site in the innermost function's straight-line flow, outside
+    /// optional chains, that no earlier jump of that function may skip.
+    fn record_completion_site(&mut self, site: oxc_span::Span) {
+        let site = span(site);
+        if self.logical_assignment_depth == 0
+            && !self.skippable_chain_sites.contains(&site)
+            && !self
+                .skippable_chain_ranges
+                .iter()
+                .any(|range| range.contains(site))
+            && self.conditional_flow_depth
+                == self
+                    .function_flow_depths
+                    .last()
+                    .copied()
+                    .unwrap_or_default()
+            && !self.function_exits.last().copied().unwrap_or(false)
+        {
+            self.completion_sites.push(site);
+        }
+    }
+
+    /// A `return`, `break`, `continue` or `throw` may skip everything after it
+    /// in the innermost function. A thrown guard is an exit too: the caller
+    /// may catch it and carry on, with the rest of this body skipped.
+    fn mark_function_exit(&mut self) {
+        if let Some(exits) = self.function_exits.last_mut() {
+            *exits = true;
+        }
+    }
+
     fn new(source: &'s str, scoping: &'semantic Scoping) -> Self {
         Self {
             source,
@@ -1878,6 +1932,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unconditional_awaits: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
+            completion_sites: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
@@ -1914,6 +1969,10 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             method_names: Vec::new(),
             conditional_flow_depth: 0,
             function_flow_depths: Vec::new(),
+            function_exits: Vec::new(),
+            skippable_chain_sites: Vec::new(),
+            skippable_chain_ranges: Vec::new(),
+            logical_assignment_depth: 0,
             optional_chain_depth: 0,
         }
     }
@@ -1942,6 +2001,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.unconditional_awaits.sort_unstable();
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
+        self.completion_sites.sort_unstable();
+        self.completion_sites.dedup();
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
         self.jsx_fragments.sort();
@@ -2004,6 +2065,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unconditional_awaits: self.unconditional_awaits,
             straight_line_calls: self.straight_line_calls,
             straight_line_constructs: self.straight_line_constructs,
+            completion_sites: self.completion_sites,
             returns: self.returns,
             jsx_elements: self.jsx_elements,
             jsx_fragments: self.jsx_fragments,
@@ -2694,6 +2756,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         {
             self.straight_line_calls.push(span(call.span));
         }
+        self.record_completion_site(call.span);
         if let Expression::Identifier(callee) = &call.callee {
             if self.is_unresolved_named(callee, "require") {
                 let specifier = match call.arguments.as_slice() {
@@ -2785,6 +2848,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         {
             self.straight_line_constructs.push(span(expression.span));
         }
+        self.record_completion_site(expression.span);
         let callee_span = expression.callee.span();
         self.calls.push(CallFact {
             span: span(expression.span),
@@ -2918,7 +2982,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         self.function_flow_depths.push(self.conditional_flow_depth);
+        self.function_exits.push(false);
         walk::walk_function(self, function, flags);
+        self.function_exits.pop();
         self.function_flow_depths.pop();
     }
 
@@ -3045,6 +3111,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             },
         });
         self.function_flow_depths.push(self.conditional_flow_depth);
+        self.function_exits.push(false);
         let concise = function.get_expression().map(GetSpan::span);
         if let Some(concise) = concise {
             self.concise_arrow_bodies.push(concise);
@@ -3053,6 +3120,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         if concise.is_some() {
             self.concise_arrow_bodies.pop();
         }
+        self.function_exits.pop();
         self.function_flow_depths.pop();
     }
 
@@ -3348,6 +3416,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         let returned = self.return_fact(statement.argument.as_ref(), statement.span);
         self.returns.push(returned);
         walk::walk_return_statement(self, statement);
+        self.mark_function_exit();
     }
 
     fn visit_if_statement(&mut self, statement: &IfStatement<'a>) {
@@ -3450,7 +3519,15 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 Vec::new()
             },
         });
+        let logical = matches!(
+            expression.operator,
+            AssignmentOperator::LogicalAnd
+                | AssignmentOperator::LogicalOr
+                | AssignmentOperator::LogicalNullish
+        );
+        self.logical_assignment_depth += usize::from(logical);
         walk::walk_assignment_expression(self, expression);
+        self.logical_assignment_depth -= usize::from(logical);
     }
 
     fn visit_simple_assignment_target(
@@ -3503,11 +3580,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     fn visit_break_statement(&mut self, statement: &oxc_ast::ast::BreakStatement<'a>) {
         self.jump_statements.push(span(statement.span));
         walk::walk_break_statement(self, statement);
+        self.mark_function_exit();
     }
 
     fn visit_continue_statement(&mut self, statement: &oxc_ast::ast::ContinueStatement<'a>) {
         self.jump_statements.push(span(statement.span));
         walk::walk_continue_statement(self, statement);
+        self.mark_function_exit();
+    }
+
+    fn visit_throw_statement(&mut self, statement: &oxc_ast::ast::ThrowStatement<'a>) {
+        walk::walk_throw_statement(self, statement);
+        self.mark_function_exit();
     }
 
     fn visit_formal_parameter(&mut self, parameter: &FormalParameter<'a>) {
@@ -3524,9 +3608,20 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_chain_expression(&mut self, expression: &oxc_ast::ast::ChainExpression<'a>) {
+        let (sites, ranges) = (
+            self.skippable_chain_sites.len(),
+            self.skippable_chain_ranges.len(),
+        );
+        skippable_chain_parts(
+            &expression.expression,
+            &mut self.skippable_chain_sites,
+            &mut self.skippable_chain_ranges,
+        );
         self.optional_chain_depth += 1;
         walk::walk_chain_expression(self, expression);
         self.optional_chain_depth -= 1;
+        self.skippable_chain_sites.truncate(sites);
+        self.skippable_chain_ranges.truncate(ranges);
     }
 
     fn visit_conditional_expression(&mut self, expression: &ConditionalExpression<'a>) {
@@ -3924,6 +4019,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         if member.optional {
             self.optional_members.push(span(member.span));
         }
+        self.record_completion_site(member.span);
         walk::walk_static_member_expression(self, member);
     }
 
@@ -3953,6 +4049,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 key,
             });
         }
+        self.record_completion_site(member.span);
         walk::walk_computed_member_expression(self, member);
     }
 
@@ -4374,6 +4471,91 @@ fn array_literal_elements(expression: &Expression<'_>) -> Option<Box<[Option<Spa
     )
 }
 
+/// One link of an optional chain's spine: whether it is a `?.` link, its own
+/// span, the ranges only it evaluates (arguments, a computed key), and the
+/// object or callee below it.
+fn chain_link<'e, 'a>(
+    expression: &'e Expression<'a>,
+) -> Option<(
+    bool,
+    oxc_span::Span,
+    Vec<oxc_span::Span>,
+    &'e Expression<'a>,
+)> {
+    Some(match expression {
+        Expression::CallExpression(call) => (
+            call.optional,
+            call.span,
+            call.arguments.iter().map(GetSpan::span).collect(),
+            &call.callee,
+        ),
+        Expression::StaticMemberExpression(member) => {
+            (member.optional, member.span, Vec::new(), &member.object)
+        }
+        Expression::ComputedMemberExpression(member) => (
+            member.optional,
+            member.span,
+            vec![member.expression.span()],
+            &member.object,
+        ),
+        Expression::PrivateFieldExpression(member) => {
+            (member.optional, member.span, Vec::new(), &member.object)
+        }
+        Expression::TSNonNullExpression(expression) => {
+            (false, expression.span, Vec::new(), &expression.expression)
+        }
+        _ => return None,
+    })
+}
+
+/// ADR 0276: the parts of an optional chain its `?.` links may skip. A link
+/// is skipped, with what only it evaluates, when it or a link below it on the
+/// spine is optional; the spine below the lowest `?.` always runs.
+fn skippable_chain_parts(
+    element: &oxc_ast::ast::ChainElement<'_>,
+    sites: &mut Vec<Span>,
+    ranges: &mut Vec<Span>,
+) {
+    use oxc_ast::ast::ChainElement;
+    let root = match element {
+        ChainElement::CallExpression(call) => (
+            call.optional,
+            call.span,
+            call.arguments.iter().map(GetSpan::span).collect(),
+            &call.callee,
+        ),
+        ChainElement::StaticMemberExpression(member) => {
+            (member.optional, member.span, Vec::new(), &member.object)
+        }
+        ChainElement::ComputedMemberExpression(member) => (
+            member.optional,
+            member.span,
+            vec![member.expression.span()],
+            &member.object,
+        ),
+        ChainElement::PrivateFieldExpression(member) => {
+            (member.optional, member.span, Vec::new(), &member.object)
+        }
+        ChainElement::TSNonNullExpression(expression) => {
+            (false, expression.span, Vec::new(), &expression.expression)
+        }
+    };
+    let mut spine = vec![(root.0, root.1, root.2)];
+    let mut below = root.3;
+    while let Some((optional, own, parts, next)) = chain_link(below) {
+        spine.push((optional, own, parts));
+        below = next;
+    }
+    let mut skipped = false;
+    for (optional, own, parts) in spine.into_iter().rev() {
+        skipped |= optional;
+        if skipped {
+            sites.push(span(own));
+            ranges.extend(parts.into_iter().map(span));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// ADR 0195: a straight-line call is one its function runs on every
@@ -4412,6 +4594,63 @@ mod tests {
         // recorded for the innermost function, as `unconditional_awaits` is,
         // and a consumer attributes each span to it.
         assert_eq!(lines, [4, 5, 13], "{lines:?}");
+    }
+
+    /// ADR 0276: a completion site is straight-line in its own function and
+    /// no earlier `return`, `break` or `continue` of that function may skip
+    /// it. A jump in a nested function does not count.
+    #[test]
+    fn completion_sites_stop_at_a_possible_exit() {
+        let source = concat!(
+            "declare function s(): number; declare const c: boolean;\n",
+            "declare const o: { p: number };\n",
+            "function g() {\n",
+            "  s();\n",
+            "  o.p;\n",
+            "  const inner = () => { if (c) return; s(); };\n",
+            "  s();\n",
+            "  if (c) return;\n",
+            "  s();\n",
+            "  o.p;\n",
+            "}\n",
+            "function h() {\n",
+            "  for (;;) { if (c) break; }\n",
+            "  s();\n",
+            "  return s();\n",
+            "}\n",
+            "function t(o: { v?: number }) {\n",
+            "  o.v ??= s();\n",
+            "  if (!c) throw new Error();\n",
+            "  s();\n",
+            "}\n",
+            "declare const m: { f(): { g(x: number): number } | undefined };\n",
+            "function k() {\n",
+            "  m.f()?.g(s());\n",
+            "}\n",
+        );
+        let facts = super::extract("completion.ts", source).unwrap();
+        let line_of =
+            |span: crate::core::Span| source[..span.start as usize].matches('\n').count() + 1;
+        let lines = |text: &str| {
+            facts
+                .completion_sites
+                .iter()
+                .filter(|span| source[span.start as usize..span.end as usize] == *text)
+                .map(|span| line_of(*span))
+                .collect::<Vec<_>>()
+        };
+        // Line 6's arrow returns only after its own guard, so its `s()` is
+        // not a site; line 7 follows the arrow and its jump is not `g`'s.
+        // A `break` is read as a possible exit too, which only proves less.
+        assert_eq!(lines("s()"), [4, 7], "{:?}", lines("s()"));
+        assert_eq!(lines("o.p"), [5], "{:?}", lines("o.p"));
+        // Before a chain's first `?.` everything runs; after it, nothing is
+        // a site, the argument included.
+        // A logical assignment's right side and a site after a thrown guard
+        // are not sites (lines 18 and 20).
+        assert_eq!(lines("m.f()"), [24], "{:?}", lines("m.f()"));
+        assert!(lines("s()").iter().all(|line| ![18, 20, 24].contains(line)));
+        assert!(lines("m.f()?.g(s())").is_empty());
     }
 
     #[test]

@@ -805,6 +805,14 @@ type Call struct {
 	// because no single signature was selected.
 	Targets   *CallTargetSet
 	Arguments []ArgumentMapping
+	// AssertionSignature: the selected signature carries an `asserts`
+	// type predicate (`asserts x`, `asserts this`, `asserts x is T`). Such
+	// a call may throw instead of returning, depending on its argument, as
+	// a `never` return always does (table schema v19).
+	AssertionSignature bool
+	// NeverReturns: the selected signature's return type is the `never`
+	// type itself, so the call never completes normally (table schema v19).
+	NeverReturns bool
 }
 
 // FileChange is one monotonically-versioned editor overlay change.

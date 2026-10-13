@@ -521,6 +521,13 @@ pub(super) struct SemanticLookup<'a> {
     component_functions: OnceLock<HashSet<(&'a str, Span)>>,
     result_access_forwarded: OnceLock<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
     cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
+    /// ADR 0277: `(path, function span, parameter index)` for each parameter
+    /// a synchronous project function calls on its every-completion path.
+    parameter_completion_calls: OnceLock<HashSet<(&'a str, Span, usize)>>,
+    /// ADR 0278: the calls TypeScript resolves to a signature returning
+    /// `never`, or (ADR 0279) to an `asserts` signature, per path. Such a call never completes normally, so a caller
+    /// that catches its throw carries on with the rest of the body skipped.
+    never_returning_calls: OnceLock<HashMap<&'a str, Vec<Span>>>,
 }
 
 /// Which parts of the returned-adapter contract this build's dialect can
@@ -649,6 +656,8 @@ impl<'a> SemanticLookup<'a> {
             component_functions: OnceLock::new(),
             result_access_forwarded: OnceLock::new(),
             cross_file_proof_digest: OnceLock::new(),
+            parameter_completion_calls: OnceLock::new(),
+            never_returning_calls: OnceLock::new(),
         }
     }
 
@@ -1340,6 +1349,36 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(b"returned-callbacks\0");
                 hasher.update(returned);
             }
+            // ADR 0277: whether a helper calls its parameter on every
+            // completion decides the role of a callback written in its
+            // caller, and moving that call into a branch changes no summary.
+            let mut parameter_calls = self
+                .parameter_completion_calls()
+                .iter()
+                .copied()
+                .collect::<Vec<_>>();
+            parameter_calls.sort_unstable();
+            // ADR 0278: a guard's declared `never` lives in another file's
+            // types, so it is bound here rather than by this file's bytes.
+            let mut never_paths = self.never_returning_calls().iter().collect::<Vec<_>>();
+            never_paths.sort_unstable();
+            hasher.update(b"never-returning-calls\0");
+            for (path, calls) in never_paths {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                for call in calls {
+                    hasher.update(call.start.to_le_bytes());
+                    hasher.update(call.end.to_le_bytes());
+                }
+            }
+            hasher.update(b"parameter-completion-calls\0");
+            for (path, span, index) in parameter_calls {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+                hasher.update(u64::try_from(index).unwrap_or(u64::MAX).to_le_bytes());
+            }
             // A wrapper in one file decides the role of a callback written in
             // another. Hashed only when present, so a project with no such
             // wrapper keeps the digest it had.
@@ -1358,6 +1397,120 @@ impl<'a> SemanticLookup<'a> {
                 }
             }
             Some(hasher.finalize().into())
+        })
+    }
+
+    /// ADR 0277: whether the synchronous project function at `function` in
+    /// `path` calls its single-name parameter `index`, by that parameter's
+    /// symbol, at a completion site of its own body.
+    pub(crate) fn parameter_called_on_every_completion(
+        &self,
+        path: &str,
+        function: Span,
+        index: usize,
+    ) -> bool {
+        self.parameter_completion_calls()
+            .contains(&(path, function, index))
+    }
+
+    /// ADR 0278: whether a call TypeScript resolves to a `never`-returning
+    /// signature is written directly in `function` before `site`. It may run
+    /// first and throw, so `site` is not on every completion a caller can
+    /// continue from.
+    pub(crate) fn never_returning_call_before(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+        site: Span,
+    ) -> bool {
+        self.never_returning_calls()
+            .get(file.path.as_str())
+            .is_some_and(|calls| {
+                // In the body or the parameter list (a default may call one),
+                // never in a nested function.
+                calls.iter().any(|call| {
+                    call.end <= site.start
+                        && function.span.contains(*call)
+                        && !file.ast.functions_within(function.span).any(|nested| {
+                            nested.span != function.span && nested.span.contains(*call)
+                        })
+                })
+            })
+    }
+
+    fn never_returning_calls(&self) -> &HashMap<&'a str, Vec<Span>> {
+        self.never_returning_calls.get_or_init(|| {
+            let facts: &'a ProjectFacts = self.facts;
+            let mut calls = HashMap::<&'a str, Vec<Span>>::new();
+            for file in &facts.files {
+                for call in &file.ast.calls {
+                    if self
+                        .resolved_callee_call(file, call.callee)
+                        .is_some_and(|resolved| {
+                            // The compiler's own type flag, not the display
+                            // text (docs/typefacts/compiler-semantic-facts.md).
+                            resolved.never_returns || resolved.assertion_signature
+                        })
+                    {
+                        calls.entry(file.path.as_str()).or_default().push(call.span);
+                    }
+                }
+            }
+            for spans in calls.values_mut() {
+                spans.sort_unstable();
+            }
+            calls
+        })
+    }
+
+    fn parameter_completion_calls(&self) -> &HashSet<(&'a str, Span, usize)> {
+        self.parameter_completion_calls.get_or_init(|| {
+            let facts: &'a ProjectFacts = self.facts;
+            let mut calls = HashSet::new();
+            for file in &facts.files {
+                let mut parameters = HashMap::<&str, (Span, usize)>::new();
+                for function in &file.ast.functions {
+                    if function.r#async || function.generator {
+                        continue;
+                    }
+                    for (index, parameter) in function.parameters.iter().enumerate() {
+                        if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+                            continue;
+                        }
+                        let Some(name) = parameter.names.first() else {
+                            continue;
+                        };
+                        // A written parameter may hold a replacement by the
+                        // time it is called (`cb = () => 0; cb()`).
+                        if binding_written(file, name.span) {
+                            continue;
+                        }
+                        if let Some(symbol) = self.entities().at(file.path.as_str(), name.span) {
+                            parameters.insert(symbol.as_str(), (function.span, index));
+                        }
+                    }
+                }
+                if parameters.is_empty() {
+                    continue;
+                }
+                for call in &file.ast.calls {
+                    let Some(&(function, index)) = self
+                        .callee_symbol(file, call.callee)
+                        .and_then(|symbol| parameters.get(symbol))
+                    else {
+                        continue;
+                    };
+                    if crate::owners::containing_ast_function(&file.ast, call.span)
+                        .is_some_and(|owner| owner.span == function)
+                        && crate::interproc::site_on_every_completion(
+                            self, file, function, call.span,
+                        )
+                    {
+                        calls.insert((file.path.as_str(), function, index));
+                    }
+                }
+            }
+            calls
         })
     }
 

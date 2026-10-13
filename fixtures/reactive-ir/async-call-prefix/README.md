@@ -12,7 +12,8 @@ the call. It is decided per invocation, at every hop
 | `BeforeAwaitBody`, `BeforeAwaitApply` | violation | read before the first `await` |
 | `OmittedDefaultApply`, `StoreDefaultApply`, `TopLevelOmittedDefault` | violation | omitted argument activates the default |
 | `NestedHelperPrefix`, `PrefixThroughAsyncChild`, `DormantNestedAwait` | violation | prefix proven at every edge; a nested function's `await` does not suspend the outer one |
-| `SuspensionFreeLoop`, `BeforeImplicitSuspension`, `PreferPrefixOrigin` | violation | no suspension precedes the read |
+| `BeforeImplicitSuspension`, `PreferPrefixOrigin` | violation | no suspension precedes the read |
+| `SuspensionFreeLoop` | uncertifiable | no suspension precedes the read, but a loop body is not a completion site: loop bounds are not modelled (ADR 0276) |
 | `CrossFilePrefix` | violation | origin in `remote.ts` |
 | `MultipleRoles` (apply call) | violation | the same helper's compute and event calls stay clean |
 | `StoreProtocolKeys` `cookedDefault` | violation | a cooked ordinary string key |

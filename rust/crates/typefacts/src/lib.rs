@@ -862,6 +862,14 @@ pub struct ResolvedCall {
     pub target: Arc<str>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub return_type_text: Arc<str>,
+    /// The selected signature carries an `asserts` type predicate, so the
+    /// call may throw instead of returning (table schema v19, ADR 0279).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub assertion_signature: bool,
+    /// The selected signature returns the `never` type itself, so the call
+    /// never completes normally (table schema v19, ADR 0279).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub never_returns: bool,
     pub validity: ResolvedCallValidity,
     pub kind: CallKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -412,15 +412,27 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
     if let Some(via) = &operation.via
         && !matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
     {
-        message.push_str(&format!(
-            " — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
-        ));
+        message.push_str(&if operation.possible {
+            // ADR 0275: behind a branch, an early return or a loop in the
+            // helper, on a path this call's arguments may or may not take.
+            format!(
+                " — reached through {via}(), whose synchronous extent performs the operation on some calls but not on every completion, so whether this call performs it is not proven and the finding is a proof obligation"
+            )
+        } else {
+            format!(
+                " — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
+            )
+        });
     }
     let mut evidence = vec![EvidenceStep {
         message: if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) {
             "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
         } else {
             match &operation.via {
+                Some(via) if operation.possible => format!(
+                    "the exactly resolved helper {via}() runs the operation synchronously on some completions only, and this call site is inside the {} callback",
+                    operation.owner
+                ),
                 Some(via) => format!(
                     "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
                     operation.owner

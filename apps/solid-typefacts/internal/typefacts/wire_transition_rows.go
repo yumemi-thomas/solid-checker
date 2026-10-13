@@ -401,6 +401,9 @@ func writeWireTransitionResolvedCall(w *packedWriter, call *Call, tableSchema ui
 			return err
 		}
 	}
+	if tableSchema >= TypeFactsTableSchemaVersionV19 {
+		w.u64(boolBit(call.AssertionSignature) | boolBit(call.NeverReturns)<<1)
+	}
 	return nil
 }
 

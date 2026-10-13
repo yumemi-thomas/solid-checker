@@ -2558,6 +2558,7 @@ fn propagate_summary_deltas(
     reverse_edges: &[Vec<usize>],
     propagated_lengths: &mut [usize],
     transported_edges: &std::collections::HashSet<(usize, usize)>,
+    guaranteed_edges: &std::collections::HashSet<(usize, usize)>,
 ) {
     let mut queued = summaries
         .iter()
@@ -2580,6 +2581,10 @@ fn propagate_summary_deltas(
             for read in &propagated {
                 let mut read = read.clone();
                 read.transported |= transported;
+                // ADR 0276: past this edge the row's own completion standing
+                // is a hop below the caller, and the edge's is the caller's.
+                read.conditional |= read.local;
+                read.local = !guaranteed_edges.contains(&(owner, target));
                 changed |= summaries[owner].push_unique(read);
             }
             if changed && !queued[owner] {
@@ -3261,6 +3266,8 @@ mod tests {
             },
             origin_context: symbol.into(),
             owner: None,
+            local: false,
+            conditional: false,
         }
     }
 
@@ -4154,6 +4161,7 @@ mod tests {
             &reverse_edges,
             &mut [0; 4],
             &HashSet::from([(2, 3)]),
+            &HashSet::from([(0, 1), (1, 2), (2, 3)]),
         );
         assert!(
             !summaries[3][0].transported,
@@ -4165,6 +4173,45 @@ mod tests {
                 "ordinary hops must retain the transport boundary"
             );
         }
+    }
+
+    /// ADR 0276: past an edge, a row's own completion standing becomes a hop
+    /// below and the edge's standing becomes the holder's; a better-proven
+    /// row arriving later is kept beside a weaker one.
+    #[test]
+    fn summary_edges_carry_completion_standing() {
+        let mut summaries = vec![SummaryReads::default(); 4];
+        let mut guarded = summary_read("count", "count", 1);
+        guarded.local = true;
+        summaries[3].push(guarded);
+        // 0 -> 1 -> 3 is unconditional except 1 -> 3's own row; 0 -> 2 -> 3
+        // calls 3 conditionally in 2.
+        let reverse_edges = vec![vec![], vec![0], vec![0], vec![1, 2]];
+        propagate_summary_deltas(
+            &mut summaries,
+            &reverse_edges,
+            &mut [0; 4],
+            &HashSet::new(),
+            &HashSet::from([(0, 1), (0, 2), (1, 3)]),
+        );
+        let standing = |index: usize| {
+            summaries[index]
+                .iter()
+                .map(|read| (read.local, read.conditional))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(standing(1), [(false, true)]);
+        assert_eq!(standing(2), [(true, true)]);
+        assert_eq!(standing(0), [(false, true)]);
+
+        let mut reads = SummaryReads::default();
+        let mut weak = summary_read("count", "count", 1);
+        weak.conditional = true;
+        assert!(reads.push_unique(weak));
+        assert!(reads.push_unique(summary_read("count", "count", 1)));
+        let mut weaker = summary_read("count", "count", 1);
+        weaker.local = true;
+        assert!(!reads.push_unique(weaker), "the proven row covers it");
     }
 
     #[test]

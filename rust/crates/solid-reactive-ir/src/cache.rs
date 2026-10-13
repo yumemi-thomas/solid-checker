@@ -210,6 +210,9 @@ pub(crate) enum InterproceduralGraphTarget {
 pub(crate) struct InterproceduralGraphContribution {
     pub(crate) direct_reads: Vec<(Span, SummaryRead)>,
     pub(crate) edges: Vec<(Span, InterproceduralGraphTarget)>,
+    /// ADR 0276: the subset of [`Self::edges`] whose call is a completion site
+    /// of its owner, so the callee runs on every normal completion of it.
+    pub(crate) guaranteed_edges: Vec<(Span, InterproceduralGraphTarget)>,
     /// A composite TypeScript call can be dispatched to several exact local
     /// implementations. These edges stay deferred until their summaries can
     /// be compared; adding all of them eagerly would union incompatible

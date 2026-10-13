@@ -35,6 +35,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V15: u64 = 15;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
+/// v19 appends a flag word to every resolved call: bit 0 is
+/// `ResolvedCall::assertion_signature`, bit 1 `ResolvedCall::never_returns`.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V19: u64 = 19;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
     "sha256:4f847aa5054745ce5a4fe1f2f2c41cc1d6329dceb44c68e14e6d1d90474f149f";
 /// 17 says that an empty uncensused-form census includes the reviewed
@@ -1138,9 +1141,20 @@ impl<'a> PackedCursor<'a> {
                 parameter,
             });
         }
+        let (assertion_signature, never_returns) = if table_schema >= TYPE_FACTS_TABLE_SCHEMA_V19 {
+            let flags = self.u64()?;
+            if flags & !3 != 0 {
+                return Err(format!("packed resolved call has unknown flags {flags}"));
+            }
+            (flags & 1 != 0, flags & 2 != 0)
+        } else {
+            (false, false)
+        };
         Ok(ResolvedCall {
             target,
             return_type_text,
+            assertion_signature,
+            never_returns,
             validity,
             kind,
             declaration,
@@ -1245,7 +1259,7 @@ fn decode_entity_run(
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
             TYPE_FACTS_TABLE_SCHEMA_V16 | TYPE_FACTS_TABLE_SCHEMA_V17 => 32767,
-            TYPE_FACTS_TABLE_SCHEMA_V18 => 65535,
+            TYPE_FACTS_TABLE_SCHEMA_V18 | TYPE_FACTS_TABLE_SCHEMA_V19 => 65535,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1723,6 +1737,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V16
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V17
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V18
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V19
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -2073,9 +2088,9 @@ mod tests {
     use super::{
         SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_TABLE_SCHEMA_V3, TYPE_FACTS_TABLE_SCHEMA_V14,
         TYPE_FACTS_TABLE_SCHEMA_V15, TYPE_FACTS_TABLE_SCHEMA_V16, TYPE_FACTS_TABLE_SCHEMA_V17,
-        TYPE_FACTS_TABLE_SCHEMA_V18, TransitionMode, decode_table_transition,
-        parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
-        parse_callability, parse_constructability, parse_reference_space,
+        TYPE_FACTS_TABLE_SCHEMA_V18, TYPE_FACTS_TABLE_SCHEMA_V19, TransitionMode,
+        decode_table_transition, parse_argument_mapping_reason, parse_argument_mapping_status,
+        parse_call_kind, parse_callability, parse_constructability, parse_reference_space,
         parse_resolved_call_validity, push_uvarint,
     };
 
@@ -2681,6 +2696,7 @@ mod tests {
         assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V16, 16);
         assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V17, 17);
         assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V18, 18);
+        assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V19, 19);
     }
 
     #[test]
