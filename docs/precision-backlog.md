@@ -30118,3 +30118,16 @@ location Gets in 10 apps, none removed). Open:
 - inside a package, `export { x } from "./f.js"` with `f.d.ts` beside it is
   not redirected (only import statements are), so a hook bound only that way
   stays unbound and silent.
+
+## Review round 1 of ADRs 0287 and 0289 (2026-10-13)
+
+A context created by a package analyzed as source no longer has a closed
+provider census. A package that is not analyzed can re-provide it, which gave
+a false SC1001 (`dependency-source-context-reprovided`). Open, from the
+review:
+- function-valued store members (`q.refetch()`) are reported as untracked
+  store reads. This needs checking against the rc.13 store trap;
+- a member typed `Accessor<T>` in a `.d.ts` is reported as a reactive read
+  in base mode with no source evidence (the typed fallback);
+- two contrived ADR 0287 shapes: a trap that throws for every string key,
+  and a monkeypatched `Reflect.get`.

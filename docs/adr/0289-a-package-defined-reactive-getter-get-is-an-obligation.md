@@ -150,3 +150,21 @@ and put nothing at the Get.
     (identical rows), uncertifiable 3,556 → 3,583. The 27 added are all
     `dependency-source-getter` obligations at `@solidjs/router` location
     Gets in 10 apps; none was removed.
+
+## Review round 1
+
+One false violation, fixed. Decision 1 made a package's own provider tag
+visible to the context census, so a package context with one visible provider
+transported its members to the project. A package that is not analyzed can
+import that context and provide another value: `StaticWrap` in
+`fixtures/reactive-ir/dependency-source-context-reprovided` provides a
+static object, and the project's read under it was reported as SC1001. A
+context created by a package analyzed as source now has no closed provider
+census (`Resolver::provider`). That was already the effect before this ADR,
+when the package's tag counted as an escape. The obligations of decision 2
+do not use the census and are unchanged.
+
+Recorded, not fixed (contrived):
+- an ADR 0287 trap that throws for every string key still yields a
+  violation;
+- a monkeypatched `Reflect.get` is not seen.

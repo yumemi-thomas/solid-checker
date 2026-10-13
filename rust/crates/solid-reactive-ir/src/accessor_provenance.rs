@@ -1670,10 +1670,17 @@ impl Resolver<'_, '_> {
         let (context_file, binding, _) = self
             .lookup
             .binding_at_reference(file.path.as_str(), argument)?;
+        // ADR 0289 review round 1: a context a package analyzed as source
+        // creates can be imported, provided and written by any package that
+        // is not analyzed, so its provider census is never closed.
         if !binding.immutable
             || binding.shape != ast::BindingShape::Identifier
             || binding.names.len() != 1
             || crate::indexes::binding_written(context_file, binding.names[0].span)
+            || self
+                .facts
+                .dependency_source_root(context_file.path.as_str())
+                .is_some()
         {
             return None;
         }
