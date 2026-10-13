@@ -1,0 +1,86 @@
+# ADR 0290: A package's owner requirement is reported at the project's call
+
+- Status: accepted and implemented (2026-10-13).
+- Owner: `owners::attribute_dependency_requirements`, run at the end of both
+  owner passes; `OwnerRequirement::through_dependency`; the wording in
+  `Finding::for_owner_requirement`.
+- Step 1 of moving dependency analysis from contracts to source (ADR 0284).
+
+## Context
+
+ADR 0284 does not report a finding located in a package analyzed as source.
+Most of those findings are the package's own: its component bodies, its
+compiled store writes, its internal dispatch. They hold whatever the
+project does, and contract mode never saw them either. Measured over the
+rc.13 corpus with 11 packages, about 1,000 package-located findings were
+dropped, and 36 of them were violations. Every violation but two was
+package-intrinsic.
+
+The two were readingroom's: `createTimer(…, 1500, setTimeout)` called in an
+event handler after an `await`. `createTimer`'s `onCleanup` then runs without
+an owner. The defect is the project's call, but the finding sat in the
+package, so it was dropped. Contract mode reported it. Dropping it is a loss
+of recall, and also a loss of fail-closed behaviour: the project's call could
+run package code unowned with nothing said.
+
+An owner requirement is the one kind whose truth comes from the caller. Owner
+contexts propagate as bits along call edges from the project into the
+package. A read in a package helper already reaches the project through
+interprocedural summaries, and the leaf-owner rule already reports at the
+project's call.
+
+## Decision
+
+After propagation, take each owner requirement located in a package that is
+reported, not after an `await` in the package, and not itself attributed.
+Walk back from the function that owns the operation along incoming edges
+that carry the reporting bit.
+
+- **Inside packages:** follow an edge only when the bit is inherited. An edge
+  that creates the bit itself, because the package scheduled the callback,
+  is the package's own context, and the walk stops there. Each hop must be a
+  call written directly in the caller that enters the function.
+- **At a project caller:** each call written directly in it that enters the
+  package function becomes a requirement at that call. It carries the
+  package operation's location in `through_dependency`.
+- **Proven or obligation:** a requirement proven unowned walks only the
+  proven-unowned bit and can be a violation at the call. Every other
+  requirement walks the plain unowned bit and becomes an obligation.
+- **ADR 0275 at the boundary:** the attributed requirement is a violation
+  only when the operation is on its function's every-completion path, and so
+  is each hop's call. On the first hop, the project call's own arguments may
+  decide instead (ADR 0280):
+  - `Unreachable`: nothing is attributed to that call;
+  - `Possible`: the result is an obligation;
+  - `Guaranteed`: the first hop counts as proven.
+
+The finding is located at the project's call. Its message says the call runs
+the operation inside a package analyzed as source, and its last evidence step
+is the operation in the package's source.
+
+## Consequences
+
+- readingroom's `createTimer` cleanup is reported at the call again, as a
+  violation, as in contract mode. Its accessor-delay effect branch is
+  unreachable for a numeric delay, so it is not reported.
+- Not attributed, and silent as before:
+  - a bit seeded inside the package (its own event handlers or module
+    scope);
+  - a project call from module scope, which the incremental pass records as
+    an edge with no source function;
+  - a hop made through a callback rather than a call.
+- Only owner requirements are attributed. Every other package-located
+  finding is still not reported.
+- No cache change. The requirements are recomputed with the owner graph,
+  which already covers both files.
+
+## Evidence
+
+- **Fixture** `reactive-ir/dependency-source-owner` covers six calls: two
+  violations, two uncertifiable, one clean and one not attributed. The two
+  violations come from a two-hop numeric delay and an arrow delay. `tsc
+  --noEmit` is clean.
+- **Coverage:** no other snapshot moved.
+- **rc.13 corpus, dependency mode** (11 packages): violations 559 → 560, the
+  readingroom cleanup. Uncertifiable is unchanged at 3,556, and there were no
+  errors. Base mode returns before any work.

@@ -168,8 +168,10 @@ impl Finding {
         let missing_jsx_census = requirement.missing_jsx_census;
         // `uncertain` predates the reason fields. Treat a deserialized legacy
         // row with no explicit reason as caller uncertainty.
+        let through_dependency = requirement.through_dependency.as_ref();
         let caller_uncertain = requirement.caller_uncertain
             || (uncertain
+                && through_dependency.is_none()
                 && !runtime_uncertain
                 && !conditional_owner
                 && !later_run_unowned
@@ -215,6 +217,38 @@ impl Finding {
             },
             location: Some(requirement.location.clone()),
         }];
+        // ADR 0290: the operation is in a package analyzed as source, and
+        // this is the project's call that runs it.
+        if let Some(operation) = through_dependency {
+            message.push_str(
+                "; this call runs it inside a package analyzed as source, under this call's owner context",
+            );
+            if uncertain
+                && !runtime_uncertain
+                && !conditional_owner
+                && !later_run_unowned
+                && !component_uncertain
+                && !requirement.caller_uncertain
+            {
+                message.push_str(
+                    ", which solid-checker cannot prove provides an owner on every path to it",
+                );
+            }
+            hint.push_str(
+                " The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot).",
+            );
+            evidence.insert(
+                0,
+                EvidenceStep {
+                    message: "this call enters package code that performs the operation".into(),
+                    location: Some(requirement.location.clone()),
+                },
+            );
+            evidence.push(EvidenceStep {
+                message: "the operation, in the package's source".into(),
+                location: Some(operation.clone()),
+            });
+        }
         if runtime_uncertain {
             let (clause, guidance, evidence_message) = match requirement.operation {
                 crate::OwnerRequirementOperation::SettledCleanup => (
@@ -802,6 +836,7 @@ mod tests {
             after_await: false,
             missing_jsx_census: false,
             through_contract: false,
+            through_dependency: None,
             report: true,
         };
 

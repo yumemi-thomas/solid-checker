@@ -1153,7 +1153,270 @@ pub(crate) fn find_missing_owners(
             );
         }
     }
+    attribute_dependency_requirements(
+        &mut requirements,
+        facts,
+        lookup,
+        &nodes,
+        &contexts,
+        &outgoing,
+    );
     (requirements, settled_gates)
+}
+
+/// ADR 0290: report an owner requirement located in a package analyzed as
+/// source (ADR 0284) at the project's call that runs it there.
+///
+/// A requirement inside a package is reported because some owner context
+/// reached its function; when that context came from a project caller, the
+/// defect is the project's call, and dropping it with the package's own
+/// findings would leave the project silent. The walk goes back from the
+/// operation's function along the edges that carry the reporting bit, through
+/// package functions only, and stops at:
+///
+/// - an edge from a project function: each call written directly in it whose
+///   callee is the package function it enters becomes a requirement at that
+///   call;
+/// - an edge a package function creates the bit on itself (it schedules the
+///   callback): that context is the package's own, not a caller's.
+///
+/// Only a requirement proven unowned (`OWNER_CONTEXT_PROVEN_UNOWNED`, not
+/// uncertain) walks the proven bit and stays a violation at the call. Every
+/// other one walks the plain unowned bit and becomes an obligation there: the
+/// call may run it unowned. An operation after an `await` inside the package
+/// is unowned whatever the caller did, and a bit seeded inside the package (a
+/// module-scope or event-handler origin) has no project call; neither is
+/// attributed.
+pub(crate) fn attribute_dependency_requirements(
+    requirements: &mut Vec<OwnerRequirement>,
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    nodes: &[OwnerNode],
+    contexts: &[u8],
+    outgoing: &[Vec<(usize, OwnerEdgeKind)>],
+) {
+    if facts.dependency_source_roots.is_empty() {
+        return;
+    }
+    let mut incoming = vec![Vec::<(usize, OwnerEdgeKind)>::new(); nodes.len()];
+    for (source, edges) in outgoing.iter().enumerate() {
+        for &(target, kind) in edges {
+            incoming[target].push((source, kind));
+        }
+    }
+    let in_dependency = |index: usize| facts.dependency_source_root(&nodes[index].path).is_some();
+    let mut seen = requirements
+        .iter()
+        .map(|requirement| {
+            (
+                requirement.location.path.to_string(),
+                requirement.location.start_byte,
+                requirement.location.end_byte,
+                operation_name(requirement.operation).to_owned(),
+            )
+        })
+        .collect::<HashSet<_>>();
+    let mut attributed = Vec::new();
+    for requirement in requirements.iter() {
+        if !requirement.report
+            || requirement.after_await
+            || requirement.through_dependency.is_some()
+            || facts
+                .dependency_source_root(&requirement.location.path)
+                .is_none()
+        {
+            continue;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(requirement.location.start_byte),
+            u32::try_from(requirement.location.end_byte),
+        ) else {
+            continue;
+        };
+        let span = Span::new(start, end);
+        let Some(owner) = nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| {
+                *node.path == *requirement.location.path && node.body.contains(span)
+            })
+            .min_by_key(|(_, node)| node.body.end - node.body.start)
+            .map(|(index, _)| index)
+        else {
+            continue;
+        };
+        let proven = !requirement.uncertain && contexts[owner] & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+        let mask = if proven {
+            OWNER_CONTEXT_PROVEN_UNOWNED
+        } else {
+            OWNER_CONTEXT_UNOWNED
+        };
+        let Some(owner_file) = lookup.file_by_path(&nodes[owner].path) else {
+            continue;
+        };
+        // ADR 0275 at the call boundary: the operation counts for a caller
+        // only on its function's every-completion path, and each hop's call
+        // on its caller's. The operation's own site is its call.
+        let operation_site = owner_file
+            .ast
+            .calls
+            .iter()
+            .find(|call| call.callee == span || call.span == span)
+            .map(|call| call.span);
+        // Per package function on a path to the operation: the site in it
+        // that leads there, whether that site is on the function's
+        // every-completion path, and whether every hop below it is.
+        let mut best = HashMap::<usize, (Span, bool, bool)>::new();
+        best.insert(
+            owner,
+            (
+                operation_site.unwrap_or(span),
+                operation_site.is_some_and(|site| {
+                    crate::interproc::site_on_every_completion(
+                        lookup,
+                        owner_file,
+                        nodes[owner].span,
+                        site,
+                    )
+                }),
+                true,
+            ),
+        );
+        let mut queue = VecDeque::from([owner]);
+        while let Some(node) = queue.pop_front() {
+            let (site, own, below) = best[&node];
+            let Some(node_file) = lookup.file_by_path(&nodes[node].path) else {
+                continue;
+            };
+            let Some(node_function) = node_file
+                .ast
+                .functions
+                .iter()
+                .find(|function| function.span == nodes[node].span)
+            else {
+                continue;
+            };
+            for &(caller, kind) in &incoming[node] {
+                if owner_edge_context(kind, contexts[caller]) & mask == 0 {
+                    continue;
+                }
+                let created = owner_edge_context(kind, 0) & mask != 0;
+                let Some(file) = lookup.file_by_path(&nodes[caller].path) else {
+                    continue;
+                };
+                // Only calls written directly in the caller that enter this
+                // function: a callback edge names no call to report at.
+                let calls = file
+                    .ast
+                    .calls
+                    .iter()
+                    .filter(|call| {
+                        containing_ast_function(&file.ast, call.span)
+                            .is_some_and(|function| function.span == nodes[caller].span)
+                            && crate::execution_role::project_callee_at_parameter(
+                                file, call, 0, lookup,
+                            )
+                            .is_some_and(|(callee_file, callee, _)| {
+                                *callee_file.path.as_str() == *nodes[node].path
+                                    && callee.span == nodes[node].span
+                            })
+                    })
+                    .collect::<Vec<_>>();
+                if in_dependency(caller) {
+                    if created || calls.is_empty() {
+                        continue;
+                    }
+                    let completing = calls.iter().find(|call| {
+                        crate::interproc::site_on_every_completion(
+                            lookup,
+                            file,
+                            nodes[caller].span,
+                            call.span,
+                        )
+                    });
+                    let entry = (
+                        completing.map_or(calls[0].span, |call| call.span),
+                        completing.is_some(),
+                        own && below,
+                    );
+                    let improves = best
+                        .get(&caller)
+                        .is_none_or(|previous| !(previous.1 && previous.2) && entry.1 && entry.2);
+                    if improves {
+                        best.insert(caller, entry);
+                        queue.push_back(caller);
+                    }
+                    continue;
+                }
+                for call in calls {
+                    // ADR 0280: this call's arguments may decide the callee's
+                    // branches, on the first hop only.
+                    let standing = crate::argument_values::parameter_values(
+                        file,
+                        call,
+                        node_file,
+                        node_function,
+                        lookup,
+                    )
+                    .filter(|values| !values.is_empty())
+                    .and_then(|values| {
+                        solid_facts::ast::argument_site_standings(
+                            std::path::Path::new(node_file.path.as_str()),
+                            &node_file.source,
+                            node_function.span,
+                            &values,
+                            &lookup.never_returning_calls_within(node_file, node_function),
+                            &[site],
+                        )
+                    })
+                    .and_then(|standings| standings.first().copied());
+                    let reached = match standing {
+                        Some(solid_facts::ast::SiteStanding::Unreachable) => continue,
+                        Some(solid_facts::ast::SiteStanding::Guaranteed) => below,
+                        Some(solid_facts::ast::SiteStanding::Possible) => false,
+                        None => own && below,
+                    };
+                    attributed.push((file, call.span, requirement.clone(), proven && reached));
+                }
+            }
+        }
+    }
+    for (file, span, requirement, proven) in attributed {
+        let before = requirements.len();
+        push_owner_requirement(
+            requirements,
+            &mut seen,
+            operation_name(requirement.operation),
+            file,
+            span,
+            OwnerRequirementStatus {
+                through_contract: false,
+                uncertain: !proven,
+                runtime_uncertain: requirement.runtime_uncertain,
+                caller_uncertain: requirement.caller_uncertain,
+                conditional_owner: requirement.conditional_owner,
+                later_run_unowned: requirement.later_run_unowned,
+                component_uncertain: requirement.component_uncertain,
+                after_await: false,
+                report: true,
+            },
+            lookup,
+        );
+        if requirements.len() > before
+            && let Some(pushed) = requirements.last_mut()
+        {
+            pushed.through_dependency = Some(requirement.location.clone());
+        }
+    }
+}
+
+const fn operation_name(operation: OwnerRequirementOperation) -> &'static str {
+    match operation {
+        OwnerRequirementOperation::Effect => "effect",
+        OwnerRequirementOperation::Cleanup => "cleanup",
+        OwnerRequirementOperation::Boundary => "boundary",
+        OwnerRequirementOperation::SettledCleanup => "settled-cleanup",
+    }
 }
 
 pub(crate) fn discover_owner_file(
@@ -1661,6 +1924,14 @@ pub(crate) fn find_missing_owners_incremental(
             );
         }
     }
+    attribute_dependency_requirements(
+        &mut requirements,
+        facts,
+        lookup,
+        &nodes,
+        &contexts,
+        &outgoing,
+    );
     let requirement_emission = requirements_started.elapsed();
     (
         requirements,
@@ -1989,6 +2260,7 @@ pub(crate) fn push_owner_requirement(
             after_await: status.after_await,
             missing_jsx_census,
             through_contract: status.through_contract,
+            through_dependency: None,
             report: status.report,
         });
     }

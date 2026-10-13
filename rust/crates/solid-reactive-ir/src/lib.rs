@@ -1006,6 +1006,11 @@ pub struct OwnerRequirement {
     /// generator never states such a site's registration as guaranteed.
     #[serde(default, skip_serializing_if = "is_false")]
     pub through_contract: bool,
+    /// ADR 0290: the operation is inside a package analyzed as source
+    /// (ADR 0284), at this location, and this requirement stands at the
+    /// project's call that runs it there, under the call's owner context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub through_dependency: Option<Location>,
     pub report: bool,
 }
 

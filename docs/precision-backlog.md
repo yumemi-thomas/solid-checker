@@ -29987,3 +29987,17 @@ otherwise unmoved. Corpus unchanged (562/3,731). Open:
 - an interface-declared member read through a parameter, a context value or
   another Unknown receiver keeps the type-only premise, so a caller that
   replaced it is still reported there.
+
+## A package's owner requirement at the project's call (2026-10-13, ADR 0290)
+
+In dependency mode, an owner requirement inside a package is now reported at
+the project call that runs it. It is a violation only on a proven-unowned,
+every-completion path, where the call's own arguments decide the first hop;
+otherwise it is an obligation. readingroom's `createTimer` cleanup is back
+(dependency mode 559 → 560, uncertifiable unchanged). Open:
+- module-scope project calls;
+- package-seeded contexts;
+- callback hops;
+- every package-located finding other than owner requirements, which stays
+  unreported as package-intrinsic. Of the 36 package-located violations
+  measured, 34 were intrinsic.

@@ -1117,6 +1117,7 @@ mod tests {
                 after_await: false,
                 missing_jsx_census: false,
                 through_contract: false,
+                through_dependency: None,
                 report: true,
             }],
             async_reads: vec![AsyncRead {
