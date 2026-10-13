@@ -1711,6 +1711,78 @@ fn discover_interprocedural_graph(
                 .factory_calls
                 .push((owner_span, SymbolId::from(symbol)));
         }
+        // ADR 0285: `function f(cb) { g(cb) }`, where `g` calls that position
+        // on every completion, invokes `cb` as `cb()` would. Only the owner's
+        // own parameter, passed unchanged at an exactly mapped position.
+        if project_function && !ambiguous_dispatch {
+            for (position, argument) in call.arguments.iter().enumerate() {
+                if argument.spread {
+                    break;
+                }
+                let span = file.ast.peel_ts_sugar_span(argument.span);
+                if file
+                    .ast
+                    .identifiers
+                    .binary_search_by_key(&span, |identifier| identifier.span)
+                    .is_err()
+                {
+                    continue;
+                }
+                let Some(owner_parameter) = symbols
+                    .entities
+                    .get(&location(file.path.shared(), span))
+                    .and_then(|argument_symbol| {
+                        nodes[owner]
+                            .parameters
+                            .iter()
+                            .position(|candidate| candidate == argument_symbol)
+                    })
+                else {
+                    continue;
+                };
+                // Summary parameter indices skip destructured parameters;
+                // the completion table's do not. Admit only where they agree.
+                let aligned = file
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|function| function.span == nodes[owner].span)
+                    .is_some_and(|function| {
+                        function
+                            .parameters
+                            .iter()
+                            .take(owner_parameter + 1)
+                            .all(|parameter| {
+                                parameter.shape == solid_facts::ast::BindingShape::Identifier
+                            })
+                    });
+                let forwarded = aligned
+                    && crate::execution_role::project_callee_at_parameter(
+                        file, call, position, lookup,
+                    )
+                    .is_some_and(|(callee_file, callee, exact)| {
+                        // A declaration is initialized when its module is
+                        // instantiated; a `const` callee may still be in its
+                        // temporal dead zone (ADR 0218's review round 3).
+                        exact
+                            && callee.kind == solid_facts::ast::FunctionKind::Declaration
+                            && lookup.parameter_called_on_every_completion(
+                                callee_file.path.as_str(),
+                                callee.span,
+                                position,
+                            )
+                    });
+                if forwarded
+                    && !contribution
+                        .invoked_parameters
+                        .contains(&(owner_span, owner_parameter))
+                {
+                    contribution
+                        .invoked_parameters
+                        .push((owner_span, owner_parameter));
+                }
+            }
+        }
         if !ambiguous_dispatch && let Some(contracted) = contracts.reads.get(symbol) {
             for (display, _, declaration, kind, read_context) in contracted {
                 contribution.direct_reads.push((

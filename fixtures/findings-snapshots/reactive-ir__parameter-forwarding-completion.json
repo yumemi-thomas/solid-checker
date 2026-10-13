@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 318,
+      "end": 336,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 446,
+      "end": 462,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
+      "start": 794,
+      "end": 801,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/helpers.ts",
+      "start": 983,
+      "end": 990,
+      "fixes": 0
+    }
+  ]
+}

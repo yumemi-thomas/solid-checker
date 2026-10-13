@@ -1540,6 +1540,8 @@ impl<'a> SemanticLookup<'a> {
         self.parameter_completion_calls.get_or_init(|| {
             let facts: &'a ProjectFacts = self.facts;
             let mut calls = HashSet::new();
+            // ADR 0285: calls passing a parameter on to another function.
+            let mut forwards = Vec::new();
             for file in &facts.files {
                 let mut parameters = HashMap::<&str, (Span, usize)>::new();
                 for function in &file.ast.functions {
@@ -1580,6 +1582,64 @@ impl<'a> SemanticLookup<'a> {
                         )
                     {
                         calls.insert((file.path.as_str(), function, index));
+                    }
+                }
+                for call in &file.ast.calls {
+                    for (position, argument) in call.arguments.iter().enumerate() {
+                        let span = file.ast.peel_ts_sugar_span(argument.span);
+                        if argument.spread
+                            || file
+                                .ast
+                                .identifiers
+                                .binary_search_by_key(&span, |identifier| identifier.span)
+                                .is_err()
+                        {
+                            continue;
+                        }
+                        let Some(&(function, index)) = self
+                            .entities()
+                            .at(file.path.as_str(), span)
+                            .and_then(|symbol| parameters.get(symbol.as_str()))
+                        else {
+                            continue;
+                        };
+                        if crate::owners::containing_ast_function(&file.ast, call.span)
+                            .is_some_and(|owner| owner.span == function)
+                            && crate::interproc::site_on_every_completion(
+                                self, file, function, call.span,
+                            )
+                        {
+                            forwards.push((file, call, position, function, index));
+                        }
+                    }
+                }
+            }
+            // ADR 0285: `function f(cb) { g(cb) }` calls `cb` on every
+            // completion when the call is on f's every-completion path, the
+            // argument is the parameter itself, unchanged, at an exactly
+            // mapped position, and `g` calls that position on every
+            // completion. `g` must be a function declaration: a `const`
+            // callee may be in its temporal dead zone (ADR 0218). To a
+            // fixpoint, so a chain of forwards composes.
+            let mut changed = true;
+            while changed {
+                changed = false;
+                for &(file, call, position, function, index) in &forwards {
+                    let key = (file.path.as_str(), function, index);
+                    if calls.contains(&key) {
+                        continue;
+                    }
+                    let forwarded = crate::execution_role::project_callee_at_parameter(
+                        file, call, position, self,
+                    )
+                    .is_some_and(|(callee_file, callee, exact)| {
+                        exact
+                            && callee.kind == solid_facts::ast::FunctionKind::Declaration
+                            && calls.contains(&(callee_file.path.as_str(), callee.span, position))
+                    });
+                    if forwarded {
+                        calls.insert(key);
+                        changed = true;
                     }
                 }
             }
@@ -4632,6 +4692,7 @@ mod tests {
             resolved_imports: None,
             runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
+            dependency_source_roots: Vec::new(),
         }
     }
 

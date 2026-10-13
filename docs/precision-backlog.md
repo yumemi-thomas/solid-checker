@@ -29851,3 +29851,16 @@ A method receiver must now be a non-exported, never-escaping `const`.
 ADR 0281 narrows ADR 0222's escape check: a store member chain consumed
 inside a callback argument is not an escape, so a hook that reads its store
 in an effect (`@tanstack/solid-query` `useMutation`) keeps its returned store.
+
+## A forwarded parameter is called where its target calls it (2026-10-13, ADR 0285)
+
+`function f(cb) { return g(cb) }` now counts as calling `cb` on every
+completion when `g` is a function declaration that does, by exact mapping and
+to a fixpoint. Before, the forward was silent in plain TypeScript too. The
+rc.13 corpus is unchanged in both modes. Open:
+- a forward that is not proven to run is silent rather than an obligation;
+- `const` arrow targets, refused for the temporal dead zone (ADR 0218);
+- a forward after a destructured parameter. Summary parameter positions skip
+  destructured parameters, which ADR 0277's by-reference read
+  (`call.arguments.get(parameter)`) also relies on. That index mismatch is
+  pre-existing and not audited here.
