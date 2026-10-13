@@ -578,6 +578,12 @@ pub const EXPORTED_PARAMETER_MEMBER_DISPATCH: &str = "exported-parameter-member-
 /// `projection.rs`, which words it.
 pub const DEPENDENCY_SOURCE_GETTER: &str = "dependency-source-getter:";
 
+/// ADR 0293: the `analysis_context` prefix of a dispatch obligation at an
+/// untracked store Get whose strict-read warning depends on a key
+/// solid-checker cannot decide; the rest is the reason. Its `callee` is the
+/// Get's text. Producer: `local_access.rs`; consumer: `projection.rs`.
+pub const STORE_KEY_UNDECIDED: &str = "store-key-undecided:";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticDefect {

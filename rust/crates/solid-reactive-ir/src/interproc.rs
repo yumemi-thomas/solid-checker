@@ -7953,6 +7953,12 @@ fn direct_reference_contributions(
                     .members
                     .iter()
                     .filter(|member| member.object == reference_span)
+                    // ADR 0293: only a head Get whose key warns is a read; an
+                    // exempt or undecided key is withheld from the summary.
+                    .filter(|member| {
+                        crate::local_access::store_head_get(file, member.span, lookup.dialect)
+                            == crate::local_access::StoreHeadGet::Warns
+                    })
                     .map(|member| DirectReferenceContribution {
                         owner,
                         read: SummaryRead {

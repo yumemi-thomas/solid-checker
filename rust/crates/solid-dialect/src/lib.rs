@@ -2844,6 +2844,18 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether an evaluated Get of this known string key on a runtime store
+    /// may skip the strict-read warning that the dialect's store Get gives
+    /// other string keys (ADR 0293). This is the refusal half of
+    /// [`Self::store_key_warns_strict_read`], asked where a store Get was
+    /// already a strict-read witness before that premise was audited: an
+    /// answer of `true` withholds the violation. Non-string keys are never
+    /// submitted; the caller decides them as undecided. An unaudited dialect
+    /// fails closed and exempts every key.
+    fn store_key_may_skip_strict_read(&self, _key: &str) -> bool {
+        true
+    }
+
     /// The callback argument whose exact returned value is the call's result.
     /// This is a runtime identity claim, separate from callback execution and
     /// ownership. Silence grants no passthrough to an unaudited dialect.

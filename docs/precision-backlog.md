@@ -30208,3 +30208,26 @@ unmoved. Open:
 - the direct-read path reports a lazy body's reads (`local()`) as violations
   on rc.9 too, where that release's `lazy` opens no strict-read window. This
   predates the ADR and is pinned in `lazy-default-consumer-rc9`.
+
+## A store Get warns by its key (2026-10-13, ADR 0293)
+
+A store Get of `"then"` or of a symbol key was a proven `SC1001`, though
+rc.9 and rc.13 warn only for string keys other than `"then"` (rc.13
+`@solidjs/signals` `dist/dev.js:6660-6675`). Function-valued members are
+ordinary string keys and stay violations (probed). Now:
+- a chain's head Get decides;
+- a `then` head of a single Get is no read;
+- a symbol or dynamic key, or a `then` head followed by another Get, is an
+  `SC9012` obligation in a role that reports an untracked read;
+- interprocedural store-member summaries keep only warning heads.
+
+Fixture `reactive-ir/store-strict-read-keys`: 6 violations, 4 obligations, 4
+`then` reads with no `SC1001`. `async-call-prefix` moved: one `then` default
+dropped, two defaults became `SC9012`, three summary rows withheld. Corpus:
+violations unchanged (562 base, 560 dependency mode, identical rows),
+uncertifiable −2 in each mode (derp-media-server). Open:
+- a symbol key is undecided, not exempt: no fact gives the key's type;
+- a template-literal key such as `` `draft:${id}` `` is undecided;
+- an undecided key read through a helper is now silent, not uncertifiable;
+- rc.3 warns for `then`, but every vocabulary withholds it;
+- `no-destructure`, store spreads and after-await store reads are unchanged.

@@ -292,18 +292,8 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
-      "start": 494,
-      "end": 512,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
@@ -312,8 +302,8 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
@@ -329,36 +319,6 @@
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
       "start": 707,
       "end": 726,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
-      "start": 786,
-      "end": 796,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
-      "start": 803,
-      "end": 815,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
-      "start": 822,
-      "end": 835,
       "fixes": 0
     },
     {

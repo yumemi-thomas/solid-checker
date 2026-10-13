@@ -1123,6 +1123,11 @@ mod tests {
         assert!(audited.store_key_warns_strict_read("value"));
         assert!(!audited.store_key_warns_strict_read("then"));
         assert!(!Solid2::CONSERVATIVE.store_key_warns_strict_read("value"));
+        // ADR 0293: the refusal half holds in every vocabulary.
+        for vocabulary in [Solid2::CONSERVATIVE, Solid2::RC3, Solid2::RC9, audited] {
+            assert!(vocabulary.store_key_may_skip_strict_read("then"));
+            assert!(!vocabulary.store_key_may_skip_strict_read("value"));
+        }
         assert!(
             vocabulary_for(Release::Read(9), Release::Read(13), Release::Read(9))
                 .store_key_warns_strict_read("value")

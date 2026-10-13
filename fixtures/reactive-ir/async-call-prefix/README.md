@@ -23,7 +23,9 @@ the call. It is decided per invocation, at every hop
 | `NestedHelperAfterAwait`, `ConditionalSuspendBeforeChild`, `CrossFileSuffix` | uncertifiable | the child is entered after a possible suspension |
 | `AsyncGenerator`, `DormantNestedDefault`, `LazyDefault` | uncertifiable | no body runs, or the default creates a closure |
 | `ReassignedTarget`, `TypeOnlyInputs`, `ReplacedSourceDefault` | not a violation | replaced targets, type-only sources and replaced sources prove nothing |
-| `StoreProtocolKeys` `then`/symbol/dynamic | uncertifiable | protocol and dynamic store keys |
+| `StoreProtocolKeys` `thenBody`, `thenDefault` | not a finding | a `then` store Get does not warn (ADR 0293) |
+| `StoreProtocolKeys` `symbolDefault`, `dynamicDefault` | uncertifiable (`SC9012`) | the key may be a symbol or `then`, whose Get does not warn (ADR 0293) |
+| `StoreProtocolKeys` `symbolBody`, `dynamicBody` | not a finding | an undecided key is withheld from the helper's summary (ADR 0293), a recall gap |
 | `SampledApply`, `SampledDefaultApply`, `TrackedCompute`, `ShadowedName` | not a violation | sampled, tracked or unrelated |
 
 `WrappedExactCall` is meant as a positive but is not proven yet, which is a

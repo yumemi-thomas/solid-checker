@@ -232,6 +232,21 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Read the member inside JSX or a memo, or analyze the package through an accepted contract, whose getter rows state this Get (ADR 0272).".into(),
             )
         }
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect
+            .analysis_context
+            .starts_with(crate::STORE_KEY_UNDECIDED) =>
+        {
+            let reason = &defect.analysis_context[crate::STORE_KEY_UNDECIDED.len()..];
+            (
+                format!(
+                    "{callee} reads a store outside tracking, but whether this Get warns STRICT_READ_UNTRACKED depends on its key: {reason}; whether the read is a strict-read violation can be neither proven nor ruled out"
+                ),
+                "Read the member inside JSX, a createMemo, or an effect's compute function, or use a known string key solid-checker can decide (ADR 0293).".into(),
+            )
+        }
         StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (
             if let Some(member) = member {
                 format!(

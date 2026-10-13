@@ -2405,6 +2405,34 @@ impl LocalAccessContext<'_, '_> {
                     PropUse::Unknown => uncertain = true,
                 }
             }
+            // ADR 0293: the store's strict-read warning is its head Get's.
+            // A `then` head does not warn; a key solid-checker cannot spell
+            // (a symbol, a dynamic expression) may not either.
+            if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+                match store_head_get(file, member.span, self.lookup.dialect) {
+                    StoreHeadGet::Warns => {}
+                    StoreHeadGet::Exempt => continue,
+                    StoreHeadGet::Undecided(reason) => {
+                        let key = (object.path.clone(), object.start_byte, object.end_byte);
+                        if execution.reports_untracked_read() && seen.insert(key) {
+                            result.dispatch_obligations.push(crate::StaticDefect {
+                                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                                    callee: file
+                                        .source_text(member.span)
+                                        .unwrap_or("this store Get")
+                                        .to_owned(),
+                                    member: None,
+                                },
+                                location: location(file.path.shared(), member.span),
+                                analysis_context: format!("{}{reason}", crate::STORE_KEY_UNDECIDED),
+                                fixes: vec![],
+                                uncertain: true,
+                            });
+                        }
+                        continue;
+                    }
+                }
+            }
             let key = (object.path.clone(), object.start_byte, object.end_byte);
             if !seen.insert(key) {
                 continue;
@@ -2947,6 +2975,69 @@ pub(crate) fn callback_result_literal_is_tracked(
             && use_.operation.owner.capabilities.child_owners == CapabilityKnowledge::Allowed
             && (!guaranteed || exact_at_call(&use_.operation))
     })
+}
+
+/// What a store member chain's strict-read warning is (ADR 0293).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum StoreHeadGet {
+    /// The head Get's known string key warns in this dialect.
+    Warns,
+    /// The chain is one Get whose known string key is exempt (`then`).
+    Exempt,
+    /// The head key is not a known string (a symbol or dynamic key), or an
+    /// exempt head is followed by a Get on its value, which may warn if the
+    /// value is a store proxy. The reason words the obligation.
+    Undecided(&'static str),
+}
+
+/// The chain's head Get decides: it runs first, on the store proxy itself.
+/// A warning head warns whatever follows it; an exempt one decides only a
+/// chain of one Get. `span` is any member of the chain.
+pub(crate) fn store_head_get(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    dialect: &dyn solid_dialect::Dialect,
+) -> StoreHeadGet {
+    let Some(mut head) = file.ast.members.iter().find(|member| member.span == span) else {
+        return StoreHeadGet::Undecided("the store Get's key is not a known string");
+    };
+    while let Some(inner) = file
+        .ast
+        .members
+        .iter()
+        .find(|member| member.span == file.ast.peel_ts_sugar_span(head.object))
+    {
+        head = inner;
+    }
+    let chained = file
+        .ast
+        .members
+        .iter()
+        .any(|member| file.ast.peel_ts_sugar_span(member.object) == head.span);
+    let key = if file.ast.computed_members.binary_search(&head.span).is_ok() {
+        file.ast
+            .literal_computed_members
+            .iter()
+            .find(|literal| literal.span == head.span)
+            .map(|literal| literal.key.as_ref())
+    } else {
+        file.source_text(head.property)
+    };
+    match key {
+        None => StoreHeadGet::Undecided(
+            "the store Get's key is not a known string; a symbol key or \"then\" does not warn",
+        ),
+        Some(key) if dialect.store_key_may_skip_strict_read(key) => {
+            if chained {
+                StoreHeadGet::Undecided(
+                    "the store Get's head key does not warn, and whether its value is a store proxy whose next Get does is not proven",
+                )
+            } else {
+                StoreHeadGet::Exempt
+            }
+        }
+        Some(_) => StoreHeadGet::Warns,
+    }
 }
 
 // Insert at the end of the existing local_access.rs module.

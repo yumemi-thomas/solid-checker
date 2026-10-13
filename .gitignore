@@ -466,3 +466,5 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/host-dead-return-prototype/node_modules/**
 !fixtures/reactive-ir/dependency-source-context-reprovided/node_modules/
 !fixtures/reactive-ir/dependency-source-context-reprovided/node_modules/**
+!fixtures/reactive-ir/store-strict-read-keys/node_modules/
+!fixtures/reactive-ir/store-strict-read-keys/node_modules/**

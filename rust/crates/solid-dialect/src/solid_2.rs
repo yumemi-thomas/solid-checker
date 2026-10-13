@@ -7500,6 +7500,17 @@ impl Dialect for Solid2 {
         self.store_strict_keys_audited && key != "then"
     }
 
+    /// ADR 0293. rc.9 and rc.13 `@solidjs/signals` store Get test
+    /// `typeof key === "string" && key !== "then"` before warning (rc.9
+    /// `dist/dev.js:6229-6235`, rc.13 `dist/dev.js:6660-6675`): a promise
+    /// resolution probes `.then`, and that is not a read the user wrote.
+    /// rc.3's gate has no `then` clause (`dist/dev.js:7662`), but no
+    /// vocabulary carries that difference, so every release withholds `then`:
+    /// only a violation is lost there, never one invented.
+    fn store_key_may_skip_strict_read(&self, key: &str) -> bool {
+        key == "then"
+    }
+
     /// Source: rc.0 `devComponent` (`solid-js` dev entry `dev.js:35-50`)
     /// wraps the body in `untrack(() => Comp(props), '<Name>')`, so
     /// `STRICT_READ_UNTRACKED` fires only when a prop getter reads reactive
