@@ -12,6 +12,7 @@ where its importer is. A Solid package is one whose `dependencies` or
 | `Inner` | `dep-hooks` → `dep-inner`, from `dep-hooks/node_modules` | SC1001 at the call |
 | `Plain` | `plain-utils` (no Solid dependency) | SC9011: not selected, an unknown package |
 | `Pattern` | `dep-pattern` (`exports` pattern `./*`) | SC1001 at the call: the pattern resolves as Node resolves it |
+| `ExtensionOrder` | `dep-ext`, whose `./read` matches `read.mjs` and `read.js` | SC1001 at the call: Vite's order loads `read.mjs` |
 | `ArrayExports` | `dep-array` (`exports` array fallback) | SC9011 and SC9005: skipped with a note, an unknown package |
 
 `solid-js.d.ts` is `context-member-identity`'s stub (claim-bearing signatures

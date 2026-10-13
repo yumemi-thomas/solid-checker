@@ -8,7 +8,9 @@ declare module "@solidjs/web" { export namespace JSX { type Element = unknown; }
 // Claim-bearing signatures copied from published 2.0.0-rc.13:
 // @solidjs/signals/dist/types/signals.d.ts, core/constants.d.ts and
 // solid-js/types/client/core.d.ts, hydration.d.ts, plus `onCleanup` and
-// `Disposable` from @solidjs/signals signals.d.ts and core/types.d.ts.
+// `Disposable` from @solidjs/signals signals.d.ts and core/types.d.ts, and
+// `getOwner` (with `Owner` reduced to an opaque interface) and `createRoot`
+// from `detached-callback-in-root`'s stub.
 // Renderer/option scaffolding
 // is reduced; effect returns retain the real cleanup-or-void constraint.
 declare module "solid-js" {
@@ -48,4 +50,10 @@ declare module "solid-js" {
     name?: string;
   }
   export function onCleanup(fn: Disposable): Disposable;
+  export interface Owner {}
+  export function getOwner(): Owner | null;
+  export function createRoot<T>(init: ((dispose: () => void) => T) | (() => T), options?: {
+    id?: string;
+    transparent?: boolean;
+  }): T;
 }

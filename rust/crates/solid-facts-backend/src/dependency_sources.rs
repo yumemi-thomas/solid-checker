@@ -32,7 +32,10 @@ use crate::host_constants::{Ordered, find_package_root, split_bare_specifier};
 /// host's: `exports` is read in its own document order.
 const BUILD_CONDITIONS: &[&str] = &["solid", "import", "module", "default"];
 const MAX_CLOSURE_FILES: usize = 4000;
-const SOURCE_EXTENSIONS: &[&str] = &[".js", ".jsx", ".mjs", ".ts", ".tsx", ".mts"];
+/// Vite's `resolve.extensions` order (`DEFAULT_EXTENSIONS`, minus `.json`):
+/// a relative import that matches two files loads the first (review round 1
+/// of ADR 0290, Sol: `./read` with `read.js` and `read.mjs` loads `.mjs`).
+const SOURCE_EXTENSIONS: &[&str] = &[".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx"];
 
 /// One import the compiler resolves to declarations, and the runtime file it
 /// loads.
@@ -199,14 +202,16 @@ pub fn prepare_all(
         else {
             continue;
         };
+        if unsupported.contains(&root) || not_solid.contains(&root) {
+            continue;
+        }
         // A workspace package linked into `node_modules` resolves to the
         // project's own directory: it is project code, not a dependency.
-        if unsupported.contains(&root)
-            || not_solid.contains(&root)
-            || !root
-                .components()
-                .any(|component| component.as_os_str() == "node_modules")
+        if !root
+            .components()
+            .any(|component| component.as_os_str() == "node_modules")
         {
+            not_solid.insert(root);
             continue;
         }
         if !names_by_root.contains_key(&root) && !solid_package(&root) {
@@ -274,10 +279,12 @@ pub fn prepare_all(
     if names_by_root.is_empty() {
         return Ok(None);
     }
-    // A contract is unbound by package name, so a name with an unsupported
-    // copy keeps its contract for every copy.
+    // A contract is unbound by package name, so a name with any copy that is
+    // not analyzed (unsupported, not a Solid package, a workspace link) keeps
+    // its contract for every copy (review round 1 of ADR 0290, Sol).
     let unsupported_names = unsupported
         .iter()
+        .chain(&not_solid)
         .filter_map(|root| package_name_of_root(root))
         .collect::<BTreeSet<_>>();
     let package_names = names_by_root

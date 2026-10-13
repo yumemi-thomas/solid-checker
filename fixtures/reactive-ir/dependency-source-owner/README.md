@@ -18,10 +18,14 @@ path, or the project call's arguments must decide the branch it sits in.
 | `ArrowInHandler` | `useTicker(fn, () => 1000)` | violation, the effect; the cleanup branch is unreachable |
 | `MemberInHandler` | `useTicker.bind(…)`, `useTicker.length` | clean: a member of the function does not run it |
 | `ScheduledAndCalled` | owned `useMaybe(true, fn)` beside `setTimeout(useMaybe, …)` | clean: the scheduled reference, not the direct call, runs unowned |
+| `SharedHelper` | `start(false)` in a handler, `start(true)` under `createRoot`; `start` calls the package only when `owned` | uncertifiable: the call is not on `start`'s every-completion path |
+| `OwnerGuard` | `if (!getOwner()) return;` before the call | uncertifiable: the guard may return first |
+| `SecondSite` | `choice(false)`, whose cleanup runs from a second call site | violation: every site in `choice` is weighed |
+| `AfterAwait` | `later()`, whose cleanup follows an `await` | uncertifiable: attributed whatever the caller's owner |
 
 Without the flag, the package has no contract, and only `AccessorInHandler`
 reports an uncertifiable (`reactive-source-uncaptured`).
 
 `solid-js.d.ts` is `context-member-identity`'s stub plus `onCleanup` and
-`Disposable` from `summary-completion-read` (claim-bearing signatures copied
+`Disposable` from `summary-completion-read`, and `getOwner` and `createRoot` (claim-bearing signatures copied
 from published 2.0.0-rc.13). `App.tsx` passes `tsc --noEmit`.

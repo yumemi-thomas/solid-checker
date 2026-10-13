@@ -39,6 +39,9 @@ A resolved package is selected when all of these hold:
   enters the program, and it keeps its contract. A name with an unsupported
   copy keeps its contract for every copy, because contracts unbind by name.
 
+Relative imports inside a package resolve in Vite's extension order (`.mjs`,
+`.js`, `.mts`, `.ts`, `.jsx`, `.tsx`), as the declared Vite host loads them.
+
 `exports` subpath patterns (`./*`) now resolve as Node resolves them: the
 longest prefix wins, the matched text replaces every `*` in the target, and a
 match that steps out of the package (`..`) selects nothing. That covers

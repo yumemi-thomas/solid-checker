@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
-      "start": 361,
-      "end": 375,
+      "start": 396,
+      "end": 410,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
-      "start": 609,
-      "end": 623,
+      "start": 644,
+      "end": 658,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
-      "start": 847,
-      "end": 851,
+      "start": 882,
+      "end": 886,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
-      "start": 1031,
-      "end": 1048,
+      "start": 1066,
+      "end": 1083,
       "fixes": 0
     },
     {
@@ -57,8 +57,18 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
-      "start": 1317,
-      "end": 1321,
+      "start": 1352,
+      "end": 1356,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 1617,
+      "end": 1630,
       "fixes": 0
     }
   ]

@@ -9,6 +9,24 @@ use std::{
 
 use solid_reactive_ir::contract_semantics::AcceptedContractIndex;
 
+/// Whether `importer` imports `specifier` as a namespace at run time.
+fn namespace_import(facts: &solid_facts::ProjectFacts, importer: &str, specifier: &str) -> bool {
+    facts
+        .files
+        .iter()
+        .find(|file| file.path.as_str() == importer)
+        .is_some_and(|file| {
+            file.ast.imports.iter().any(|import| {
+                !import.type_only
+                    && import.module.as_str() == specifier
+                    && import.bindings.iter().any(|binding| {
+                        !binding.type_only
+                            && binding.kind == solid_facts::ast::ImportKind::Namespace
+                    })
+            })
+        })
+}
+
 /// Preserve the existing external-package obligation discovery independently
 /// of the historical first-party bundle generator. This index carries only
 /// missing-evidence markers; a catalog may fill them with accepted semantics.
@@ -30,10 +48,14 @@ pub fn external_package_contract_requirements(
             if is_package_local_edge(&mut owners, importer, import) {
                 continue;
             }
-            // ADR 0284: a package analyzed as source needs no contract.
+            // ADR 0284: a package analyzed as source needs no contract, when
+            // the import is one its redirects bind. A namespace import is not
+            // redirected, so its members stay the declarations' and the
+            // import keeps the obligation (review round 1 of ADR 0290, Sol).
             if facts
                 .dependency_source_root(&import.resolved_path)
                 .is_some()
+                && !namespace_import(facts, importer, &import.text)
             {
                 continue;
             }

@@ -1222,12 +1222,17 @@ fn call_edge_symbol<'e>(
 ///   callback): that context is the package's own, not a caller's.
 ///
 /// Only a requirement proven unowned (`OWNER_CONTEXT_PROVEN_UNOWNED`, not
-/// uncertain) walks the proven bit and stays a violation at the call. Every
-/// other one walks the plain unowned bit and becomes an obligation there: the
-/// call may run it unowned. An operation after an `await` inside the package
-/// is unowned whatever the caller did, and a bit seeded inside the package (a
-/// module-scope or event-handler origin) has no project call; neither is
-/// attributed.
+/// uncertain) walks the proven bit and can stay a violation at the call, and
+/// only when the call is on its project function's every-completion path:
+/// that function's unowned context reaches a call behind a branch or an owner
+/// guard on some invocations only. Every other one walks the plain unowned
+/// bit and becomes an obligation there: the call may run it unowned.
+///
+/// An operation after an `await` inside the package is unowned whatever the
+/// caller did, so it walks every edge. A project call at module scope has no
+/// edge; it is found by scanning and attributed as an obligation. A bit
+/// seeded inside the package (its own event handlers or module scope) has no
+/// project call and is not attributed.
 pub(crate) fn attribute_dependency_requirements(
     requirements: &mut Vec<OwnerRequirement>,
     facts: &ProjectFacts,
@@ -1260,7 +1265,6 @@ pub(crate) fn attribute_dependency_requirements(
     let mut attributed = Vec::new();
     for requirement in requirements.iter() {
         if !requirement.report
-            || requirement.after_await
             || requirement.through_dependency.is_some()
             || facts
                 .dependency_source_root(&requirement.location.path)
@@ -1286,7 +1290,10 @@ pub(crate) fn attribute_dependency_requirements(
         else {
             continue;
         };
-        let proven = !requirement.uncertain && contexts[owner] & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+        // After an `await` the operation is proven unowned on its own; its
+        // function's entry context does not matter.
+        let proven = !requirement.uncertain
+            && (requirement.after_await || contexts[owner] & OWNER_CONTEXT_PROVEN_UNOWNED != 0);
         let mask = if proven {
             OWNER_CONTEXT_PROVEN_UNOWNED
         } else {
@@ -1307,11 +1314,14 @@ pub(crate) fn attribute_dependency_requirements(
         // Per package function on a path to the operation: the site in it
         // that leads there, whether that site is on the function's
         // every-completion path, and whether every hop below it is.
-        let mut best = HashMap::<usize, (Span, bool, bool)>::new();
+        // Per package function on a path to the operation: the sites in it
+        // that lead there, whether one of them is on the function's
+        // every-completion path, and whether every hop below it is.
+        let mut best = HashMap::<usize, (Vec<Span>, bool, bool)>::new();
         best.insert(
             owner,
             (
-                operation_site.unwrap_or(span),
+                vec![operation_site.unwrap_or(span)],
                 operation_site.is_some_and(|site| {
                     crate::interproc::site_on_every_completion(
                         lookup,
@@ -1323,9 +1333,59 @@ pub(crate) fn attribute_dependency_requirements(
                 true,
             ),
         );
+        // An operation after an `await` in the package runs unowned whatever
+        // context its function was entered with (review round 1 of ADR 0290,
+        // Sol): every project call that runs it is attributed.
+        let carries = |kind: OwnerEdgeKind, caller: usize| {
+            requirement.after_await || owner_edge_context(kind, contexts[caller]) & mask != 0
+        };
+        let enters =
+            |file: &solid_facts::FileFacts, call: &solid_facts::ast::CallFact, node: usize| {
+                // An exact invocation of the function: not a member of it
+                // (`f.reset()`, `f.bind(…)`) nor a replaced binding.
+                crate::execution_role::project_callee_at_parameter(file, call, 0, lookup)
+                    .is_some_and(|(callee_file, callee, exact)| {
+                        exact
+                            && *callee_file.path.as_str() == *nodes[node].path
+                            && callee.span == nodes[node].span
+                    })
+            };
+        // ADR 0280 on the first hop: what the call's arguments decide about
+        // the callee's sites. Reached when one site is guaranteed, dropped
+        // when every site is unreachable, possible otherwise.
+        let first_hop = |file: &solid_facts::FileFacts,
+                         call: &solid_facts::ast::CallFact,
+                         node_file: &'_ solid_facts::FileFacts,
+                         node_function: &solid_facts::ast::FunctionFact,
+                         sites: &[Span]| {
+            crate::argument_values::parameter_values(file, call, node_file, node_function, lookup)
+                .filter(|values| !values.is_empty())
+                .and_then(|values| {
+                    solid_facts::ast::argument_site_standings(
+                        std::path::Path::new(node_file.path.as_str()),
+                        &node_file.source,
+                        node_function.span,
+                        &values,
+                        &lookup.never_returning_calls_within(node_file, node_function),
+                        sites,
+                    )
+                })
+                .map(|standings| {
+                    if standings.contains(&solid_facts::ast::SiteStanding::Guaranteed) {
+                        solid_facts::ast::SiteStanding::Guaranteed
+                    } else if standings
+                        .iter()
+                        .all(|standing| *standing == solid_facts::ast::SiteStanding::Unreachable)
+                    {
+                        solid_facts::ast::SiteStanding::Unreachable
+                    } else {
+                        solid_facts::ast::SiteStanding::Possible
+                    }
+                })
+        };
         let mut queue = VecDeque::from([owner]);
         while let Some(node) = queue.pop_front() {
-            let (site, own, below) = best[&node];
+            let (sites, own, below) = best[&node].clone();
             let Some(node_file) = lookup.file_by_path(&nodes[node].path) else {
                 continue;
             };
@@ -1338,7 +1398,7 @@ pub(crate) fn attribute_dependency_requirements(
                 continue;
             };
             for &(caller, kind) in &incoming[node] {
-                if owner_edge_context(kind, contexts[caller]) & mask == 0 {
+                if !carries(kind, caller) {
                     continue;
                 }
                 let created = owner_edge_context(kind, 0) & mask != 0;
@@ -1354,24 +1414,17 @@ pub(crate) fn attribute_dependency_requirements(
                     .filter(|call| {
                         containing_ast_function(&file.ast, call.span)
                             .is_some_and(|function| function.span == nodes[caller].span)
-                            // An exact invocation of the function: not a
-                            // member of it (`f.reset()`, `f.bind(…)`) nor a
-                            // replaced binding (review round 1).
-                            && crate::execution_role::project_callee_at_parameter(
-                                file, call, 0, lookup,
-                            )
-                            .is_some_and(|(callee_file, callee, exact)| {
-                                exact
-                                    && *callee_file.path.as_str() == *nodes[node].path
-                                    && callee.span == nodes[node].span
-                            })
+                            && enters(file, call, node)
                     })
                     .collect::<Vec<_>>();
+                if calls.is_empty() {
+                    continue;
+                }
                 if in_dependency(caller) {
-                    if created || calls.is_empty() {
+                    if created {
                         continue;
                     }
-                    let completing = calls.iter().find(|call| {
+                    let completing = calls.iter().any(|call| {
                         crate::interproc::site_on_every_completion(
                             lookup,
                             file,
@@ -1380,8 +1433,8 @@ pub(crate) fn attribute_dependency_requirements(
                         )
                     });
                     let entry = (
-                        completing.map_or(calls[0].span, |call| call.span),
-                        completing.is_some(),
+                        calls.iter().map(|call| call.span).collect::<Vec<_>>(),
+                        completing,
                         own && below,
                     );
                     let improves = best
@@ -1396,38 +1449,61 @@ pub(crate) fn attribute_dependency_requirements(
                 // The project caller creates the bit itself (it schedules the
                 // package function, `setTimeout(f)`): the unowned run is that
                 // reference's, not a direct call's (review round 1).
-                if created {
+                if created && !requirement.after_await {
                     continue;
                 }
                 for call in calls {
-                    // ADR 0280: this call's arguments may decide the callee's
-                    // branches, on the first hop only.
-                    let standing = crate::argument_values::parameter_values(
-                        file,
-                        call,
-                        node_file,
-                        node_function,
-                        lookup,
-                    )
-                    .filter(|values| !values.is_empty())
-                    .and_then(|values| {
-                        solid_facts::ast::argument_site_standings(
-                            std::path::Path::new(node_file.path.as_str()),
-                            &node_file.source,
-                            node_function.span,
-                            &values,
-                            &lookup.never_returning_calls_within(node_file, node_function),
-                            &[site],
-                        )
-                    })
-                    .and_then(|standings| standings.first().copied());
-                    let reached = match standing {
+                    let reached = match first_hop(file, call, node_file, node_function, &sites) {
                         Some(solid_facts::ast::SiteStanding::Unreachable) => continue,
                         Some(solid_facts::ast::SiteStanding::Guaranteed) => below,
                         Some(solid_facts::ast::SiteStanding::Possible) => false,
                         None => own && below,
                     };
-                    attributed.push((file, call.span, requirement.clone(), proven && reached));
+                    // The unowned context is the project function's; it
+                    // reaches this call only when the call is on that
+                    // function's every-completion path (review round 1, Sol):
+                    // a call behind a branch or an owner guard may run only on
+                    // owned invocations.
+                    let call_completes =
+                        frontier_call_completes(lookup, file, nodes[caller].span, call.span);
+                    attributed.push((
+                        file,
+                        call.span,
+                        requirement.clone(),
+                        proven && reached && call_completes,
+                    ));
+                }
+            }
+        }
+        // A project call at module scope has no owner and no function node,
+        // so no edge records it. It is attributed as an obligation: whether a
+        // module-scope statement runs is not proven here.
+        for &node in best.keys() {
+            let (sites, _, _) = &best[&node];
+            let Some(node_file) = lookup.file_by_path(&nodes[node].path) else {
+                continue;
+            };
+            let Some(node_function) = node_file
+                .ast
+                .functions
+                .iter()
+                .find(|function| function.span == nodes[node].span)
+            else {
+                continue;
+            };
+            for file in &facts.files {
+                if facts.dependency_source_root(file.path.as_str()).is_some() {
+                    continue;
+                }
+                for call in &file.ast.calls {
+                    if containing_ast_function(&file.ast, call.span).is_some()
+                        || !enters(file, call, node)
+                        || first_hop(file, call, node_file, node_function, sites)
+                            == Some(solid_facts::ast::SiteStanding::Unreachable)
+                    {
+                        continue;
+                    }
+                    attributed.push((file, call.span, requirement.clone(), false));
                 }
             }
         }
@@ -1459,6 +1535,49 @@ pub(crate) fn attribute_dependency_requirements(
             pushed.through_dependency = Some(requirement.location.clone());
         }
     }
+}
+
+/// Whether `site`, a call written directly in the project function at
+/// `function_span`, runs on that function's every completion (ADR 0276's
+/// completion sites, minus an earlier `never` guard). Like
+/// `interproc::site_on_every_completion`, except that only JSX, a class or a
+/// pattern written inside this function defers the site: an inline handler
+/// sits inside its component's JSX, and that JSX does not defer its own body.
+fn frontier_call_completes(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    function_span: Span,
+    site: Span,
+) -> bool {
+    let Some(function) = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == function_span)
+    else {
+        return false;
+    };
+    let inside = |span: Span| function.body.contains(span) && span.contains(site);
+    file.ast.completion_sites.binary_search(&site).is_ok()
+        && !function.generator
+        && written_directly_in(&file.ast, function, site)
+        && !file
+            .ast
+            .jsx_elements
+            .iter()
+            .any(|element| inside(element.span))
+        && !file.ast.classes.iter().any(|class| inside(class.span))
+        && !file
+            .ast
+            .bindings
+            .iter()
+            .any(|binding| inside(binding.pattern))
+        && !file
+            .ast
+            .assignments
+            .iter()
+            .any(|assignment| inside(assignment.target))
+        && !lookup.never_returning_call_before(file, function, site)
 }
 
 const fn operation_name(operation: OwnerRequirementOperation) -> &'static str {

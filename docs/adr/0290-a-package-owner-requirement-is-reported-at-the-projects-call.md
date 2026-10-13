@@ -105,3 +105,35 @@ Fixtures: `dependency-source-owner` gains `MemberInHandler` and
 `ScheduledAndCalled`, both clean, and `owner-member-call-edge` pins the base
 case. A `const AP = Array.prototype` alias that defeats ADR 0288's veto was
 also found; ADR 0288 already places it outside the premise.
+
+## Review round 1, second reviewer
+
+Four false-violation shapes, all now obligations or exact:
+- **The project call itself.** A violation now also needs the attributed
+  call to be on its project function's every-completion path
+  (`frontier_call_completes`). An aggregate unowned context is the function's,
+  and a call behind a branch may run only on owned invocations. The covered
+  shapes are a helper called as `start(true)` owned and `start(false)`
+  unowned, an `if (!getOwner()) return;` guard, and `if (false)`. Inside the
+  function, only JSX, a class or a pattern written in the function defers
+  the call, so an inline JSX handler's own body is not deferred.
+- **Every site counts.** When a package function enters the next through
+  several calls, the first hop weighs all of them. `choice(false)` running
+  the second of two cleanup sites was dropped.
+- **Vite's extension order** for relative imports in a package (`.mjs`
+  before `.js`; ADR 0291). A redirect now also binds an import the compiler
+  resolved to another runtime file than the bundler loads.
+
+Defects that were silently certified are now obligations:
+- a project call at module scope, found by scanning;
+- a package operation after an `await`, which walks every edge.
+
+A namespace import of a selected package keeps its contract obligation,
+because it is never redirected. A package name with any copy that is not
+analyzed keeps its contract.
+
+Recorded, not fixed:
+- a caller's own `await` before the call is not carried on owner edges,
+  which is a base-mode limitation too;
+- a package hop through `runWithOwner(null, f)`;
+- members of an exported object (`timer.useTicker()` from a named import).

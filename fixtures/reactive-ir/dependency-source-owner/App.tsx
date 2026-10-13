@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
-import { useLater, useMaybe, useTicker } from "dep-timer";
+import { choice, later, useLater, useMaybe, useTicker } from "dep-timer";
+import { createRoot, getOwner } from "solid-js";
 
 declare const flag: boolean;
 
@@ -56,4 +57,40 @@ export function ScheduledAndCalled() {
   useMaybe(true, () => {});
   setTimeout(useMaybe, 0, true, () => {});
   return <p>scheduled</p>;
+}
+
+// Uncertifiable, not a violation: `start` runs the package call only when
+// `owned`, which only the root's call passes (review round 1, Sol).
+function start(owned: boolean) {
+  if (owned) useTicker(() => {}, 1000);
+}
+export function SharedHelper() {
+  createRoot(() => start(true));
+  return <button onClick={() => start(false)}>shared</button>;
+}
+
+// Uncertifiable, not a violation: the handler returns before the call when it
+// has no owner.
+export function OwnerGuard() {
+  return (
+    <button
+      onClick={() => {
+        if (!getOwner()) return;
+        useTicker(() => {}, 1000);
+      }}
+    >
+      guard
+    </button>
+  );
+}
+
+// Violation at the call: `choice(false)` runs the package's second cleanup
+// site, though its first is unreachable for `false`.
+export function SecondSite() {
+  return <button onClick={() => choice(false)}>second</button>;
+}
+
+// Uncertifiable at the call: the package's cleanup after an `await`.
+export function AfterAwait() {
+  return <button onClick={() => void later()}>later</button>;
 }

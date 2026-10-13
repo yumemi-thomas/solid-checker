@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { useInner, useLabel } from "dep-hooks";
 import { readArray } from "dep-array";
+import { readExt } from "dep-ext";
 import { readPattern } from "dep-pattern/read";
 import { readPlain } from "plain-utils";
 
@@ -39,5 +40,13 @@ export function Pattern() {
 export function ArrayExports() {
   const [name] = createSignal("a");
   const label = readArray(name);
+  return <p>{label}</p>;
+}
+
+// Positive: `./read` resolves to `read.mjs`, Vite's first extension, whose
+// `readNow` reads the accessor (review round 1 of ADR 0290, Sol).
+export function ExtensionOrder() {
+  const [name] = createSignal("a");
+  const label = readExt(name);
   return <p>{label}</p>;
 }

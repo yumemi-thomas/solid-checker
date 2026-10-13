@@ -7131,8 +7131,10 @@ fn runtime_symbol_redirects(
             ))
         })
         .collect::<Result<Vec<_>, std::io::Error>>()?;
-    symbol_redirects(facts, typescript, rows, |importer, target, _| {
-        importer.starts_with(&package_root) && target.starts_with(&package_root)
+    symbol_redirects(facts, typescript, rows, |importer, target, declaration| {
+        is_declaration_file(declaration)
+            && importer.starts_with(&package_root)
+            && target.starts_with(&package_root)
     })
 }
 
@@ -7189,6 +7191,11 @@ fn dependency_source_redirects(
     })
 }
 
+fn is_declaration_file(path: &Path) -> bool {
+    let path = path.to_string_lossy();
+    path.ends_with(".d.ts") || path.ends_with(".d.mts") || path.ends_with(".d.cts")
+}
+
 /// The redirects `rows` (importer, specifier, runtime target, all canonical)
 /// state, for the rows `admitted` accepts: each runtime-referenced value
 /// import the compiler resolved to declarations is bound to the export entity
@@ -7224,13 +7231,16 @@ fn symbol_redirects(
         // The declaration the compiler resolved this import to, which
         // `admitted` judges beside the runtime target: another installed
         // copy of the package resolves elsewhere (ADR 0284 review round 2).
+        // Or, for a relative import inside a package analyzed as source, the
+        // runtime file the compiler picked when the bundler loads another
+        // (`./read` is `read.js` to TypeScript, `read.mjs` to Vite; review
+        // round 1 of ADR 0290). `admitted` decides which kinds a caller takes.
         let declaration = graph.imports.iter().find_map(|import| {
             (import.text.as_ref() == specifier
                 && same_canonical_path(Path::new(import.specifier.path.as_ref()), &importer_path)
                 && import.included_path.is_empty()
-                && (import.resolved_path.ends_with(".d.ts")
-                    || import.resolved_path.ends_with(".d.mts")
-                    || import.resolved_path.ends_with(".d.cts")))
+                && !import.resolved_path.is_empty()
+                && !same_canonical_path(Path::new(import.resolved_path.as_ref()), &target_path))
             .then(|| PathBuf::from(import.resolved_path.as_ref()))
         });
         let Some(declaration) = declaration else {

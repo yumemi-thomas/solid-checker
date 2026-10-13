@@ -30147,3 +30147,14 @@ the review:
 - a peer dependency on `solid-js` that exists only for build tooling;
 - a null `exports` condition, which Node treats as a stop;
 - TypeScript `this` parameters in argument mapping.
+
+## Second review of ADR 0290 (2026-10-13)
+
+A proven attributed violation now needs the project call on its function's
+every-completion path. The first hop weighs every package site. Relative
+imports follow Vite's extension order, and the redirect binds them.
+Module-scope calls, after-`await` package operations and namespace imports
+are obligations now, not silently certified. Open:
+- a caller-side `await` is not on owner edges (base mode too);
+- `runWithOwner(null, f)` hops;
+- exported-object members.
