@@ -180,6 +180,8 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolName>,
     pub(crate) aliases: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// ADR 0294: typed candidates, never proven sources.
+    pub(crate) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
     pub(crate) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
@@ -269,7 +271,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     let BuildCaches {
         ast_indexes: ast_indexes_cache,
         source_discovery: source_discovery_cache,
-        typed_accessors: typed_accessor_cache,
         interprocedural_graph: interprocedural_graph_cache,
         interprocedural_results: interprocedural_result_cache,
         typescript_indexes: typescript_indexes_cache,
@@ -508,6 +509,7 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         symbol_names: &symbol_names,
         aliases,
         accessors: &source_discovery.accessors,
+        typed_sources: &source_discovery.typed_sources,
         setters: &source_discovery.setters,
         actions: &source_discovery.actions,
         prop_sources: &source_discovery.prop_sources,
@@ -534,7 +536,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
             typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
         },
         reactive_analysis::IncrementalCaches {
-            typed_accessors: typed_accessor_cache,
             interprocedural_graph: interprocedural_graph_cache,
             interprocedural_results: interprocedural_result_cache,
             late_stages: late_stage_cache.as_deref_mut().and_then(Option::as_mut),

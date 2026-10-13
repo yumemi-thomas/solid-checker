@@ -10,9 +10,12 @@ the member's property symbol is judged by its receiver.
   reads `tag.other`, neither of which can replace `label`; `FactoryKept` and
   `ArrowKept` read an object a closed project factory in `factories.ts` returns
   fresh (through its own binding used only for that return, and as an
-  expression-bodied arrow returning the literal). `External` reads an
-  interface-declared member through a receiver that is no project literal, so
-  the type-only premise is unchanged there.
+  expression-bodied arrow returning the literal). Since ADR 0294 these four
+  are proven by what the literal stores (a `createSignal` accessor), not by
+  the member's `Accessor<T>` type.
+- Uncertifiable (`App.tsx`, `SC9012`): `External` reads an interface-declared
+  member through a receiver that is no project literal. Its type is the only
+  evidence, and ADR 0294 no longer lets a type prove a reactive read.
 - Negative (`App.tsx`, silent): `relabel` (`factories.ts`) replaces `label`
   through a generic parameter, a write that names the constraint's property
   and never the literal's, so no census of the member's own symbol sees it.

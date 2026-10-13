@@ -14,8 +14,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     for (rule, count) in [
         ("reactive-write-in-owned-scope", 11),
         ("action-called-in-owned-scope", 2),
-        ("strict-read-untracked", 22),
-        ("reactive-read-after-await", 20),
+        ("strict-read-untracked", 20),
+        ("reactive-read-after-await", 19),
+        // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
+        ("reactive-dispatch-unresolved", 3),
         ("no-destructure", 1),
         ("components-return-once", 3),
         ("leaf-owner-forbidden-call", 7),
@@ -34,15 +36,27 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "effect-apply-invalid.tsx",
-            [("strict-read-untracked", 3)].as_slice(),
+            [
+                ("strict-read-untracked", 2),
+                ("reactive-dispatch-unresolved", 1),
+            ]
+            .as_slice(),
         ),
         (
             "effect-apply-extended-invalid.tsx",
-            [("strict-read-untracked", 5)].as_slice(),
+            [
+                ("strict-read-untracked", 4),
+                ("reactive-dispatch-unresolved", 1),
+            ]
+            .as_slice(),
         ),
         (
             "after-await-invalid.tsx",
-            [("reactive-read-after-await", 3)].as_slice(),
+            [
+                ("reactive-read-after-await", 2),
+                ("reactive-dispatch-unresolved", 1),
+            ]
+            .as_slice(),
         ),
         (
             "await-control-flow-invalid.tsx",

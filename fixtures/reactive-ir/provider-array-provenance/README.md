@@ -8,7 +8,8 @@ Body/eager/apply consumers read the original
 signal slots. Tracked and inert queries remain non-violating. Definition timing
 obligations are retained separately.
 TypeOnly and TypeOnlyHelper carry only a declared SourceAccessor type: neither
-may become a violation. Exact arrow identity is separate from runtime source
+may become a violation. Since ADR 0294 removed the type-only interprocedural
+summary rows, both are silent (they were uncertifiable). Exact arrow identity is separate from runtime source
 identity. Both the selected targets and the per-analysis runtime-origin set
 participate in retained result identity.
 

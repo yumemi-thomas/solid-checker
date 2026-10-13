@@ -36,9 +36,8 @@ use super::{
 };
 use crate::cache::{
     CachedInterproceduralGraph, CachedInterproceduralResultFile, CachedInterproceduralResults,
-    CachedReactiveSource, CachedTypedAccessors, InterproceduralGraphContribution,
-    InterproceduralGraphTarget, InterproceduralResultDependency,
-    InterproceduralResultDependencyState, TypedAccessorContribution, same_compiler_semantics,
+    CachedReactiveSource, InterproceduralGraphContribution, InterproceduralGraphTarget,
+    InterproceduralResultDependency, InterproceduralResultDependencyState, same_compiler_semantics,
 };
 use crate::execution_role::{
     callee_callback_timing, control_flow_execution_role, direct_callback_contains,
@@ -49,7 +48,7 @@ use crate::indexes::ComponentStatus;
 use crate::owners::{
     containing_ast_function, enclosing_function_label, enclosing_render_function,
     function_binding_name, inside_non_component_function, read_escapes_synchronous_extent,
-    solid_accessor_declaration, source_function_exported,
+    source_function_exported,
 };
 use crate::pipeline::{parallel_file_results, parallel_slice_results};
 
@@ -136,11 +135,6 @@ impl SummaryReads {
         }
         self.ordered.push(read);
         true
-    }
-
-    pub(super) fn insert(&mut self, index: usize, read: SummaryRead) {
-        self.seen.insert(Self::key(&read));
-        self.ordered.insert(index, read);
     }
 
     fn take(&mut self) -> Vec<SummaryRead> {
@@ -317,7 +311,6 @@ pub(super) struct InterproceduralTimings {
     pub(super) direct_summaries: Duration,
     pub(super) direct_index: Duration,
     pub(super) direct_references: Duration,
-    pub(super) typed_accessors: Duration,
     pub(super) propagation: Duration,
     pub(super) returned_direct: Duration,
     pub(super) returned_delta: Duration,
@@ -326,8 +319,6 @@ pub(super) struct InterproceduralTimings {
     pub(super) results_and_exports: Duration,
     pub(super) result_reads: Duration,
     pub(super) export_summaries: Duration,
-    pub(super) typed_accessor_reused_files: u64,
-    pub(super) typed_accessor_recomputed_files: u64,
     pub(super) graph_reused_files: u64,
     pub(super) graph_recomputed_files: u64,
     pub(super) result_reused_files: u64,
@@ -515,102 +506,6 @@ fn is_retained_value_position(
             .flatten()
             .any(|element| file.ast.peel_ts_sugar_span(*element) == literal)
     })
-}
-
-fn discover_typed_accessors(
-    file: &solid_facts::FileFacts,
-    nodes: &[SummaryNode],
-    nodes_by_path: &HashMap<String, Vec<usize>>,
-    project_indexes: &ProjectIndexes<'_>,
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-    lookup: &SemanticLookup<'_>,
-) -> Vec<TypedAccessorContribution> {
-    let dialect = lookup.dialect;
-    let path_entities = project_indexes.entities_for_path(file.path.as_str());
-    let mut contributions = Vec::new();
-    for call in &file.ast.calls {
-        let callee_location = location(file.path.shared(), call.callee);
-        let descriptor = path_entities
-            .iter()
-            .find(|entity| {
-                entity.location.start_byte == callee_location.start_byte
-                    && entity.location.end_byte == callee_location.end_byte
-            })
-            .and_then(|entity| entity.type_descriptor.as_ref());
-        let Some(accessor_declaration) =
-            descriptor.and_then(|descriptor| solid_accessor_declaration(descriptor, dialect))
-        else {
-            continue;
-        };
-        let Some(owner) = containing_summary_function_indexed(
-            nodes,
-            nodes_by_path,
-            file.path.as_str(),
-            call.callee,
-        ) else {
-            continue;
-        };
-        if read_escapes_synchronous_extent(file, call.callee, entities, symbol_names, dialect)
-            || runs_in_retained_value_literal(file, call.callee, &nodes[owner])
-            || runs_outside_owner_call(file, call.callee, nodes[owner].body, lookup)
-            || enclosing_render_function(file, call.callee, lookup)
-        {
-            continue;
-        }
-        let call_location = location(file.path.shared(), call.span);
-        let display = usize::try_from(call.callee.start)
-            .ok()
-            .zip(usize::try_from(call.callee.end).ok())
-            .and_then(|(start, end)| file.source.get(start..end))
-            .map(SymbolId::from)
-            .unwrap_or_else(|| "accessor".into());
-        let declaration = accessor_declaration.location.clone();
-        contributions.push(TypedAccessorContribution {
-            owner: nodes[owner].span,
-            read: SummaryRead {
-                transported: false,
-                contract_read_context: None,
-                symbol: SymbolId::from(format!(
-                    "typed:{}\0{}\0{}",
-                    call_location.path, call_location.start_byte, call_location.end_byte
-                )),
-                display,
-                kind: Some("accessor".into()),
-                declaration,
-                origin: call_location,
-                origin_context: nodes[owner].name.clone().unwrap_or_default(),
-                owner: nodes[owner].symbol.clone(),
-                local: !site_on_every_completion(lookup, file, nodes[owner].span, call.span),
-                conditional: false,
-            },
-        });
-    }
-    contributions
-}
-
-fn merge_typed_accessors(
-    path: &str,
-    contributions: &[TypedAccessorContribution],
-    indexes: &HashMap<(String, Span), usize>,
-    summaries: &mut [SummaryReads],
-) {
-    for contribution in contributions {
-        let Some(owner) = indexes
-            .get(&(path.to_string(), contribution.owner))
-            .copied()
-        else {
-            continue;
-        };
-        if summaries[owner]
-            .iter()
-            .any(|read| read.origin == contribution.read.origin)
-        {
-            continue;
-        }
-        let insertion = summaries[owner].len();
-        summaries[owner].insert(insertion, contribution.read.clone());
-    }
 }
 
 fn discover_summary_nodes(
@@ -8016,9 +7911,6 @@ pub(super) struct InterproceduralContext<'a, 'facts> {
 impl InterproceduralContext<'_, '_> {
     pub(super) fn build(
         &self,
-        typed_accessor_cache: Option<
-            &mut HashMap<solid_facts::core::SourcePath, CachedTypedAccessors>,
-        >,
         interprocedural_graph_cache: Option<
             &mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>,
         >,
@@ -8027,7 +7919,6 @@ impl InterproceduralContext<'_, '_> {
         interprocedural_reads(
             self,
             InterproceduralCaches {
-                typed_accessors: typed_accessor_cache,
                 graph: interprocedural_graph_cache,
                 results: interprocedural_result_cache,
             },
@@ -8036,7 +7927,6 @@ impl InterproceduralContext<'_, '_> {
 }
 
 struct InterproceduralCaches<'a> {
-    typed_accessors: Option<&'a mut HashMap<solid_facts::core::SourcePath, CachedTypedAccessors>>,
     graph: Option<&'a mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>>,
     results: Option<&'a mut CachedInterproceduralResults>,
 }
@@ -8066,7 +7956,6 @@ fn interprocedural_reads(
         lookup,
     } = context;
     let InterproceduralCaches {
-        typed_accessors: typed_accessor_cache,
         graph: mut interprocedural_graph_cache,
         results: mut interprocedural_result_cache,
     } = caches;
@@ -8543,61 +8432,6 @@ fn interprocedural_reads(
         }
     }
     let direct_references = direct_references_started.elapsed();
-    let typed_accessors_started = Instant::now();
-    let mut typed_accessor_reused_files = 0;
-    let mut typed_accessor_recomputed_files = 0;
-    match typed_accessor_cache {
-        None => {
-            for file in &facts.files {
-                let contributions = discover_typed_accessors(
-                    file,
-                    &nodes,
-                    &nodes_by_path,
-                    project_indexes,
-                    entities,
-                    symbol_names,
-                    lookup,
-                );
-                merge_typed_accessors(file.path.as_str(), &contributions, &indexes, &mut summaries);
-            }
-        }
-        Some(cache) => {
-            let current_paths = facts
-                .files
-                .iter()
-                .map(|file| file.path.as_str())
-                .collect::<HashSet<_>>();
-            cache.retain(|path, _| current_paths.contains(path.as_str()));
-            for file in &facts.files {
-                let contributions = if retained_source_paths.contains(file.path.as_str())
-                    && let Some(cached) = cache.get(file.path.as_str())
-                {
-                    typed_accessor_reused_files += 1;
-                    cached.contributions.clone()
-                } else {
-                    typed_accessor_recomputed_files += 1;
-                    let contributions = discover_typed_accessors(
-                        file,
-                        &nodes,
-                        &nodes_by_path,
-                        project_indexes,
-                        entities,
-                        symbol_names,
-                        lookup,
-                    );
-                    cache.insert(
-                        file.path.clone(),
-                        CachedTypedAccessors {
-                            contributions: contributions.clone(),
-                        },
-                    );
-                    contributions
-                };
-                merge_typed_accessors(file.path.as_str(), &contributions, &indexes, &mut summaries);
-            }
-        }
-    }
-    let typed_accessors = typed_accessors_started.elapsed();
     let direct_summaries = phase_started.elapsed();
     phase_started = Instant::now();
     let mut returned = vec![SummaryReads::default(); nodes.len()];
@@ -9346,7 +9180,6 @@ fn interprocedural_reads(
             direct_summaries,
             direct_index,
             direct_references,
-            typed_accessors,
             propagation,
             returned_direct,
             returned_delta,
@@ -9355,8 +9188,6 @@ fn interprocedural_reads(
             results_and_exports,
             result_reads,
             export_summaries,
-            typed_accessor_reused_files,
-            typed_accessor_recomputed_files,
             graph_reused_files,
             graph_recomputed_files,
             result_reused_files,
@@ -9584,22 +9415,6 @@ mod tests {
             reads.to_vec(),
             vec![read("sym", "name", 20), read("sym", "count", 10)]
         );
-    }
-
-    #[test]
-    fn inserting_preserves_order_and_marks_the_key() {
-        let mut reads = SummaryReads::default();
-        reads.push(read("sym", "a", 1));
-        reads.push(read("sym", "c", 3));
-        reads.insert(1, read("sym", "b", 2));
-        assert_eq!(
-            reads
-                .iter()
-                .map(|read| read.display.as_ref())
-                .collect::<Vec<_>>(),
-            ["a", "b", "c"]
-        );
-        assert!(!reads.push_unique(read("sym", "b", 2)));
     }
 
     #[test]

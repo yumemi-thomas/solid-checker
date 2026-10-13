@@ -364,6 +364,18 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                         }
                     });
                 let Some((name, _)) = symbol.and_then(|symbol| ctx.accessors.get(symbol)) else {
+                    // ADR 0294: a typed candidate's read after the await is
+                    // an obligation; its type is the only reactive evidence.
+                    if let (Some(symbol), Some((file, candidate))) = (symbol, ast_call)
+                        && typed_unknown(ctx, symbol)
+                        && reported_calls.insert((
+                            call.path.to_string(),
+                            call.start_byte,
+                            call.end_byte,
+                        ))
+                    {
+                        draft.push_defect(typed_after_await_obligation(file, candidate.callee));
+                    }
                     continue;
                 };
                 // The same source read on every run before the first
@@ -437,6 +449,18 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                             continue;
                         };
                         let Some((name, _)) = ctx.accessors.get(symbol) else {
+                            if typed_unknown(ctx, symbol)
+                                && reported_calls.insert((
+                                    file.path.to_string(),
+                                    u64::from(callback_call.callee.start),
+                                    u64::from(callback_call.callee.end),
+                                ))
+                            {
+                                draft.push_defect(typed_after_await_obligation(
+                                    file,
+                                    callback_call.callee,
+                                ));
+                            }
                             continue;
                         };
                         if tracked_before_first_suspension(ctx, &files_by_path, function, symbol) {
@@ -464,6 +488,31 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                 }
             }
         }
+    }
+}
+
+/// ADR 0294: a typed candidate whose implementation is not visible.
+fn typed_unknown(ctx: &AnalysisContext<'_>, symbol: &SymbolId) -> bool {
+    !ctx.accessors.contains_key(symbol)
+        && ctx
+            .typed_sources
+            .get(symbol)
+            .is_some_and(|typed| !typed.implementation_visible)
+}
+
+fn typed_after_await_obligation(
+    file: &solid_facts::FileFacts,
+    callee: solid_facts::core::Span,
+) -> StaticDefect {
+    StaticDefect {
+        kind: StaticDefectKind::ReactiveDispatchUnresolved {
+            callee: file.source_text(callee).unwrap_or("this value").to_owned(),
+            member: None,
+        },
+        location: location(file.path.shared(), callee),
+        analysis_context: crate::TYPE_ONLY_SOURCE.to_owned(),
+        fixes: vec![],
+        uncertain: true,
     }
 }
 

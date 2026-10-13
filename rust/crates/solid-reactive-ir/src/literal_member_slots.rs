@@ -30,16 +30,22 @@
 //! A property an object literal declares (`{ label }`, `{ label: label }`) is
 //! typed by what that literal stored, so it is kept only when every read is
 //! Closed over a literal that declares it. A property declared anywhere else
-//! keeps the type-only premise for Unknown receivers and is withheld only when
-//! a read is Escaped: there the object is provably a project literal that left
-//! the analysis's sight.
+//! is withheld only when a read is Escaped: there the object is provably a
+//! project literal that left the analysis's sight.
+//!
+//! A kept root is still not proven by its type (ADR 0294).
+//! [`LiteralMemberSlots::closed_values`] gives source discovery the property
+//! every read observes when all are Closed: a source stored there proves the
+//! root, a function literal stored there is decided by its own body, and any
+//! other root (an Unknown receiver among them) is only a typed candidate.
 
 use std::collections::HashMap;
 
 use solid_facts::{
     FileFacts, ProjectFacts,
     ast::{
-        BindingFact, BindingShape, FunctionFact, FunctionKind, IdentifierRole, RuntimeValueKind,
+        BindingFact, BindingShape, FunctionFact, FunctionKind, IdentifierRole, ObjectPropertyFact,
+        RuntimeValueKind,
     },
     core::Span,
 };
@@ -93,6 +99,103 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         let verdict = self.compute(symbol);
         self.verdicts.insert(symbol.clone(), verdict);
         verdict
+    }
+
+    /// ADR 0294: the property every read of the member `symbol` observes,
+    /// when each read is a static member Get whose receiver is Closed over
+    /// project object literals that all declare that property as an own
+    /// static data property. `None` when some read is anything else. The
+    /// type-only fallback asks this to judge what the slot holds instead of
+    /// trusting the member's type.
+    pub(crate) fn closed_values(
+        &mut self,
+        symbol: &SymbolId,
+    ) -> Option<Vec<(&'a FileFacts, &'a ObjectPropertyFact)>> {
+        let lookup = self.lookup;
+        let facts = self.facts;
+        let sites = self.sites.get_or_insert_with(|| {
+            let mut sites = HashMap::<&SymbolId, Vec<&Location>>::new();
+            for entity in facts.typescript.entities() {
+                if let Some(root) = lookup.entities().get(&entity.location) {
+                    sites.entry(root).or_default().push(&entity.location);
+                }
+            }
+            sites
+        });
+        let sites = sites.get(symbol).cloned().unwrap_or_default();
+        let declarations = lookup
+            .symbol_declarations(symbol.as_str())
+            .unwrap_or_default();
+        let mut values = Vec::new();
+        for site in sites {
+            let file = lookup.file_by_path(site.path.as_ref())?;
+            let span = Span::new(
+                u32::try_from(site.start_byte).ok()?,
+                u32::try_from(site.end_byte).ok()?,
+            );
+            // A declaring site (an object literal key, a type member) is no
+            // read.
+            if declarations.iter().any(|declaration| {
+                declaration.location.path == site.path
+                    && declaration.location.start_byte == site.start_byte
+                    && declaration.location.end_byte == site.end_byte
+            }) {
+                continue;
+            }
+            let member = file.ast.members.iter().find(|member| {
+                (member.span == span || member.property == span)
+                    && file
+                        .ast
+                        .computed_members
+                        .binary_search(&member.span)
+                        .is_err()
+            })?;
+            if member_written(file, member.span) {
+                return None;
+            }
+            let name = file.source_text(member.property)?;
+            for (literal_file, literal) in
+                self.closed_literals(file, file.ast.peel_ts_sugar_span(member.object))?
+            {
+                let property =
+                    own_properties(literal_file, literal)
+                        .into_iter()
+                        .find(|property| {
+                            !property.computed
+                                && property.data
+                                && literal_file.source_text(property.key) == Some(name)
+                        })?;
+                values.push((literal_file, property));
+            }
+        }
+        Some(values)
+    }
+
+    /// The project object literals a Closed receiver holds, or `None` when
+    /// the receiver is not Closed.
+    fn closed_literals(
+        &self,
+        file: &'a FileFacts,
+        receiver: Span,
+    ) -> Option<Vec<(&'a FileFacts, Span)>> {
+        let binding = const_binding_at(file, receiver)?;
+        let initializer = file.ast.peel_ts_sugar_span(binding.initializer?);
+        if !binding_closed(file, binding, None) {
+            return None;
+        }
+        if binding.initializer_value_kind == RuntimeValueKind::Object {
+            return literal_is_closed(file, initializer, None).then(|| vec![(file, initializer)]);
+        }
+        let (factory_file, factory) = self.factory(file, initializer)?;
+        if factory_returns_literal(factory_file, factory, None) != Receiver::Closed {
+            return None;
+        }
+        returned_literals(factory_file, factory).map(|literals| {
+            literals
+                .into_iter()
+                .map(|literal| (factory_file, literal))
+                .collect()
+        })
     }
 
     fn compute(&mut self, symbol: &SymbolId) -> bool {
@@ -324,6 +427,59 @@ fn factory_returns_literal(
         }
     }
     held
+}
+
+/// The object literal every completion of `factory` returns, written in the
+/// return or through its own `const` binding, once
+/// [`factory_returns_literal`] answered Closed.
+fn returned_literals(file: &FileFacts, factory: &FunctionFact) -> Option<Vec<Span>> {
+    let returns = factory.expression_return.as_ref().map_or_else(
+        || {
+            file.ast
+                .returns
+                .iter()
+                .filter(|returned| {
+                    containing_ast_function(&file.ast, returned.span)
+                        .is_some_and(|owner| owner.span == factory.span)
+                })
+                .collect::<Vec<_>>()
+        },
+        |returned| vec![returned],
+    );
+    returns
+        .into_iter()
+        .map(|returned| {
+            let argument = file.ast.peel_ts_sugar_span(returned.argument?);
+            if returned.runtime_value_kind == RuntimeValueKind::Object {
+                return Some(argument);
+            }
+            let binding = const_binding_at(file, argument)?;
+            binding
+                .initializer
+                .map(|initializer| file.ast.peel_ts_sugar_span(initializer))
+        })
+        .collect()
+}
+
+/// The object literal's own properties: those inside it that no other
+/// property inside it holds in its key or value.
+fn own_properties(file: &FileFacts, literal: Span) -> Vec<&ObjectPropertyFact> {
+    let inside = file
+        .ast
+        .object_properties
+        .iter()
+        .filter(|property| literal.contains(property.span))
+        .collect::<Vec<_>>();
+    inside
+        .iter()
+        .filter(|property| {
+            !inside.iter().any(|other| {
+                other.span != property.span
+                    && (other.value.contains(property.span) || other.key.contains(property.span))
+            })
+        })
+        .copied()
+        .collect()
 }
 
 /// The unwritten `const` identifier binding the exact identifier reference at

@@ -30231,3 +30231,33 @@ uncertifiable −2 in each mode (derp-media-server). Open:
 - an undecided key read through a helper is now silent, not uncertifiable;
 - rc.3 warns for `then`, but every vocabulary withholds it;
 - `no-destructure`, store spreads and after-await store reads are unchanged.
+
+## A type is not a reactive source (2026-10-14, ADR 0294)
+
+`Accessor<T>` is `() => T`, but three paths made a value typed with it a
+proven source: source discovery's type-only fallback, the effect-apply
+descriptor shortcut, and the type-only interprocedural summary stage. With an
+ambient stub byte-faithful to `signals.d.ts:55`, `() => "h"` typed
+`Accessor<string>` was a proven `SC1001` (nine shapes in the research
+probe). Now the value a typed binding or member holds decides:
+- a source it provably holds (a `const` alias, a closed literal member, an
+  exact factory's tuple slot) is a proven root;
+- a literal it holds is decided by its own body;
+- anything else is a typed candidate, and its read in a reporting role is an
+  `SC9012` obligation.
+
+The summary stage is removed. Fixture `reactive-ir/typed-accessor-roots`
+(8 silent, 3 violations, 5 obligations). Five snapshots moved: four
+exported-`install` `Accessor` parameters and ADR 0286's `External` went from
+violation to `SC9012`, and three uncertifiable type-only rows are gone.
+Corpus unchanged (562/3,735 base, 560/3,286 dependency mode, identical rows).
+Open:
+- class fields, destructured parameters and imported receivers are not
+  judged, so a plain function there is an obligation;
+- a visible arrow that reads a signal is silent where the analysis does not
+  follow the call into it (a member holding an arrow);
+- a typed callee inside a helper is silent at its callers, not an obligation;
+- `Setter`/`StoreSetter` type roles still feed write rules from the type;
+- against published rc.13 the fallback is not reached at all (no alias
+  origin module), so `const get: Accessor<number> = count; get()` is silent
+  there.

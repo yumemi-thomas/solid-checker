@@ -256,10 +256,12 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
             "reactive-write-in-owned-scope",
         ),
         ("owned-reexport-action.tsx", "action-called-in-owned-scope"),
-        ("effect-apply-parameter.tsx", "strict-read-untracked"),
-        ("effect-apply-member.tsx", "strict-read-untracked"),
-        ("after-await-member.tsx", "reactive-read-after-await"),
-        ("after-await-parameter.tsx", "reactive-read-after-await"),
+        // ADR 0294: an exported function's `Accessor<T>` parameter is a
+        // typed candidate, so its reads are obligations, not violations.
+        ("effect-apply-parameter.tsx", "reactive-dispatch-unresolved"),
+        ("effect-apply-member.tsx", "reactive-dispatch-unresolved"),
+        ("after-await-member.tsx", "reactive-dispatch-unresolved"),
+        ("after-await-parameter.tsx", "reactive-dispatch-unresolved"),
         ("after-await-namespace.tsx", "reactive-read-after-await"),
         (
             "after-await-callback-before-read.tsx",
@@ -550,7 +552,6 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
         "initial incremental fragments must match the fresh builder"
     );
     assert_eq!(incremental_timings.source_discovery_recomputed_files, 2);
-    assert_eq!(incremental_timings.typed_accessor_recomputed_files, 2);
     let findings = selected.solve(&program);
     assert_eq!(findings.len(), 1, "findings = {findings:#?}");
     // Catalog-relative name: unprefixed in 2.0, `v1/`-prefixed in a
@@ -656,10 +657,6 @@ fn incremental_reactive_ir_matches_fresh_after_an_edit() {
     );
     assert_eq!(
         timings.source_discovery_reused_files + timings.source_discovery_recomputed_files,
-        u64::try_from(edited.files.len()).unwrap()
-    );
-    assert_eq!(
-        timings.typed_accessor_reused_files + timings.typed_accessor_recomputed_files,
         u64::try_from(edited.files.len()).unwrap()
     );
     assert_eq!(

@@ -584,6 +584,14 @@ pub const DEPENDENCY_SOURCE_GETTER: &str = "dependency-source-getter:";
 /// Get's text. Producer: `local_access.rs`; consumer: `projection.rs`.
 pub const STORE_KEY_UNDECIDED: &str = "store-key-undecided:";
 
+/// ADR 0294: the `analysis_context` of a dispatch obligation at a call or
+/// Get, in a role that reports an untracked read, of a value whose only
+/// evidence of being a reactive source is a dialect type alias
+/// (`Accessor<T>`, `Store<T>`) and whose implementation is not visible.
+/// Its `callee` is the read's text. Producers: `local_access.rs`,
+/// `static_rules.rs`; consumer: `projection.rs`.
+pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticDefect {
@@ -2290,8 +2298,6 @@ pub struct BuildTimings {
     pub reused: bool,
     pub source_discovery_reused_files: u64,
     pub source_discovery_recomputed_files: u64,
-    pub typed_accessor_reused_files: u64,
-    pub typed_accessor_recomputed_files: u64,
     pub interprocedural_graph_reused_files: u64,
     pub interprocedural_graph_recomputed_files: u64,
     pub interprocedural_result_reused_files: u64,
@@ -2326,7 +2332,6 @@ pub struct BuildTimings {
     pub interprocedural_direct_summaries: Duration,
     pub interprocedural_direct_index: Duration,
     pub interprocedural_direct_references: Duration,
-    pub interprocedural_typed_accessors: Duration,
     pub interprocedural_propagation: Duration,
     pub interprocedural_returned_direct: Duration,
     pub interprocedural_returned_delta: Duration,
@@ -4126,7 +4131,7 @@ mod tests {
     }
 
     #[test]
-    fn summary_membership_keeps_first_writer_and_ordered_insertions() {
+    fn summary_membership_keeps_first_writer() {
         let mut reads = SummaryReads::default();
         let first = summary_read("first", "signal", 1);
         let mut duplicate = first.clone();
@@ -4136,13 +4141,11 @@ mod tests {
 
         assert!(reads.push_unique(first));
         assert!(!reads.push_unique(duplicate));
-        reads.insert(0, summary_read("typed", "typed accessor", 2));
 
-        assert_eq!(reads.len(), 2);
-        assert_eq!(reads[0].symbol, "typed");
-        assert_eq!(reads[1].symbol, "first");
-        assert_eq!(reads[1].kind.as_deref(), Some("accessor"));
-        assert_eq!(reads[1].origin_context, "first");
+        assert_eq!(reads.len(), 1);
+        assert_eq!(reads[0].symbol, "first");
+        assert_eq!(reads[0].kind.as_deref(), Some("accessor"));
+        assert_eq!(reads[0].origin_context, "first");
     }
 
     #[test]

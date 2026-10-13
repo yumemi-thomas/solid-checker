@@ -247,6 +247,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Read the member inside JSX, a createMemo, or an effect's compute function, or use a known string key solid-checker can decide (ADR 0293).".into(),
             )
         }
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::TYPE_ONLY_SOURCE => (
+            format!(
+                "{callee} runs where a reactive read would not be tracked, but its only evidence of reading reactive state is its declared type, a Solid source alias that a plain function or object also satisfies; no implementation, contract or source flow proves what it reads, so whether this is an untracked reactive read can be neither proven nor ruled out"
+            ),
+            "Read it inside JSX, a createMemo, or an effect's compute function, or make its source visible to solid-checker: create it with a Solid primitive in the project, or pass one through a path the analysis follows (ADR 0294).".into(),
+        ),
         StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (
             if let Some(member) = member {
                 format!(

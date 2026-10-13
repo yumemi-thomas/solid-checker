@@ -337,16 +337,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
-      "start": 1203,
-      "end": 1209,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
       "start": 1910,
       "end": 1918,
       "fixes": 0

@@ -9,8 +9,7 @@ use crate::owners::{
     LoadingCover, analysis_context, async_read_role, containing_ast_function,
     containing_leaf_owner, counts_as_strict_read_root, enclosing_render_function,
     function_binding_name, inside_known_value_function_argument, inside_non_component_function,
-    inside_unclassified_callback, read_loading_cover, solid_accessor_declaration,
-    typed_accessor_descriptor_at,
+    inside_unclassified_callback, read_loading_cover, typed_accessor_descriptor_at,
 };
 use crate::pipeline::parallel_file_chunk_results;
 use crate::source_discovery::{AsyncSourceOptions, PropUse, PropsReactivityIndex};
@@ -106,6 +105,9 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// ADR 0294: typed candidates. A read of one whose implementation is not
+    /// visible is an obligation, never a read.
+    pub(crate) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
     pub(crate) accessor_origins: &'a HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
     pub(crate) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
@@ -438,6 +440,7 @@ impl LocalAccessContext<'_, '_> {
     pub(crate) fn symbol_state(&self, symbol: &str) -> LocalAccessSymbolState {
         LocalAccessSymbolState {
             accessor: self.accessors.get(symbol).cloned(),
+            typed_source: self.typed_sources.get(symbol).cloned(),
             accessor_origin: self.accessor_origins.get(symbol).cloned(),
             setter: self.setters.get(symbol).cloned(),
             action: self.actions.get(symbol).cloned(),
@@ -1800,6 +1803,13 @@ impl LocalAccessContext<'_, '_> {
             } else {
                 execution
             };
+            // ADR 0294: a typed candidate whose implementation is not visible
+            // is located like an accessor read and reported as an obligation.
+            let typed_unknown = !self.accessors.contains_key(symbol)
+                && self
+                    .typed_sources
+                    .get(symbol)
+                    .is_some_and(|typed| !typed.implementation_visible);
             let typed_effect_accessor = execution == ExecutionRole::EffectApply
                 && call.arguments.is_empty()
                 && !crate::callback_return::binding_is_callback_result(
@@ -1811,7 +1821,7 @@ impl LocalAccessContext<'_, '_> {
                     .is_some();
             let Some(multiplicity) = self.reachable_calls.get(&callee).copied().or_else(|| {
                 (typed_effect_accessor
-                    || (self.accessors.contains_key(symbol)
+                    || ((self.accessors.contains_key(symbol) || typed_unknown)
                         && (execution == ExecutionRole::EffectApply
                             || control_flow_execution_role(
                                 file,
@@ -1942,7 +1952,28 @@ impl LocalAccessContext<'_, '_> {
                     }));
                 }
             }
+            // ADR 0294: a typed candidate read where an accessor read would be
+            // reported. Its type is the only evidence that it reads reactive
+            // state, so this is an obligation, never a read.
+            if typed_unknown
+                && execution.reports_untracked_read()
+                && (!inside_non_component_function(file, call.callee, self.lookup)
+                    || named_callback_execution_role(file, call.callee, self.lookup).is_some())
+                && seen.insert(key.clone())
+            {
+                result
+                    .dispatch_obligations
+                    .push(typed_source_obligation(file, call.callee));
+            }
+            // The effect-apply shortcut: a no-argument call whose callee Type
+            // Facts types as the Accessor alias, with no symbol entry. The
+            // same premise as above, so the same obligation, unless the
+            // callee's own implementation is visible.
             if !self.accessors.contains_key(symbol)
+                && !self
+                    .typed_sources
+                    .get(symbol)
+                    .is_some_and(|typed| typed.implementation_visible)
                 && execution == ExecutionRole::EffectApply
                 && call.arguments.is_empty()
                 && !crate::callback_return::binding_is_callback_result(
@@ -1950,52 +1981,13 @@ impl LocalAccessContext<'_, '_> {
                     file,
                     call.callee,
                 )
-                && let Some(descriptor) =
-                    typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee)
+                && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee)
+                    .is_some()
                 && seen.insert(key.clone())
             {
-                let display = usize::try_from(call.callee.start)
-                    .ok()
-                    .zip(usize::try_from(call.callee.end).ok())
-                    .and_then(|(start, end)| file.source.get(start..end))
-                    .unwrap_or("accessor")
-                    .to_string();
-                let declaration = solid_accessor_declaration(descriptor, self.lookup.dialect)
-                    .map_or_else(
-                        || callee.clone(),
-                        |declaration| declaration.location.clone(),
-                    );
-                result.reads.push(Arc::new(ReactiveRead {
-                    package_internal: false,
-                    summary_attributed: false,
-                    transported: false,
-                    kind: "accessor".into(),
-                    accessor: display.into(),
-                    location: location(file.path.shared(), call.span),
-                    declaration,
-                    execution,
-                    context: read_analysis_context(file, call.span, execution, self.lookup).into(),
-                    via: Arc::from(""),
-                    origin: None,
-                    origin_context: Arc::from(""),
-                    uncertain: self.lookup.inside_possible_component(file, call.span),
-                    missing_jsx_census: missing_jsx_census(file, call.span, execution),
-                    host_callback_timing: host_callback_timing(
-                        file,
-                        call.span,
-                        execution,
-                        self.lookup,
-                    ),
-                    project_consumer_non_strict: false,
-                    callback_invocation_unproven: false,
-                    callee_callback_timing: callee_callback_timing(
-                        file,
-                        call.span,
-                        execution,
-                        self.lookup,
-                    ),
-                }));
-                result.strict_read_obligations += 1;
+                result
+                    .dispatch_obligations
+                    .push(typed_source_obligation(file, call.callee));
             }
             if let Some(contracted) = self.contract_reads.get(symbol)
                 && !inside_non_component_function(file, call.callee, self.lookup)
@@ -2340,6 +2332,24 @@ impl LocalAccessContext<'_, '_> {
                     ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
                 );
             if helper.is_none() && gate_refuses {
+                continue;
+            }
+            // ADR 0294: a Get of a typed store candidate. `Store<T>` is `T`,
+            // so the type says nothing about a proxy.
+            if !self.accessors.contains_key(symbol)
+                && !self.prop_sources.contains_key(symbol)
+                && let Some(typed) = self.typed_sources.get(symbol)
+                && typed.kind == ReactiveSourceKind::Store
+            {
+                let key = (object.path.clone(), object.start_byte, object.end_byte);
+                if !typed.implementation_visible
+                    && execution.reports_untracked_read()
+                    && seen.insert(key)
+                {
+                    result
+                        .dispatch_obligations
+                        .push(typed_source_obligation(file, member.span));
+                }
                 continue;
             }
             let source = if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
@@ -2975,6 +2985,23 @@ pub(crate) fn callback_result_literal_is_tracked(
             && use_.operation.owner.capabilities.child_owners == CapabilityKnowledge::Allowed
             && (!guaranteed || exact_at_call(&use_.operation))
     })
+}
+
+/// ADR 0294: the obligation at a read whose only reactive evidence is a type.
+fn typed_source_obligation(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> crate::StaticDefect {
+    crate::StaticDefect {
+        kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+            callee: file.source_text(span).unwrap_or("this value").to_owned(),
+            member: None,
+        },
+        location: location(file.path.shared(), span),
+        analysis_context: crate::TYPE_ONLY_SOURCE.to_owned(),
+        fixes: vec![],
+        uncertain: true,
+    }
 }
 
 /// What a store member chain's strict-read warning is (ADR 0293).

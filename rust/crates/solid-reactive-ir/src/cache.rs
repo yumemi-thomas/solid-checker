@@ -65,7 +65,6 @@ struct SourceDiscoveryDomain {
 pub(crate) struct IncrementalCacheState {
     ast_indexes: HashMap<SourcePath, CachedAstFileIndex>,
     source_discovery: HashMap<SourcePath, CachedSourceDiscovery>,
-    typed_accessors: HashMap<SourcePath, CachedTypedAccessors>,
     interprocedural_graph: HashMap<SourcePath, CachedInterproceduralGraph>,
     interprocedural_results: CachedInterproceduralResults,
     typescript_indexes: Option<CachedTypeScriptIndexes>,
@@ -78,7 +77,6 @@ pub(crate) struct IncrementalCacheState {
 pub(crate) struct BuildCaches<'a> {
     pub(crate) ast_indexes: Option<&'a mut HashMap<SourcePath, CachedAstFileIndex>>,
     pub(crate) source_discovery: Option<&'a mut HashMap<SourcePath, CachedSourceDiscovery>>,
-    pub(crate) typed_accessors: Option<&'a mut HashMap<SourcePath, CachedTypedAccessors>>,
     pub(crate) interprocedural_graph:
         Option<&'a mut HashMap<SourcePath, CachedInterproceduralGraph>>,
     pub(crate) interprocedural_results: Option<&'a mut CachedInterproceduralResults>,
@@ -113,7 +111,6 @@ impl IncrementalCacheState {
         BuildCaches {
             ast_indexes: Some(&mut self.ast_indexes),
             source_discovery: Some(&mut self.source_discovery),
-            typed_accessors: Some(&mut self.typed_accessors),
             interprocedural_graph: Some(&mut self.interprocedural_graph),
             interprocedural_results: Some(&mut self.interprocedural_results),
             typescript_indexes: Some(&mut self.typescript_indexes),
@@ -138,7 +135,6 @@ impl IncrementalCacheState {
         if retention == CacheRetention::Compact {
             self.ast_indexes.clear();
             self.source_discovery.clear();
-            self.typed_accessors.clear();
             self.late_stages = None;
         }
     }
@@ -146,7 +142,6 @@ impl IncrementalCacheState {
     fn clear_derived(&mut self) {
         self.ast_indexes.clear();
         self.source_discovery.clear();
-        self.typed_accessors.clear();
         self.interprocedural_graph.clear();
         self.interprocedural_results = CachedInterproceduralResults::default();
         self.typescript_indexes = None;
@@ -188,16 +183,6 @@ pub(crate) struct CachedSourceDiscovery {
     /// unchanged caller types alone cannot retain a callee's return identity.
     pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
     pub(crate) contribution: SourceDiscoveryContribution,
-}
-
-#[derive(Clone)]
-pub(crate) struct TypedAccessorContribution {
-    pub(crate) owner: Span,
-    pub(crate) read: SummaryRead,
-}
-
-pub(crate) struct CachedTypedAccessors {
-    pub(crate) contributions: Vec<TypedAccessorContribution>,
 }
 
 #[derive(Clone)]
@@ -573,6 +558,7 @@ pub(crate) struct LocalAccessBuild {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct LocalAccessSymbolState {
     pub(crate) accessor: Option<(SymbolId, Location)>,
+    pub(crate) typed_source: Option<crate::source_discovery::TypedSource>,
     pub(crate) accessor_origin: Option<(SymbolId, SymbolId, Location)>,
     pub(crate) setter: Option<(SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) action: Option<(SymbolId, Location)>,

@@ -14,9 +14,8 @@ use solid_facts::core::SourcePath;
 use typefacts::Declaration;
 
 use crate::cache::{
-    CachedInterproceduralGraph, CachedInterproceduralResults, CachedLateStages,
-    CachedTypedAccessors, LocalAccessResult, PARALLEL_INDEX_FILE_THRESHOLD, ReusePlan,
-    SourceDiscoveryTypeScriptDelta,
+    CachedInterproceduralGraph, CachedInterproceduralResults, CachedLateStages, LocalAccessResult,
+    PARALLEL_INDEX_FILE_THRESHOLD, ReusePlan, SourceDiscoveryTypeScriptDelta,
 };
 use crate::indexes::ProjectIndexes;
 use crate::interproc::{InterproceduralContext, InterproceduralTimings};
@@ -33,7 +32,6 @@ use crate::upstream_compat;
 use crate::{BuildTimings, ReactiveRead};
 
 pub(crate) struct IncrementalCaches<'a> {
-    pub(crate) typed_accessors: Option<&'a mut HashMap<SourcePath, CachedTypedAccessors>>,
     pub(crate) interprocedural_graph:
         Option<&'a mut HashMap<SourcePath, CachedInterproceduralGraph>>,
     pub(crate) interprocedural_results: Option<&'a mut CachedInterproceduralResults>,
@@ -70,6 +68,7 @@ pub(crate) fn collect_project<'facts>(
         symbol_names: ctx.symbol_names,
         reachable_calls: ctx.reachable_calls,
         accessors: ctx.accessors,
+        typed_sources: ctx.typed_sources,
         accessor_origins: &source.accessor_origins,
         setters: &source.setters,
         actions: &source.actions,
@@ -172,11 +171,8 @@ pub(crate) fn collect_project<'facts>(
                 let interprocedural = scope.spawn(move || {
                     let _worker_limit = AnalysisWorkerLimit::enter(worker_limit);
                     let started = Instant::now();
-                    let result = interprocedural_context.build(
-                        caches.typed_accessors,
-                        caches.interprocedural_graph,
-                        caches.interprocedural_results,
-                    );
+                    let result = interprocedural_context
+                        .build(caches.interprocedural_graph, caches.interprocedural_results);
                     (result, started.elapsed())
                 });
                 let local_worker_limit = AnalysisWorkerLimit::enter(worker_limit);
@@ -199,11 +195,8 @@ pub(crate) fn collect_project<'facts>(
                 let local_access = run_local_access();
                 let local_elapsed = started.elapsed();
                 let started = Instant::now();
-                let interprocedural = interprocedural_context.build(
-                    caches.typed_accessors,
-                    caches.interprocedural_graph,
-                    caches.interprocedural_results,
-                );
+                let interprocedural = interprocedural_context
+                    .build(caches.interprocedural_graph, caches.interprocedural_results);
                 (
                     local_access,
                     interprocedural,
