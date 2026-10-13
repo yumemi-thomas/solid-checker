@@ -496,6 +496,19 @@
    "misuse": "import { createEffect, createSignal } from \"solid-js\";\nfunction IconPicker(props: { projectId: string }) {\n  const [picking] = createSignal(true);\n  const [answer, setAnswer] = createSignal(\"\");\n  const readTree = (projectId: string, path: string) => Promise.resolve(projectId + path);\n  const browse = (path: string): void => {\n    void readTree(props.projectId, path).then((value) => { setAnswer(value); });\n  };\n  createEffect(() => picking(), (open) => { if (open) browse(\"\"); });\n  return <p>{answer()}</p>;\n}\nexport default function App() {\n  const [projectId] = createSignal(\"project\");\n  const getProjectId = () => projectId();\n  return <IconPicker projectId={getProjectId()} />;\n}\n",
    "correct": "import { createEffect, createSignal, untrack } from \"solid-js\";\nfunction IconPicker(props: { projectId: string }) {\n  const [picking] = createSignal(true);\n  const [answer, setAnswer] = createSignal(\"\");\n  const readTree = (projectId: string, path: string) => Promise.resolve(projectId + path);\n  const browse = (path: string): void => {\n    void readTree(props.projectId, path).then((value) => { setAnswer(value); });\n  };\n  createEffect(() => picking(), (open) => { if (open) untrack(() => browse(\"\")); });\n  return <p>{answer()}</p>;\n}\nexport default function App() {\n  const [projectId] = createSignal(\"project\");\n  const getProjectId = () => projectId();\n  return <IconPicker projectId={getProjectId()} />;\n}\n",
    "install": "error-menu-web/web"
+  },
+  {
+   "id": "probus-virtual-helper-forwarded-later-getter",
+   "package": "@tanstack/virtual-core",
+   "version": "3.17.8",
+   "entrypoint": ".",
+   "export": "Virtualizer",
+   "class": "app-pattern",
+   "rule": "strict-read-untracked",
+   "why": "App install: probus-hk. A local helper hands its options parameter straight to the Virtualizer constructor, as VirtualRows' createCustomVirtualizer does; setOptions then evaluates every option getter, including scrollMargin after the count getter, on the caller's stack (ADR 0274). The correct twin constructs inside untrack. Expected misuse diagnostic: STRICT_READ_UNTRACKED at case.tsx; correct: no authored dev diagnostic.",
+   "misuse": "import { createEffect, createSignal, untrack } from \"solid-js\";\nimport { Virtualizer, elementScroll, observeElementOffset, observeElementRect, type VirtualizerOptions } from \"@tanstack/virtual-core\";\n\nfunction createListVirtualizer(options: VirtualizerOptions<HTMLDivElement, HTMLDivElement>) {\n  const instance = new Virtualizer(options);\n  return instance;\n}\n\nexport default function App() {\n  const [rows] = createSignal(3);\n  const [margin] = createSignal(12);\n  const instance = createListVirtualizer({\n    get count() { return rows(); },\n    getScrollElement: () => null,\n    estimateSize: () => 44,\n    get scrollMargin() { return margin(); },\n    scrollToFn: elementScroll,\n    observeElementOffset,\n    observeElementRect,\n  });\n  return <p>{instance.options.scrollMargin}</p>;\n}\n",
+   "correct": "import { createEffect, createSignal, untrack } from \"solid-js\";\nimport { Virtualizer, elementScroll, observeElementOffset, observeElementRect, type VirtualizerOptions } from \"@tanstack/virtual-core\";\n\nfunction createListVirtualizer(options: VirtualizerOptions<HTMLDivElement, HTMLDivElement>) {\n  const instance = new Virtualizer(options);\n  return instance;\n}\n\nexport default function App() {\n  const [rows] = createSignal(3);\n  const [margin] = createSignal(12);\n  const instance = untrack(() => createListVirtualizer({\n      get count() { return rows(); },\n      getScrollElement: () => null,\n      estimateSize: () => 44,\n      get scrollMargin() { return margin(); },\n      scrollToFn: elementScroll,\n      observeElementOffset,\n      observeElementRect,\n    }));\n  return <p>{instance.options.scrollMargin}</p>;\n}\n",
+   "install": "probus-hk"
   }
  ]
 }

@@ -29708,3 +29708,16 @@ applications (`"private": true`), because an open program closes no context
 census. No
 package names, Accessor types, generic callback dispatch, synthetic functions,
 borrowed execution roles or obligation suppression are admitted.
+
+### Option getters through a forwarding helper (2026-10-13, ADR 0274)
+
+ADR 0225's value-copy proof now follows a local helper that hands its exact,
+untouched parameter to the package constructor in straight-line flow, and
+guarantees every getter of a hazard-free prefix under the statically-present-
+code premise. Corpus: +5 violations at probus-hk `VirtualRows.tsx:81`, 0
+removed. Runtime-confirmed with the installed rc.13 development runtime.
+Remaining: ai-memory-ui's `merge`-forwarded options, table-core 9.2.4 (no
+identity), virtual-core 3.17.10/3.17.11 (no identity), and a getter that
+mentions `this` (later getters stay possible). The getter declarations keep
+their callback-consumer obligation beside the call-site violation, as in the
+direct case.

@@ -1,6 +1,8 @@
 //! Instantiate value Gets at a package call, never on a getter declaration.
 //! The first slice admits fresh closed literals and one non-escaped const
-//! binding. Spreads, aliases and later accessor prefixes remain obligations.
+//! binding. Spreads and aliases remain obligations. ADR 0274 adds a local
+//! helper that forwards its exact parameter to the package call, and every
+//! getter a hazard-free prefix reaches.
 
 use super::*;
 use solid_facts::ast::{BindingShape, ObjectGetShapeFact};
@@ -147,7 +149,7 @@ pub(super) fn reads(
     let Some(shape) = receiver(&context.file.ast, context.call, context.callback.parameter) else {
         return (reads, obligation(&context), dependencies);
     };
-    let mut preceding_getters = 0;
+    let mut preceding_mutation_hazards = 0;
     let mut unresolved = false;
     for property in &shape.properties {
         let Some(getter_span) = property.getter else {
@@ -157,9 +159,8 @@ pub(super) fn reads(
         let occurrence_guaranteed = crate::contract_semantics::enumeration_get_is_guaranteed(
             context.callback.protocol,
             true,
-            preceding_getters,
+            preceding_mutation_hazards,
         );
-        preceding_getters += 1;
         let Some(getter) = context
             .file
             .ast
@@ -168,8 +169,20 @@ pub(super) fn reads(
             .find(|function| function.span == getter_span)
         else {
             unresolved = true;
+            preceding_mutation_hazards += 1;
             continue;
         };
+        // The receiver is a fresh unaliased literal, so a getter can reach it
+        // only through `this`: deleting a later key or replacing its
+        // descriptor. Any `this` token refuses the later getters; a false
+        // match only withholds.
+        if context
+            .file
+            .source_text(getter.body)
+            .is_none_or(mentions_this)
+        {
+            preceding_mutation_hazards += 1;
+        }
         for call in context.file.ast.calls.iter().filter(|call| {
             crate::owners::written_directly_in(&context.file.ast, getter, call.span)
                 && getter.body.contains(call.span)
@@ -200,7 +213,10 @@ pub(super) fn reads(
                 continue;
             };
             dependencies.insert(InterproceduralResultDependency::Symbol(symbol.clone()));
-            let guaranteed = occurrence_guaranteed && property.entry_call == Some(call.span);
+            // A read written directly in a reached getter body executes under
+            // the statically-present-code premise; `entry_call` is no longer
+            // the only guaranteed read.
+            let guaranteed = occurrence_guaranteed;
             reads.push(ReactiveRead {
                 kind: "accessor".into(),
                 accessor: display.to_string().into(),
@@ -249,6 +265,134 @@ pub(super) fn reads(
         unresolved.then(|| obligation(&context)).flatten(),
         dependencies,
     )
+}
+
+/// ADR 0274: the value-enumeration rows a local helper forwards, keyed by the
+/// helper's own parameter.
+///
+/// The helper's body must call the package unconditionally and directly (no
+/// nested function, no optional chain), passing that parameter itself as the
+/// enumerated argument. Nothing may reference the parameter before that call:
+/// no earlier Get, descriptor change, alias or escape can run first. The
+/// parameter is a plain, unwritten, default-less identifier. A synchronous
+/// helper that is not a generator then performs the package copy on its
+/// caller's stack, before it returns.
+fn helper_forwards(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<ContractCallback> {
+    if function.r#async || function.generator || !lookup.function_value_is_current(file, function) {
+        return Vec::new();
+    }
+    let mut forwarded = Vec::new();
+    for inner in file
+        .ast
+        .calls
+        .iter()
+        .filter(|inner| unconditional_in(&file.ast, function, inner))
+    {
+        let Some(symbol) = lookup.callee_symbol(file, inner.callee) else {
+            continue;
+        };
+        for callback in lookup.value_enumeration_callbacks(symbol) {
+            if let Some(index) = forwarded_parameter(file, function, inner, callback.parameter) {
+                let mut callback = callback.clone();
+                callback.parameter = index;
+                forwarded.push(callback);
+            }
+        }
+    }
+    forwarded
+}
+
+/// Whether `inner` is written directly in `function`'s straight-line flow.
+fn unconditional_in(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+    inner: &solid_facts::ast::CallFact,
+) -> bool {
+    function.body.contains(inner.span)
+        && crate::owners::written_directly_in(ast, function, inner.span)
+        && if inner.construct {
+            ast.straight_line_constructs.contains(&inner.span)
+        } else {
+            ast.straight_line_calls.contains(&inner.span)
+        }
+}
+
+/// The index of `function`'s parameter that `inner` receives, untouched, at
+/// `argument`: a plain, unwritten, default-less identifier parameter that
+/// nothing references before that call.
+fn forwarded_parameter(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    inner: &solid_facts::ast::CallFact,
+    argument: usize,
+) -> Option<usize> {
+    let ast = &file.ast;
+    if inner.arguments.iter().take(argument + 1).any(|a| a.spread) {
+        return None;
+    }
+    let passed = ast.peel_ts_sugar_span(inner.arguments.get(argument)?.span);
+    let declaration = ast.reference_declaration(passed)?;
+    let index = function.parameters.iter().position(|parameter| {
+        parameter.shape == BindingShape::Identifier
+            && parameter.names.len() == 1
+            && parameter.names[0].span == declaration
+            && parameter.initializer.is_none()
+    })?;
+    let touched_before = ast.reference_declarations.iter().any(|(reference, bound)| {
+        *bound == declaration && *reference != passed && reference.start < inner.span.end
+    });
+    (!touched_before && !crate::indexes::binding_written(file, declaration)).then_some(index)
+}
+
+/// The value-enumeration rows a call of a local helper performs (ADR 0274).
+/// Empty unless the callee resolves to exactly one current project function.
+pub(super) fn forwarded_enumerations(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<ContractCallback> {
+    if call.construct {
+        return Vec::new();
+    }
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let Some((helper_file, helper)) = lookup.function_called_at(file.path.as_str(), callee) else {
+        return Vec::new();
+    };
+    helper_forwards(helper_file, helper, lookup)
+        .into_iter()
+        .filter(|callback| {
+            !call
+                .arguments
+                .iter()
+                .take(callback.parameter + 1)
+                .any(|argument| argument.spread)
+        })
+        .collect()
+}
+
+/// Whether `file` holds a helper that forwards an enumeration. A caller's
+/// result depends on that helper's syntax beyond its read summary.
+pub(super) fn forwards_enumeration(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .functions
+        .iter()
+        .any(|function| !helper_forwards(file, function, lookup).is_empty())
+}
+
+/// Whether `text` contains the `this` keyword as a token.
+fn mentions_this(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
+    text.match_indices("this").any(|(at, _)| {
+        (at == 0 || !ident(bytes[at - 1])) && bytes.get(at + 4).is_none_or(|b| !ident(*b))
+    })
 }
 
 #[cfg(test)]
@@ -322,6 +466,85 @@ mod tests {
                 .unwrap();
             assert_eq!(receiver(&ast, call, 0).is_some(), expected, "{source}");
         }
+    }
+
+    fn file(source: &str) -> solid_facts::FileFacts {
+        use solid_facts::core::{Generation, SourceHash, SourcePath};
+        let ast = solid_facts::ast::extract("helper.ts", source).unwrap();
+        solid_facts::FileFacts {
+            generation: Generation::new(1).unwrap(),
+            path: SourcePath::new("helper.ts").unwrap(),
+            source_hash: SourceHash::of(source),
+            source: std::sync::Arc::from(source),
+            ast: std::sync::Arc::new(ast),
+            compiler: std::sync::Arc::new(solid_facts::compiler::ExecutionMap {
+                compiler_facts_protocol: solid_facts::compiler::COMPILER_FACTS_PROTOCOL,
+                source_hash: SourceHash::of(source),
+                semantic_model: Default::default(),
+                tracked_regions: vec![],
+                untracked_regions: vec![],
+                discarded_regions: vec![],
+                ownership_regions: vec![],
+                callback_roles: vec![],
+                jsx_operations: vec![],
+            }),
+        }
+    }
+
+    #[test]
+    fn a_helper_forwards_only_an_untouched_parameter_on_its_straight_line() {
+        for (source, expected) in [
+            ("function h(o) { const v = new V(o); return v; }", Some(0)),
+            ("function h(a, o) { return new V(o); }", Some(1)),
+            (
+                "function h(o) { setup(); const v = new V(o as T); return v; }",
+                Some(0),
+            ),
+            (
+                "function h(o) { const n = o.count; return new V(o); }",
+                None,
+            ),
+            ("function h(o) { keep(o); return new V(o); }", None),
+            ("function h(o) { o = other; return new V(o); }", None),
+            ("function h(o = {}) { return new V(o); }", None),
+            ("function h({ o }) { return new V(o); }", None),
+            ("function h(o) { if (ready) { return new V(o); } }", None),
+            ("function h(o) { return ready ? new V(o) : null; }", None),
+            ("function h(o) { return untrack(() => new V(o)); }", None),
+            ("function h(o) { return new V(...rest, o); }", None),
+            (
+                "function h(o) { const copy = { ...o }; return new V(copy); }",
+                None,
+            ),
+        ] {
+            let facts = file(source);
+            let function = facts
+                .ast
+                .functions
+                .iter()
+                .find(|f| f.name.is_some())
+                .unwrap();
+            let found = facts
+                .ast
+                .calls
+                .iter()
+                .filter(|call| call.construct)
+                .find(|call| unconditional_in(&facts.ast, function, call))
+                .and_then(|call| {
+                    let last = call.arguments.len().saturating_sub(1);
+                    forwarded_parameter(&facts, function, call, last)
+                });
+            assert_eq!(found, expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn this_is_matched_only_as_a_token() {
+        assert!(mentions_this("{ delete this.count; }"));
+        assert!(mentions_this("this"));
+        assert!(!mentions_this("{ return thisValue(); }"));
+        assert!(!mentions_this("{ return history(); }"));
+        assert!(!mentions_this("{ return $this; }"));
     }
 
     #[test]

@@ -6231,6 +6231,37 @@ fn interprocedural_result_reads_for_file(
             continue;
         }
         let mut context = None::<String>;
+        // ADR 0274: a local helper that forwards its parameter to a package
+        // value copy performs that copy at this call.
+        let forwarded = if contract_callbacks.contains_key(symbol) {
+            Vec::new()
+        } else {
+            property_gets::forwarded_enumerations(file, call, lookup)
+        };
+        for callback in &forwarded {
+            let (mut reads, obligation, get_dependencies) =
+                property_gets::reads(property_gets::ReadContext {
+                    file,
+                    call,
+                    callback,
+                    valid: valid_call && ambiguous_candidates.is_none(),
+                    execution,
+                    label: &label,
+                    source_kinds,
+                    accessors,
+                    entities,
+                    symbol_names,
+                    lookup,
+                });
+            if object_callable {
+                for read in &mut reads {
+                    read.callee_callback_timing = true;
+                }
+            }
+            result.extend(reads);
+            dispatch_obligations.extend(obligation);
+            dependencies.extend(get_dependencies);
+        }
         if let Some(callbacks) = contract_callbacks.get(symbol) {
             for callback in callbacks
                 .iter()
@@ -8381,7 +8412,7 @@ fn interprocedural_reads(
             .iter()
             .filter(|file| !retained_source_paths.contains(file.path.as_str()))
             .all(|file| {
-                !call_role_syntax(file)
+                !(call_role_syntax(file) || property_gets::forwards_enumeration(file, lookup))
                     && cache
                         .files
                         .get(file.path.as_str())
@@ -8415,7 +8446,8 @@ fn interprocedural_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
-                        call_role_syntax: call_role_syntax(file),
+                        call_role_syntax: call_role_syntax(file)
+                            || property_gets::forwards_enumeration(file, lookup),
                     },
                 );
             }
@@ -8499,7 +8531,8 @@ fn interprocedural_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
-                        call_role_syntax: call_role_syntax(file),
+                        call_role_syntax: call_role_syntax(file)
+                            || property_gets::forwards_enumeration(file, lookup),
                     },
                 );
             }

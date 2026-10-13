@@ -691,6 +691,27 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    /// The accepted value-enumeration rows of this export (ADR 0225) whose
+    /// source is a bare argument. Empty when callbacks are not known.
+    pub(super) fn value_enumeration_callbacks(
+        &self,
+        symbol: &str,
+    ) -> Vec<&super::ContractCallback> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .and_then(|binding| binding.summary.callbacks.known())
+            .map(|callbacks| {
+                callbacks
+                    .iter()
+                    .filter(|callback| {
+                        callback.protocol.is_value_enumeration() && callback.path.is_empty()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Exact admitted factory return; callers do not inspect contract storage.
     pub(super) fn contract_return_at_call(
         &self,

@@ -68,7 +68,7 @@ richer schema.
 - rc.13 corpus: no violation moved. The real apps call `Virtualizer` through
   their own helper modules, which this slice does not follow.
 - Not yet:
-  - option objects passed through a helper;
+  - option objects passed through a helper (ADR 0274 adds a forwarding helper);
   - `virtual-core` 3.17.10 and 3.17.11 (their identities are not
     generated);
   - `probus-table-data-getter-spread`: caller feature hooks run before the

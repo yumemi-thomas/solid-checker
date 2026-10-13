@@ -1810,21 +1810,24 @@ fn evaluate_guard_with(
     }
 }
 
-/// The enumeration lower bound is not a bound on every getter. A preceding
-/// accessor may throw, delete a later key or replace its descriptor. The
-/// initial consumer has no completion/mutation proof for such an accessor.
-/// `receiver_exact` must come from a descriptor-aware, non-escaped allocation
-/// proof, not a TypeScript object type. Data-property Gets do not advance
-/// `preceding_getters` and methods held as data are never called by this use.
+/// Whether a `for…in` value copy is guaranteed to Get one getter.
+///
+/// A preceding accessor that throws is an abrupt completion, which the
+/// statically-present-code premise puts out of scope (owner decision
+/// 2026-10-13, ADR 0274). A preceding accessor that may delete a later key or
+/// replace its descriptor still breaks the guarantee: it is counted in
+/// `preceding_mutation_hazards`. `receiver_exact` must come from a
+/// descriptor-aware, non-escaped allocation proof, not a TypeScript object
+/// type. Methods held as data are never called by this use.
 #[must_use]
 pub fn enumeration_get_is_guaranteed(
     protocol: InvokeProtocol,
     receiver_exact: bool,
-    preceding_getters: usize,
+    preceding_mutation_hazards: usize,
 ) -> bool {
     protocol == InvokeProtocol::GetEnumerableStringValues
         && receiver_exact
-        && preceding_getters == 0
+        && preceding_mutation_hazards == 0
 }
 
 #[cfg(test)]
@@ -1832,7 +1835,7 @@ mod enumeration_tests {
     use super::*;
 
     #[test]
-    fn getter_strength_requires_receiver_and_prefix_not_only_enumeration() {
+    fn getter_strength_requires_receiver_and_a_hazard_free_prefix() {
         let protocol = InvokeProtocol::GetEnumerableStringValues;
         assert!(enumeration_get_is_guaranteed(protocol, true, 0));
         assert!(!enumeration_get_is_guaranteed(protocol, false, 0));

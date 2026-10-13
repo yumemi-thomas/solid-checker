@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 57;
+pub const AST_FACTS_SCHEMA: u32 = 58;
 
 mod binding_references;
 mod class_obligation;
@@ -222,6 +222,11 @@ pub struct AstFacts {
     /// reaches its position.
     #[serde(default)]
     pub straight_line_calls: Vec<Span>,
+    /// The `new` expressions written in straight-line flow under the same
+    /// conditions as [`Self::straight_line_calls`] (facts schema 58). Kept
+    /// apart so that table's existing consumers keep their meaning.
+    #[serde(default)]
+    pub straight_line_constructs: Vec<Span>,
     pub returns: Vec<ReturnFact>,
     pub jsx_elements: Vec<JsxElementFact>,
     /// JSX fragment spans (`<>…</>`). A fragment's children are as tracked
@@ -1555,6 +1560,7 @@ impl AstFacts {
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
             straight_line_calls: Vec::new(),
+            straight_line_constructs: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
@@ -1715,6 +1721,7 @@ struct Collector<'s, 'semantic> {
     awaits: Vec<Span>,
     unconditional_awaits: Vec<Span>,
     straight_line_calls: Vec<Span>,
+    straight_line_constructs: Vec<Span>,
     returns: Vec<ReturnFact>,
     jsx_elements: Vec<JsxElementFact>,
     jsx_fragments: Vec<Span>,
@@ -1870,6 +1877,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
             straight_line_calls: Vec::new(),
+            straight_line_constructs: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
@@ -1933,6 +1941,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.awaits.sort_unstable();
         self.unconditional_awaits.sort_unstable();
         self.straight_line_calls.sort_unstable();
+        self.straight_line_constructs.sort_unstable();
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
         self.jsx_fragments.sort();
@@ -1994,6 +2003,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             awaits: self.awaits,
             unconditional_awaits: self.unconditional_awaits,
             straight_line_calls: self.straight_line_calls,
+            straight_line_constructs: self.straight_line_constructs,
             returns: self.returns,
             jsx_elements: self.jsx_elements,
             jsx_fragments: self.jsx_fragments,
@@ -2765,6 +2775,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_new_expression(&mut self, expression: &NewExpression<'a>) {
+        if self.optional_chain_depth == 0
+            && self.conditional_flow_depth
+                == self
+                    .function_flow_depths
+                    .last()
+                    .copied()
+                    .unwrap_or_default()
+        {
+            self.straight_line_constructs.push(span(expression.span));
+        }
         let callee_span = expression.callee.span();
         self.calls.push(CallFact {
             span: span(expression.span),
