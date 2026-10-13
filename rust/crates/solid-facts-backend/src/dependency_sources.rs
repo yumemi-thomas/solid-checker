@@ -7,7 +7,7 @@
 //! each requested specifier (the package's `exports` read in document order
 //! with `solid`, `import`, `module`, `default` and the host's own conditions:
 //! its target, its build and every `--runtime-condition`), walks its
-//! relative imports to a closure, and writes a sibling tsconfig that extends
+//! relative imports to a closure, and composes a sibling tsconfig that extends
 //! the project's and lists exactly the project's configured sources plus that
 //! closure as root files, with `allowJs` and an empty `include`, so neither an
 //! inherited `include` nor `allowJs` changes which project files are analyzed
@@ -21,11 +21,19 @@
 //! not read (an array, a condition this does not set leading to nothing), or
 //! a closure larger than [`MAX_CLOSURE_FILES`]. Subpath patterns (`./*`)
 //! resolve as Node resolves them. Nothing here guesses a file.
+//!
+//! Preparation writes nothing (ADR 0296): [`prepare_program`] answers a
+//! [`PreparedDependencyProgram`], a value a one-shot check writes under its
+//! process id and a retained daemon compares against the one it holds before
+//! reusing any work.
 
 use std::collections::{BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use sha2::{Digest, Sha256};
+
+use crate::SourceFile;
 use crate::host_constants::{Ordered, find_package_root, split_bare_specifier};
 
 /// The conditions every Vite + `vite-plugin-solid` build sets, beside the
@@ -48,36 +56,138 @@ pub struct ImportResolution {
     pub target: PathBuf,
 }
 
-/// The selected packages, their closure, and the written tsconfig.
-#[derive(Debug)]
-pub struct DependencySources {
+/// The selected packages and their closure.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DependencySelection {
     /// Canonical package directories.
     pub roots: Vec<PathBuf>,
     /// The selected packages' names, whose contracts are not bound.
-    pub package_names: std::collections::BTreeSet<String>,
-    /// Canonical closure files, the tsconfig's `files`.
+    pub package_names: BTreeSet<String>,
+    /// Canonical closure files.
     pub files: Vec<PathBuf>,
     pub resolutions: Vec<ImportResolution>,
-    /// The written tsconfig, removed when this is dropped.
+}
+
+/// Everything a dependency-source program is, before it is written (ADR
+/// 0296): the selection, the project half of its root files, the host it was
+/// selected for, and the sibling tsconfig's exact bytes. Two equal values
+/// describe the same program, the same redirects and the same contract
+/// removal; anything that differs is a different program.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PreparedDependencyProgram {
+    /// The project's canonical tsconfig, which the sibling extends.
     pub tsconfig: PathBuf,
+    pub host: Host,
+    /// The project's own program files outside `node_modules`.
+    pub project_files: BTreeSet<PathBuf>,
+    pub selection: DependencySelection,
+    /// The sibling tsconfig's bytes.
+    pub document: Vec<u8>,
 }
 
-impl Drop for DependencySources {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.tsconfig);
-    }
-}
-
-impl DependencySources {
+impl PreparedDependencyProgram {
     /// Whether `path` lies inside one of the selected packages.
     #[must_use]
     pub fn contains(&self, path: &Path) -> bool {
-        self.roots.iter().any(|root| path.starts_with(root))
+        self.selection
+            .roots
+            .iter()
+            .any(|root| path.starts_with(root))
+    }
+
+    /// Write the sibling tsconfig under this process's id, as a one-shot
+    /// check does. It is removed when the returned value drops.
+    pub fn write_for_process(&self) -> Result<GeneratedProgram, String> {
+        let written = self.sibling(&std::process::id().to_string())?;
+        fs::write(&written, &self.document).map_err(|error| {
+            format!(
+                "--dependency-source: cannot write {}: {error}",
+                written.display()
+            )
+        })?;
+        Ok(GeneratedProgram { path: written })
+    }
+
+    /// Write the sibling tsconfig under a name keyed by `domain` and its
+    /// bytes, as a retained daemon does. An existing file of that name is
+    /// reused only when its bytes are these; it is never rewritten, and a
+    /// missing one is created without replacing anything a concurrent writer
+    /// made. Nothing removes it here: its owner does.
+    pub fn write_retained(&self, domain: &[u8]) -> Result<PathBuf, String> {
+        let mut digest = Sha256::new();
+        digest.update(domain);
+        digest.update([0]);
+        digest.update(&self.document);
+        let key = digest
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let written = self.sibling(&key)?;
+        let matches = |path: &Path| fs::read(path).is_ok_and(|bytes| bytes == self.document);
+        if written.exists() {
+            return if matches(&written) {
+                Ok(written)
+            } else {
+                Err(format!(
+                    "--dependency-source: {} holds other bytes",
+                    written.display()
+                ))
+            };
+        }
+        let staged = written.with_extension(format!("json.{}.tmp", std::process::id()));
+        fs::write(&staged, &self.document).map_err(|error| {
+            format!(
+                "--dependency-source: cannot write {}: {error}",
+                staged.display()
+            )
+        })?;
+        // A hard link never replaces an existing file, so a concurrent
+        // writer's copy is kept and then verified like any other.
+        let linked = fs::hard_link(&staged, &written);
+        let _ = fs::remove_file(&staged);
+        match linked {
+            Ok(()) => Ok(written),
+            Err(_) if matches(&written) => Ok(written),
+            Err(error) => Err(format!(
+                "--dependency-source: cannot write {}: {error}",
+                written.display()
+            )),
+        }
+    }
+
+    fn sibling(&self, key: &str) -> Result<PathBuf, String> {
+        let directory = self
+            .tsconfig
+            .parent()
+            .ok_or("--dependency-source: the project tsconfig has no directory")?;
+        Ok(directory.join(format!(
+            ".solid-checker-dependency-sources.{key}.tsconfig.json"
+        )))
+    }
+}
+
+/// A sibling tsconfig a one-shot check wrote, removed when this drops.
+#[derive(Debug)]
+pub struct GeneratedProgram {
+    path: PathBuf,
+}
+
+impl GeneratedProgram {
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for GeneratedProgram {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
     }
 }
 
 /// The declared host a package entry is selected for.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Host {
     /// The host's conditions: `browser` or `node`, `development` or
     /// `production`, and every `--runtime-condition`.
@@ -85,15 +195,96 @@ pub struct Host {
     pub browser: bool,
 }
 
-/// Select, walk and write. `tsconfig` is the project's canonical tsconfig.
-/// `None` when the project installs none of the packages: the analysis is
-/// then the ordinary one.
+/// Compose the dependency-source program from the project's own program:
+/// its configured sources (`project_sources`) and every module it holds
+/// (`program_modules`). `selection` is the `--dependency-source` list; `*`
+/// selects every Solid package the project loads ([`prepare_all`]).
+/// `excluded` and `ecosystem_scopes` are the dialect's runtime and scopes.
+/// Notes are pushed to `notes` as they arise, so a caller can print them
+/// even when this then refuses.
+///
+/// `None` when nothing is selected: the analysis is then the ordinary one.
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_program(
+    tsconfig: &Path,
+    selection: &[String],
+    host: &Host,
+    project_sources: &[SourceFile],
+    program_modules: &[PathBuf],
+    excluded: &BTreeSet<String>,
+    ecosystem_scopes: &[&str],
+    notes: &mut Vec<String>,
+) -> Result<Option<PreparedDependencyProgram>, String> {
+    // Configured sources omit declaration files, and an ambient `declare
+    // module` stub is part of the project's program too: take every file the
+    // program holds outside `node_modules`.
+    let project_files = program_modules
+        .iter()
+        .cloned()
+        .chain(
+            project_sources
+                .iter()
+                .map(|source| PathBuf::from(&source.path)),
+        )
+        .filter(|path| {
+            path.is_file()
+                && !path
+                    .components()
+                    .any(|component| component.as_os_str() == "node_modules")
+        })
+        .collect::<BTreeSet<_>>();
+    // ADR 0291: `*` selects every package the project loads at run time,
+    // and every package those load, except the dialect's own runtime.
+    let selected = if selection.iter().any(|source| source == "*") {
+        let requests = project_sources
+            .iter()
+            .flat_map(|source| {
+                runtime_bare_imports_of(&source.path, &source.source)
+                    .into_iter()
+                    .map(|specifier| (PathBuf::from(&source.path), specifier))
+            })
+            .collect::<Vec<_>>();
+        prepare_all(requests, host, excluded, ecosystem_scopes, notes)?
+    } else {
+        // Every subpath of a selected package the project loads is selected
+        // too, so an unselected subpath sharing a declaration cannot be bound
+        // to another subpath's source.
+        let packages = selection
+            .iter()
+            .filter_map(|specifier| package_name(specifier))
+            .collect::<BTreeSet<_>>();
+        let mut specifiers = selection.iter().cloned().collect::<BTreeSet<_>>();
+        for source in project_sources {
+            specifiers.extend(imported_subpaths(&source.path, &source.source, &packages));
+        }
+        prepare(
+            tsconfig,
+            &specifiers.into_iter().collect::<Vec<_>>(),
+            host,
+            notes,
+        )?
+    };
+    let Some(selection) = selected else {
+        return Ok(None);
+    };
+    let document = program_document(tsconfig, &project_files, &selection.files)?;
+    Ok(Some(PreparedDependencyProgram {
+        tsconfig: tsconfig.to_path_buf(),
+        host: host.clone(),
+        project_files,
+        selection,
+        document,
+    }))
+}
+
+/// Select and walk. `tsconfig` is the project's canonical tsconfig. `None`
+/// when the project installs none of the packages.
 pub fn prepare(
     tsconfig: &Path,
     specifiers: &[String],
     host: &Host,
-    project_files: &[PathBuf],
-) -> Result<Option<DependencySources>, String> {
+    notes: &mut Vec<String>,
+) -> Result<Option<DependencySelection>, String> {
     let mut roots = Vec::new();
     let mut package_names = BTreeSet::new();
     let mut files = BTreeSet::new();
@@ -104,9 +295,9 @@ pub fn prepare(
         // A package the project does not install is no source to analyze;
         // a sweep may name the same packages for every project.
         let Some(root) = find_package_root(tsconfig, &name, None) else {
-            eprintln!(
+            notes.push(format!(
                 "solid-checker: note: --dependency-source {specifier}: not installed here, skipped"
-            );
+            ));
             continue;
         };
         let root = root
@@ -129,13 +320,11 @@ pub fn prepare(
     if roots.is_empty() {
         return Ok(None);
     }
-    let tsconfig = write_program(tsconfig, project_files, &files)?;
-    Ok(Some(DependencySources {
+    Ok(Some(DependencySelection {
         roots,
         package_names,
         files: files.into_iter().collect(),
         resolutions: resolutions.into_iter().collect(),
-        tsconfig,
     }))
 }
 
@@ -155,13 +344,12 @@ pub fn prepare(
 /// note and keeps its contract: nothing of it enters the program, and its
 /// other copies are judged on their own.
 pub fn prepare_all(
-    tsconfig: &Path,
     requests: Vec<(PathBuf, String)>,
     host: &Host,
-    project_files: &[PathBuf],
     excluded: &BTreeSet<String>,
     ecosystem_scopes: &[&str],
-) -> Result<Option<DependencySources>, String> {
+    notes: &mut Vec<String>,
+) -> Result<Option<DependencySelection>, String> {
     let solid_package = |root: &Path| {
         let Some(manifest) = fs::read(root.join("package.json"))
             .ok()
@@ -221,10 +409,10 @@ pub fn prepare_all(
         let entry = match select_entry(&root, &subpath, host) {
             Ok(entry) => entry,
             Err(reason) => {
-                eprintln!(
+                notes.push(format!(
                     "solid-checker: note: dependency source {name} ({}): {reason}; its contract stays",
                     root.display()
-                );
+                ));
                 unsupported.insert(root);
                 continue;
             }
@@ -252,11 +440,11 @@ pub fn prepare_all(
                     queue.extend(bare);
                 }
                 Err(reason) => {
-                    eprintln!(
+                    notes.push(format!(
                         "solid-checker: note: dependency source {} ({}): {reason}; its contract stays",
                         names_by_root[&root],
                         root.display()
-                    );
+                    ));
                     unsupported.insert(root);
                 }
             }
@@ -292,13 +480,11 @@ pub fn prepare_all(
         .filter(|name| !unsupported_names.contains(*name))
         .cloned()
         .collect();
-    let tsconfig = write_program(tsconfig, project_files, &files)?;
-    Ok(Some(DependencySources {
+    Ok(Some(DependencySelection {
         roots: names_by_root.into_keys().collect(),
         package_names,
         files: files.into_iter().collect(),
         resolutions: resolutions.into_iter().collect(),
-        tsconfig,
     }))
 }
 
@@ -342,16 +528,13 @@ fn select_entry(root: &Path, subpath: &str, host: &Host) -> Result<PathBuf, Stri
     Ok(entry)
 }
 
-/// Write the sibling tsconfig: the project's own program files plus the
+/// The sibling tsconfig's bytes: the project's own program files plus the
 /// closure, with an empty `include` (review round 2).
-fn write_program(
+fn program_document(
     tsconfig: &Path,
-    project_files: &[PathBuf],
-    files: &BTreeSet<PathBuf>,
-) -> Result<PathBuf, String> {
-    let directory = tsconfig
-        .parent()
-        .ok_or("--dependency-source: the project tsconfig has no directory")?;
+    project_files: &BTreeSet<PathBuf>,
+    files: &[PathBuf],
+) -> Result<Vec<u8>, String> {
     let tsconfig_name = tsconfig
         .file_name()
         .and_then(|name| name.to_str())
@@ -367,21 +550,7 @@ fn write_program(
         "files": root_files,
         "include": [],
     });
-    let written = directory.join(format!(
-        ".solid-checker-dependency-sources.{}.tsconfig.json",
-        std::process::id()
-    ));
-    fs::write(
-        &written,
-        serde_json::to_vec_pretty(&document).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| {
-        format!(
-            "--dependency-source: cannot write {}: {error}",
-            written.display()
-        )
-    })?;
-    Ok(written)
+    serde_json::to_vec_pretty(&document).map_err(|error| error.to_string())
 }
 
 /// The package a bare specifier names (`@scope/pkg` for `@scope/pkg/sub`).
@@ -698,7 +867,9 @@ fn resolve_relative(directory: &Path, module: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Host, entry_target, prepare, select};
+    use std::collections::BTreeSet;
+
+    use super::{Host, entry_target, select};
     use crate::host_constants::Ordered;
 
     fn ordered(json: &str) -> Ordered {
@@ -721,17 +892,28 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         let tsconfig = directory.join("tsconfig.json");
         std::fs::write(&tsconfig, "{}").unwrap();
-        let prepared = prepare(
+        let mut notes = Vec::new();
+        let prepared = super::prepare_program(
             &tsconfig,
             &["not-installed-here".to_owned()],
             &host(&["browser", "development"]),
             &[],
+            &[],
+            &BTreeSet::new(),
+            &[],
+            &mut notes,
         )
         .unwrap();
         let written = std::fs::read_dir(&directory).unwrap().count();
         std::fs::remove_dir_all(&directory).unwrap();
         assert!(prepared.is_none());
         assert_eq!(written, 1, "no sibling tsconfig is written");
+        assert_eq!(
+            notes,
+            [
+                "solid-checker: note: --dependency-source not-installed-here: not installed here, skipped"
+            ]
+        );
     }
 
     #[test]
@@ -790,16 +972,13 @@ mod tests {
             directory.join("node_modules/ui"),
         )
         .unwrap();
-        let tsconfig = directory.join("tsconfig.json");
-        std::fs::write(&tsconfig, "{}").unwrap();
         let app = directory.join("App.tsx");
         let prepared = super::prepare_all(
-            &tsconfig,
             vec![(app.clone(), "ui".into()), (app, "real".into())],
             &host(&["browser", "development"]),
-            &[],
             &["solid-js".to_owned()].into_iter().collect(),
             &["@solidjs/"],
+            &mut Vec::new(),
         )
         .unwrap()
         .unwrap();
@@ -808,9 +987,60 @@ mod tests {
             .iter()
             .map(|root| root.file_name().unwrap().to_string_lossy().into_owned())
             .collect::<Vec<_>>();
-        drop(prepared);
         std::fs::remove_dir_all(&directory).unwrap();
         assert_eq!(roots, ["real"]);
+    }
+
+    #[test]
+    fn a_retained_sibling_is_named_by_its_bytes_and_never_rewritten() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-dependency-sibling-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let program = |document: &[u8]| super::PreparedDependencyProgram {
+            tsconfig: directory.join("tsconfig.json"),
+            host: host(&["browser", "development"]),
+            project_files: BTreeSet::new(),
+            selection: super::DependencySelection {
+                roots: Vec::new(),
+                package_names: BTreeSet::new(),
+                files: Vec::new(),
+                resolutions: Vec::new(),
+            },
+            document: document.to_vec(),
+        };
+        let first = program(b"{\"files\":[]}").write_retained(b"a").unwrap();
+        assert_eq!(std::fs::read(&first).unwrap(), b"{\"files\":[]}");
+        let stamp = std::fs::metadata(&first).unwrap().modified().unwrap();
+        // The same bytes and domain reuse the file as it is.
+        assert_eq!(
+            program(b"{\"files\":[]}").write_retained(b"a").unwrap(),
+            first
+        );
+        assert_eq!(
+            std::fs::metadata(&first).unwrap().modified().unwrap(),
+            stamp
+        );
+        // Another domain or other bytes are another file.
+        let other_domain = program(b"{\"files\":[]}").write_retained(b"b").unwrap();
+        let other_bytes = program(b"{\"files\":[\"x\"]}")
+            .write_retained(b"a")
+            .unwrap();
+        assert_ne!(other_domain, first);
+        assert_ne!(other_bytes, first);
+        // A file of that name holding other bytes is refused, not rewritten.
+        std::fs::write(&first, b"tampered").unwrap();
+        assert!(program(b"{\"files\":[]}").write_retained(b"a").is_err());
+        assert_eq!(std::fs::read(&first).unwrap(), b"tampered");
+        // A one-shot check's sibling goes with it.
+        let generated = program(b"{}").write_for_process().unwrap();
+        let path = generated.path().to_path_buf();
+        assert!(path.is_file());
+        drop(generated);
+        assert!(!path.exists());
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 
     #[test]

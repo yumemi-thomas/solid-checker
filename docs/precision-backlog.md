@@ -30309,3 +30309,18 @@ Open:
 - against published rc.13 the fallback is not reached at all (no alias
   origin module), so `const get: Accessor<number> = count; get()` is silent
   there.
+
+## Retained dependency-source programs (2026-10-14, ADR 0296)
+
+No precision change: the daemon now serves `--dependency-source` checks
+through the one-shot path's own preparation, fold and binding, and every
+retained answer equals a fresh one in the process tests. No snapshot moved.
+A warm unchanged check of `probus-hk` under `*` takes 0.24 s instead of
+5.8 s. Open:
+- the daemon's existing trust level: stamp-unchanged files are not reread,
+  and declaration files, extended tsconfigs and untracked `node_modules`
+  files are not watched (a producer input manifest would close it);
+- a cold check is no faster, and a selection or fold change reopens the
+  analyzed program;
+- contract-emission inputs, `--feedback-facts` and producer arguments keep a
+  check one-shot.

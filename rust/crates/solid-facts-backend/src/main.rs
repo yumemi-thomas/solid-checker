@@ -1,4 +1,5 @@
 mod daemon_cache;
+mod dependency_program;
 mod idle_memory;
 mod json_output;
 mod snapshot_emission;
@@ -3473,13 +3474,19 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         io::stdout().write_all(&emission.output)?;
         return Ok(emission.exit_code);
     }
+    // ADR 0284: refused before the daemon branch, so a retained check
+    // (ADR 0296) refuses exactly as a one-shot one does.
+    let dependency_host = if request.dependency_sources.is_empty() {
+        None
+    } else {
+        Some(dependency_program::host(&request.runtime)?)
+    };
     #[cfg(unix)]
     {
         if request.serve {
             return daemon::serve(&request);
         }
-        if daemon::enabled() && daemon::eligible(&request) && request.dependency_sources.is_empty()
-        {
+        if daemon::enabled() && daemon::eligible(&request) {
             match daemon::check(&request) {
                 Ok(code) => return Ok(code),
                 Err(error) => {
@@ -3506,121 +3513,38 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // the TypeScript program build — that lands on the first request needing
     // the built program, which is the source fetch below.
     // ADR 0284: the selected packages' runtime closure enters the program
-    // through a sibling tsconfig, removed again when `dependency_sources`
-    // drops.
-    let dependency_sources = if request.dependency_sources.is_empty() {
-        None
-    } else {
-        // A package's entry depends on the host's target and build (review
-        // round 1), so neither may be left to a default.
-        let (Some(target), Some(_)) = (request.runtime.target, request.runtime.build) else {
-            return Err(
-                "--dependency-source needs --runtime-target and --runtime-build: \
-                 the file a package loads depends on both"
-                    .into(),
-            );
-        };
-        let host = solid_facts_backend::dependency_sources::Host {
-            conditions: request.runtime.selected_conditions(),
-            browser: target == RuntimeTarget::Browser,
-        };
-        // The project's own configured sources, read from its own program,
-        // are the project half of the sibling tsconfig's `files`: composing
-        // `include`/`files` through `extends` widened or emptied it (review
-        // round 2). Every subpath of a selected package they load is selected
-        // too, so an unselected subpath sharing a declaration cannot be bound
-        // to another subpath's source.
-        let mut configured = TypeFactsSession::open(
-            &request.typefacts_executable,
-            &request.project_id,
-            &producer_arguments(&request.typefacts_args),
-        )?;
-        let project_sources = configured.configured_sources()?;
-        // Configured sources omit declaration files, and an ambient
-        // `declare module` stub is part of the project's program too: take
-        // every file the program holds outside `node_modules`.
-        let graph = configured.module_graph(&typefacts::ModuleGraphDemand::default())?;
-        drop(configured);
-        let packages = request
-            .dependency_sources
-            .iter()
-            .filter_map(|specifier| {
-                solid_facts_backend::dependency_sources::package_name(specifier)
-            })
-            .collect::<BTreeSet<_>>();
-        let mut specifiers = request
-            .dependency_sources
-            .iter()
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        for source in &project_sources {
-            specifiers.extend(solid_facts_backend::dependency_sources::imported_subpaths(
-                &source.path,
-                &source.source,
-                &packages,
-            ));
-        }
-        let project_files = graph
-            .modules
-            .iter()
-            .map(|module| PathBuf::from(module.path.as_ref()))
-            .chain(
-                project_sources
-                    .iter()
-                    .map(|source| PathBuf::from(&source.path)),
-            )
-            .filter(|path| {
-                path.is_file()
-                    && !path
-                        .components()
-                        .any(|component| component.as_os_str() == "node_modules")
-            })
-            .collect::<Vec<_>>();
-        // ADR 0291: `*` selects every package the project loads at run
-        // time, and every package those load, except the dialect's own
-        // runtime.
-        let prepared = if request
-            .dependency_sources
-            .iter()
-            .any(|source| source == "*")
-        {
-            let requests = project_sources
-                .iter()
-                .flat_map(|source| {
-                    solid_facts_backend::dependency_sources::runtime_bare_imports_of(
-                        &source.path,
-                        &source.source,
-                    )
-                    .into_iter()
-                    .map(|specifier| (PathBuf::from(&source.path), specifier))
-                })
-                .collect::<Vec<_>>();
-            let excluded = dialect
-                .vocabulary
-                .primitive_defining_packages()
-                .iter()
-                .map(|name| (*name).to_owned())
-                .collect::<BTreeSet<_>>();
-            solid_facts_backend::dependency_sources::prepare_all(
+    // through a sibling tsconfig, removed again when `generated` drops. The
+    // project keeps its own identity for reporting (ADR 0296); only the Type
+    // Facts program and the analysis read the sibling.
+    let logical_project_id = request.project_id.clone();
+    let (dependency_sources, _generated) = match &dependency_host {
+        None => (None, None),
+        Some(host) => {
+            let mut configured = TypeFactsSession::open(
+                &request.typefacts_executable,
+                &request.project_id,
+                &producer_arguments(&request.typefacts_args),
+            )?;
+            let (notes, prepared) = dependency_program::prepare(
                 Path::new(&request.project_id),
-                requests,
-                &host,
-                &project_files,
-                &excluded,
-                dialect.vocabulary.ecosystem_scopes(),
-            )?
-        } else {
-            solid_facts_backend::dependency_sources::prepare(
-                Path::new(&request.project_id),
-                &specifiers.into_iter().collect::<Vec<_>>(),
-                &host,
-                &project_files,
-            )?
-        };
-        if let Some(prepared) = &prepared {
-            request.project_id = prepared.tsconfig.to_string_lossy().into_owned();
+                &request.dependency_sources,
+                host,
+                dialect,
+                &mut configured,
+            )?;
+            drop(configured);
+            for note in &notes {
+                eprintln!("{note}");
+            }
+            match prepared? {
+                None => (None, None),
+                Some(program) => {
+                    let generated = program.write_for_process()?;
+                    request.project_id = generated.path().to_string_lossy().into_owned();
+                    (Some(program), Some(generated))
+                }
+            }
         }
-        prepared
     };
     let mut typescript = TypeFactsSession::open(
         &request.typefacts_executable,
@@ -3943,40 +3867,13 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         let (sources, program_hashes) = if !request.emit_contract.is_empty() {
             fold_emission_host_constants(request.sources.clone(), &request.runtime.conditions)
         } else if let Some(dependencies) = &dependency_sources {
-            // ADR 0284: under a declared host, a selected package's own
-            // host constants (`isServer`) fold as they do for contract
-            // emission, matching the browser entry the mode selected. The
-            // project's files are analyzed as before.
-            let mut program_hashes = HashMap::new();
-            let sources = request
-                .sources
-                .iter()
-                .cloned()
-                .map(|file| {
-                    let inside = Path::new(&file.path)
-                        .canonicalize()
-                        .is_ok_and(|path| dependencies.contains(&path));
-                    if !inside {
-                        return file;
-                    }
-                    // The conditions `--runtime-target` and its siblings select,
-                    // not only explicit `--runtime-condition`s. ADR 0295: a
-                    // declared Window realm decides these files' `typeof
-                    // window` guards too, and nothing else's.
-                    let conditions = request.runtime.selected_conditions();
-                    let realm = request.window_realm.then(|| {
-                        solid_facts_backend::dependency_sources::Host {
-                            conditions: conditions.clone(),
-                            browser: true,
-                        }
-                    });
-                    let (mut folded, hashes) =
-                        fold_host_constants_in_realm(vec![file], &conditions, realm.as_ref());
-                    program_hashes.extend(hashes);
-                    folded.remove(0)
-                })
-                .collect();
-            (sources, program_hashes)
+            let folded = dependency_program::fold_sources(
+                &request.sources,
+                dependencies,
+                &request.runtime,
+                request.window_realm,
+            );
+            (folded.sources, folded.program_hashes)
         } else {
             (request.sources.clone(), HashMap::new())
         };
@@ -4010,19 +3907,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         )?;
     }
     // ADR 0284: bind the selected packages' imports to their runtime files.
-    if let Some(sources) = &dependency_sources {
-        facts.dependency_source_roots = sources
-            .roots
-            .iter()
-            .map(|root| root.to_string_lossy().into_owned())
-            .collect();
-        facts
-            .runtime_symbol_redirects
-            .extend(dependency_source_redirects(
-                &facts,
-                &mut typescript,
-                sources,
-            )?);
+    if let Some(program) = &dependency_sources {
+        dependency_program::bind(&mut facts, &mut typescript, program)?;
     }
     let facts_complete_ns = started.elapsed().as_nanos();
     // Contracts are bound to the installed package an import resolves to, not
@@ -4332,7 +4218,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         };
         // ADR 0284: a package analyzed as source binds through no contract.
         let contracts = match &dependency_sources {
-            Some(sources) => contracts.without_packages(&sources.package_names),
+            Some(program) => contracts.without_packages(&program.selection.package_names),
             None => contracts,
         };
         let (analysis, diagnostic_timings) = analyze_project_accepted_measured_with_enablement(
@@ -4411,7 +4297,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         let emission = snapshot_emission::emit(
             dialect,
             &request.format,
-            &request.project_id,
+            &logical_project_id,
             snapshot,
             request.certify,
             started.elapsed(),
@@ -4715,6 +4601,13 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             }
             "--no-bundled-contracts" => bundled_contracts = false,
             "--serve" => serve = true,
+            // Internal: the whole declared host a dependency-source daemon
+            // serves (ADR 0296), as its client stated it.
+            "--daemon-runtime" => {
+                runtime = serde_json::from_str(
+                    &args.next().ok_or("--daemon-runtime needs a JSON value")?,
+                )?
+            }
             "--help" | "-h" => help = true,
             "--validate-contract" => {
                 validate_contract_paths.push(args.next().ok_or("--validate-contract needs a path")?)
@@ -7222,10 +7115,10 @@ fn runtime_symbol_redirects(
 fn dependency_source_redirects(
     facts: &solid_facts::ProjectFacts,
     typescript: &mut TypeFactsSession,
-    sources: &solid_facts_backend::dependency_sources::DependencySources,
+    sources: &solid_facts_backend::dependency_sources::PreparedDependencyProgram,
 ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
     let mut rows = Vec::new();
-    for resolution in &sources.resolutions {
+    for resolution in &sources.selection.resolutions {
         match &resolution.importer {
             Some(importer) => {
                 rows.push((
@@ -7262,6 +7155,7 @@ fn dependency_source_redirects(
             .canonicalize()
             .unwrap_or_else(|_| declaration.to_path_buf());
         sources
+            .selection
             .roots
             .iter()
             .any(|root| target.starts_with(root) && declaration.starts_with(root))

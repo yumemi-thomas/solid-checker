@@ -795,7 +795,23 @@ pub struct NativeIncrementalSession {
     last_build_timings: NativeBuildTimings,
     last_import_identity: ImportIdentityMeasurement,
     semantic_demand_options: SemanticDemandOptions,
+    /// Per path, the digest of the program's text where the session's source
+    /// is a span-preserving rewrite of it (ADR 0166's host-constant fold, as
+    /// [`build_project_native_measured_with_program_hashes`] takes it).
+    program_hashes: HashMap<String, SourceHash>,
+    facts_transform: Option<FactsTransform>,
 }
+
+/// An edited path's previous source and program digest, restored when the
+/// edit never lands.
+type DisplacedSource = (String, Option<SourceFile>, Option<SourceHash>);
+
+/// A step every generation's joined facts pass through before their import
+/// identities are attested, with the session's own Type Facts program (ADR
+/// 0296: a dependency-source program's roots and redirects). It runs on every
+/// path that produces facts, so no generation's facts can miss it.
+pub type FactsTransform =
+    Box<dyn FnMut(&mut ProjectFacts, &mut TypeFactsSession) -> Result<(), BackendError>>;
 
 /// The importing files whose module specifiers are attested: every file of
 /// the program.
@@ -980,6 +996,32 @@ impl NativeIncrementalSession {
         Ok((session, sources))
     }
 
+    /// A session whose `sources` are, where `program_hashes` names a path, a
+    /// span-preserving rewrite of the text the Type Facts program holds. The
+    /// join compares those digests instead, exactly as
+    /// [`build_project_native_measured_with_program_hashes`] does for a
+    /// one-shot build. An edit replaces a path's text with the program's own,
+    /// so it drops that path's entry.
+    #[must_use]
+    pub fn open_rewritten(
+        dialect: &'static Dialect,
+        project_id: String,
+        sources: Vec<SourceFile>,
+        program_hashes: HashMap<String, SourceHash>,
+        typescript: TypeFactsSession,
+    ) -> Self {
+        let mut session = Self::from_sources(dialect, project_id, sources, typescript);
+        session.program_hashes = program_hashes;
+        session
+    }
+
+    /// Install the [`FactsTransform`] every later generation passes through.
+    /// Facts already joined are discarded, so none escapes it.
+    pub fn set_facts_transform(&mut self, transform: FactsTransform) {
+        self.facts_transform = Some(transform);
+        self.last_facts = None;
+    }
+
     fn from_sources(
         dialect: &'static Dialect,
         project_id: String,
@@ -1001,6 +1043,8 @@ impl NativeIncrementalSession {
             last_build_timings: NativeBuildTimings::default(),
             last_import_identity: ImportIdentityMeasurement::default(),
             semantic_demand_options: SemanticDemandOptions::NONE,
+            program_hashes: HashMap::new(),
+            facts_transform: None,
         }
     }
 
@@ -1056,7 +1100,11 @@ impl NativeIncrementalSession {
         // displaced entries restore the overlay if the update never lands.
         let mut displaced = Vec::with_capacity(changes.len());
         for change in changes {
-            displaced.push((change.path.clone(), self.sources.get(&change.path).cloned()));
+            displaced.push((
+                change.path.clone(),
+                self.sources.get(&change.path).cloned(),
+                self.program_hashes.remove(&change.path),
+            ));
             self.cache.invalidate_path(&change.path);
             if let Some(source) = change.source {
                 self.sources.insert(
@@ -1159,6 +1207,7 @@ impl NativeIncrementalSession {
             cancelled,
             retained,
             self.semantic_demand_options,
+            &self.program_hashes,
         );
         result.map(|(facts, timings)| {
             self.last_build_timings = timings;
@@ -1166,9 +1215,12 @@ impl NativeIncrementalSession {
         })
     }
 
-    fn restore_overlay(&mut self, displaced: Vec<(String, Option<SourceFile>)>) {
-        for (path, previous) in displaced {
+    fn restore_overlay(&mut self, displaced: Vec<DisplacedSource>) {
+        for (path, previous, program_hash) in displaced {
             self.cache.invalidate_path(&path);
+            if let Some(hash) = program_hash {
+                self.program_hashes.insert(path.clone(), hash);
+            }
             match previous {
                 Some(source) => {
                     self.sources.insert(path, source);
@@ -1219,14 +1271,17 @@ impl NativeIncrementalSession {
         }
         let mut sources = self.sources.values().cloned().collect::<Vec<_>>();
         sources.sort_by(|left, right| left.path.cmp(&right.path));
-        let (facts, timings) = build_project_native_cached_measured_with_demands(
+        let (facts, timings) = build_project_native_cached_measured_inner(
             self.dialect,
             self.project_id.clone(),
             self.generation,
             sources,
             &mut self.typescript,
             &mut self.cache,
+            None,
+            None,
             self.semantic_demand_options,
+            &self.program_hashes,
         )?;
         self.last_build_timings = timings;
         let facts = Arc::new(self.attested(facts)?);
@@ -1259,6 +1314,7 @@ impl NativeIncrementalSession {
             Some(cancelled),
             None,
             self.semantic_demand_options,
+            &self.program_hashes,
         )?;
         self.last_build_timings = timings;
         let facts = Arc::new(self.attested(facts)?);
@@ -1276,6 +1332,9 @@ impl NativeIncrementalSession {
     /// it must not be conditional on anything that can change between checks
     /// (see [`contract_identity_scope`]).
     fn attested(&mut self, mut facts: ProjectFacts) -> Result<ProjectFacts, BackendError> {
+        if let Some(transform) = &mut self.facts_transform {
+            transform(&mut facts, &mut self.typescript)?;
+        }
         let scope = contract_identity_scope(&facts);
         if scope.is_empty() {
             // This generation asked for nothing, and the measurement must say
@@ -1607,6 +1666,7 @@ pub fn build_project_native_cached_measured_with_demands(
         None,
         None,
         semantic_demand_options,
+        &HashMap::new(),
     )
 }
 
@@ -1629,6 +1689,7 @@ pub fn build_project_native_cached_cancellable(
         Some(cancelled),
         None,
         SemanticDemandOptions::NONE,
+        &HashMap::new(),
     )
     .map(|(facts, _)| facts)
 }
@@ -1651,6 +1712,7 @@ fn build_project_native_cached_measured_inner(
     cancelled: Option<&std::sync::atomic::AtomicBool>,
     retained: Option<RetainedFileFacts<'_>>,
     semantic_demand_options: SemanticDemandOptions,
+    program_hashes: &HashMap<String, SourceHash>,
 ) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
     let project_id = project_id.into();
     let generation = Generation::new(generation).map_err(|_| BackendError::Generation)?;
@@ -1706,7 +1768,10 @@ fn build_project_native_cached_measured_inner(
     for (((file, ast), execution), index) in
         prepared.into_iter().zip(executions).zip(pending_indices)
     {
-        let facts = FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
+        let mut facts = FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
+        if let Some(hash) = program_hashes.get(&file.path) {
+            facts.source_hash = hash.clone();
+        }
         files[index] = Some(facts);
     }
     let files = files

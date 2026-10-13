@@ -1,6 +1,10 @@
 #[path = "support/diagnostics.rs"]
 mod support;
 
+// ADR 0296: retained dependency-source checks against one-shot ones.
+#[path = "dependency_daemon_process.rs"]
+mod dependency_daemon_process;
+
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]

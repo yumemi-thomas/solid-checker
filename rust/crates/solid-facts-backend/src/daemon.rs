@@ -10,6 +10,11 @@
 //! created, deleted, or renamed), or an unreadable known file rebuilds the
 //! whole session; changed file contents become incremental overlay updates.
 //! The response body is byte-identical to one-shot output.
+//!
+//! A `--dependency-source` daemon (ADR 0296) serves one selection under one
+//! runtime host. It also retains the project's own program and, before every
+//! answer, prepares and folds again and compares both with what it holds;
+//! any difference reopens the analyzed program.
 use std::{
     collections::{BTreeMap, HashSet},
     error::Error,
@@ -26,16 +31,17 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use solid_facts::core::SourceHash;
 use solid_facts_backend::{
-    DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement, SourceChange, SourceFile,
-    TypeFactsSession, accepted_contract_catalog_members, discovered_contract_paths,
-    external_package_contract_requirements, imported_package_roots,
+    BackendError, DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement,
+    SourceChange, SourceFile, TypeFactsSession, accepted_contract_catalog_members,
+    discovered_contract_paths, external_package_contract_requirements, imported_package_roots,
     read_policy2_trust_configuration, semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
 use solid_reactive_ir::RuntimeEnvironment;
 
-use super::{Request, snapshot_emission};
+use super::{Request, dependency_program::PreparedDependencies, snapshot_emission};
 use crate::daemon_cache::{CachedAnswer, CachedSnapshot, ContractFile};
 use crate::idle_memory;
 
@@ -62,6 +68,10 @@ struct CheckRequest {
     enable_rules: Vec<String>,
     #[serde(default)]
     runtime: RuntimeEnvironment,
+    /// ADR 0296: the `--dependency-source` selection, normalized. A daemon
+    /// serves exactly one, with exactly one runtime host.
+    #[serde(default)]
+    dependency_sources: Vec<String>,
 }
 
 const fn bundled_by_default() -> bool {
@@ -128,6 +138,22 @@ pub fn eligible(request: &Request) -> bool {
         // the retained identity (ADR 0220).
         && !request.runtime_resolution
         && retained_format(&request.format)
+        && (request.dependency_sources.is_empty() || dependency_eligible(request))
+}
+
+/// ADR 0296: a dependency-source check is retained only where the daemon's
+/// program is the one-shot program. Anything a retained session does not
+/// carry stays one-shot.
+fn dependency_eligible(request: &Request) -> bool {
+    // ADR 0295's Window realm is not part of the retained identity.
+    !request.window_realm
+        && request.contract_package_root.is_empty()
+        && request.runtime_module_resolutions.is_empty()
+        && request.proposal_dependency_catalog.is_empty()
+        && request.emit_contract_batch.is_empty()
+        && request.emit_module_inventory.is_empty()
+        && !request.feedback_facts
+        && super::producer_arguments(&request.typefacts_args).is_empty()
 }
 
 fn retained_format(format: &str) -> bool {
@@ -278,11 +304,30 @@ fn verify_implementation(expected: &str, actual: &str) -> Result<(), Box<dyn Err
     Ok(())
 }
 
+#[cfg(test)]
 fn socket_path(
     project_id: &str,
     typefacts_executable: &str,
     dialect_id: &str,
     implementation: &str,
+) -> PathBuf {
+    socket_path_in_domain(
+        project_id,
+        typefacts_executable,
+        dialect_id,
+        implementation,
+        None,
+    )
+}
+
+/// [`socket_path`] for a daemon that also serves one [`dependency_domain`]:
+/// a different selection or host is a different daemon.
+fn socket_path_in_domain(
+    project_id: &str,
+    typefacts_executable: &str,
+    dialect_id: &str,
+    implementation: &str,
+    domain: Option<&str>,
 ) -> PathBuf {
     let mut identity = Sha256::new();
     identity.update(implementation.as_bytes());
@@ -299,6 +344,12 @@ fn socket_path(
     if let Ok(executable) = std::env::current_exe() {
         identity.update([0]);
         identity.update(executable.as_os_str().as_encoded_bytes());
+    }
+    if let Some(domain) = domain {
+        identity.update([0]);
+        identity.update(b"dependency-sources");
+        identity.update([0]);
+        identity.update(domain.as_bytes());
     }
     let digest = identity.finalize();
     let mut name = String::from("solid-checker-");
@@ -405,15 +456,140 @@ fn process_tree_resident_bytes(root: u32) -> Option<u64> {
 
 struct State {
     dialect: &'static solid_facts_backend::dialect::Dialect,
+    /// The tsconfig the Type Facts program opened: the project's own, or in
+    /// dependency-source mode the sibling it extends (ADR 0296).
     project: PathBuf,
     session: NativeIncrementalSession,
     diagnostics: DiagnosticSession,
     sources: Vec<SourceFile>,
+    tracking: Tracking,
+    last: Option<CachedAnswer>,
+    cache_retention: CacheRetention,
+    dependency: Option<DependencyState>,
+}
+
+/// What a retained dependency-source program (ADR 0296) holds beside the
+/// program it analyzes: the project's own program, which preparation reads,
+/// and what preparation and the fold answered when the analyzed program was
+/// opened. Each request re-asks both and reuses the analyzed program only
+/// when both answer exactly as they did.
+struct DependencyState {
+    original: OriginalProgram,
+    prepared: PreparedDependencies,
+    folds: BTreeMap<String, Option<SourceHash>>,
+    /// The sibling tsconfig this daemon wrote and owns.
+    generated: Option<PathBuf>,
+}
+
+/// The project's own Type Facts program, retained and kept current with the
+/// same freshness machinery as the analyzed one.
+struct OriginalProgram {
+    project: PathBuf,
+    typescript: TypeFactsSession,
+    /// Sorted by path, as [`resync_tracked`] keeps them.
+    sources: Vec<SourceFile>,
+    /// The producer's own order of `sources`, which preparation reads in: it
+    /// decides the order notes are printed in.
+    order: Vec<String>,
+    tracking: Tracking,
+}
+
+impl OriginalProgram {
+    fn open(request: &Request) -> Result<Self, Box<dyn Error>> {
+        let project = PathBuf::from(&request.project_id);
+        let mut typescript =
+            TypeFactsSession::open(&request.typefacts_executable, &request.project_id, &[])?;
+        let configured = typescript.configured_sources()?;
+        let order = configured
+            .iter()
+            .map(|source| source.path.clone())
+            .collect();
+        let mut sources = configured;
+        sources.sort_by(|left, right| left.path.cmp(&right.path));
+        let tracking = Tracking::new(&project, &sources)?;
+        Ok(Self {
+            project,
+            typescript,
+            sources,
+            order,
+            tracking,
+        })
+    }
+
+    /// The configured sources in the producer's order.
+    fn ordered_sources(&self) -> Vec<SourceFile> {
+        self.order
+            .iter()
+            .filter_map(|path| {
+                self.sources
+                    .binary_search_by(|source| source.path.as_str().cmp(path))
+                    .ok()
+                    .map(|index| self.sources[index].clone())
+            })
+            .collect()
+    }
+
+    fn prepare(
+        &mut self,
+        request: &Request,
+        dialect: &'static solid_facts_backend::dialect::Dialect,
+    ) -> Result<PreparedDependencies, Box<dyn Error>> {
+        let host = super::dependency_program::host(&request.runtime)?;
+        let modules = super::dependency_program::program_modules(&mut self.typescript)?;
+        let (notes, program) = super::dependency_program::prepare_from(
+            &self.project,
+            &request.dependency_sources,
+            &host,
+            dialect,
+            &self.ordered_sources(),
+            &modules,
+        );
+        Ok(PreparedDependencies {
+            notes,
+            program: program?,
+        })
+    }
+}
+
+/// The filesystem observations a retained program is reused under.
+struct Tracking {
     fingerprints: BTreeMap<String, FileFingerprint>,
     dirs: BTreeMap<PathBuf, Option<FileStamp>>,
     tsconfig: FileFingerprint,
-    last: Option<CachedAnswer>,
-    cache_retention: CacheRetention,
+}
+
+impl Tracking {
+    fn new(project: &Path, sources: &[SourceFile]) -> Result<Self, Box<dyn Error>> {
+        let tsconfig = fingerprint_file(project)?;
+        let mut fingerprints = BTreeMap::new();
+        let mut dirs = BTreeMap::new();
+        if let Some(parent) = project.parent() {
+            dirs.insert(parent.to_path_buf(), directory_stamp(parent));
+        }
+        for source in sources {
+            fingerprints.insert(
+                source.path.clone(),
+                fingerprint_bytes(Path::new(&source.path), source.source.as_bytes())?,
+            );
+            if let Some(parent) = PathBuf::from(&source.path).parent() {
+                dirs.entry(parent.to_path_buf())
+                    .or_insert_with(|| directory_stamp(parent));
+            }
+        }
+        Ok(Self {
+            fingerprints,
+            dirs,
+            tsconfig,
+        })
+    }
+
+    /// Record `directory` as it is now, after this daemon itself created or
+    /// removed a sibling tsconfig in it.
+    fn restamp(&mut self, directory: &Path) {
+        if let Some(stamp) = self.dirs.get_mut(directory) {
+            *stamp = directory_stamp(directory);
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -459,11 +635,91 @@ enum FileRefresh {
 enum Sync {
     Ready(Vec<SourceChange>),
     Rebuild,
+    /// ADR 0296: the project's own program is current, and preparation
+    /// answers differently; reopen the analyzed program for this answer.
+    Reprepare(Box<PreparedDependencies>),
+}
+
+/// Reconcile one retained program with the filesystem. Content edits to
+/// known files become overlay updates at `version`; anything that can change
+/// the project's file set demands a full rebuild.
+fn resync_tracked(
+    project: &Path,
+    tracking: &mut Tracking,
+    sources: &mut [SourceFile],
+    version: u64,
+) -> Result<Sync, Box<dyn Error>> {
+    match refresh_file_with(project, &tracking.tsconfig, |path| fs::read(path)) {
+        Ok(FileRefresh::Unchanged) => {}
+        Ok(FileRefresh::MetadataOnly(fingerprint)) => tracking.tsconfig = fingerprint,
+        // A tsconfig that changed or can no longer be read is a new program.
+        Ok(FileRefresh::Content { .. }) | Err(_) => return Ok(Sync::Rebuild),
+    }
+    for (dir, recorded) in &tracking.dirs {
+        if directory_stamp(dir) != *recorded {
+            return Ok(Sync::Rebuild);
+        }
+    }
+    let mut changes = Vec::new();
+    let paths = tracking.fingerprints.keys().cloned().collect::<Vec<_>>();
+    for path in paths {
+        let recorded = tracking.fingerprints[&path];
+        let refresh = match refresh_file_with(Path::new(&path), &recorded, |path| fs::read(path)) {
+            Ok(refresh) => refresh,
+            Err(_) => return Ok(Sync::Rebuild),
+        };
+        match refresh {
+            FileRefresh::Unchanged => {}
+            FileRefresh::MetadataOnly(fingerprint) => {
+                tracking.fingerprints.insert(path, fingerprint);
+            }
+            FileRefresh::Content { fingerprint, bytes } => {
+                let text = String::from_utf8(bytes)?;
+                changes.push(SourceChange {
+                    path: path.clone(),
+                    version,
+                    source: Some(text.clone()),
+                    compiler_options: Default::default(),
+                });
+                tracking.fingerprints.insert(path.clone(), fingerprint);
+                let index = sources
+                    .binary_search_by(|source| source.path.as_str().cmp(path.as_str()))
+                    .map_err(|_| format!("configured source disappeared from state: {path}"))?;
+                sources[index] = SourceFile {
+                    path,
+                    source: text.into(),
+                    compiler_options: Default::default(),
+                };
+            }
+        }
+    }
+    Ok(Sync::Ready(changes))
+}
+
+/// The sibling tsconfig a live daemon owns, removed when it exits.
+static OWNED_PROGRAM: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+
+fn own_program(path: Option<&Path>) {
+    if let Ok(mut owned) = OWNED_PROGRAM.lock() {
+        *owned = path.map(Path::to_path_buf);
+    }
+}
+
+fn remove_owned_program() {
+    if let Ok(mut owned) = OWNED_PROGRAM.lock()
+        && let Some(path) = owned.take()
+    {
+        let _ = fs::remove_file(path);
+    }
 }
 
 impl State {
     fn open(request: &Request) -> Result<Self, Box<dyn Error>> {
         let dialect = resolve_dialect(request)?;
+        if !request.dependency_sources.is_empty() {
+            let original = OriginalProgram::open(request)?;
+            return Self::open_dependency(request, dialect, original, None);
+        }
         let typescript =
             TypeFactsSession::open(&request.typefacts_executable, &request.project_id, &[])?;
         let (session, configured) = NativeIncrementalSession::open_pipelined(
@@ -471,25 +727,25 @@ impl State {
             request.project_id.clone(),
             typescript,
         )?;
-        let project = PathBuf::from(&request.project_id);
-        let tsconfig = fingerprint_file(&project)?;
+        Self::from_session(
+            dialect,
+            PathBuf::from(&request.project_id),
+            session,
+            configured,
+            None,
+        )
+    }
+
+    fn from_session(
+        dialect: &'static solid_facts_backend::dialect::Dialect,
+        project: PathBuf,
+        session: NativeIncrementalSession,
+        configured: Vec<SourceFile>,
+        dependency: Option<DependencyState>,
+    ) -> Result<Self, Box<dyn Error>> {
         let mut sources = configured;
         sources.sort_by(|left, right| left.path.cmp(&right.path));
-        let mut fingerprints = BTreeMap::new();
-        let mut dirs = BTreeMap::new();
-        if let Some(parent) = project.parent() {
-            dirs.insert(parent.to_path_buf(), directory_stamp(parent));
-        }
-        for source in &sources {
-            fingerprints.insert(
-                source.path.clone(),
-                fingerprint_bytes(Path::new(&source.path), source.source.as_bytes())?,
-            );
-            if let Some(parent) = PathBuf::from(&source.path).parent() {
-                dirs.entry(parent.to_path_buf())
-                    .or_insert_with(|| directory_stamp(parent));
-            }
-        }
+        let tracking = Tracking::new(&project, &sources)?;
         let cache_retention = cache_retention(sources.len());
         Ok(Self {
             dialect,
@@ -497,65 +753,222 @@ impl State {
             session,
             diagnostics: DiagnosticSession::new(dialect),
             sources,
-            fingerprints,
-            dirs,
-            tsconfig,
+            tracking,
             last: None,
             cache_retention,
+            dependency,
         })
     }
 
-    /// Reconcile the retained session with the filesystem. Content edits
-    /// to known files become overlay updates; anything that can change
-    /// the project's file set demands a full rebuild.
-    fn resync(&mut self) -> Result<Sync, Box<dyn Error>> {
-        match refresh_file_with(&self.project, &self.tsconfig, |path| fs::read(path))? {
-            FileRefresh::Unchanged => {}
-            FileRefresh::MetadataOnly(fingerprint) => self.tsconfig = fingerprint,
-            FileRefresh::Content { .. } => return Ok(Sync::Rebuild),
+    /// ADR 0296: open the analyzed program of a dependency-source check from
+    /// the project's own retained program, exactly as a one-shot check
+    /// prepares, folds and binds it (`dependency_program`). `prepared` is
+    /// preparation's answer when the caller already has it.
+    fn open_dependency(
+        request: &Request,
+        dialect: &'static solid_facts_backend::dialect::Dialect,
+        mut original: OriginalProgram,
+        prepared: Option<PreparedDependencies>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let prepared = match prepared {
+            Some(prepared) => prepared,
+            None => original.prepare(request, dialect)?,
+        };
+        let Some(program) = prepared.program.clone() else {
+            // Nothing selected: the ordinary analysis of the project's own
+            // tsconfig, as a one-shot check runs it.
+            let typescript =
+                TypeFactsSession::open(&request.typefacts_executable, &request.project_id, &[])?;
+            let (session, configured) = NativeIncrementalSession::open_pipelined(
+                dialect,
+                request.project_id.clone(),
+                typescript,
+            )?;
+            return Self::from_session(
+                dialect,
+                original.project.clone(),
+                session,
+                configured,
+                Some(DependencyState {
+                    original,
+                    prepared,
+                    folds: BTreeMap::new(),
+                    generated: None,
+                }),
+            );
+        };
+        let domain = dependency_domain(request).unwrap_or_default();
+        let generated = program.write_retained(domain.as_bytes())?;
+        if let Some(directory) = generated.parent() {
+            original.tracking.restamp(directory);
         }
-        for (dir, recorded) in &self.dirs {
-            if directory_stamp(dir) != *recorded {
-                return Ok(Sync::Rebuild);
-            }
+        let opened = (|| -> Result<Self, Box<dyn Error>> {
+            let project_id = generated.to_string_lossy().into_owned();
+            let mut typescript =
+                TypeFactsSession::open(&request.typefacts_executable, &project_id, &[])?;
+            let configured = typescript.configured_sources()?;
+            let folded = super::dependency_program::fold_sources(
+                &configured,
+                &program,
+                &request.runtime,
+                false,
+            );
+            let mut session = NativeIncrementalSession::open_rewritten(
+                dialect,
+                project_id,
+                folded.sources,
+                folded.program_hashes,
+                typescript,
+            );
+            let bound = program.clone();
+            session.set_facts_transform(Box::new(move |facts, typescript| {
+                super::dependency_program::bind(facts, typescript, &bound)
+                    .map_err(|error| BackendError::Process(error.to_string()))
+            }));
+            Self::from_session(
+                dialect,
+                generated.clone(),
+                session,
+                configured,
+                Some(DependencyState {
+                    original,
+                    prepared,
+                    folds: folded.record,
+                    generated: Some(generated.clone()),
+                }),
+            )
+        })();
+        if opened.is_err() {
+            let _ = fs::remove_file(&generated);
         }
-        let mut changes = Vec::new();
-        let paths = self.fingerprints.keys().cloned().collect::<Vec<_>>();
-        for path in paths {
-            let recorded = self.fingerprints[&path];
-            let refresh =
-                match refresh_file_with(Path::new(&path), &recorded, |path| fs::read(path)) {
-                    Ok(refresh) => refresh,
-                    Err(_) => return Ok(Sync::Rebuild),
-                };
-            match refresh {
-                FileRefresh::Unchanged => {}
-                FileRefresh::MetadataOnly(fingerprint) => {
-                    self.fingerprints.insert(path, fingerprint);
+        opened
+    }
+
+    fn generated(&self) -> Option<&Path> {
+        self.dependency
+            .as_ref()
+            .and_then(|dependency| dependency.generated.as_deref())
+    }
+
+    /// The program's own analysis answer may be reused only when this holds:
+    /// in dependency-source mode, the project's own program and the fold
+    /// answer as they did too.
+    fn resync(&mut self, request: &Request) -> Result<Sync, Box<dyn Error>> {
+        let changes = match resync_tracked(
+            &self.project,
+            &mut self.tracking,
+            &mut self.sources,
+            self.session.generation() + 1,
+        )? {
+            Sync::Ready(changes) => changes,
+            other => return Ok(other),
+        };
+        if request.dependency_sources.is_empty() {
+            return Ok(Sync::Ready(changes));
+        }
+        let Some(dependency) = self.dependency.as_mut() else {
+            return Ok(Sync::Rebuild);
+        };
+        let original = &mut dependency.original;
+        match resync_tracked(
+            &original.project,
+            &mut original.tracking,
+            &mut original.sources,
+            original.typescript.generation() + 1,
+        )? {
+            Sync::Ready(edits) if edits.is_empty() => {}
+            Sync::Ready(edits) => {
+                let edits = edits
+                    .into_iter()
+                    .map(|change| typefacts::v3::FileChange {
+                        path: change.path,
+                        version: change.version,
+                        source: change.source.unwrap_or_default().into_bytes(),
+                        deleted: false,
+                    })
+                    .collect();
+                if original.typescript.update(edits).is_err() {
+                    return Ok(Sync::Rebuild);
                 }
-                FileRefresh::Content { fingerprint, bytes } => {
-                    let text = String::from_utf8(bytes)?;
-                    changes.push(SourceChange {
-                        path: path.clone(),
-                        version: self.session.generation() + 1,
-                        source: Some(text.clone()),
-                        compiler_options: Default::default(),
-                    });
-                    self.fingerprints.insert(path.clone(), fingerprint);
-                    let index = self
-                        .sources
-                        .binary_search_by(|source| source.path.as_str().cmp(path.as_str()))
-                        .map_err(|_| format!("configured source disappeared from state: {path}"))?;
-                    self.sources[index] = SourceFile {
-                        path,
-                        source: text.into(),
-                        compiler_options: Default::default(),
-                    };
+            }
+            _ => return Ok(Sync::Rebuild),
+        }
+        // A refusal is answered by a rebuild, which refuses as a fresh run
+        // does.
+        let Ok(prepared) = original.prepare(request, self.dialect) else {
+            return Ok(Sync::Rebuild);
+        };
+        if prepared != dependency.prepared {
+            return Ok(Sync::Reprepare(Box::new(prepared)));
+        }
+        if let Some(program) = &prepared.program {
+            // The fold reads more than the analyzed files: the installed
+            // runtime it resolves each host constant from. Recompute it, and
+            // reuse nothing unless it answers as it did. An edited file is an
+            // ordinary edit only when neither its old nor its new text folds,
+            // since an edit carries the program's own text.
+            let folded = super::dependency_program::fold_sources(
+                &self.sources,
+                program,
+                &request.runtime,
+                false,
+            );
+            if !folded.record.keys().eq(dependency.folds.keys()) {
+                return Ok(Sync::Reprepare(Box::new(prepared)));
+            }
+            for (path, now) in &folded.record {
+                let before = &dependency.folds[path];
+                let edited = changes.iter().any(|change| &change.path == path);
+                if (edited && (before.is_some() || now.is_some())) || (!edited && before != now) {
+                    return Ok(Sync::Reprepare(Box::new(prepared)));
                 }
             }
         }
         Ok(Sync::Ready(changes))
     }
+}
+
+/// Replace a retained state, removing `previous`, the sibling tsconfig the
+/// replaced one owned, when the new one does not use it.
+fn replace_state(state: &mut State, next: State, previous: Option<PathBuf>) {
+    *state = next;
+    if let Some(previous) = previous
+        && state.generated() != Some(previous.as_path())
+    {
+        let _ = fs::remove_file(&previous);
+        if let Some(directory) = previous.parent() {
+            state.tracking.restamp(directory);
+            if let Some(dependency) = state.dependency.as_mut() {
+                dependency.original.tracking.restamp(directory);
+            }
+        }
+    }
+    own_program(state.generated());
+}
+
+/// ADR 0296: what a dependency-source daemon serves beside its project: the
+/// normalized selection and the whole declared runtime host, both of which
+/// decide the analyzed program. `None` outside dependency-source mode.
+fn dependency_domain(request: &Request) -> Option<String> {
+    if request.dependency_sources.is_empty() {
+        return None;
+    }
+    Some(
+        serde_json::json!({
+            "project": request.project_id,
+            "dependencySources": normalized_selection(&request.dependency_sources),
+            "runtime": request.runtime,
+        })
+        .to_string(),
+    )
+}
+
+/// The selection as preparation reads it: a set.
+fn normalized_selection(selection: &[String]) -> Vec<String> {
+    let mut selection = selection.to_vec();
+    selection.sort();
+    selection.dedup();
+    selection
 }
 
 fn content_hash(bytes: &[u8]) -> [u8; 32] {
@@ -609,18 +1022,29 @@ fn directory_stamp(path: &Path) -> Option<FileStamp> {
 
 pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
     let implementation = implementation_identity()?;
-    let socket = socket_path(
+    let mut request = request.clone();
+    request.dependency_sources = normalized_selection(&request.dependency_sources);
+    let request = &request;
+    let socket = socket_path_in_domain(
         &request.project_id,
         &request.typefacts_executable,
         resolve_dialect(request)?.id,
         implementation,
+        dependency_domain(request).as_deref(),
     );
     if UnixStream::connect(&socket).is_ok() {
         return Ok(0); // a live daemon already serves this project
     }
     let _ = fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket)?;
-    let mut state = State::open(request)?;
+    let mut state = match State::open(request) {
+        Ok(state) => state,
+        Err(error) => {
+            let _ = fs::remove_file(&socket);
+            return Err(error);
+        }
+    };
+    own_program(state.generated());
     // Blocking accept keeps request latency free of poll sleeps; a
     // watchdog thread ends the whole process after the idle limit.
     let idle = idle_limit();
@@ -638,12 +1062,14 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
                 .unwrap_or(idle);
             if idle_for >= idle {
                 let _ = fs::remove_file(&watchdog_socket);
+                remove_owned_program();
                 std::process::exit(0);
             }
             if memory_limit.is_some_and(|limit| {
                 process_tree_resident_bytes(process_id).is_some_and(|resident| resident > limit)
             }) {
                 let _ = fs::remove_file(&watchdog_socket);
+                remove_owned_program();
                 std::process::exit(0);
             }
         }
@@ -663,6 +1089,7 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
             }
             Err(error) => {
                 let _ = fs::remove_file(&socket);
+                remove_owned_program();
                 return Err(error.into());
             }
         }
@@ -685,6 +1112,15 @@ fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<()
     }
     if check.project_id != request.project_id {
         return respond_error(&mut stream, "daemon serves a different project");
+    }
+    if check.dependency_sources != request.dependency_sources {
+        return respond_error(
+            &mut stream,
+            "daemon serves a different dependency selection",
+        );
+    }
+    if !request.dependency_sources.is_empty() && check.runtime != request.runtime {
+        return respond_error(&mut stream, "daemon serves a different runtime host");
     }
     let outcome = answer(state, request, &check);
     match outcome {
@@ -723,6 +1159,7 @@ fn normalize_enablement(check: &mut CheckRequest) {
     check.presets.dedup();
     check.enable_rules.sort();
     check.enable_rules.dedup();
+    check.dependency_sources = normalized_selection(&check.dependency_sources);
 }
 
 fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn Error>> {
@@ -749,9 +1186,37 @@ fn answer(
     check: &CheckRequest,
 ) -> Result<Answer, Box<dyn Error>> {
     let started = Instant::now();
-    let changes = match state.resync()? {
+    let changes = match state.resync(request)? {
         Sync::Rebuild => {
-            *state = State::open(request)?;
+            let previous = state.generated().map(Path::to_path_buf);
+            replace_state(state, State::open(request)?, previous);
+            Vec::new()
+        }
+        Sync::Reprepare(prepared) => {
+            // The project's own program is current; only the analyzed one
+            // is reopened.
+            let dependency = state
+                .dependency
+                .take()
+                .ok_or("dependency-source state without its original program")?;
+            let previous = dependency.generated.clone();
+            match State::open_dependency(
+                request,
+                state.dialect,
+                dependency.original,
+                Some(*prepared),
+            ) {
+                Ok(next) => replace_state(state, next, previous),
+                Err(error) => {
+                    // The next request rebuilds: the retained program has
+                    // lost its original, and its sibling is gone.
+                    if let Some(previous) = previous {
+                        let _ = fs::remove_file(previous);
+                    }
+                    own_program(None);
+                    return Err(error);
+                }
+            }
             Vec::new()
         }
         Sync::Ready(changes) => changes,
@@ -851,13 +1316,29 @@ fn answer(
         inputs.sort();
         inputs.dedup();
     }
-    let notice: Arc<str> = selection
-        .notice()
+    // ADR 0296: preparation's notes come first, where a one-shot check
+    // prints them.
+    let dependency_notes = state
+        .dependency
+        .as_ref()
+        .map(|dependency| dependency.prepared.notes.clone())
+        .unwrap_or_default();
+    let notice: Arc<str> = dependency_notes
         .into_iter()
+        .chain(selection.notice())
         .chain(inference_note)
         .collect::<Vec<_>>()
         .join("\n")
         .into();
+    // ADR 0284: a package analyzed as source binds through no contract.
+    let contracts = match state
+        .dependency
+        .as_ref()
+        .and_then(|dependency| dependency.prepared.program.as_ref())
+    {
+        Some(program) => contracts.without_packages(&program.selection.package_names),
+        None => contracts,
+    };
     let analysis = state
         .diagnostics
         .analyze_accepted_measured_with_enablement(
@@ -1155,11 +1636,12 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     // its daemon across two dialects.
     let dialect = resolve_dialect(request)?;
     let implementation = implementation_identity()?;
-    let socket = socket_path(
+    let socket = socket_path_in_domain(
         &request.project_id,
         &request.typefacts_executable,
         dialect.id,
         implementation,
+        dependency_domain(request).as_deref(),
     );
     let stream = match UnixStream::connect(&socket) {
         Ok(stream) => stream,
@@ -1174,6 +1656,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         presets: request.presets.clone(),
         enable_rules: request.enable_rules.clone(),
         runtime: request.runtime.clone(),
+        dependency_sources: normalized_selection(&request.dependency_sources),
     })?;
     let mut stream = stream;
     stream.write_all(&payload)?;
@@ -1286,6 +1769,16 @@ fn spawn_and_connect(
     // the client never connects to — so the value `check` resolved once is
     // passed in and forwarded, never re-derived.
     command.arg("--dialect").arg(dialect.id);
+    // ADR 0296: a dependency-source daemon prepares its program for exactly
+    // this selection and host, which therefore cross verbatim.
+    if !request.dependency_sources.is_empty() {
+        for specifier in normalized_selection(&request.dependency_sources) {
+            command.arg("--dependency-source").arg(specifier);
+        }
+        command
+            .arg("--daemon-runtime")
+            .arg(serde_json::to_string(&request.runtime)?);
+    }
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -1334,7 +1827,7 @@ mod tests {
         explicit_inputs, fingerprint_file, hash_file, inference_inputs_current,
         macho_build_identity, normalize_enablement, parse_process_memory,
         process_tree_resident_bytes_from, refresh_file_with, retained_format, socket_path,
-        timing_value, verify_implementation,
+        socket_path_in_domain, timing_value, verify_implementation,
     };
     use solid_reactive_ir::{CacheRetention, RuntimeEnvironment};
 
@@ -1399,6 +1892,7 @@ mod tests {
             presets: Vec::new(),
             enable_rules: Vec::new(),
             runtime: RuntimeEnvironment::default(),
+            dependency_sources: Vec::new(),
         };
         assert_ne!(
             explicit_inputs(&request(true)),
@@ -1505,10 +1999,36 @@ mod tests {
                 "prefer-show".into(),
             ],
             runtime: RuntimeEnvironment::default(),
+            dependency_sources: vec!["dep-b".into(), "*".into(), "dep-b".into()],
         };
         normalize_enablement(&mut repeated);
         assert_eq!(repeated.presets, ["preferences", "z"]);
         assert_eq!(repeated.enable_rules, ["prefer-for", "prefer-show"]);
+        assert_eq!(repeated.dependency_sources, ["*", "dep-b"]);
+    }
+
+    #[test]
+    fn a_dependency_source_domain_is_its_own_daemon() {
+        // ADR 0296: the selection and host decide the analyzed program, so
+        // another selection or host must not reach this daemon's answers.
+        let base = socket_path("/p/tsconfig.json", "/bin/typefacts", "solid-v2", "c");
+        assert_eq!(
+            base,
+            socket_path_in_domain("/p/tsconfig.json", "/bin/typefacts", "solid-v2", "c", None),
+            "the ordinary daemon keeps its identity"
+        );
+        let domain = |text: &str| {
+            socket_path_in_domain(
+                "/p/tsconfig.json",
+                "/bin/typefacts",
+                "solid-v2",
+                "c",
+                Some(text),
+            )
+        };
+        assert_ne!(base, domain("a"));
+        assert_ne!(domain("a"), domain("b"));
+        assert_eq!(domain("a"), domain("a"));
     }
 
     #[test]
