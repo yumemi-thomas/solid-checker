@@ -612,6 +612,70 @@ fn walk(
     Ok(())
 }
 
+/// ADR 0295: whether `module` is outside every static import cycle, as a
+/// Vite build for `host` loads it: no module its static loads reach,
+/// transitively, loads it back. A module in a cycle can be entered by a
+/// module that runs before its body, which may then call its hoisted
+/// functions before a module-level `var` is initialized.
+///
+/// Every load is followed as [`prepare`] follows one -- a relative import to
+/// the source file it names, a bare one through Node's lookup and the
+/// package's `exports` for the host -- into every package, selected or not.
+/// `false` whenever a load on the way cannot be followed (an unreadable or
+/// unparsable file, a CommonJS `require`, an `import.meta.glob`, a bare
+/// specifier no installed package answers, an `exports` form this does not
+/// read, a non-source target) or the walk exceeds [`MAX_CLOSURE_FILES`]: an
+/// unknown edge may close a cycle. A `node:` builtin loads no package code.
+#[must_use]
+pub fn outside_import_cycles(module: &Path, host: &Host) -> bool {
+    let Ok(module) = module.canonicalize() else {
+        return false;
+    };
+    let Some(first) = module_loads(&module, host) else {
+        return false;
+    };
+    let mut seen = BTreeSet::new();
+    let mut queue = VecDeque::from(first);
+    while let Some(file) = queue.pop_front() {
+        if file == module {
+            return false;
+        }
+        if !seen.insert(file.clone()) {
+            continue;
+        }
+        if seen.len() > MAX_CLOSURE_FILES {
+            return false;
+        }
+        let Some(loads) = module_loads(&file, host) else {
+            return false;
+        };
+        queue.extend(loads);
+    }
+    true
+}
+
+/// The canonical files `file`'s static loads evaluate before it, for
+/// [`outside_import_cycles`]; `None` when one cannot be followed.
+fn module_loads(file: &Path, host: &Host) -> Option<Vec<PathBuf>> {
+    let source = fs::read_to_string(file).ok()?;
+    let specifiers = solid_facts::ast::module_load_specifiers(file, &source)?;
+    let directory = file.parent()?;
+    let mut loads = Vec::with_capacity(specifiers.len());
+    for specifier in specifiers {
+        if specifier.starts_with("node:") {
+            continue;
+        }
+        if specifier.starts_with("./") || specifier.starts_with("../") {
+            loads.push(resolve_relative(directory, &specifier)?);
+            continue;
+        }
+        let (name, subpath) = split_bare_specifier(&specifier)?;
+        let root = find_package_root(file, &name, None)?.canonicalize().ok()?;
+        loads.push(select_entry(&root, &subpath, host).ok()?);
+    }
+    Some(loads)
+}
+
 /// A relative specifier as a bundler resolves it: the exact file, then the
 /// source extensions, then an `index` file.
 fn resolve_relative(directory: &Path, module: &str) -> Option<PathBuf> {
@@ -831,5 +895,72 @@ mod tests {
             entry_target(&empty, ".", &host(&["browser", "development"])).as_deref(),
             Some("./module.js")
         );
+    }
+
+    #[test]
+    fn an_import_cycle_is_found_through_every_package() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-import-cycles-{}",
+            std::process::id()
+        ));
+        let modules = directory.join("node_modules");
+        let package = |name: &str, files: &[(&str, &str)]| {
+            let root = modules.join(name);
+            std::fs::create_dir_all(&root).unwrap();
+            std::fs::write(
+                root.join("package.json"),
+                format!(r#"{{"name":"{name}","exports":{{".":"./index.js"}}}}"#),
+            )
+            .unwrap();
+            for (file, source) in files {
+                std::fs::write(root.join(file), source).unwrap();
+            }
+            root.join("index.js")
+        };
+        let browser = host(&["browser", "development"]);
+        let query = package(
+            "query",
+            &[(
+                "index.js",
+                "import { a } from \"core\";\nimport \"./local.js\";\nimport \"node:fs\";\nconst lazy = () => import(\"cyclic\");\n",
+            )],
+        );
+        package(
+            "core",
+            &[
+                ("index.js", "export * from \"./more.js\";\n"),
+                ("more.js", "export const a = 1;\n"),
+            ],
+        );
+        std::fs::write(modules.join("query/local.js"), "export {};\n").unwrap();
+        assert!(super::outside_import_cycles(&query, &browser));
+        // Back into the module from another package, two edges away.
+        let cyclic = package("cyclic", &[("index.js", "import \"middle\";\n")]);
+        package(
+            "middle",
+            &[("index.js", "export { useQuery } from \"cyclic\";\n")],
+        );
+        assert!(!super::outside_import_cycles(&cyclic, &browser));
+        // Within one package.
+        let local = package(
+            "local",
+            &[
+                ("index.js", "import \"./a.js\";\n"),
+                ("a.js", "import \"./index.js\";\n"),
+            ],
+        );
+        assert!(!super::outside_import_cycles(&local, &browser));
+        // An edge that cannot be followed may close a cycle.
+        let missing = package("missing", &[("index.js", "import \"not-installed\";\n")]);
+        assert!(!super::outside_import_cycles(&missing, &browser));
+        let required = package(
+            "required",
+            &[("index.js", "const core = require(\"core\");\n")],
+        );
+        assert!(!super::outside_import_cycles(&required, &browser));
+        let unread = package("unread", &[("index.js", "import \"./style.css\";\n")]);
+        std::fs::write(modules.join("unread/style.css"), "").unwrap();
+        assert!(!super::outside_import_cycles(&unread, &browser));
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 }

@@ -17,6 +17,13 @@
 //! import specifier itself (or to a never-written `const` whose initializer
 //! does). A shadowing binding, a namespace member, a re-export, a written
 //! alias, or a module containing a direct `eval` states nothing.
+//!
+//! ADR 0295 adds one premise a caller may declare for a module: it runs in an
+//! HTML Window realm ([`WindowRealm`]). There, a strict comparison of
+//! `typeof window` or `typeof document` with `"undefined"` is decided, when
+//! the identifier is the unbound global; and a module-level `var` holding
+//! exactly that comparison carries it, when every read of it is proved to run
+//! after its initializer.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -24,13 +31,14 @@ use std::path::Path;
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{
-    BindingPattern, Declaration, Expression, IdentifierReference, ImportDeclarationSpecifier,
+    Argument, BinaryOperator, BindingPattern, Class, ClassElement, Declaration,
+    ExportDefaultDeclarationKind, Expression, IdentifierReference, ImportDeclarationSpecifier,
     ImportOrExportKind, ModuleExportName, Program, Statement, UnaryOperator,
     VariableDeclarationKind,
 };
 use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
-use oxc_semantic::{Scoping, SemanticBuilder, SymbolId};
+use oxc_semantic::{Scoping, SemanticBuilder, SymbolFlags, SymbolId};
 use oxc_span::{GetSpan, SourceType};
 
 const MAX_SOURCE_BYTES: usize = 4 * 1024 * 1024;
@@ -102,6 +110,66 @@ pub fn named_value_imports(path: &Path, source: &str) -> Option<Vec<HostConstant
     imports.sort();
     imports.dedup();
     Some(imports)
+}
+
+/// ADR 0295: every specifier whose module `source` loads before its own body
+/// runs -- each static import, side-effect import, and `export … from`, except
+/// a type-only one, which is erased. `None` when the module does not parse,
+/// reads an unbound `require` (a CommonJS load this does not follow), or uses
+/// `import.meta.glob` (a bundler-generated import). A dynamic `import()`
+/// settles only after the importing module's evaluation, so it is no edge.
+#[must_use]
+pub fn module_load_specifiers(path: &Path, source: &str) -> Option<Vec<String>> {
+    let allocator = Allocator::default();
+    let program = parse(&allocator, path, source)?;
+    let built = SemanticBuilder::new().build(&program);
+    if !built.errors.is_empty() {
+        return None;
+    }
+    let scoping = built.semantic.scoping();
+    if scoping.root_unresolved_references().contains_key("require") {
+        return None;
+    }
+    // `import.meta` is only refused as `import.meta.glob`; any other read of
+    // it loads nothing.
+    let glob = built.semantic.nodes().iter().any(|node| {
+        matches!(node.kind(), AstKind::StaticMemberExpression(member)
+            if matches!(member.object, Expression::MetaProperty(_))
+                && member.property.name == "glob")
+    });
+    if glob {
+        return None;
+    }
+    let mut specifiers = Vec::new();
+    for statement in &program.body {
+        let specifier = match statement {
+            Statement::ImportDeclaration(import)
+                if import.import_kind != ImportOrExportKind::Type =>
+            {
+                &import.source.value
+            }
+            Statement::ExportAllDeclaration(export)
+                if export.export_kind != ImportOrExportKind::Type =>
+            {
+                &export.source.value
+            }
+            Statement::ExportNamedDeclaration(export)
+                if export.export_kind != ImportOrExportKind::Type =>
+            {
+                let Some(source) = &export.source else {
+                    continue;
+                };
+                &source.value
+            }
+            // `import x = require("…")`: a CommonJS load.
+            Statement::TSImportEqualsDeclaration(_) => return None,
+            _ => continue,
+        };
+        specifiers.push(specifier.to_string());
+    }
+    specifiers.sort();
+    specifiers.dedup();
+    Some(specifiers)
 }
 
 /// Whether the module `source` exports `exported` as a module-level `const`
@@ -247,6 +315,21 @@ pub struct HostConstantScope<'s, 'a> {
     scoping: &'s Scoping,
     imports: HashMap<SymbolId, bool>,
     consts: HashMap<SymbolId, &'a Expression<'a>>,
+    /// ADR 0295: the module runs in a declared Window realm.
+    window_realm: bool,
+    /// ADR 0295: module-level `var` aliases of a Window-realm comparison,
+    /// each proved read only after its initializer ran.
+    vars: HashMap<SymbolId, &'a Expression<'a>>,
+}
+
+/// ADR 0295: the declared premise that a module runs in a standards-conforming
+/// HTML Window realm, whose global `window` and `document` exist and are not
+/// replaced.
+pub struct WindowRealm<'f> {
+    /// Whether the module is part of no static import cycle. Asked only when
+    /// a module-level `var` alias needs it; a caller that cannot tell answers
+    /// `false`.
+    pub acyclic: &'f dyn Fn() -> bool,
 }
 
 impl<'s, 'a> HostConstantScope<'s, 'a> {
@@ -258,8 +341,32 @@ impl<'s, 'a> HostConstantScope<'s, 'a> {
         semantic: &'s oxc_semantic::Semantic<'a>,
         folds: &[HostConstantFold],
     ) -> Option<Self> {
+        Self::build(program, semantic, folds, None)
+    }
+
+    /// [`Self::new`] for a module the caller declares runs in a Window realm
+    /// (ADR 0295). `None` also when the module holds a `with` statement.
+    #[must_use]
+    pub fn in_window_realm(
+        program: &Program<'a>,
+        semantic: &'s oxc_semantic::Semantic<'a>,
+        folds: &[HostConstantFold],
+        realm: &WindowRealm<'_>,
+    ) -> Option<Self> {
+        Self::build(program, semantic, folds, Some(realm))
+    }
+
+    fn build(
+        program: &Program<'a>,
+        semantic: &'s oxc_semantic::Semantic<'a>,
+        folds: &[HostConstantFold],
+        realm: Option<&WindowRealm<'_>>,
+    ) -> Option<Self> {
         let scoping = semantic.scoping();
         if contains_direct_eval(program) {
+            return None;
+        }
+        if realm.is_some() && contains_with(program) {
             return None;
         }
         let mut imports = HashMap::new();
@@ -297,7 +404,7 @@ impl<'s, 'a> HostConstantScope<'s, 'a> {
             }
         }
         let mut consts = HashMap::new();
-        if !imports.is_empty() {
+        if !imports.is_empty() || realm.is_some() {
             for node in semantic.nodes().iter() {
                 let AstKind::VariableDeclarator(declarator) = node.kind() else {
                     continue;
@@ -321,16 +428,231 @@ impl<'s, 'a> HostConstantScope<'s, 'a> {
                 }
             }
         }
-        Some(Self {
+        let mut scope = Self {
             scoping,
             imports,
             consts,
-        })
+            window_realm: realm.is_some(),
+            vars: HashMap::new(),
+        };
+        if let Some(realm) = realm {
+            scope.vars = scope.initialized_var_aliases(program, semantic, realm);
+        }
+        Some(scope)
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.imports.is_empty()
+        self.imports.is_empty() && !self.window_realm
+    }
+
+    /// ADR 0295: the module-level `var` aliases of a Window-realm comparison
+    /// whose every read is proved to run after the initializer. A `var` is
+    /// `undefined` until its declaration runs, so a read before it would take
+    /// the other arm; only this layout is admitted:
+    ///
+    /// - one plain `var` statement at module level with one identifier
+    ///   declarator, initialized with exactly the comparison, never written
+    ///   or redeclared;
+    /// - every reference a read, inside a function or textually after the
+    ///   declaration at module level;
+    /// - every module-level statement before it runs no code of this module
+    ///   ([`Self::runs_no_module_code`]);
+    /// - the module in no static import cycle, which the caller proves: a
+    ///   module importing it back runs first and may call its hoisted
+    ///   functions.
+    fn initialized_var_aliases(
+        &self,
+        program: &Program<'a>,
+        semantic: &oxc_semantic::Semantic<'a>,
+        realm: &WindowRealm<'_>,
+    ) -> HashMap<SymbolId, &'a Expression<'a>> {
+        let mut vars = HashMap::new();
+        let mut acyclic = None::<bool>;
+        let nodes = semantic.nodes();
+        for node in nodes.iter() {
+            let AstKind::VariableDeclaration(declaration) = node.kind() else {
+                continue;
+            };
+            if !matches!(nodes.parent_kind(node.id()), AstKind::Program(_))
+                || declaration.kind != VariableDeclarationKind::Var
+                || declaration.declare
+                || declaration.declarations.len() != 1
+            {
+                continue;
+            }
+            let declarator = &declaration.declarations[0];
+            let BindingPattern::BindingIdentifier(identifier) = &declarator.id else {
+                continue;
+            };
+            let (Some(symbol), Some(init)) = (identifier.symbol_id.get(), &declarator.init) else {
+                continue;
+            };
+            if self.window_comparison(init).is_none()
+                || !self.scoping.symbol_redeclarations(symbol).is_empty()
+            {
+                continue;
+            }
+            let after = declaration.span.end;
+            let reads_after_init = self
+                .scoping
+                .get_resolved_references(symbol)
+                .all(|reference| {
+                    if reference.is_write() {
+                        return false;
+                    }
+                    let node = reference.node_id();
+                    nodes.ancestor_kinds(node).any(|kind| {
+                        matches!(
+                            kind,
+                            AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
+                        )
+                    }) || nodes.kind(node).span().start >= after
+                });
+            if !reads_after_init
+                || !program
+                    .body
+                    .iter()
+                    .take_while(|statement| statement.span().end <= declaration.span.start)
+                    .all(|statement| self.runs_no_module_code(statement))
+            {
+                continue;
+            }
+            if !*acyclic.get_or_insert_with(|| (realm.acyclic)()) {
+                continue;
+            }
+            vars.insert(symbol, init);
+        }
+        vars
+    }
+
+    /// Whether evaluating a module-level `statement` provably calls no
+    /// function of this module: an import or re-export, a function
+    /// declaration, an inert class ([`inert_class`]), or a declaration whose
+    /// initializers are inert ([`Self::inert_initializer`]).
+    fn runs_no_module_code(&self, statement: &Statement<'_>) -> bool {
+        match statement {
+            Statement::ImportDeclaration(_)
+            | Statement::ExportAllDeclaration(_)
+            | Statement::FunctionDeclaration(_)
+            | Statement::EmptyStatement(_)
+            | Statement::TSTypeAliasDeclaration(_)
+            | Statement::TSInterfaceDeclaration(_) => true,
+            Statement::ClassDeclaration(class) => inert_class(class),
+            Statement::VariableDeclaration(declaration) => {
+                self.inert_declarators(&declaration.declarations)
+            }
+            Statement::ExportNamedDeclaration(export) => match &export.declaration {
+                None | Some(Declaration::FunctionDeclaration(_)) => true,
+                Some(Declaration::ClassDeclaration(class)) => inert_class(class),
+                Some(Declaration::VariableDeclaration(declaration)) => {
+                    self.inert_declarators(&declaration.declarations)
+                }
+                Some(_) => false,
+            },
+            Statement::ExportDefaultDeclaration(export) => matches!(
+                export.declaration,
+                ExportDefaultDeclarationKind::FunctionDeclaration(_)
+            ),
+            _ => false,
+        }
+    }
+
+    fn inert_declarators(&self, declarators: &[oxc_ast::ast::VariableDeclarator<'_>]) -> bool {
+        declarators.iter().all(|declarator| {
+            matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+                && declarator
+                    .init
+                    .as_ref()
+                    .is_none_or(|init| self.inert_initializer(init))
+        })
+    }
+
+    /// An initializer whose evaluation calls no function of this module: a
+    /// literal, `void` of one, a function or arrow expression (created, not
+    /// run), a Window-realm comparison, or a call of an imported binding
+    /// whose every argument is a literal or a parameterless arrow returning
+    /// one (`createContext(null)`, `createContext(() => false)`). An imported
+    /// callee reaches this module's functions only through an import cycle,
+    /// which the caller excludes, or through an argument, which is closed.
+    fn inert_initializer(&self, init: &Expression<'_>) -> bool {
+        let init = strip(init);
+        if inert_literal(init)
+            || matches!(
+                init,
+                Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_)
+            )
+            || self.window_comparison(init).is_some()
+        {
+            return true;
+        }
+        let Expression::CallExpression(call) = init else {
+            return false;
+        };
+        let Expression::Identifier(callee) = &call.callee else {
+            return false;
+        };
+        if call.optional {
+            return false;
+        }
+        let Some(symbol) = reference_symbol(self.scoping, callee) else {
+            return false;
+        };
+        self.scoping
+            .symbol_flags(symbol)
+            .contains(SymbolFlags::Import)
+            && call.arguments.iter().all(|argument| match argument {
+                Argument::SpreadElement(_) => false,
+                argument => argument.as_expression().is_some_and(closed_argument),
+            })
+    }
+
+    /// ADR 0295: how a strict comparison of `typeof window` or `typeof
+    /// document` with `"undefined"` reads in a Window realm: `===` is false
+    /// and `!==` true. `None` for every other form, outside a declared
+    /// realm, and when the identifier resolves to any binding of this module.
+    fn window_comparison(&self, expression: &Expression<'_>) -> Option<bool> {
+        if !self.window_realm {
+            return None;
+        }
+        let Expression::BinaryExpression(binary) = strip(expression) else {
+            return None;
+        };
+        let equal = match binary.operator {
+            BinaryOperator::StrictEquality => true,
+            BinaryOperator::StrictInequality => false,
+            _ => return None,
+        };
+        let (left, right) = (strip(&binary.left), strip(&binary.right));
+        let operand = if undefined_string(right) {
+            left
+        } else if undefined_string(left) {
+            right
+        } else {
+            return None;
+        };
+        let Expression::UnaryExpression(unary) = operand else {
+            return None;
+        };
+        if unary.operator != UnaryOperator::Typeof {
+            return None;
+        }
+        let Expression::Identifier(identifier) = strip(&unary.argument) else {
+            return None;
+        };
+        if !matches!(identifier.name.as_str(), "window" | "document") {
+            return None;
+        }
+        let reference = self.scoping.get_reference(identifier.reference_id.get()?);
+        if reference.symbol_id().is_some()
+            || self
+                .scoping
+                .get_root_binding(identifier.name.as_str().into())
+                .is_some()
+        {
+            return None;
+        }
+        Some(!equal)
     }
 
     /// How `expression` reads as a condition: `Some((value, folded))` when it
@@ -376,12 +698,100 @@ impl<'s, 'a> HostConstantScope<'s, 'a> {
                 if let Some(value) = self.imports.get(&symbol) {
                     return Some((*value, true));
                 }
-                let init = self.consts.get(&symbol)?;
+                let init = self
+                    .consts
+                    .get(&symbol)
+                    .or_else(|| self.vars.get(&symbol))?;
                 self.truthiness_at(init, depth + 1)
             }
+            Expression::BinaryExpression(_) => self
+                .window_comparison(expression)
+                .map(|value| (value, true)),
             _ => None,
         }
     }
+}
+
+/// `expression` without parentheses and identity-preserving type wrappers.
+fn strip<'e, 'a>(mut expression: &'e Expression<'a>) -> &'e Expression<'a> {
+    for _ in 0..MAX_DEPTH {
+        expression = match expression {
+            Expression::ParenthesizedExpression(inner) => &inner.expression,
+            Expression::TSAsExpression(inner) => &inner.expression,
+            Expression::TSSatisfiesExpression(inner) => &inner.expression,
+            Expression::TSNonNullExpression(inner) => &inner.expression,
+            Expression::TSTypeAssertion(inner) => &inner.expression,
+            _ => return expression,
+        };
+    }
+    expression
+}
+
+fn undefined_string(expression: &Expression<'_>) -> bool {
+    matches!(expression, Expression::StringLiteral(literal) if literal.value == "undefined")
+}
+
+fn inert_literal(expression: &Expression<'_>) -> bool {
+    match strip(expression) {
+        Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::StringLiteral(_)
+        | Expression::BigIntLiteral(_) => true,
+        Expression::UnaryExpression(unary) => {
+            unary.operator == UnaryOperator::Void && inert_literal(&unary.argument)
+        }
+        _ => false,
+    }
+}
+
+/// A call argument a callee can run without reaching this module: a literal,
+/// or a parameterless arrow whose expression body is one.
+fn closed_argument(argument: &Expression<'_>) -> bool {
+    match strip(argument) {
+        Expression::ArrowFunctionExpression(arrow) => {
+            arrow.expression
+                && arrow.params.items.is_empty()
+                && arrow.params.rest.is_none()
+                && matches!(
+                    arrow.body.statements.as_slice(),
+                    [Statement::ExpressionStatement(statement)]
+                        if inert_literal(&statement.expression)
+                )
+        }
+        argument => inert_literal(argument),
+    }
+}
+
+/// A class whose declaration runs no code: no heritage or decorators, no
+/// computed key, no static block, and no static member with an initializer.
+fn inert_class(class: &Class<'_>) -> bool {
+    class.super_class.is_none()
+        && class.decorators.is_empty()
+        && class.body.body.iter().all(|element| match element {
+            ClassElement::MethodDefinition(method) => {
+                !method.computed && method.decorators.is_empty()
+            }
+            ClassElement::PropertyDefinition(property) => {
+                !property.computed
+                    && property.decorators.is_empty()
+                    && (!property.r#static || property.value.is_none())
+            }
+            ClassElement::TSIndexSignature(_) => true,
+            ClassElement::StaticBlock(_) | ClassElement::AccessorProperty(_) => false,
+        })
+}
+
+fn contains_with(program: &Program<'_>) -> bool {
+    struct With(bool);
+    impl<'a> Visit<'a> for With {
+        fn visit_with_statement(&mut self, _: &oxc_ast::ast::WithStatement<'a>) {
+            self.0 = true;
+        }
+    }
+    let mut visitor = With(false);
+    visitor.visit_program(program);
+    visitor.0
 }
 
 /// `source` with every `if` arm a host-constant fold leaves dead blanked, and
@@ -408,13 +818,38 @@ pub fn fold_host_constant_branches(
     if folds.is_empty() {
         return None;
     }
+    fold_branches(path, source, folds, None)
+}
+
+/// [`fold_host_constant_branches`] for a module the caller declares runs in a
+/// Window realm (ADR 0295): a condition a Window-realm comparison decides is
+/// folded too.
+#[must_use]
+pub fn fold_host_constant_branches_in_window_realm(
+    path: &Path,
+    source: &str,
+    folds: &[HostConstantFold],
+    realm: &WindowRealm<'_>,
+) -> Option<String> {
+    fold_branches(path, source, folds, Some(realm))
+}
+
+fn fold_branches(
+    path: &Path,
+    source: &str,
+    folds: &[HostConstantFold],
+    realm: Option<&WindowRealm<'_>>,
+) -> Option<String> {
     let allocator = Allocator::default();
     let program = parse(&allocator, path, source)?;
     let built = SemanticBuilder::new().build(&program);
     if !built.errors.is_empty() {
         return None;
     }
-    let scope = HostConstantScope::new(&program, &built.semantic, folds)?;
+    let scope = match realm {
+        Some(realm) => HostConstantScope::in_window_realm(&program, &built.semantic, folds, realm)?,
+        None => HostConstantScope::new(&program, &built.semantic, folds)?,
+    };
     if scope.is_empty() {
         return None;
     }
@@ -697,5 +1132,287 @@ function viaConst(fn) {\n  if (isSupported) {\n    onCleanup(fn);\n  }\n}\n";
         assert!(fold_host_constant_branches(Path::new("m.js"), other, &fold(true)).is_none());
         let plain = "function f() { if (false) return; g(); }\n";
         assert!(fold_host_constant_branches(Path::new("m.js"), plain, &fold(true)).is_none());
+    }
+
+    /// The Window-realm reading of every `if` test in `source`, in order:
+    /// `Some(value)` when the realm decides it, `None` otherwise.
+    fn realm_tests(path: &str, source: &str, acyclic: bool) -> Option<Vec<Option<bool>>> {
+        let allocator = Allocator::default();
+        let program = parse(&allocator, Path::new(path), source).expect("parses");
+        let built = SemanticBuilder::new().build(&program);
+        let answer = move || acyclic;
+        let realm = WindowRealm { acyclic: &answer };
+        let scope = HostConstantScope::in_window_realm(&program, &built.semantic, &[], &realm)?;
+        let mut tests = Vec::new();
+        for node in built.semantic.nodes().iter() {
+            if let AstKind::IfStatement(statement) = node.kind() {
+                tests.push(
+                    scope
+                        .truthiness(&statement.test)
+                        .and_then(|(value, folded)| folded.then_some(value)),
+                );
+            }
+        }
+        Some(tests)
+    }
+
+    fn realm_test(source: &str) -> Option<bool> {
+        let tests = realm_tests("m.js", source, true).expect("scope");
+        assert_eq!(tests.len(), 1, "{source}");
+        tests[0]
+    }
+
+    #[test]
+    fn a_window_realm_decides_a_strict_typeof_comparison_with_undefined() {
+        for (source, value) in [
+            (
+                "function f() { if (typeof window === \"undefined\") g(); }",
+                false,
+            ),
+            (
+                "function f() { if (typeof window !== \"undefined\") g(); }",
+                true,
+            ),
+            (
+                "function f() { if (\"undefined\" === typeof window) g(); }",
+                false,
+            ),
+            (
+                "function f() { if (typeof document === \"undefined\") g(); }",
+                false,
+            ),
+            (
+                "function f() { if (\"undefined\" !== typeof document) g(); }",
+                true,
+            ),
+            (
+                "function f() { if (!(typeof window === \"undefined\")) g(); }",
+                true,
+            ),
+            (
+                "function f() { if (!!(typeof window !== \"undefined\")) g(); }",
+                true,
+            ),
+            (
+                "function f() { if (((typeof (window)) === (\"undefined\"))) g(); }",
+                false,
+            ),
+        ] {
+            assert_eq!(realm_test(source), Some(value), "{source}");
+        }
+        let wrapped =
+            "function f() { if ((typeof (window as any)) as unknown === \"undefined\") g(); }";
+        assert_eq!(realm_tests("m.ts", wrapped, true).unwrap(), [Some(false)]);
+    }
+
+    #[test]
+    fn every_other_global_test_stays_undecided() {
+        for source in [
+            "function f() { if (typeof window == \"undefined\") g(); }",
+            "function f() { if (typeof window != \"undefined\") g(); }",
+            "function f() { if (typeof window === \"object\") g(); }",
+            "function f() { if (typeof window < \"u\") g(); }",
+            "function f() { if (typeof globalThis.window === \"undefined\") g(); }",
+            "function f() { if (typeof globalThis === \"undefined\") g(); }",
+            "function f() { if (typeof self === \"undefined\") g(); }",
+            "function f() { if (typeof window.document === \"undefined\") g(); }",
+            "function f() { if (typeof document !== \"undefined\" && document.body) g(); }",
+            "function f() { if (typeof window === `undefined`) g(); }",
+            "function f() { if (window === undefined) g(); }",
+        ] {
+            assert_eq!(realm_test(source), None, "{source}");
+        }
+    }
+
+    #[test]
+    fn a_bound_window_or_document_is_not_the_global() {
+        for source in [
+            "function f(window) { if (typeof window === \"undefined\") g(); }",
+            "function f({ document }) { if (typeof document === \"undefined\") g(); }",
+            "function f(window = 1) { if (typeof window === \"undefined\") g(); }",
+            "function f() { const window = undefined; if (typeof window === \"undefined\") g(); }",
+            "function f() { try { g(); } catch (window) { if (typeof window === \"undefined\") g(); } }",
+            "import { window } from \"x\";\nfunction f() { if (typeof window === \"undefined\") g(); }",
+            "import * as document from \"x\";\nfunction f() { if (typeof document === \"undefined\") g(); }",
+            "function f() { if (typeof window === \"undefined\") g(); }\nvar window;",
+            "function f() { if (typeof document === \"undefined\") g(); }\nfunction document() {}",
+            "function f() { if (typeof window === \"undefined\") g(); }\nclass window {}",
+        ] {
+            assert_eq!(realm_test(source), None, "{source}");
+        }
+        // A direct `eval` may declare anything: the module decides nothing.
+        assert!(
+            realm_tests(
+                "m.js",
+                "function f() { eval(\"\"); if (typeof window === \"undefined\") g(); }",
+                true
+            )
+            .is_none()
+        );
+        // Outside a declared realm the comparison is no host constant.
+        let source = "function f() { if (typeof window === \"undefined\") return; g(); }\n";
+        assert!(fold_host_constant_branches(Path::new("m.js"), source, &[]).is_none());
+        let allocator = Allocator::default();
+        let program = parse(&allocator, Path::new("m.js"), source).unwrap();
+        let built = SemanticBuilder::new().build(&program);
+        let scope = HostConstantScope::new(&program, &built.semantic, &[]).unwrap();
+        assert!(scope.is_empty());
+    }
+
+    /// `@tanstack/solid-query` 6.0.0-rc.0's `build/dev.js` (and `index.js`),
+    /// reduced to the kinds of statement before its `var isServer2` and three
+    /// of the guards after it.
+    const SOLID_QUERY_LAYOUT: &str = "import { MutationObserver } from '@tanstack/query-core';\n\
+export * from '@tanstack/query-core';\n\
+import { createContext, useContext, onCleanup } from 'solid-js';\n\
+function createServerDehydrationChannel(client) { return client; }\n\
+function createHydrationCoordinator(client) { return { client }; }\n\
+var HydrationCoordinatorContext = createContext(null);\n\
+var isServer = typeof window === \"undefined\";\n\
+var QueryClientContext = createContext(null);\n\
+var useQueryClient = (queryClient) => { if (queryClient) { return queryClient; } return useContext(QueryClientContext)(); };\n\
+var QueryClientProvider = (props) => { onCleanup(() => props.client.unmount()); return isServer ? null : props.children; };\n\
+var IsRestoringContext = createContext(() => false);\n\
+var useIsRestoring = () => useContext(IsRestoringContext);\n\
+var isServer2 = typeof window === \"undefined\";\n\
+function _stripFnsForSSR(obj) {\n  if (!isServer2) return obj;\n  return {};\n}\n\
+var hydratableObserverResult = (_query, result) => {\n  if (!isServer2) return result;\n  return {};\n};\n\
+function useBaseQuery(options) {\n  if (isServer2) {\n    options.retry = false;\n  }\n  return options;\n}\n";
+
+    #[test]
+    fn a_var_alias_initialized_before_every_read_carries_the_realm() {
+        assert_eq!(
+            realm_tests("dev.js", SOLID_QUERY_LAYOUT, true).unwrap(),
+            [None, Some(true), Some(true), Some(false)],
+            "the first `if` reads a parameter"
+        );
+        // A const alias is read after its initializer or throws (TDZ).
+        let constant = "const isServer = typeof window === \"undefined\";\nfunction f() { if (isServer) g(); }\nif (!isServer) g();\n";
+        assert_eq!(
+            realm_tests("m.js", constant, false).unwrap(),
+            [Some(false), Some(true)]
+        );
+        // A read at module level after the declaration has run it.
+        let after = "var isServer = typeof window === \"undefined\";\nif (isServer) g();\n";
+        assert_eq!(realm_tests("m.js", after, true).unwrap(), [Some(false)]);
+    }
+
+    #[test]
+    fn a_var_alias_without_an_initialization_proof_stays_live() {
+        let live = |source: &str| {
+            let tests = realm_tests("m.js", source, true).unwrap();
+            assert!(tests.iter().all(Option::is_none), "{source}: {tests:?}");
+        };
+        let tail = "var isServer = typeof window === \"undefined\";\nfunction f() { if (isServer) g(); }\n";
+        // The controls below are each one change away from this positive.
+        let prefix = "import { createContext, Context } from \"solid-js\";\nimport * as ns from \"solid-js\";\n";
+        assert_eq!(realm_tests("m.js", tail, true).unwrap(), [Some(false)]);
+        assert_eq!(
+            realm_tests(
+                "m.js",
+                &format!("{prefix}var context = createContext(() => 0);\n{tail}"),
+                true
+            )
+            .unwrap(),
+            [Some(false)]
+        );
+        // An import cycle: a module importing this one back runs first.
+        assert_eq!(realm_tests("m.js", tail, false).unwrap(), [None]);
+        // Written, redeclared, `let`, exported, nested, or declared beside
+        // another binding.
+        live(&format!("{tail}function w() {{ isServer = false; }}\n"));
+        live(&format!("{tail}var isServer;\n"));
+        live(
+            "let isServer = typeof window === \"undefined\";\nfunction f() { if (isServer) g(); }\n",
+        );
+        live(
+            "var isServer = typeof window === \"undefined\", other = 1;\nfunction f() { if (isServer) g(); }\n",
+        );
+        live(
+            "export var isServer = typeof window === \"undefined\";\nfunction f() { if (isServer) g(); }\n",
+        );
+        live(
+            "function f() { var isServer = typeof window === \"undefined\"; if (isServer) g(); }\nfunction h() { f(); }\n",
+        );
+        // Read at module level before the declaration runs.
+        live(&format!("if (isServer) g();\n{tail}"));
+        live(&format!("var early = isServer;\n{tail}"));
+        // Functions are hoisted, so callable before the declaration: any
+        // statement before it that may call into this module refuses.
+        for before in [
+            "var early = f();\n",
+            "f();\n",
+            "var context = createContext(f);\n",
+            "var context = createContext(() => f());\n",
+            "var context = createContext(...[f]);\n",
+            "var context = local(null);\nfunction local() {}\n",
+            "var context = createContext?.(null);\n",
+            "var context = ns.createContext(null);\n",
+            "var context = new Context(null);\n",
+            "var { a } = createContext(null);\n",
+            "class Early { static { f(); } }\n",
+            "class Early { static value = f(); }\n",
+            "class Early extends Context {}\n",
+            "class Early { [f()]() {} }\n",
+            "export default f();\n",
+            "if (true) f();\n",
+        ] {
+            live(&format!("{prefix}{before}{tail}"));
+        }
+    }
+
+    #[test]
+    fn the_cycle_proof_is_asked_only_for_a_var_alias() {
+        let asked = std::cell::Cell::new(0);
+        let answer = || {
+            asked.set(asked.get() + 1);
+            true
+        };
+        let realm = WindowRealm { acyclic: &answer };
+        let source =
+            "const a = typeof window === \"undefined\";\nfunction f() { if (a) return; g(); }\n";
+        assert!(
+            fold_host_constant_branches_in_window_realm(Path::new("m.js"), source, &[], &realm)
+                .is_some()
+        );
+        assert_eq!(asked.get(), 0);
+        let folded = fold_host_constant_branches_in_window_realm(
+            Path::new("dev.js"),
+            SOLID_QUERY_LAYOUT,
+            &[],
+            &realm,
+        )
+        .expect("folds");
+        assert_eq!(asked.get(), 1);
+        assert_eq!(folded.len(), SOLID_QUERY_LAYOUT.len());
+        assert!(
+            folded.contains("  if (!0        ) return obj;\n"),
+            "{folded}"
+        );
+        assert!(folded.contains("  if (!1       ) ;\n"), "{folded}");
+    }
+
+    #[test]
+    fn load_specifiers_follow_static_loads_only() {
+        let source = "import a from \"a\";\nimport \"./side.js\";\nimport type { T } from \"t\";\nexport * from \"b\";\nexport { c } from \"./c.js\";\nexport type { U } from \"u\";\nconst lazy = () => import(\"d\");\n";
+        assert_eq!(
+            module_load_specifiers(Path::new("m.ts"), source).unwrap(),
+            ["./c.js", "./side.js", "a", "b"]
+        );
+        assert!(module_load_specifiers(Path::new("m.js"), "const x = require(\"a\");\n").is_none());
+        assert!(
+            module_load_specifiers(Path::new("m.ts"), "import x = require(\"a\");\n").is_none()
+        );
+        assert!(
+            module_load_specifiers(
+                Path::new("m.js"),
+                "const all = import.meta.glob(\"./*.js\");\n"
+            )
+            .is_none()
+        );
+        assert_eq!(
+            module_load_specifiers(Path::new("m.js"), "const url = import.meta.url;\n").unwrap(),
+            Vec::<String>::new()
+        );
     }
 }

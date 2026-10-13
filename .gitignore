@@ -452,6 +452,10 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/returned-store-proxy/node_modules/**
 !fixtures/reactive-ir/dependency-source-proxy-store/node_modules/
 !fixtures/reactive-ir/dependency-source-proxy-store/node_modules/**
+!fixtures/reactive-ir/dependency-source-window-realm/node_modules/
+!fixtures/reactive-ir/dependency-source-window-realm/node_modules/**
+!fixtures/reactive-ir/dependency-source-window-undeclared/node_modules/
+!fixtures/reactive-ir/dependency-source-window-undeclared/node_modules/**
 !fixtures/reactive-ir/host-dead-return/node_modules/
 !fixtures/reactive-ir/host-dead-return/node_modules/**
 !fixtures/reactive-ir/host-dead-return-server/node_modules/

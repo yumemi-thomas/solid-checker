@@ -59,8 +59,9 @@ pub use class_obligation::{ClassObligation, ClassObligationKind, class_obligatio
 pub use completion_call_cover::{completion_call_cover, completion_return_cover};
 pub use component_value_flow::{ComponentPropSite, ComponentValueFlow, component_value_flows};
 pub use host_constants::{
-    HostConstantFold, HostConstantImport, HostConstantScope, exported_boolean_constant,
-    fold_host_constant_branches, named_value_imports,
+    HostConstantFold, HostConstantImport, HostConstantScope, WindowRealm,
+    exported_boolean_constant, fold_host_constant_branches,
+    fold_host_constant_branches_in_window_realm, module_load_specifiers, named_value_imports,
 };
 pub use host_execution::{
     HostCallSequence, HostConstantIdentity, HostDefaultInitializer, HostExecutionFact,

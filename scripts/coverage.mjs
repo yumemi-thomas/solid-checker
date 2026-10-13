@@ -166,7 +166,29 @@ const KEEPS_WORDING = new Set([
 // dialect was retired (ADR 0110). The list is kept rather than deleted: it is
 // the mechanism for "these two projects must stay byte-identical or their
 // snapshot diff stops meaning anything", and the next divergence pair needs it.
-const IDENTICAL_SOURCES = [];
+const IDENTICAL_SOURCES = [
+  // ADR 0295: the same project and package with and without a declared
+  // Window realm; only `.solid-checker/runtime.json` (and the README) differ.
+  {
+    projects: [
+      "reactive-ir/dependency-source-window-realm",
+      "reactive-ir/dependency-source-window-undeclared"
+    ],
+    files: [
+      "App.tsx",
+      "solid-js.d.ts",
+      "tsconfig.json",
+      "node_modules/solid-js/package.json",
+      "node_modules/solid-js/dist/solid.js",
+      "node_modules/dep-query/package.json",
+      "node_modules/dep-query/dist/index.d.ts",
+      "node_modules/dep-query/src/index.js",
+      "node_modules/dep-query/src/early.js",
+      "node_modules/dep-query/src/cyclic.js",
+      "node_modules/dep-query/src/cycle-back.js"
+    ]
+  }
+];
 
 /**
  * The comparable shape of one finding. Byte offsets rather than line/column so
@@ -222,6 +244,8 @@ function runtimeArguments(tsconfig) {
   for (const [key, flag] of [
     ["target", "--runtime-target"],
     ["build", "--runtime-build"],
+    // ADR 0295: the declared realm of the dependency sources (`window`).
+    ["realm", "--runtime-realm"],
     ["rendering", "--rendering"],
     ["programBoundary", "--program-boundary"]
   ]) {

@@ -117,6 +117,12 @@ struct Request {
     /// through a package contract.
     #[serde(default)]
     dependency_sources: Vec<String>,
+    /// ADR 0295: the declared premise that the selected dependency-source
+    /// modules run in an HTML Window realm (`--runtime-realm window`), which
+    /// decides their `typeof window` and `typeof document` guards. Only with
+    /// `--runtime-target browser` and `--dependency-source`.
+    #[serde(default)]
+    window_realm: bool,
     /// Full Phase-7 exact package resolution for the artifact being emitted.
     #[serde(default)]
     contract_resolution: String,
@@ -576,11 +582,28 @@ fn fold_emission_host_constants(
     Vec<SourceFile>,
     HashMap<String, solid_facts::core::SourceHash>,
 ) {
+    fold_host_constants_in_realm(sources, conditions, None)
+}
+
+/// [`fold_emission_host_constants`], and under `window_realm` (ADR 0295, a
+/// selected dependency-source file of a declared browser host) the module's
+/// Window-realm comparisons too. `window_realm` is the host its import cycles
+/// are resolved for; a host the conditions do not declare as `browser` folds
+/// no realm.
+fn fold_host_constants_in_realm(
+    sources: Vec<SourceFile>,
+    conditions: &BTreeSet<String>,
+    window_realm: Option<&solid_facts_backend::dependency_sources::Host>,
+) -> (
+    Vec<SourceFile>,
+    HashMap<String, solid_facts::core::SourceHash>,
+) {
     let conditions = conditions.iter().cloned().collect::<Vec<_>>();
     let mut program_hashes = HashMap::new();
     let Some(host) = solid_facts_backend::host_constants::declared_host(&conditions) else {
         return (sources, program_hashes);
     };
+    let window_realm = window_realm.filter(|_| host == solid_dialect::HostTargetCondition::Browser);
     let folded = sources
         .into_iter()
         .map(|mut file| {
@@ -594,9 +617,23 @@ fn fold_emission_host_constants(
             .into_iter()
             .map(|resolved| resolved.fold)
             .collect::<Vec<_>>();
-            if let Some(text) =
-                solid_facts::ast::fold_host_constant_branches(path, &file.source, &folds)
-            {
+            let text = match window_realm {
+                Some(cycle_host) => {
+                    let acyclic = || {
+                        solid_facts_backend::dependency_sources::outside_import_cycles(
+                            path, cycle_host,
+                        )
+                    };
+                    solid_facts::ast::fold_host_constant_branches_in_window_realm(
+                        path,
+                        &file.source,
+                        &folds,
+                        &solid_facts::ast::WindowRealm { acyclic: &acyclic },
+                    )
+                }
+                None => solid_facts::ast::fold_host_constant_branches(path, &file.source, &folds),
+            };
+            if let Some(text) = text {
                 program_hashes.insert(
                     file.path.clone(),
                     solid_facts::core::SourceHash::of(file.source.as_ref()),
@@ -3923,11 +3960,18 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                         return file;
                     }
                     // The conditions `--runtime-target` and its siblings select,
-                    // not only explicit `--runtime-condition`s.
-                    let (mut folded, hashes) = fold_emission_host_constants(
-                        vec![file],
-                        &request.runtime.selected_conditions(),
-                    );
+                    // not only explicit `--runtime-condition`s. ADR 0295: a
+                    // declared Window realm decides these files' `typeof
+                    // window` guards too, and nothing else's.
+                    let conditions = request.runtime.selected_conditions();
+                    let realm = request.window_realm.then(|| {
+                        solid_facts_backend::dependency_sources::Host {
+                            conditions: conditions.clone(),
+                            browser: true,
+                        }
+                    });
+                    let (mut folded, hashes) =
+                        fold_host_constants_in_realm(vec![file], &conditions, realm.as_ref());
                     program_hashes.extend(hashes);
                     folded.remove(0)
                 })
@@ -4432,6 +4476,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut contract_entry_file = String::new();
     let mut contract_package_root = String::new();
     let mut runtime = RuntimeEnvironment::default();
+    let mut window_realm = false;
     let mut help = false;
     let mut serve = false;
     let mut args = arguments.into_iter();
@@ -4596,6 +4641,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             runtime.build = Some(parse_runtime_build(value)?);
             continue;
         }
+        if let Some(value) = argument.strip_prefix("--runtime-realm=") {
+            window_realm = parse_runtime_realm(value)?;
+            continue;
+        }
         if let Some(value) = argument.strip_prefix("--rendering=") {
             runtime.rendering = Some(parse_runtime_rendering(value)?);
             continue;
@@ -4691,6 +4740,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                 args.next()
                     .ok_or("--dependency-source needs a package specifier")?,
             ),
+            "--runtime-realm" => {
+                window_realm =
+                    parse_runtime_realm(&args.next().ok_or("--runtime-realm needs a value")?)?;
+            }
             "--runtime-module-resolutions" => {
                 runtime_module_resolutions = args
                     .next()
@@ -4819,6 +4872,17 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             unknown => return Err(format!("unknown argument {unknown:?}").into()),
         }
     }
+    // ADR 0295: the realm is a premise about the selected packages' runtime
+    // in a browser; `--runtime-target browser` alone states no realm, and no
+    // other analysis reads one.
+    if window_realm && runtime.target != Some(RuntimeTarget::Browser) {
+        return Err("--runtime-realm window needs --runtime-target browser".into());
+    }
+    if window_realm && dependency_sources.is_empty() {
+        return Err(
+            "--runtime-realm window applies only to --dependency-source packages; name one".into(),
+        );
+    }
     let project = if !help
         && validate_contract_paths.is_empty()
         && merge_contract_paths.is_empty()
@@ -4863,6 +4927,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         emit_module_inventory,
         runtime_module_resolutions,
         dependency_sources,
+        window_realm,
         contract_resolution,
         emit_proposal_plan,
         merge_contract_paths,
@@ -4909,6 +4974,14 @@ fn parse_runtime_target(value: &str) -> Result<RuntimeTarget, Box<dyn std::error
         "browser" => Ok(RuntimeTarget::Browser),
         "node" => Ok(RuntimeTarget::Node),
         _ => Err(format!("unknown runtime target {value:?}; expected browser or node").into()),
+    }
+}
+
+/// ADR 0295: `window` is the one realm a premise is defined for.
+fn parse_runtime_realm(value: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    match value {
+        "window" => Ok(true),
+        _ => Err(format!("unknown runtime realm {value:?}; expected window").into()),
     }
 }
 
@@ -4973,6 +5046,10 @@ fn print_help() {
                                         Select the runtime target explicitly\n\
            --runtime-build <development|production>\n\
                                         Select the build mode explicitly\n\
+           --runtime-realm <window>     Declare that the --dependency-source packages run\n\
+                                        in an HTML Window realm, which decides their\n\
+                                        `typeof window`/`typeof document` guards.\n\
+                                        Requires --runtime-target browser\n\
            --rendering <csr|string-ssr|streaming-ssr>\n\
                                         Select the rendering mode explicitly\n\
            --runtime-condition <NAME>   Select an exact package/runtime condition\n\

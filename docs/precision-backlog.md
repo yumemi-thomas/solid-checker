@@ -30043,7 +30043,8 @@ Open:
   clone, spotify-desk-thing regains exactly its two contract-mode
   `prefer-show` findings. Folding `typeof window` under a declared `browser`
   host is a separate premise decision. It would affect every selected
-  dependency and every contract emission.
+  dependency and every contract emission. (Recovered under a declared
+  Window realm only, ADR 0295.)
 - A handler held in a variable, a `target[prop]` return, another receiver, a
   cross-file forward, and a proxy over a store member all refuse.
 
@@ -30165,17 +30166,38 @@ A `try` block's sites are completion sites under the normal-completion
 premise; `catch` and `finally` stay conditional. Base mode is unchanged.
 Dependency mode recovers readingroom's attributed cleanup.
 
-## Parked: `typeof window` under a browser host (2026-10-13)
+## A declared Window realm decides `typeof window` in package source (2026-10-14, ADR 0295)
 
-The owner approved it "if correct". Research
-(`rust/target/research/typeof-window-premise.md`) finds it correct only under
-an explicit Window-realm declaration, not `--runtime-target browser` alone:
-browser conditions also select worker and SSR code. Recovering solid-query
-(`var isServer2 = typeof window === "undefined"`) also needs an
-initialization-dominance proof for a module-level `var`, because hoisting
-makes a never-written `var` insufficient. The payoff is 2 `prefer-show`
-findings in spotify-desk-thing. Parked until the realm declaration and the
-`var` proof are worth building.
+Replaces the parked 2026-10-13 entry. `--runtime-realm window` (with
+`--runtime-target browser` and `--dependency-source`; refused otherwise)
+declares that the selected dependency-source modules run in an HTML Window
+realm. In those files only, a strict `===`/`!==` of `"undefined"` with
+`typeof` of the unbound global `window` or `document` is decided, and so are
+`!` and never-written `const` aliases of it. A module-level `var` alias is
+decided only with an initialization proof: every read in a function or after
+the declaration, nothing before it that may call the module (solid-query's
+`createContext(null)` layout is the widest admitted), and no static import
+cycle through any package (`outside_import_cycles`; an edge it cannot follow
+refuses). Project files, inferred hosts, contract emission and certification
+are unchanged; `--runtime-target browser` alone folds nothing new.
+
+spotify-desk-thing under `*` mode: 6 → 8 violations, +2 and nothing removed,
+`PlayerControls.tsx:133:5` and `PlayerControlIcon.tsx:26:5` (`prefer-show`),
+both contract mode's findings, reviewed by hand; no other finding moves
+over the 24 corpus apps with a root tsconfig. Fixtures
+`reactive-ir/dependency-source-window-realm` (3 violations, 5 silent) and
+`reactive-ir/dependency-source-window-undeclared` (same bytes, no realm,
+silent); coverage otherwise unmoved.
+
+Open:
+- The realm is the caller's statement. A worker, SSR or test slice that
+  selects browser conditions must not declare it, and nothing checks that.
+- Still live: `globalThis.window`, member and capability tests (`document.body
+  &&`), loose equality, `< "u"`, ternaries, `let` and exported `var` aliases,
+  a `var` alias after a module-level call of a module function, and any
+  module whose load closure reaches a CommonJS `require`.
+- Contract emission and certification read no realm; binding it into
+  receipts and replay is separate work.
 
 ## A `lazy` module's `default` is rendered, not retained (2026-10-13, ADR 0292)
 

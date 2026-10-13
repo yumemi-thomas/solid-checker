@@ -1,0 +1,1 @@
+{ "target": "browser", "build": "development", "realm": "window", "dependencySources": ["dep-query"] }
