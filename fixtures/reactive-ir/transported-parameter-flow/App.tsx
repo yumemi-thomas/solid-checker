@@ -101,3 +101,21 @@ function restQuery(providers: Provider[], ..._rest: string[]) { return providers
 export function RestParameter() { const providers = makeProviders(); const values = restQuery(providers); return <p>{values.join()}</p>; }
 function preferenceQuery(providers: Provider[]) { return providers.map(p => p.query("preference")); }
 export function TransportedPreference() { const providers = makeProviders(); return <p>{preferenceQuery(providers).length && <span>ready</span>}</p>; }
+
+// A composite argument hands over its result, not its receiver: passing
+// `model.read()` to a helper that aliases its numeric parameter does not
+// make `model` escape, so both untracked reads stay SC1001.
+function makeCounter(): { read: () => number } {
+  const [read] = createSignal(1);
+  return { read };
+}
+function useCount(n: number) {
+  const alias = n;
+  void alias;
+}
+export function CompositeArgument() {
+  const model = makeCounter();
+  useCount(model.read());
+  const n = model.read();
+  return <p>{n}</p>;
+}

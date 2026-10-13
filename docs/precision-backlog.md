@@ -29647,6 +29647,20 @@ program's context.
 
 ## Exact returned provider arrays and context intermediate handoffs (2026-10-12)
 
+Statically present code premise (owner decision, 2026-10-13): a read that is
+present in a reached function body is assumed to execute. Dead code is out of
+scope for every channel, old and new. That includes `if (false)` branches,
+statements after an unconditional `throw`, short-circuited operands, a wrapper
+whose return follows a throw, and a later array element after an earlier
+element's member aborts `map`. A direct read under `if (false)`, a read after
+`throw`, and an ADR 0273 object-member read behind `if (false)` were already
+SC1001 violations before this work. Review round 1 showed the provider-array
+and intermediate-context channels inherit the premise
+(rust/target/research/provenance-2/REVIEW-1.md). Reachability-sensitive proof
+would be its own project-wide slice. Handoff joins now require the argument or
+destructured initializer to be exactly one identifier: `f(model.read())` hands
+over the read's result, not `model`, and no longer marks `model` escaped.
+
 Reactive IR carries source-discovered synchronous arrow member identities from
 one factory's single returned array literal of closed object literals to an
 exact standard-library map/forEach call. An inline synchronous arrow invokes

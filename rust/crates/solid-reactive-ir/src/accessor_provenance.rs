@@ -559,7 +559,13 @@ impl Resolver<'_, '_> {
             .parameter_inputs
             .iter()
             .filter_map(|(parameter, (path, span))| {
-                let argument = resolver.binding_key(lookup.file_by_path(path)?, *span)?;
+                // Only an argument that is exactly a binding hands that binding
+                // over; `f(model.read())` passes the read's result, not `model`.
+                let file = lookup.file_by_path(path)?;
+                if !exact_identifier(file, *span) {
+                    return None;
+                }
+                let argument = resolver.binding_key(file, *span)?;
                 Some((argument, parameter.clone(), false))
             })
             .collect::<Vec<_>>();
@@ -572,7 +578,9 @@ impl Resolver<'_, '_> {
             {
                 if let Some(argument) = binding
                     .initializer
-                    .and_then(|span| resolver.binding_key(file, file.ast.peel_ts_sugar_span(span)))
+                    .map(|span| file.ast.peel_ts_sugar_span(span))
+                    .filter(|span| exact_identifier(file, *span))
+                    .and_then(|span| resolver.binding_key(file, span))
                 {
                     handoffs.push((
                         argument,
