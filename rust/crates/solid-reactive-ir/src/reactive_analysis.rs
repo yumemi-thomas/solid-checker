@@ -137,6 +137,7 @@ pub(crate) fn collect_project<'facts>(
         symbol_names: ctx.symbol_names,
         changed_semantic_symbols: typescript_delta.map(|delta| &delta.semantic_symbol_ids),
         retained_source_paths: &source.retained_source_paths,
+        typed_sources: ctx.typed_sources,
         lookup: ctx.semantic_lookup,
     };
     let run_local_access = || {

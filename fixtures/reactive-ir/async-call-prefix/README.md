@@ -23,9 +23,10 @@ the call. It is decided per invocation, at every hop
 | `NestedHelperAfterAwait`, `ConditionalSuspendBeforeChild`, `CrossFileSuffix` | uncertifiable | the child is entered after a possible suspension |
 | `AsyncGenerator`, `DormantNestedDefault`, `LazyDefault` | uncertifiable | no body runs, or the default creates a closure |
 | `ReassignedTarget`, `TypeOnlyInputs`, `ReplacedSourceDefault` | not a violation | replaced targets, type-only sources and replaced sources prove nothing |
-| `StoreProtocolKeys` `thenBody`, `thenDefault` | not a finding | a `then` store Get does not warn (ADR 0293) |
+| `StoreProtocolKeys` `thenBody` | uncertifiable (`SC1001`) | a `then` store Get does not warn (ADR 0293), but the literal's computed key leaves the backing `then` unproven (review round 1), so the helper's row is undecided |
+| `StoreProtocolKeys` `thenDefault` | uncertifiable (`SC9012`) | the same Get, written in the default |
 | `StoreProtocolKeys` `symbolDefault`, `dynamicDefault` | uncertifiable (`SC9012`) | the key may be a symbol or `then`, whose Get does not warn (ADR 0293) |
-| `StoreProtocolKeys` `symbolBody`, `dynamicBody` | not a finding | an undecided key is withheld from the helper's summary (ADR 0293), a recall gap |
+| `StoreProtocolKeys` `symbolBody`, `dynamicBody` | uncertifiable (`SC1001`) | an undecided key is an undecided row in the helper's summary (ADR 0293, review round 1) |
 | `SampledApply`, `SampledDefaultApply`, `TrackedCompute`, `ShadowedName` | not a violation | sampled, tracked or unrelated |
 
 `WrappedExactCall` is meant as a positive but is not proven yet, which is a

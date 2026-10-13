@@ -3294,6 +3294,7 @@ mod tests {
             owner: None,
             local: false,
             conditional: false,
+            undecided: false,
         }
     }
 

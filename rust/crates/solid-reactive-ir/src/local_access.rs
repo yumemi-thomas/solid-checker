@@ -2417,9 +2417,10 @@ impl LocalAccessContext<'_, '_> {
             }
             // ADR 0293: the store's strict-read warning is its head Get's.
             // A `then` head does not warn; a key solid-checker cannot spell
-            // (a symbol, a dynamic expression) may not either.
+            // (a symbol, a dynamic expression) may not either. Review round
+            // 1: a `then` Get is withheld only when its backing runs nothing.
             if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
-                match store_head_get(file, member.span, self.lookup.dialect) {
+                match store_get_decision(file, member.span, declaration, self.lookup) {
                     StoreHeadGet::Warns => {}
                     StoreHeadGet::Exempt => continue,
                     StoreHeadGet::Undecided(reason) => {
@@ -3065,6 +3066,221 @@ pub(crate) fn store_head_get(
         }
         Some(_) => StoreHeadGet::Warns,
     }
+}
+
+/// Review round 1 of ADR 0293: [`store_head_get`] for a Get on the store
+/// declared at `store`. The `then` exemption is the trap's own warning only:
+/// the trap then evaluates the backing property, and a getter there (or a
+/// function a call of the Get runs) performs its own reads. An exempt Get
+/// stays exempt only where [`exempt_store_get_runs_nothing`] proves the
+/// backing property runs no code; otherwise it is undecided.
+pub(crate) fn store_get_decision(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    store: &Location,
+    lookup: &SemanticLookup<'_>,
+) -> StoreHeadGet {
+    match store_head_get(file, span, lookup.dialect) {
+        StoreHeadGet::Exempt if !exempt_store_get_runs_nothing(file, span, store, lookup) => {
+            StoreHeadGet::Undecided(
+                "the store Get's key \"then\" does not warn, but the property it reads is not proven to be data that runs nothing (a getter there reads on access)",
+            )
+        }
+        decision => decision,
+    }
+}
+
+/// Whether the one-Get chain at `span`, whose key the dialect exempts, reads
+/// a backing property that runs no code. Holds only when all of these do:
+///
+/// - the store is a `const [store] = createStore(literal)` (or another
+///   dialect store primitive) binding in the same file, whose setter slot is
+///   absent or never
+///   referenced, so nothing writes the backing after it is built;
+/// - the first argument is a closed object literal
+///   ([`crate::interproc::accessor_provenance::closed_properties`]: data
+///   properties only, no spread, computed key or `__proto__`);
+/// - the key is absent from it (the Get falls through to `Object.prototype`),
+///   or its value is a primitive, object or array literal, or a function
+///   literal [`function_literal_runs_nothing`] proves inert;
+/// - no assignment anywhere writes a member of that name or through a
+///   `prototype`, and no analyzed file defines a property reflectively.
+fn exempt_store_get_runs_nothing(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    store: &Location,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_facts::ast::RuntimeValueKind;
+    let Some(member) = file.ast.members.iter().find(|member| member.span == span) else {
+        return false;
+    };
+    let key = if file
+        .ast
+        .computed_members
+        .binary_search(&member.span)
+        .is_ok()
+    {
+        file.ast
+            .literal_computed_members
+            .iter()
+            .find(|literal| literal.span == member.span)
+            .map(|literal| literal.key.as_ref())
+    } else {
+        file.source_text(member.property)
+    };
+    let Some(key) = key else {
+        return false;
+    };
+    if lookup.member_name_may_be_reassigned(key)
+        || crate::interproc::accessor_provenance::reflective_prototype_write(lookup)
+        || lookup.property_may_be_defined_reflectively()
+    {
+        return false;
+    }
+    // The store is declared in this file: the file's own bytes then bind the
+    // literal for the local-access cache, and the cross-file digest binds the
+    // project-wide vetoes above.
+    if store.path.as_ref() != file.path.as_str() {
+        return false;
+    }
+    let store_file = file;
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(store.start_byte),
+        u32::try_from(store.end_byte),
+    ) else {
+        return false;
+    };
+    let declaration = solid_facts::core::Span::new(start, end);
+    let Some(binding) = store_file.ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Array
+            && binding
+                .array_slots
+                .first()
+                .and_then(Option::as_ref)
+                .is_some_and(|slot| slot.span == declaration)
+    }) else {
+        return false;
+    };
+    if !binding.immutable
+        || binding.array_slots.len() > 2
+        || binding.names.len() != binding.array_slots.iter().flatten().count()
+        || binding
+            .array_slots
+            .get(1)
+            .and_then(Option::as_ref)
+            .is_some_and(|setter| {
+                store_file
+                    .ast
+                    .reference_declarations
+                    .iter()
+                    .any(|(_, target)| *target == setter.span)
+            })
+    {
+        return false;
+    }
+    let Some(initializer) = binding.initializer else {
+        return false;
+    };
+    let initializer = store_file.ast.peel_ts_sugar_span(initializer);
+    let Some(call) = store_file
+        .ast
+        .calls
+        .iter()
+        .find(|call| call.span == initializer && !call.construct)
+    else {
+        return false;
+    };
+    if !lookup
+        .primitive_at_call(store_file, call.span)
+        .is_some_and(|primitive| lookup.dialect.returns_store(primitive))
+        || call.arguments.iter().any(|argument| argument.spread)
+    {
+        return false;
+    }
+    let Some(argument) = call.arguments.first() else {
+        return false;
+    };
+    let literal = store_file.ast.peel_ts_sugar_span(argument.span);
+    let Some(properties) =
+        crate::interproc::accessor_provenance::closed_properties(store_file, literal)
+    else {
+        return false;
+    };
+    let Some(property) = properties.into_iter().find(|property| {
+        store_file
+            .source_text(property.key)
+            .is_some_and(|name| name.trim_matches(['\'', '"']) == key)
+    }) else {
+        return true;
+    };
+    if property.shorthand_binding.is_some() {
+        return false;
+    }
+    match property.value_kind {
+        RuntimeValueKind::Primitive
+        | RuntimeValueKind::Nullish
+        | RuntimeValueKind::Object
+        | RuntimeValueKind::Array => true,
+        RuntimeValueKind::Function => function_literal_runs_nothing(
+            store_file,
+            store_file.ast.peel_ts_sugar_span(property.value),
+        ),
+        RuntimeValueKind::Unknown => false,
+    }
+}
+
+/// Whether calling the function literal at `span` provably runs no code but
+/// its own: neither it nor its parameter defaults hold a call, a member
+/// access, a reference to any binding (a global included), a spread, a
+/// tagged template, JSX, or a `this`, `super` or `import` keyword. Such a
+/// body builds only literals, so it reads no reactive state (under the
+/// unpatched built-in prototype premise every other proof here keeps).
+pub(crate) fn function_literal_runs_nothing(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> bool {
+    let Some(function) = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == span)
+    else {
+        return false;
+    };
+    let within = |inner: solid_facts::core::Span| function.span.contains(inner);
+    if function.generator
+        || file.ast.calls.iter().any(|call| within(call.span))
+        || file.ast.members.iter().any(|member| within(member.span))
+        || file.ast.identifiers.iter().any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && within(identifier.span)
+        })
+        || file.ast.spreads.iter().any(|spread| within(spread.span))
+        || file.ast.tagged_template_tags.iter().any(|tag| within(*tag))
+        || file
+            .ast
+            .jsx_elements
+            .iter()
+            .any(|element| within(element.span))
+    {
+        return false;
+    }
+    // Keywords no fact records. Matching a word inside a string literal only
+    // refuses, which is the safe direction.
+    let Some(text) = file.source_text(function.span) else {
+        return false;
+    };
+    !text
+        .split(|character: char| {
+            !(character.is_alphanumeric() || character == '_' || character == '$')
+        })
+        .any(|word| {
+            matches!(
+                word,
+                "this" | "super" | "import" | "arguments" | "await" | "yield"
+            )
+        })
 }
 
 // Insert at the end of the existing local_access.rs module.

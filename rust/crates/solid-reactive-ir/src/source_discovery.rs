@@ -2414,6 +2414,19 @@ pub(crate) fn discover_sources(
                             declaration: declaration_location,
                             kind,
                             implementation_visible: true,
+                            held_body_unfollowed: false,
+                        },
+                    );
+                }
+                TypedImplementation::HeldUnfollowed => {
+                    typed_sources.insert(
+                        symbol.clone(),
+                        TypedSource {
+                            name: symbol_id(name.as_ref()),
+                            declaration: declaration_location,
+                            kind,
+                            implementation_visible: false,
+                            held_body_unfollowed: true,
                         },
                     );
                 }
@@ -2425,6 +2438,7 @@ pub(crate) fn discover_sources(
                             declaration: declaration_location,
                             kind,
                             implementation_visible: false,
+                            held_body_unfollowed: false,
                         },
                     );
                 }
@@ -2940,6 +2954,13 @@ pub(crate) struct TypedSource {
     /// Get does and the type adds nothing. Otherwise the implementation is
     /// unknown and a read in a reporting role is an obligation.
     pub(crate) implementation_visible: bool,
+    /// Review round 1 of ADR 0294: the member holds function literals
+    /// written in project source, but no summary follows a call of the
+    /// member into them, and not every one is proven to run nothing
+    /// (`local_access::function_literal_runs_nothing`). Not visible, so a
+    /// read in a reporting role is an obligation; a call in a helper is an
+    /// undecided summary row (`interproc::typed_candidate_contributions`).
+    pub(crate) held_body_unfollowed: bool,
 }
 
 /// What a typed binding or member provably holds.
@@ -2948,6 +2969,9 @@ enum TypedImplementation {
     Source(SymbolId),
     /// A literal written in project source.
     Visible,
+    /// Function literals held by a closed literal member that no summary
+    /// follows and that are not all proven to run nothing.
+    HeldUnfollowed,
     Unknown,
 }
 
@@ -3038,6 +3062,19 @@ fn typed_implementation(
         .iter()
         .all(|(_, property)| visible(property.value_kind))
     {
+        // Review round 1: a call of the member is not followed into the
+        // function it holds, so that body decides only when it provably
+        // reads nothing.
+        if kind == ReactiveSourceKind::Accessor
+            && !values.iter().all(|(file, property)| {
+                crate::local_access::function_literal_runs_nothing(
+                    file,
+                    file.ast.peel_ts_sugar_span(property.value),
+                )
+            })
+        {
+            return TypedImplementation::HeldUnfollowed;
+        }
         return TypedImplementation::Visible;
     }
     let sources = values
@@ -3149,7 +3186,15 @@ impl TypedValueJudge<'_, '_> {
         let sources = returns
             .into_iter()
             .map(|returned| {
-                let element = (*returned.elements().get(index)?)?;
+                // Review round 1: a syntactic element is the runtime slot of
+                // the same index only when nothing before it is a spread
+                // (which may fill any number of slots) or a hole, which the
+                // facts record alike as `None`.
+                let elements = returned.elements();
+                if elements.get(..index)?.iter().any(Option::is_none) {
+                    return None;
+                }
+                let element = (*elements.get(index)?)?;
                 self.value(factory_file, element, 8)
             })
             .collect::<Option<Vec<_>>>()?;

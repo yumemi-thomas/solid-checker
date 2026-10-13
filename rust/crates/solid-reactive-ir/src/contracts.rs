@@ -4936,8 +4936,11 @@ fn contract_export_function(
         invoked_parameter_members,
     } = inputs;
     let mut seen_reactive_reads = BTreeSet::new();
+    // An undecided row (review round 1 of ADRs 0293 and 0294) is no read a
+    // contract may promise.
     let mut reactive_reads = summary
         .iter()
+        .filter(|read| !read.undecided)
         .filter_map(|read| {
             let reactive_read = ContractReactiveRead {
                 execution: read.contract_read_context.clone(),
@@ -5009,16 +5012,16 @@ fn contract_export_function(
             });
         }
     }
-    let first_returned =
-        returned_summary
-            .iter()
-            .fold(None::<&SummaryRead>, |current, candidate| match current {
-                None => Some(candidate),
-                Some(best) if location_order(&candidate.declaration, &best.declaration).is_lt() => {
-                    Some(candidate)
-                }
-                Some(best) => Some(best),
-            });
+    let first_returned = returned_summary.iter().filter(|read| !read.undecided).fold(
+        None::<&SummaryRead>,
+        |current, candidate| match current {
+            None => Some(candidate),
+            Some(best) if location_order(&candidate.declaration, &best.declaration).is_lt() => {
+                Some(candidate)
+            }
+            Some(best) => Some(best),
+        },
+    );
     let returns = structured_return.cloned().or_else(|| {
         first_returned.map(|read| ContractReturn {
             kind: if semantics.source_kinds.get(&read.symbol) == Some(&ReactiveSourceKind::Store) {

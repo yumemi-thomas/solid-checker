@@ -92,6 +92,12 @@ pub(super) struct SummaryRead {
     /// ADR 0276: some hop below the function whose summary holds this row
     /// was not proven to run on every completion of its caller.
     pub(super) conditional: bool,
+    /// Review round 1 of ADRs 0293 and 0294: the row's site may read
+    /// reactive state, but nothing proves it does: a store Get whose key is
+    /// undecided, or an exempt `then` whose backing may run code, or a call of
+    /// a typed candidate whose held body no summary follows. At a caller it is
+    /// an uncertifiable read, never a proven one, and no contract publishes it.
+    pub(super) undecided: bool,
 }
 
 struct DirectReferenceContribution {
@@ -172,6 +178,7 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
         &'r Location,
         &'r Option<crate::ContractReadContext>,
         bool,
+        bool,
     );
     fn effect(reads: &SummaryReads) -> Vec<Effect<'_>> {
         reads
@@ -184,6 +191,7 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
                     &read.declaration,
                     &read.contract_read_context,
                     read.transported,
+                    read.undecided,
                 )
             })
             .collect()
@@ -1737,6 +1745,7 @@ fn discover_interprocedural_graph(
                             call.span,
                         ),
                         conditional: false,
+                        undecided: false,
                     },
                 ));
             }
@@ -4620,7 +4629,8 @@ impl StructuredReturnDiscovery<'_, '_> {
             return self.instantiate_return(file, call, returned, fallback_label, depth - 1);
         }
         self.returned[*index]
-            .first()
+            .iter()
+            .find(|read| !read.undecided)
             .map(|read| self.contract_return_from_read(read, fallback_label))
     }
 
@@ -5195,7 +5205,7 @@ impl StructuredReturnDiscovery<'_, '_> {
             let summarized = self
                 .indexes
                 .get(&(file.path.to_string(), function.span))
-                .is_some_and(|index| !self.summaries[*index].is_empty());
+                .is_some_and(|index| self.summaries[*index].iter().any(|read| !read.undecided));
             let calls_accessor = file.ast.calls.iter().any(|call| {
                 function.body.contains(call.span)
                     && self
@@ -5274,7 +5284,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 });
             }
             if let Some(index) = self.by_symbol.get(symbol)
-                && !self.summaries[*index].is_empty()
+                && self.summaries[*index].iter().any(|read| !read.undecided)
             {
                 return Some(ContractReturn {
                     kind: "accessor".into(),
@@ -6156,6 +6166,7 @@ fn interprocedural_result_reads_for_file(
                             owner: None,
                             local: !guaranteed,
                             conditional: false,
+                            undecided: false,
                         },
                     );
                 }
@@ -6217,6 +6228,7 @@ fn interprocedural_result_reads_for_file(
                                 owner: None,
                                 local: false,
                                 conditional: false,
+                                undecided: false,
                             },
                         );
                     } else if !crate::local_access::argument_proves_non_reactive(
@@ -6568,6 +6580,7 @@ fn interprocedural_result_reads_for_file(
                             owner: None,
                             local: false,
                             conditional: false,
+                            undecided: false,
                         })
                     })
                     .flatten();
@@ -6649,7 +6662,7 @@ fn interprocedural_result_reads_for_file(
                             via: label.clone().into(),
                             origin: Some(read.origin.clone()),
                             origin_context: read.origin_context.clone().into(),
-                            uncertain: read_unproven,
+                            uncertain: read_unproven || read.undecided,
                             missing_jsx_census: missing_jsx_census(
                                 file,
                                 call.span,
@@ -6783,6 +6796,7 @@ fn interprocedural_result_reads_for_file(
                                 .binary_search(&read_call.span)
                                 .is_err(),
                             conditional: false,
+                            undecided: false,
                         },
                     );
                 }
@@ -6840,6 +6854,7 @@ fn interprocedural_result_reads_for_file(
                                 .binary_search(&member.span)
                                 .is_err(),
                             conditional: false,
+                            undecided: false,
                         },
                     );
                 }
@@ -7067,7 +7082,9 @@ fn interprocedural_result_reads_for_file(
                     .map(|read| (!read.local, read)),
             )
             .collect::<Vec<_>>();
-        effective.sort_by_key(|(direct, read)| (!*direct, read.transported));
+        // An undecided row sorts last: a proven row of the same symbol at
+        // this call keeps the finding a violation.
+        effective.sort_by_key(|(direct, read)| (read.undecided, !*direct, read.transported));
         for (direct, read) in effective {
             let (execution, read_unproven) = read
                 .contract_read_context
@@ -7110,7 +7127,7 @@ fn interprocedural_result_reads_for_file(
                     via: label.clone().into(),
                     origin: Some(read.origin),
                     origin_context: read.origin_context.into(),
-                    uncertain: read_unproven,
+                    uncertain: read_unproven || read.undecided,
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
                     host_callback_timing: host_callback_timing(file, call.span, execution, lookup),
                     project_consumer_non_strict: false,
@@ -7834,6 +7851,7 @@ fn direct_reference_contributions(
                 owner: nodes[owner].symbol.clone(),
                 local: !site_on_every_completion(lookup, file, nodes[owner].span, call.span),
                 conditional: false,
+                undecided: false,
             };
             contributions.push(DirectReferenceContribution {
                 owner,
@@ -7848,13 +7866,23 @@ fn direct_reference_contributions(
                     .members
                     .iter()
                     .filter(|member| member.object == reference_span)
-                    // ADR 0293: only a head Get whose key warns is a read; an
-                    // exempt or undecided key is withheld from the summary.
-                    .filter(|member| {
-                        crate::local_access::store_head_get(file, member.span, lookup.dialect)
-                            == crate::local_access::StoreHeadGet::Warns
+                    // ADR 0293: only a head Get whose key warns is a read. An
+                    // exempt Get whose backing runs nothing is no row; an
+                    // undecided one is an undecided row (review round 1),
+                    // uncertifiable at every caller and never a contract read.
+                    .filter_map(|member| {
+                        match crate::local_access::store_get_decision(
+                            file,
+                            member.span,
+                            &source.declaration,
+                            lookup,
+                        ) {
+                            crate::local_access::StoreHeadGet::Warns => Some((member, false)),
+                            crate::local_access::StoreHeadGet::Exempt => None,
+                            crate::local_access::StoreHeadGet::Undecided(_) => Some((member, true)),
+                        }
                     })
-                    .map(|member| DirectReferenceContribution {
+                    .map(|(member, undecided)| DirectReferenceContribution {
                         owner,
                         read: SummaryRead {
                             transported: false,
@@ -7877,11 +7905,116 @@ fn direct_reference_contributions(
                                 member.span,
                             ),
                             conditional: false,
+                            undecided,
                         },
                         unique: false,
                     }),
             );
         }
+    }
+    contributions
+}
+
+/// Review round 1 of ADR 0294: an undecided row for each call, in a summary
+/// node's own synchronous extent, of a typed candidate whose member holds
+/// function literals no summary follows
+/// ([`crate::source_discovery::TypedSource::held_body_unfollowed`]). Its
+/// type is no evidence of a read and the body is not followed, so a caller
+/// reports the call as an uncertifiable read, never a proven one. A call in
+/// a component's own body is `local_access`'s obligation instead.
+fn typed_candidate_contributions(
+    file: &solid_facts::FileFacts,
+    context: &InterproceduralContext<'_, '_>,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+) -> Vec<DirectReferenceContribution> {
+    let InterproceduralContext {
+        accessors,
+        entities,
+        symbol_names,
+        typed_sources,
+        lookup,
+        ..
+    } = context;
+    let mut contributions = Vec::new();
+    for call in &file.ast.calls {
+        // The candidate is keyed by the entity root its reads carry; the
+        // callee's resolved declaration symbol may be another identity.
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let property = file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == callee)
+            .map(|member| member.property);
+        let Some((symbol, typed)) = [
+            lookup.callee_symbol(file, call.callee),
+            entities
+                .at(file.path.as_str(), callee)
+                .map(SymbolId::as_str),
+            property.and_then(|property| {
+                entities
+                    .at(file.path.as_str(), property)
+                    .map(SymbolId::as_str)
+            }),
+        ]
+        .into_iter()
+        .flatten()
+        .find_map(|symbol| {
+            typed_sources
+                .get(symbol)
+                .filter(|typed| {
+                    typed.held_body_unfollowed && typed.kind == ReactiveSourceKind::Accessor
+                })
+                .map(|typed| (symbol, typed))
+        }) else {
+            continue;
+        };
+        if accessors.contains_key(symbol) {
+            continue;
+        }
+        let Some(owner) = containing_summary_function_indexed(
+            nodes,
+            nodes_by_path,
+            file.path.as_str(),
+            call.callee,
+        ) else {
+            continue;
+        };
+        if read_escapes_synchronous_extent(
+            file,
+            call.callee,
+            entities,
+            symbol_names,
+            lookup.dialect,
+        ) || runs_in_retained_value_literal(file, call.callee, &nodes[owner])
+            || runs_outside_owner_call(file, call.callee, nodes[owner].body, lookup)
+            || enclosing_render_function(file, call.callee, lookup)
+        {
+            continue;
+        }
+        let call_location = location(file.path.shared(), call.span);
+        contributions.push(DirectReferenceContribution {
+            owner,
+            read: SummaryRead {
+                transported: false,
+                contract_read_context: None,
+                symbol: SymbolId::from(format!(
+                    "typed:{}\0{}\0{}",
+                    call_location.path, call_location.start_byte, call_location.end_byte
+                )),
+                display: SymbolId::from(file.source_text(call.callee).unwrap_or("accessor")),
+                kind: Some("accessor".into()),
+                declaration: typed.declaration.clone(),
+                origin: call_location,
+                origin_context: nodes[owner].name.clone().unwrap_or_default(),
+                owner: nodes[owner].symbol.clone(),
+                local: !site_on_every_completion(lookup, file, nodes[owner].span, call.span),
+                conditional: false,
+                undecided: true,
+            },
+            unique: false,
+        });
     }
     contributions
 }
@@ -7905,6 +8038,8 @@ pub(super) struct InterproceduralContext<'a, 'facts> {
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(super) changed_semantic_symbols: Option<&'a HashSet<SymbolId>>,
     pub(super) retained_source_paths: &'a HashSet<String>,
+    /// ADR 0294's typed candidates, for [`typed_candidate_contributions`].
+    pub(super) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
     pub(super) lookup: &'a SemanticLookup<'facts>,
 }
 
@@ -7953,6 +8088,7 @@ fn interprocedural_reads(
         symbol_names,
         changed_semantic_symbols,
         retained_source_paths,
+        typed_sources,
         lookup,
     } = context;
     let InterproceduralCaches {
@@ -8431,6 +8567,17 @@ fn interprocedural_reads(
             }
         }
     }
+    if typed_sources
+        .values()
+        .any(|typed| typed.held_body_unfollowed)
+    {
+        for file in &facts.files {
+            for contribution in typed_candidate_contributions(file, context, &nodes, &nodes_by_path)
+            {
+                summaries[contribution.owner].push(contribution.read);
+            }
+        }
+    }
     let direct_references = direct_references_started.elapsed();
     let direct_summaries = phase_started.elapsed();
     phase_started = Instant::now();
@@ -8503,6 +8650,7 @@ fn interprocedural_reads(
                                 owner: None,
                                 local: false,
                                 conditional: false,
+                                undecided: false,
                             });
                         } else if let Some(target) = by_symbol.get(symbol).copied()
                             && target != index
@@ -8549,6 +8697,7 @@ fn interprocedural_reads(
                                     owner: None,
                                     local: false,
                                     conditional: false,
+                                    undecided: false,
                                 });
                             }
                         }
@@ -9235,6 +9384,7 @@ mod tests {
             owner: None,
             local: false,
             conditional: false,
+            undecided: false,
         }
     }
 

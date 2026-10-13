@@ -87,6 +87,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+      "start": 1922,
+      "end": 1928,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
       "start": 2132,
       "end": 2145,
       "fixes": 0
@@ -159,6 +169,96 @@
       "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
       "start": 4103,
       "end": 4109,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/Review.tsx",
+      "start": 570,
+      "end": 577,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/Review.tsx",
+      "start": 608,
+      "end": 614,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/Review.tsx",
+      "start": 796,
+      "end": 802,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/Review.tsx",
+      "start": 909,
+      "end": 916,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/Review.tsx",
+      "start": 932,
+      "end": 938,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/Review.tsx",
+      "start": 1146,
+      "end": 1152,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/Review.tsx",
+      "start": 1897,
+      "end": 1903,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/Review.tsx",
+      "start": 2080,
+      "end": 2086,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/Review.tsx",
+      "start": 2363,
+      "end": 2369,
       "fixes": 0
     }
   ]

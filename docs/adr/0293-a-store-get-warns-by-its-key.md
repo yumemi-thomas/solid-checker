@@ -102,3 +102,41 @@ Not changed:
   derp-media-server: three summary rows over template-literal and dynamic
   keys of its `sessions` store are withheld, and `sessions[key]` in
   `hermes-session-store.ts:441` is a new `SC9012` obligation.
+
+## Review round 1
+
+Two silent losses, now uncertifiable results:
+- **An exempt `then` Get erased its backing property's code.** The trap
+  exempts its own warning, then evaluates `src[key]`, and rc.13 serves an
+  accessor key through `Reflect.get`, so a `get then() { return count(); }`
+  in the store's literal runs its read in the component body. A `then` Get
+  is now withheld only when `store_get_decision` proves the property runs
+  nothing: the store is a `const [store] = createStore(literal)` in the same
+  file whose setter slot is absent or never referenced, the literal is closed
+  (data properties only), and `then` is absent from it or holds a primitive,
+  object or array literal, or a function literal with no call, member,
+  reference, spread, tagged template, JSX or `this`/`super`/`import`
+  (`function_literal_runs_nothing`). No file may write a member named `then`,
+  write through a prototype, or spell `defineProperty`, `defineProperties`
+  or `__defineGetter__` (rc.13's store clone preserves accessors, so a store
+  write is not assumed to install data). Otherwise the Get is undecided:
+  `SC9012` where it is written, an undecided summary row in a helper. The
+  cross-file digest binds the project-wide vetoes.
+- **Undecided keys vanished from helper summaries.** `function read() {
+  return q[key]; }` called in a component body was silent. A summary row now
+  carries `undecided`: it propagates like any row, is an uncertifiable read
+  at every caller (sorted after a proven row of the same symbol, so
+  `q.data + q[key]` stays a violation), and no contract publishes it as a
+  read or a returned accessor.
+
+Fixture: `store-strict-read-keys` gains `Review.tsx`: `GetterThen`,
+`UnprovenThenBacking`, `CalledReadingThen`, `WrittenStoreThen` are
+`SC9012`; `ThenData`, `AbsentThen` stay silent; `HelperUndecidedKey` and
+`ClosureUndecidedKey` are uncertifiable `SC1001`; `HelperMixedKeys` stays a
+violation. `ForwardedThen` (a store declared in `hook.ts`) is now `SC9012`.
+`async-call-prefix`'s `StoreProtocolKeys` moved: its literal has a computed
+key, so `thenBody` is an uncertifiable `SC1001` and `thenDefault` an
+`SC9012`, and `symbolBody`/`dynamicBody` are uncertifiable `SC1001` again.
+rc.13 corpus, release binary, browser host: violations unchanged in both
+modes (562, identical rows); uncertifiable 3,735 → 3,738 and 3,284 → 3,287,
+the three derp-media-server `sessions` rows this ADR had withheld.

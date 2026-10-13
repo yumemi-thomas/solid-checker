@@ -16,6 +16,16 @@
 | `DeclarationMember` | `SC9012` uncertifiable | an imported receiver is not judged (`impl.ts`, `declared.d.ts`) |
 | `EffectApplyWritten` | `SC9012` uncertifiable | the shortcut: a written binding has no typed entry |
 
+Review round 1:
+
+| Case | Finding | Why |
+| --- | --- | --- |
+| `SpreadTupleSlot` | `SC9012` uncertifiable | a spread before the slot: syntactic element 1 is not runtime slot 1, so the tuple-slot judge refuses it |
+| `ExactTupleSlot` | `SC1001` violation | no spread: slot 1 is the signal |
+| `VisibleReadingMember` | `SC1001` uncertifiable at `readHolder()` | the member holds `() => tick()`, which no summary follows; an undecided summary row |
+| `DirectReadingMember` | `SC9012` uncertifiable | the same member called in the component body |
+| `InertHeldMember` | none | `() => 1` provably runs nothing |
+
 Before ADR 0294 every case but `PlainUntyped` was an `SC1001` violation, and `ParameterSignal` had a second, typed summary row. `Store<T> = T` follows the same rule in source discovery, but Type Facts does not keep that alias on a declared value here, so no case reaches it.
 
 `solid-js.d.ts`, `tsconfig.json` and `node_modules` are copied from `returned-store-proxy`: an ambient `declare module "solid-js"` whose `Accessor` is byte-faithful to `@solidjs/signals@2.0.0-rc.13` `dist/types/signals.d.ts:55`. The ambient origin is what lets the fallback see the alias; against the real installed rc.13 packages Type Facts gives the alias no origin module and the fallback is never reached (research `store-fn-and-typed-accessor.md`). `tsc --noEmit` passes against the stub and against installed rc.13 (`strict`, `skipLibCheck: false`).

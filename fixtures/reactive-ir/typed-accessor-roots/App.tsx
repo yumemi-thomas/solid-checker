@@ -103,3 +103,51 @@ export function EffectApplyWritten() {
   );
   return <p>ok</p>;
 }
+
+// --- Review round 1 of ADR 0294. ---
+// A spread before the slot: runtime slot 1 is the spread's second constant
+// function, and the signal is slot 2. Syntactic element 1 is not slot 1.
+function spreadFactory() {
+  const [count] = createSignal(0);
+  return [...([() => 0, () => 0] as const), count] as const;
+}
+export function SpreadTupleSlot() {
+  const [, read]: readonly [unknown, Accessor<number>, ...unknown[]] = spreadFactory();
+  const value = read();
+  return <p>{value}</p>;
+}
+// No spread: element 1 is slot 1, the signal.
+function slotFactory() {
+  const [count] = createSignal(0);
+  return [() => 0, count] as const;
+}
+export function ExactTupleSlot() {
+  const [, read]: readonly [unknown, Accessor<number>] = slotFactory();
+  const value = read();
+  return <p>{value}</p>;
+}
+// A held arrow that reads a signal, called as a member through a helper:
+// the body is visible but this path builds no summary for it.
+const [tick] = createSignal(0);
+const holder: { read: Accessor<number> } = { read: () => tick() };
+function readHolder() {
+  return holder.read();
+}
+export function VisibleReadingMember() {
+  const value = readHolder();
+  return <p>{value}</p>;
+}
+// The same member called in the component body: an obligation there.
+export function DirectReadingMember() {
+  const value = holder.read();
+  return <p>{value}</p>;
+}
+// A held arrow proven to run nothing stays silent through a helper too.
+const inertHolder: { read: Accessor<number> } = { read: () => 1 };
+function readInert() {
+  return inertHolder.read();
+}
+export function InertHeldMember() {
+  const value = readInert();
+  return <p>{value}</p>;
+}

@@ -1262,6 +1262,7 @@ impl Resolver<'_, '_> {
             owner: None,
             local: false,
             conditional: false,
+            undecided: false,
         })
     }
 

@@ -132,3 +132,35 @@ unsound premise on.
   mode 562 violations / 3,735 uncertifiable and dependency mode 560 / 3,286,
   every row identical. The research's census found no corpus finding resting
   on the fallback, and this confirms it.
+
+## Review round 1
+
+Two issues on the ambient-alias path (inactive against the published
+typings, whose alias has no origin module):
+- **A tuple slot after a spread.** `return [...[f, g], count]` put `count`
+  at syntactic element 1 and runtime slot 2; the tuple-slot judge read
+  element 1 and proved `const [, read] = factory()` a signal, a false
+  violation. The judge now refuses a slot with a spread or a hole before it
+  (the facts record both as `None`). Such a slot is a typed candidate
+  (`SC9012`).
+- **A held member body nothing followed.** `{ read: () => tick() }` typed
+  `{ read: Accessor<number> }` was judged visible, but no summary follows a
+  member call into the literal it holds, so `helper()` calling
+  `holder.read()` was silent. Closed-member function literals are now
+  visible only when each is proven to run nothing
+  (`local_access::function_literal_runs_nothing`). Otherwise the candidate
+  is not visible (`held_body_unfollowed`): a call in a component body is an
+  `SC9012`, and a call in a helper is an undecided summary row
+  (`interproc::typed_candidate_contributions`), so the helper's call is an
+  uncertifiable `SC1001`.
+
+Fixture: `typed-accessor-roots` gains `SpreadTupleSlot` (`SC9012`),
+`ExactTupleSlot` (violation), `VisibleReadingMember` (uncertifiable
+`SC1001` at `readHolder()`), `DirectReadingMember` (`SC9012`) and
+`InertHeldMember` (silent). `tsc --noEmit` is clean against the stub and
+against installed rc.13. rc.13 corpus: no row moved from this part.
+
+Not changed: an Unknown typed candidate called through a helper
+(`function f() { return opaque(); }`) is still silent at the helper's call,
+as is an untyped object member holding a reading arrow (`const h = { read:
+() => tick() }; h.read()`), which no path follows.

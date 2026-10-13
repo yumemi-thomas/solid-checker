@@ -503,6 +503,9 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0209: the property names some assignment in the project writes
     /// (`x.name = …`), and whether any writes through a `prototype`.
     assigned_member_names: OnceLock<(HashSet<String>, bool)>,
+    /// Review round 1 of ADR 0293: whether some file may define a property
+    /// reflectively ([`Self::property_may_be_defined_reflectively`]).
+    reflective_property_definition: OnceLock<bool>,
     entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
@@ -646,6 +649,7 @@ impl<'a> SemanticLookup<'a> {
             resolved_contracts,
             functions_by_symbol: OnceLock::new(),
             assigned_member_names: OnceLock::new(),
+            reflective_property_definition: OnceLock::new(),
             entities_by_location: OnceLock::new(),
             contained_entities_by_path: OnceLock::new(),
             descriptors_by_symbol: OnceLock::new(),
@@ -1364,6 +1368,17 @@ impl<'a> SemanticLookup<'a> {
             if let Some(returned) = self.returned_callback_proof_digest() {
                 hasher.update(b"returned-callbacks\0");
                 hasher.update(returned);
+            }
+            // Review round 1 of ADR 0293: an exempt store Get is withheld
+            // only while no file writes a member of its key, writes through a
+            // prototype, or defines a property reflectively.
+            if let Some(census) = self.exempt_store_key_census() {
+                hasher.update(b"exempt-store-keys\0");
+                for (key, written) in census {
+                    hasher.update(u64::try_from(key.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(key.as_bytes());
+                    hasher.update([u8::from(written)]);
+                }
             }
             // ADR 0277: whether a helper calls its parameter on every
             // completion decides the role of a callback written in its
@@ -2110,6 +2125,81 @@ impl<'a> SemanticLookup<'a> {
             (names, prototype)
         });
         *prototype || names.contains(name)
+    }
+
+    /// Review round 1 of ADR 0293: whether any analyzed file may define a
+    /// property reflectively, installing an accessor where a literal wrote
+    /// data. Deliberately syntactic and wide: any member access, destructured
+    /// property or callee spelled `defineProperty`, `defineProperties` or
+    /// `__defineGetter__`, whatever its receiver, so an alias
+    /// (`const define = Object.defineProperty`) is caught where it is taken.
+    pub(super) fn property_may_be_defined_reflectively(&self) -> bool {
+        const NAMES: [&str; 3] = ["defineProperty", "defineProperties", "__defineGetter__"];
+        *self.reflective_property_definition.get_or_init(|| {
+            self.files().iter().any(|file| {
+                file.ast.members.iter().any(|member| {
+                    file.source_text(member.property).is_some_and(|property| {
+                        NAMES.contains(&property.trim_matches(['\'', '"', '`']))
+                    })
+                }) || file.ast.bindings.iter().any(|binding| {
+                    binding
+                        .object_slots
+                        .iter()
+                        .any(|slot| NAMES.contains(&slot.property.as_str()))
+                }) || file.ast.calls.iter().any(|call| {
+                    file.source_text(call.callee)
+                        .is_some_and(|callee| NAMES.iter().any(|name| callee.ends_with(name)))
+                })
+            })
+        })
+    }
+
+    /// Review round 1 of ADR 0293: the project-wide inputs of an exempt store
+    /// Get's proof (`local_access::store_get_decision`), for the cross-file
+    /// digest: per key the dialect exempts that some Get spells, whether a
+    /// member of that name is written; then the prototype-write flag and
+    /// [`Self::property_may_be_defined_reflectively`]. `None` when no Get
+    /// spells an exempt key, so such a project keeps the digest it had.
+    fn exempt_store_key_census(&self) -> Option<Vec<(String, bool)>> {
+        let mut keys = self
+            .files()
+            .iter()
+            .flat_map(|file| {
+                file.ast
+                    .members
+                    .iter()
+                    .filter_map(|member| file.source_text(member.property))
+                    .chain(
+                        file.ast
+                            .literal_computed_members
+                            .iter()
+                            .map(|literal| literal.key.as_str()),
+                    )
+            })
+            .filter(|key| self.dialect.store_key_may_skip_strict_read(key))
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        if keys.is_empty() {
+            return None;
+        }
+        keys.sort_unstable();
+        keys.dedup();
+        let mut census = keys
+            .into_iter()
+            .map(|key| {
+                let written = self.member_name_may_be_reassigned(&key);
+                (key, written)
+            })
+            .collect::<Vec<_>>();
+        census.push((
+            "\0reflective-property-definition".into(),
+            self.property_may_be_defined_reflectively(),
+        ));
+        census.push((
+            "\0reflective-prototype-write".into(),
+            crate::interproc::accessor_provenance::reflective_prototype_write(self),
+        ));
+        Some(census)
     }
 
     /// ADR 0211: what the origin of the value at `value` proves about the

@@ -30243,10 +30243,14 @@ rc.9 and rc.13 warn only for string keys other than `"then"` (rc.13
 `@solidjs/signals` `dist/dev.js:6660-6675`). Function-valued members are
 ordinary string keys and stay violations (probed). Now:
 - a chain's head Get decides;
-- a `then` head of a single Get is no read;
+- a `then` head of a single Get is no read only when the store's own
+  closed literal proves the property runs nothing and nothing rewrites it
+  (review round 1, `store_get_decision`); otherwise it is undecided;
 - a symbol or dynamic key, or a `then` head followed by another Get, is an
   `SC9012` obligation in a role that reports an untracked read;
-- interprocedural store-member summaries keep only warning heads.
+- interprocedural store-member summaries keep warning heads as reads and
+  undecided Gets as undecided rows, uncertifiable at every caller and never
+  published by a contract (review round 1).
 
 Fixture `reactive-ir/store-strict-read-keys`: 6 violations, 4 obligations, 4
 `then` reads with no `SC1001`. `async-call-prefix` moved: one `then` default
@@ -30255,7 +30259,17 @@ violations unchanged (562 base, 560 dependency mode, identical rows),
 uncertifiable −2 in each mode (derp-media-server). Open:
 - a symbol key is undecided, not exempt: no fact gives the key's type;
 - a template-literal key such as `` `draft:${id}` `` is undecided;
-- an undecided key read through a helper is now silent, not uncertifiable;
+- an undecided key read through a helper is uncertifiable at the call
+  again (review round 1; derp-media-server's three `sessions` rows);
+- an exempt `then` is proven only for a store declared in the same file
+  (`ForwardedThen` through `hook.ts` is `SC9012`), with an unused setter, and
+  under coarse vetoes: any write of a member named `then`, any prototype
+  write, any spelling of `defineProperty`/`defineProperties`/`__defineGetter__`;
+- `StoreProtocolKeys`' `then: 1` is undecided because its literal has a
+  computed key, though a symbol key cannot be `then`;
+- a `then` getter's own read in an inline literal is reported where the
+  getter is written (uncertifiable); one in a module-level object passed to
+  `createStore` is not reported there, only as the Get's `SC9012`;
 - rc.3 warns for `then`, but every vocabulary withholds it;
 - `no-destructure`, store spreads and after-await store reads are unchanged.
 
@@ -30281,9 +30295,16 @@ Corpus unchanged (562/3,735 base, 560/3,286 dependency mode, identical rows).
 Open:
 - class fields, destructured parameters and imported receivers are not
   judged, so a plain function there is an obligation;
-- a visible arrow that reads a signal is silent where the analysis does not
-  follow the call into it (a member holding an arrow);
-- a typed callee inside a helper is silent at its callers, not an obligation;
+- (review round 1) a typed member holding a function literal not proven to
+  run nothing is no longer visible: an `SC9012` in a component body, an
+  undecided summary row through a helper (`typed_candidate_contributions`).
+  An untyped member holding a reading arrow is still followed by no path;
+- an Unknown typed callee (`declare const`, an import) inside a helper is
+  still silent at its callers, not an obligation;
+- (review round 1) the tuple-slot judge refuses a slot after a spread or a
+  hole. The contract tuple projection in `interproc.rs` (`result[{index}]`
+  in `StructuredReturnDiscovery`) indexes the same syntactic elements and is
+  not yet checked for a preceding spread;
 - `Setter`/`StoreSetter` type roles still feed write rules from the type;
 - against published rc.13 the fallback is not reached at all (no alias
   origin module), so `const get: Accessor<number> = count; get()` is silent
