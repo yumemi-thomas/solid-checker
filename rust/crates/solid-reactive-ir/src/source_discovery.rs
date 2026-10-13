@@ -2145,6 +2145,8 @@ pub(crate) fn discover_sources(
     // type-only fallback. A published Accessor/Store annotation alone cannot
     // witness a runtime reactive Get in an incoming prop expression.
     let mut runtime_sources = accessors.keys().cloned().collect::<HashSet<_>>();
+    let mut literal_member_slots =
+        crate::literal_member_slots::LiteralMemberSlots::new(facts, semantic_lookup);
     for entity in facts.typescript.entities() {
         let Some(descriptor) = &entity.type_descriptor else {
             continue;
@@ -2236,6 +2238,12 @@ pub(crate) fn discover_sources(
                     })
                 }))
         {
+            continue;
+        }
+        // ADR 0286: a property an object literal declares is typed by what
+        // the literal stored, which is not what its slot holds once the
+        // object reached code that may replace the member.
+        if literal_member_slots.replaceable(symbol) {
             continue;
         }
         let declaration = source_declarations.get(symbol);

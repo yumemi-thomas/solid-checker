@@ -29960,3 +29960,29 @@ Open from the review, unconfirmed:
 - a Node host with no `exports` reads `module` before `main`;
 - a workspace package selected by name;
 - cross-package wildcard writes.
+
+## A typed member root requires an unreplaced slot (2026-10-13, ADR 0286)
+
+False SC1001, fixed: `const tag = { label }; relabel(tag); tag.label()` was a
+proven untracked read, but `relabel` (a generic `T extends { label }` writer,
+`tsc`-clean) had replaced `label` with a plain function. The root came from
+source discovery's type-only fallback: the literal's property symbol is typed
+`SourceAccessor<string>`. Neither `binding_has_write` nor ADR 0273's veto saw
+the write, because it names the constraint's property. Every read of a member
+root is now judged by its receiver:
+- a property an object literal declares is kept only when every read's
+  receiver is a closed `const` holding that literal, in place or from an
+  exact project factory's fresh return;
+- a property declared elsewhere is withheld only when some read's receiver is
+  a project literal that escaped.
+
+Refusals are silent, like the fallback's other refusals. Fixture
+`reactive-ir/literal-member-handoff`: 5 violations, 8 silent. Coverage
+otherwise unmoved. Corpus unchanged (562/3,731). Open:
+- the verdict is per property symbol, so one escaped read withholds every
+  read of it, including another consumer of the same factory;
+- a hand-off to project code that writes nothing (a JSX prop, a reader) is
+  still a hand-off;
+- an interface-declared member read through a parameter, a context value or
+  another Unknown receiver keeps the type-only premise, so a caller that
+  replaced it is still reported there.

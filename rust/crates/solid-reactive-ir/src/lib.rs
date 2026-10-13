@@ -17,6 +17,7 @@ mod findings;
 mod identity;
 mod indexes;
 mod interproc;
+mod literal_member_slots;
 mod local_access;
 mod owners;
 mod pipeline;

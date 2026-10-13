@@ -1903,6 +1903,14 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// A missing symbol is missing reference evidence, not an empty census.
+    /// The compiler's declarations of `symbol`, at their name spans; `None`
+    /// when Type Facts does not know the symbol.
+    pub(super) fn symbol_declarations(&self, symbol: &str) -> Option<&'a [typefacts::Declaration]> {
+        self.symbols_by_id()
+            .get(symbol)
+            .map(|candidate| candidate.declarations())
+    }
+
     pub(super) fn symbol_references_if_present(&self, symbol: &str) -> Option<Vec<Location>> {
         self.symbols_by_id()
             .get(symbol)
