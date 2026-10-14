@@ -99,6 +99,27 @@ Also in this phase:
 - optionally, kui's router getter through package-object escape analysis
   (parked in docs/precision-backlog.md).
 
+**Exit criterion (owner, 2026-10-14):** no false positive and no wrong
+certification. A proof that contracts give and source cannot is an honest
+uncertifiable result, not a phase 1 work item. Under this criterion:
+- the hand-off allowlist (ADRs 0307 and its round 3) lands, because the
+  review rounds showed that source mode at `d9ed2224d` certifies untracked
+  reads through ordinary helpers;
+- demand selection (ADR 0304) lands only within about 1.5× each project's
+  wall time and without losing a proof;
+- the virtual-core constructor proof and kobalte's `Dynamic` callback timing
+  move to phase 1b;
+- the `browser` map and the `?raw`/JSON modules need fixtures only, since
+  they move no corpus site.
+
+### 1b. One value-flow fact
+
+ADR 0309: one fact records where each proven reactive value can flow and
+which call sites can read it. It replaces the shape-by-shape slices whose
+gaps the phase 1 reviews kept finding. It is built in shadow mode, at least
+as strict as the allowlist, and then takes over consumers one at a time.
+The recall that phase 1 deferred comes from this fact.
+
 ### 2. Host-free runs
 
 Host inference supplies a browser host where it is proven, without contract
@@ -142,7 +163,8 @@ Each step lands green on its own. The inventory's section 5 has the details.
 | Step | Content | Size |
 | --- | --- | --- |
 | P0 | Measure: per-site sweep with contracts disabled; a dual-mode comparison script | small |
-| P1 | Source gaps: namespace redirects, non-Solid packages, `browser` map, `?raw`/JSON modules; seed a source-selection corpus gate | large |
+| P1 | Source gaps: namespace redirects, non-Solid packages, `browser` map, `?raw`/JSON modules; seed a source-selection corpus gate; hand-off allowlist | large |
+| P1b | Value-flow fact (ADR 0309): shadow mode, consumer moves, then the deferred recall | large |
 | P2 | Neutral IR vocabulary: move the `Contract*` summary types (no behaviour change) | medium |
 | P3 | `PackageBoundary`: imports that cannot be analyzed, each with a reason; host passed separately (no finding moves) | medium |
 | P4 | Host-free runs (decision 7) | large |
@@ -153,6 +175,7 @@ Each step lands green on its own. The inventory's section 5 has the details.
 | D1–D8 | Delete consumption (backend, IR), emission, certification and probes, the dialect's negative authority, the Type Facts certification protocol, historical ledgers and benchmarks, schemas and docs | large in total |
 
 These constraints are fixed:
+- P1b comes before P2.
 - P2–P6 come before P7.
 - P1's seed recycling comes before D3.
 - D6 comes after D4.
