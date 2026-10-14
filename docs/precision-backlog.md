@@ -1,5 +1,20 @@
 # Precision backlog
 
+Prototype-write vetoes, open (2026-10-14; review of the parked
+`p1a-demand-nonsolid` commits, `/tmp/sc-scratch.noindex/p1/p1a-veto-review.md`).
+The base binary at `d9ed2224d` has a **false positive**: a project assignment
+`Array.prototype[Symbol.iterator] = …` is not seen by ADR 0282's tuple veto, so
+returned-tuple destructuring still reports an SC1001 read that the replaced
+iterator never performs. Aliased prototypes, `%ArrayIteratorPrototype%.next`
+writes and `Object.setPrototypeOf` also certify on every binary, and ADR 0211's
+member dispatch does not veto `Object.assign` or `defineProperty` onto
+`Array.prototype.filter`. All reproducers are tsc-clean against rc.13 and
+contrived. The parked commit 6f103c891 scopes an unnamed package `X.prototype`
+write to the package's own tuples, which is a false positive when `Array` or
+`Promise` is passed as `X`; it stays parked. 77aaa674c (ADR 0211) is held
+until its symbol check is limited to the fixed well-known names and the
+`setPrototypeOf` case vetoes. ADR 0309 decision 5 owns the general fix.
+
 ADR 0302 (2026-10-14): deferred effect apply no longer proves an execution
 from its callback position alone. Literal `defer: true` with a dependency-free
 compute suppresses SC1001 and owner/leaf claims in the unreachable apply;
