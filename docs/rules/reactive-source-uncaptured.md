@@ -33,6 +33,19 @@ reactivity), called inside a tracking scope (correct), or stored for later. The
 analysis can prove none of these, so every read that flows through the unknown
 function becomes uncertifiable rather than certified or proven wrong.
 
+## What the evidence states
+
+The finding's evidence step points at the argument and says only that a
+reference bound to a reactive accessor occupies that call expression's argument
+position, and that, if the call executes, the available analysis does not
+establish whether reads through the accessor stay tracked. The statement is
+conditional. It does not claim that the call runs, that the API or import is
+invalid, or that any read is untracked. Whether a call, import or member is
+valid is TypeScript's to report; this evidence says nothing about it, so the
+finding can appear beside a TypeScript error on the same call. That
+co-occurrence is tracked as open item B5 in
+[precision-backlog.md](../precision-backlog.md).
+
 ## How to fix
 
 Give the analysis a way to see the call:

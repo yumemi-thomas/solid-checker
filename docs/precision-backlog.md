@@ -30986,3 +30986,67 @@ ambiguous targets and namespace transfers beyond direct await-import remain
 open. P1b and production runtime corrections are held separately. Independent
 new shapes require proof-first followups. No public snapshot, contract, manifest,
 pin, protocol or dependency selection changes accompany these observations.
+
+## B5: SC9011 evidence corrected, admission still open (2026-10-15)
+
+`reactive-source-uncaptured` (SC9011, uncertifiable only) carried the evidence
+sentence "the invalid API shape is statically present at this call" on every
+finding, a claim about validity that is TypeScript's. Its own evidence step now
+reads: a reference bound to a reactive accessor occupies this call expression's
+argument position; if the call executes, the available analysis does not
+establish whether reads through that accessor stay tracked. The statement is
+conditional and asserts no invocation, no invalid API and no untracked read. Only
+that evidence text of this kind changed: message, hint, rule, kind, status,
+locations and every other kind's evidence are as before.
+
+**Partial fix only.** SC9011 is not claimed truthful as a whole, and B5 stays
+open:
+
+- The primary message still says the source "is passed to" the named callee,
+  whose behavior "is not described anywhere" in the project or a package
+  contract. That asserts a runtime transfer into an existing receiver that a
+  source call expression does not establish, and the hint still points at
+  package contracts. Unchanged by this slice.
+- c1/c2 admission is open. Against published types the controls below are
+  rejected by TypeScript, and SC9011 still fires beside it with the same
+  uncertifiable kind: no exact valid runtime binding or transfer witness
+  separates them from tsc-clean twins. The call row is `valid` because the
+  producer's Valid fallback is absence from the call-diagnostic index, not a
+  positive binding fact.
+- Suppression is held, not waived. Each candidate guard over existing facts has
+  an individual tsc-clean counterexample that would then be certified clean:
+  `declaration == None` (`declare const observe: any`, `export declare const f:
+  any` in a `.d.ts`, shorthand and `virtual:*` ambient modules, a mapped `any`
+  member), a non-durable call target (a mapped-`any` member call whose call
+  payload equals c1/c2's), an unresolved module row (`declare module "x";`,
+  `declare module "virtual:*"`, an `@ts-ignore`d import), and
+  `runtimeBindingKind == Callable` as admission (it would silence legitimate
+  unknowns such as `declare const observe: (v: unknown) => void`). These are
+  selected observations and counterexamples, not a proof that no combination of
+  existing facts could distinguish the rejected sites. Unblocking needs an
+  authoritative per-site statement of what TypeScript rejects (suppression-,
+  ambient- and alias-aware), reviewed separately; it is producer work and is not
+  started here.
+- c3 (`ns.nonexistent(v)`, TS2339) reports a separate SC9005 claim, unchanged.
+- The other six kinds that share the old evidence sentence were not reviewed.
+- `docs/rules/reactive-source-uncaptured.md` still describes the rule as
+  package-import-only, store-inclusive and shared with a 1.x catalog; none of
+  that matches the implementation. Recorded, not cleaned up here (P2 owns
+  wording and terminology).
+
+Published-type controls (`solid-js` and `@solidjs/web` 2.0.0-rc.13,
+`@solid-primitives/utils` 7.0.0-next.4, `mitt` 3.0.1). `tsc --noEmit` with
+compiler 6.0.3 and with 7.0.2 agree on all 19 controls and reject only c1, c2
+and c3:
+
+```text
+App.tsx(1,10): error TS2305: Module '"@solid-primitives/utils"' has no exported member 'nonexistent'.
+App.tsx(1,23): error TS2307: Cannot find module 'not-installed-package' or its corresponding type declarations.
+App.tsx(7,21): error TS2339: Property 'nonexistent' does not exist on type 'typeof import("/Users/thomas/Documents/Github/solid-checker-rc13-corpus/apps/openbot/node_modules/@solid-primitives/utils/dist/index")'.
+```
+
+The compilers are 6.0.3 (package manifest sha256 `9332e97c…65e9`) and 7.0.2
+(`3722b302…017e`); the raw records are under
+`/tmp/sc-scratch.noindex/sc9011-admission/tsc/`. Every other control, including
+both `@ts-ignore`d variants, is clean under both. 17 of the 19 controls report
+SC9011; the two certified controls are the constant ones.

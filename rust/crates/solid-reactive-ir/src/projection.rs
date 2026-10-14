@@ -474,9 +474,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 }
             }
         }
+        // The argument position is what the facts establish. Neither a valid
+        // call nor an exact callee proves the call runs or what it does with
+        // the accessor, so the claim stays conditional: it asserts no
+        // invocation, no invalid API, and no untracked read.
+        StaticDefectKind::ReactiveSourceUncaptured { .. } => {
+            "a reference bound to a reactive accessor occupies this call expression's argument position; if the call executes, the available analysis does not establish whether reads through that accessor stay tracked"
+        }
         StaticDefectKind::ReactiveReadAfterAwait { .. }
         | StaticDefectKind::MissingEffectFunction
-        | StaticDefectKind::ReactiveSourceUncaptured { .. }
         | StaticDefectKind::ReactiveHandlerRead { .. }
         | StaticDefectKind::HandlerValueUnresolved { .. }
         | StaticDefectKind::UncalledAccessor { .. }
@@ -2018,5 +2024,57 @@ mod tests {
         let (findings, _) =
             project_findings(&program, &RecordingCatalog(CatalogCapabilities::SOLID_2));
         assert!(findings.is_empty());
+    }
+
+    fn evidence_terms() -> StaticDefectTerms {
+        StaticDefectTerms {
+            props_destructure_hint: "",
+            reactive_object_destructure_hint: "",
+            missing_effect_message: "",
+            missing_effect_hint: "",
+            store_mutation_hint: |_| String::new(),
+            removed_export_hint: |_, _| None,
+            rich_argument_transport_throw: "",
+            rich_argument_resolved_hint: "",
+            rich_argument_nested_hint: "",
+            rich_argument_primitive_hint: "",
+            rich_argument_unresolved_hint: "",
+        }
+    }
+
+    /// The source-argument evidence states what the facts establish and no
+    /// more: the accessor sits in the call's argument position, and tracking
+    /// is unproven if the call executes. It claims no invocation, no invalid
+    /// API and no untracked read, so it holds unchanged for a call TypeScript
+    /// accepts. The other kinds that shared its sentence keep it; this test
+    /// pins that scope, not that sentence's truth for them.
+    #[test]
+    fn a_source_argument_evidence_is_conditional_and_leaves_other_kinds_alone() {
+        let defect = |kind| StaticDefect {
+            kind,
+            location: location(7),
+            analysis_context: String::new(),
+            fixes: vec![],
+            uncertain: false,
+        };
+        let terms = evidence_terms();
+        let uncaptured = defect(StaticDefectKind::ReactiveSourceUncaptured {
+            source: "count".into(),
+            callee: "observe".into(),
+        });
+        assert_eq!(
+            static_defect_text(&uncaptured, &terms).evidence,
+            "a reference bound to a reactive accessor occupies this call expression's argument position; if the call executes, the available analysis does not establish whether reads through that accessor stay tracked"
+        );
+        let shared = "the invalid API shape is statically present at this call";
+        for kind in [
+            StaticDefectKind::MissingEffectFunction,
+            StaticDefectKind::UncalledAccessor {
+                name: "count".into(),
+                position: "argument".into(),
+            },
+        ] {
+            assert_eq!(static_defect_text(&defect(kind), &terms).evidence, shared);
+        }
     }
 }

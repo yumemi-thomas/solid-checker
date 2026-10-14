@@ -981,3 +981,39 @@ mod strict_read_hint_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod source_argument_evidence_tests {
+    use solid_reactive_ir::{FindingSeed, StaticDefect, project_finding};
+
+    use super::Catalog;
+
+    /// The evidence is anchored at the argument the defect names and is
+    /// conditional: `observe` is an opaque callable, so nothing here says the
+    /// call runs, is an invalid API, or reads untracked.
+    #[test]
+    fn the_evidence_is_the_conditional_sentence_at_the_argument() {
+        let defect: StaticDefect = serde_json::from_value(serde_json::json!({
+            "kind": {
+                "kind": "reactive-source-uncaptured",
+                "source": "count",
+                "callee": "observe",
+            },
+            "location": { "path": "App.tsx", "startByte": 120, "endByte": 125 },
+        }))
+        .unwrap();
+        let finding = project_finding(FindingSeed::StaticDefect(&defect), &Catalog);
+        assert_eq!(finding.id, "SC9011");
+        assert_eq!(finding.kind, "uncertifiable");
+        assert_eq!(finding.evidence.len(), 1);
+        assert_eq!(
+            finding.evidence[0].message,
+            "a reference bound to a reactive accessor occupies this call expression's argument position; if the call executes, the available analysis does not establish whether reads through that accessor stay tracked"
+        );
+        assert_eq!(
+            finding.evidence[0].location.as_ref(),
+            Some(&defect.location)
+        );
+        assert_eq!(finding.primary_location, defect.location);
+    }
+}
