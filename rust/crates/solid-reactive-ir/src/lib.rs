@@ -28,6 +28,7 @@ pub mod returns_walk;
 mod runtime_configuration;
 mod runtime_semantics;
 pub use runtime_configuration::RuntimeConfigurationPremise;
+mod object_members;
 mod server_rules;
 mod source_discovery;
 mod static_api;

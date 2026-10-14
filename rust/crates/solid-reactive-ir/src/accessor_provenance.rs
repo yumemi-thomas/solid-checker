@@ -66,7 +66,7 @@ pub(super) struct Resolver<'a, 'facts> {
 
 /// ADR 0273: absence of a visible veto is an assumption, not a closed census.
 #[derive(Default)]
-struct MemberStability {
+pub(crate) struct MemberStability {
     written: HashMap<String, Location>,
     all: Option<Location>,
     /// ADR 0284: the wildcard vetoes written inside a package analyzed as
@@ -84,7 +84,7 @@ struct MemberStability {
     prototype_target: Option<Location>,
 }
 
-enum Stability<'a> {
+pub(crate) enum Stability<'a> {
     Assumed,
     Vetoed(&'a Location),
 }
@@ -100,7 +100,7 @@ impl MemberStability {
     /// [`Self::state`] for a member of an object created in `owner`: the
     /// project's vetoes, and those of the package analyzed as source that
     /// holds `owner`, if one does.
-    fn state_of(&self, facts: &ProjectFacts, owner: &str, name: &str) -> Stability<'_> {
+    pub(crate) fn state_of(&self, facts: &ProjectFacts, owner: &str, name: &str) -> Stability<'_> {
         match self.state(name) {
             Stability::Assumed => facts
                 .dependency_source_root(owner)
@@ -110,7 +110,7 @@ impl MemberStability {
         }
     }
 
-    fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
+    pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
         let mut project = Self::default();
         let mut prototype_target = None;
         for file in &facts.files {

@@ -6937,6 +6937,54 @@ fn interprocedural_result_reads_for_file(
                 ) {
                     return captured_body_read_runs_during_call(callee_file, callee, read);
                 }
+                // ADR 0299: an anonymous object member has no declaration
+                // symbol for the ordinary entered-function join. Its exact
+                // source location is still on this synchronous call chain.
+                // Require a runtime source witness; typed summary candidates
+                // and detached async origins cannot acquire this proof.
+                if !callee.r#async
+                    && source_has_runtime_witness(
+                        &read.symbol,
+                        accessors,
+                        entities,
+                        symbol_names,
+                        lookup,
+                    )
+                {
+                    let entered = entered.get_or_init(|| {
+                        directly_entered_functions(callee_file, callee, lookup, transported_calls)
+                    });
+                    let all_sync = entered.iter().all(|(path, span)| {
+                        lookup
+                            .file_by_path(path)
+                            .and_then(|file| {
+                                file.ast
+                                    .functions
+                                    .iter()
+                                    .find(|function| function.span == *span)
+                            })
+                            .is_some_and(|function| !function.r#async)
+                    });
+                    if all_sync
+                        && entered.iter().any(|(path, span)| {
+                            lookup.object_member_targets().values().any(
+                                |(target_path, target_span)| {
+                                    target_path == path && target_span == span
+                                },
+                            ) && lookup.file_by_path(path).is_some_and(|file| {
+                                file.ast
+                                    .functions
+                                    .iter()
+                                    .find(|function| function.span == *span)
+                                    .is_some_and(|function| {
+                                        captured_body_read_runs_during_call(file, function, read)
+                                    })
+                            })
+                        })
+                    {
+                        return true;
+                    }
+                }
                 return read.kind.as_deref() == Some("accessor")
                     && read.origin == location(file.path.shared(), call.span);
             }
@@ -7946,6 +7994,16 @@ fn typed_candidate_contributions(
     } = context;
     let mut contributions = Vec::new();
     for call in &file.ast.calls {
+        if lookup
+            .object_member_function(file, call.callee)
+            .is_some_and(|(target_file, target)| {
+                nodes
+                    .iter()
+                    .any(|node| node.path == target_file.path.as_str() && node.span == target.span)
+            })
+        {
+            continue;
+        }
         // The candidate is keyed by the entity root its reads carry; the
         // callee's resolved declaration symbol may be another identity.
         let callee = file.ast.peel_ts_sugar_span(call.callee);
@@ -8166,7 +8224,16 @@ fn interprocedural_reads(
             .map(|node| (node.path.clone(), node.span))
             .collect(),
     );
-    let (transported_calls, unavailable_calls) = provenance.calls();
+    let (mut transported_calls, unavailable_calls) = provenance.calls();
+    for (site, (path, span)) in lookup.object_member_targets() {
+        transported_calls.insert(
+            site.clone(),
+            accessor_provenance::Callable::Function {
+                path: path.clone(),
+                span: *span,
+            },
+        );
+    }
     let array_source_origins = if transported_calls
         .values()
         .any(|target| matches!(target, accessor_provenance::Callable::ArrayMembers(_)))

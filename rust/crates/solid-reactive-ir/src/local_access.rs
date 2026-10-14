@@ -1807,10 +1807,18 @@ impl LocalAccessContext<'_, '_> {
             // is located like an accessor read and reported as an obligation.
             let typed_unknown = !self.accessors.contains_key(symbol)
                 && self
+                    .lookup
+                    .object_member_function(file, call.callee)
+                    .is_none()
+                && self
                     .typed_sources
                     .get(symbol)
                     .is_some_and(|typed| !typed.implementation_visible);
             let typed_effect_accessor = execution == ExecutionRole::EffectApply
+                && self
+                    .lookup
+                    .object_member_function(file, call.callee)
+                    .is_none()
                 && call.arguments.is_empty()
                 && !crate::callback_return::binding_is_callback_result(
                     self.lookup,

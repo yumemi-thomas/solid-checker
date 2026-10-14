@@ -523,6 +523,7 @@ fn propagate_owner_contexts(contexts: &mut [u8], outgoing: &[Vec<(usize, OwnerEd
 pub(crate) enum OwnerTarget {
     Symbol(SymbolId),
     LocalSpan(Span),
+    Function(String, Span),
 }
 
 #[derive(Clone)]
@@ -753,9 +754,18 @@ pub(crate) fn find_missing_owners(
         for (call_index, call) in file.ast.calls.iter().enumerate() {
             let owner =
                 containing_function_indexed(&nodes, &nodes_by_path, file.path.as_str(), call.span);
-            if let Some(target_index) = call_edge_symbol(file, call, entities, lookup)
-                .and_then(|symbol| by_symbol.get(symbol))
-                .copied()
+            if let Some(target_index) = lookup
+                .object_member_function(file, call.callee)
+                .and_then(|(file, function)| {
+                    nodes.iter().position(|node| {
+                        node.path == file.path.as_str() && node.span == function.span
+                    })
+                })
+                .or_else(|| {
+                    call_edge_symbol(file, call, entities, lookup)
+                        .and_then(|symbol| by_symbol.get(symbol))
+                        .copied()
+                })
             {
                 if let Some(owner) = owner {
                     edges.push((owner, target_index, OwnerEdgeKind::Preserve));
@@ -1641,13 +1651,21 @@ pub(crate) fn discover_owner_file(
     let mut requirements = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = owner_at(call.span);
-        if let Some(symbol) = call_edge_symbol(file, call, entities, lookup) {
+        let target = lookup
+            .object_member_function(file, call.callee)
+            .map(|(file, function)| OwnerTarget::Function(file.path.to_string(), function.span))
+            .or_else(|| {
+                call_edge_symbol(file, call, entities, lookup)
+                    .cloned()
+                    .map(OwnerTarget::Symbol)
+            });
+        if let Some(target) = target {
             edges.push(SymbolicOwnerEdge {
                 source: owner.map(|span| OwnerSource {
                     path: file.path.to_string(),
                     span,
                 }),
-                target: OwnerTarget::Symbol(symbol.clone()),
+                target,
                 kind: OwnerEdgeKind::Preserve,
             });
         }
@@ -1822,6 +1840,10 @@ pub(crate) fn resolve_owner_target(
     match target {
         OwnerTarget::Symbol(symbol) => by_symbol.get(symbol).copied(),
         OwnerTarget::LocalSpan(span) => nodes_by_span
+            .get(path)
+            .and_then(|nodes| nodes.get(span))
+            .copied(),
+        OwnerTarget::Function(path, span) => nodes_by_span
             .get(path)
             .and_then(|nodes| nodes.get(span))
             .copied(),

@@ -30449,3 +30449,32 @@ violation rule, fixture snapshot or generated artifact changed. See ADR
 0289's recovery investigation for the required consumer, provider and
 descriptor facts. No sound recovery proof was found within the current fact
 boundary; the uncertifiable result is retained.
+
+## Exact exported object members (ADR 0299, 2026-10-14)
+
+Owner attribution and read summaries now share exact function locations for
+const object literals carried through named/default imports, including
+Object.freeze and anonymous default literals. A complete configured receiver
+use census and ADR 0273's member veto are required; package wildcard writes
+are scoped as ADR 0284 decision 8 requires. Both owner passes and retained
+summary identity consume the same result. No structural callable type proves
+a target. Spread/computed/getter literals, written/let/aliased/escaped bindings,
+namespace chains and possibly-null receivers stay refused. Generators and
+possible receiver exposure through this/arguments/super/eval, including sibling
+shorthand methods, stay refused. A visibly written Object.freeze vetoes its
+wrapper, and visible eval withholds targets. The
+conservative source spelling veto may also withhold on strings/comments.
+Fixtures: `object-member-import`, `dependency-source-object-member`,
+`object-member-freeze-write`; all
+are tsc-clean with published-rc.13 claim-bearing signatures, and the base
+sources are clean against the real published typings in strict and loose mode.
+Anonymous member reads retain their proof through synchronous helpers only
+with an exact local runtime source origin; conditional/async and unknown-origin
+paths remain uncertifiable. The followed body replaces type-only obligations.
+The existing typed-accessor-roots fixture upgrades its two tick reads and
+removes the obligation on an imported plain function. Coverage is 288 projects /
+2009 findings, with only that existing snapshot and three new ones changed.
+IR library tests: 379 passed. Ownership gate: 42 cases, zero pending rows.
+The rc.13 release/browser sweep has 49 projects, zero errors, 562 violations and
+3287 uncertifiable findings, identical at every site to sweep-m-all.json;
+there are zero added violations to hand-review (sweep-sol-members.json).

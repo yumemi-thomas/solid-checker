@@ -474,3 +474,9 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/store-strict-read-keys/node_modules/**
 !fixtures/reactive-ir/typed-accessor-roots/node_modules/
 !fixtures/reactive-ir/typed-accessor-roots/node_modules/**
+!fixtures/reactive-ir/object-member-import/node_modules/
+!fixtures/reactive-ir/object-member-import/node_modules/**
+!fixtures/reactive-ir/dependency-source-object-member/node_modules/
+!fixtures/reactive-ir/dependency-source-object-member/node_modules/**
+!fixtures/reactive-ir/object-member-freeze-write/node_modules/
+!fixtures/reactive-ir/object-member-freeze-write/node_modules/**

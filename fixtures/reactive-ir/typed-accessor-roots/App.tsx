@@ -127,7 +127,7 @@ export function ExactTupleSlot() {
   return <p>{value}</p>;
 }
 // A held arrow that reads a signal, called as a member through a helper:
-// the body is visible but this path builds no summary for it.
+// ADR 0299 follows its exact body through the synchronous helper.
 const [tick] = createSignal(0);
 const holder: { read: Accessor<number> } = { read: () => tick() };
 function readHolder() {
@@ -137,7 +137,7 @@ export function VisibleReadingMember() {
   const value = readHolder();
   return <p>{value}</p>;
 }
-// The same member called in the component body: an obligation there.
+// The same exact member called in the component body is a violation too.
 export function DirectReadingMember() {
   const value = holder.read();
   return <p>{value}</p>;

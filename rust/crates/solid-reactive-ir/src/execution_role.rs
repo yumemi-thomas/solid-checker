@@ -2825,6 +2825,17 @@ pub(crate) fn project_callee_at_parameter<'a>(
     &'a solid_facts::ast::FunctionFact,
     bool,
 )> {
+    if let Some((file, function)) = lookup.object_member_function(file, call.callee) {
+        return Some((
+            file,
+            function,
+            !call
+                .arguments
+                .iter()
+                .take(index.saturating_add(1))
+                .any(|argument| argument.spread),
+        ));
+    }
     let declared = lookup
         .callee_symbol(file, call.callee)
         .and_then(|symbol| lookup.function_for_symbol(symbol));

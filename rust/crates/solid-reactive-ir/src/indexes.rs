@@ -487,6 +487,7 @@ pub(super) struct ResultAccessForwarded {
 /// first-writer results are unchanged. Warm builds that never ask a question
 /// never pay for an index.
 pub(super) struct SemanticLookup<'a> {
+    object_members: OnceLock<crate::object_members::Targets>,
     facts: &'a ProjectFacts,
     /// The Solid-version vocabulary this build analyzes with. Every consumer
     /// of the lookup shares one dialect; a build never mixes two.
@@ -640,6 +641,7 @@ impl<'a> SemanticLookup<'a> {
             "entity table must be sorted by path for per-path containment slices"
         );
         Self {
+            object_members: OnceLock::new(),
             facts,
             dialect,
             program_closed,
@@ -1294,6 +1296,25 @@ impl<'a> SemanticLookup<'a> {
             component_keys.sort_unstable();
             let mut hasher = Sha256::new();
             hasher.update(b"components\0");
+            let mut member_targets = self.object_member_targets().iter().collect::<Vec<_>>();
+            member_targets.sort_unstable_by(|a, b| {
+                (a.0.path.as_ref(), a.0.start_byte, a.0.end_byte).cmp(&(
+                    b.0.path.as_ref(),
+                    b.0.start_byte,
+                    b.0.end_byte,
+                ))
+            });
+            hasher.update(b"object-member-targets\0");
+            for (site, (path, span)) in member_targets {
+                for value in [site.path.as_ref(), path.as_str()] {
+                    hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(value.as_bytes());
+                }
+                hasher.update(site.start_byte.to_le_bytes());
+                hasher.update(site.end_byte.to_le_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
             // Scalar-result admission vetoes writes/escapes in any configured
             // file. Bind that census when a callback-result contract can use
             // it: a mutation elsewhere must invalidate a cached clean result.
@@ -1892,6 +1913,29 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn entities(&self) -> &'a EntitySymbols {
         self.entities
+    }
+
+    pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {
+        self.object_members
+            .get_or_init(|| crate::object_members::index(self.facts, self))
+    }
+
+    pub(super) fn object_member_function(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        let (path, span) = self
+            .object_member_targets()
+            .get(&crate::location(file.path.shared(), callee))?;
+        let file = self.file_by_path(path)?;
+        Some((
+            file,
+            file.ast
+                .functions
+                .iter()
+                .find(|function| function.span == *span)?,
+        ))
     }
 
     pub(super) fn symbol_names(&self) -> &'a HashMap<SymbolId, SymbolName> {
@@ -5128,6 +5172,76 @@ mod tests {
                 stable,
                 "{source}"
             );
+        }
+    }
+
+    #[test]
+    fn exact_object_member_calls_require_a_closed_const_receiver() {
+        for (source, admitted) in [
+            ("export const obj = { run() {} }; obj.run();", true),
+            ("const obj = { run: () => 1 }; obj.run();", true),
+            ("const obj = { 'run': () => 1 }; obj.run();", true),
+            ("function run() {} const obj = { run }; obj.run();", true),
+            (
+                "function bad() { keep(this); } const obj = { run() {}, bad }; obj.bad(); obj.run();",
+                false,
+            ),
+            ("const obj = { *run() {} }; obj.run();", false),
+            ("const obj = { run: function () {} }; obj.run();", true),
+            ("const obj = { run() {} }; obj?.run?.();", true),
+            (
+                "const obj = { run() {} }; (obj as unknown as typeof obj).run();",
+                true,
+            ),
+            ("let obj = { run() {} }; obj.run();", false),
+            ("const obj = { run() {} }; obj = other; obj.run();", false),
+            (
+                "const obj = { run() {} }; obj.run = other; obj.run();",
+                false,
+            ),
+            (
+                "const obj = { run() {} }; alias.run = other; obj.run();",
+                false,
+            ),
+            (
+                "const obj = { run() {} }; Object.assign(obj, other); obj.run();",
+                false,
+            ),
+            ("const obj = { run() {} }; keep(obj); obj.run();", false),
+            (
+                "const obj = { run() {} }; const alias = obj; obj.run();",
+                false,
+            ),
+            (
+                "const obj = { run() {} }; const f = obj.run; obj.run();",
+                false,
+            ),
+            ("const obj = { [key]() {} }; obj.run();", false),
+            ("const obj = { get run() { return f; } }; obj.run();", false),
+            ("const obj = { run() {}, ...other }; obj.run();", false),
+            ("const obj = { ...other, run() {} }; obj.run();", false),
+            ("const obj = { run() { keep(this); } }; obj.run();", false),
+            (
+                "const obj = { run() {} }; eval('obj.run = other'); obj.run();",
+                false,
+            ),
+            ("const obj = flag ? { run() {} } : null; obj?.run();", false),
+            ("const obj = { run() {} }; obj['run']();", false),
+        ] {
+            let ast = solid_facts::ast::extract(PATH, source).unwrap();
+            let spans = ast
+                .identifiers
+                .iter()
+                .filter(|id| &source[id.span.start as usize..id.span.end as usize] == "obj")
+                .map(|id| (id.span, "object"))
+                .collect::<Vec<_>>();
+            with_lookup(source, &spans, |lookup| {
+                assert_eq!(
+                    !lookup.object_member_targets().is_empty(),
+                    admitted,
+                    "{source}"
+                );
+            });
         }
     }
 

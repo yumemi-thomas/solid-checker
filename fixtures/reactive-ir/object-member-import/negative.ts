@@ -1,0 +1,21 @@
+import { onCleanup } from "solid-js";
+export let mutable = { mutableRun() { onCleanup(() => {}); } };
+export let written = { writtenRun() { onCleanup(() => {}); } };
+written = { writtenRun() {} };
+export const replaced = { replacedRun() { onCleanup(() => {}); } };
+replaced.replacedRun = () => {};
+export const assigned = { assignedRun() { onCleanup(() => {}); } };
+Object.assign(assigned, { assignedRun() {} });
+export const computed = { ["computedRun"]() { onCleanup(() => {}); } };
+export const getter = { get getterRun() { return () => onCleanup(() => {}); } };
+const replacement: { spreadRun?: () => void } = { spreadRun() {} };
+export const spread = { spreadRun() { onCleanup(() => {}); }, ...replacement };
+export const escaped = { escapedRun() { onCleanup(() => {}); } };
+declare function replace(value: typeof escaped): void;
+replace(escaped);
+export const viaThis = { thisRun() { expose(this); onCleanup(() => {}); } };
+declare function expose(value: unknown): void;
+export const nullable = Math.random() ? { nullableRun() { onCleanup(() => {}); } } : null;
+export const remotelyWritten = { remoteRun() { onCleanup(() => {}); } };
+function exposeSibling(this: unknown) { expose(this); }
+export const sibling = { siblingRun() { onCleanup(() => {}); }, exposeSibling };
