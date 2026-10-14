@@ -7,6 +7,7 @@
 //!
 //! [`Program`]: crate::Program
 
+use crate::ExecutionRole;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use typefacts::Location;
@@ -440,6 +441,13 @@ pub fn strict_read_message_with_compute(read: &ReactiveRead, compute_reads_sourc
     // call, so it may run then, later from a closure the function returns or
     // keeps, or never.
     if read.callee_callback_timing {
+        if read.execution == ExecutionRole::EffectApply {
+            return format!(
+                "{} {:?} may be read in {context}; whether apply executes is unresolved for these options and compute dependencies, so this untracked read is uncertifiable",
+                reactive_value_label(&read.kind),
+                read.accessor,
+            );
+        }
         let through = if read.via.is_empty() {
             String::new()
         } else {
@@ -515,9 +523,15 @@ fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
             "{subject} sits in a callback a host API retains and may invoke on its invoker's stack, so no fact places its execution inside or after the component body's strict-read window"
         )
     } else if read.callee_callback_timing {
-        format!(
-            "{subject} sits in a callback passed to a consumer that is not proven to invoke it during the call or component rendering, so no fact places its execution inside or after the component body's strict-read window"
-        )
+        if read.execution == ExecutionRole::EffectApply {
+            format!(
+                "{subject} is in an effect apply whose invocation is not proven by its defer options and compute dependencies"
+            )
+        } else {
+            format!(
+                "{subject} sits in a callback passed to a consumer that is not proven to invoke it during the call or component rendering, so no fact places its execution inside or after the component body's strict-read window"
+            )
+        }
     } else {
         format!("{subject} is outside every compiler-tracked JSX region and deferred callback")
     }
@@ -796,6 +810,25 @@ mod tests {
                 .unwrap()
                 .message
                 .contains("does not guarantee an invocation")
+        );
+    }
+
+    #[test]
+    fn deferred_apply_does_not_claim_an_inline_contract_or_a_completed_read() {
+        let mut deferred = read(false);
+        deferred.execution = crate::ExecutionRole::EffectApply;
+        deferred.callee_callback_timing = true;
+        assert!(deferred.is_uncertifiable());
+        let message = strict_read_message(&deferred);
+        assert!(message.contains("options and compute dependencies"));
+        assert!(!message.contains("accepted contract") && !message.contains("never updates"));
+        let evidence = strict_read_evidence(&deferred);
+        assert!(
+            evidence
+                .last()
+                .unwrap()
+                .message
+                .contains("invocation is not proven")
         );
     }
 

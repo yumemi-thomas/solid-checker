@@ -12,6 +12,7 @@ pub use development_feedback::{
     DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
 };
 mod effect_api;
+mod effect_execution;
 mod execution_role;
 mod findings;
 mod identity;
@@ -376,7 +377,8 @@ pub struct ReactiveRead {
     /// call, from a closure the callee returns or stores, or never -- and the
     /// lexical position proves none of these. A fourth hole beside the other
     /// three, about which code invokes the read rather than when a host does,
-    /// and worded separately for that reason.
+    /// and worded separately for that reason. Also used when an effect apply's
+    /// defer options and compute dependencies leave its invocation unresolved.
     #[serde(default, skip_serializing_if = "is_false")]
     pub callee_callback_timing: bool,
     /// Generation-local closed project-consumer proof, used only by strict-read

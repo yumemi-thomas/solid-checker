@@ -3899,11 +3899,14 @@ pub(super) fn named_callback_roles(
                 }
                 continue;
             }
-            let proven =
-                callback_execution_at_call(file, call, primitive, argument_index, lookup).is_some();
+            let proven = callback_execution_at_call(file, call, primitive, argument_index, lookup)
+                .is_some()
+                || dialect
+                    .effect_apply_defer_options(primitive, argument_index)
+                    .is_some();
             let untracked = dialect.reports_untracked_reads_at(primitive, argument_index, count);
-            // Deliberately not gated on `proven`: an effect's apply position is
-            // read straight off the dialect signature, as it always was.
+            // The role describes the phase if invoked. ADR 0302 gates every
+            // diagnostic on the separate call-site invocation premise.
             let effect_apply =
                 effect_apply_argument(dialect, primitive, count) == Some(argument_index);
             let tracked = !is_effect(primitive)

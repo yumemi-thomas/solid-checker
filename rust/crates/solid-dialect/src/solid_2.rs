@@ -8080,11 +8080,7 @@ impl Dialect for Solid2 {
         })
     }
 
-    fn browser_callback_defer_options(
-        &self,
-        primitive: Primitive,
-        argument: usize,
-    ) -> Option<usize> {
+    fn effect_apply_defer_options(&self, primitive: Primitive, argument: usize) -> Option<usize> {
         (matches!(
             primitive,
             Primitive::CreateEffect | Primitive::CreateRenderEffect
@@ -8982,6 +8978,17 @@ mod tests {
             dialect.browser_callback_defer_options(Primitive::CreateEffect, 0),
             None
         );
+        for primitive in [Primitive::CreateEffect, Primitive::CreateRenderEffect] {
+            assert_eq!(dialect.effect_apply_defer_options(primitive, 1), Some(2));
+            assert_eq!(dialect.effect_apply_defer_options(primitive, 0), None);
+        }
+        for primitive in [
+            Primitive::CreateTrackedEffect,
+            Primitive::CreateReaction,
+            Primitive::CreateMemo,
+        ] {
+            assert_eq!(dialect.effect_apply_defer_options(primitive, 0), None);
+        }
         assert_eq!(
             dialect.browser_callback_member_trigger(Primitive::CreateEffect, 1, 2, "error"),
             Some(Trigger::ComputationError)

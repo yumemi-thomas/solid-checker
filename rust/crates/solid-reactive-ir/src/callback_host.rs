@@ -221,7 +221,7 @@ fn dialect_slot_runs_inline(
 
 /// Deliberately tiny, syntax-proved no-demand/no-throw callbacks. A type such as
 /// `() => number` is not this proof. Other bodies keep the feasible premise.
-fn inert_callback(file: &FileFacts, value: Span, lookup: &SemanticLookup<'_>) -> bool {
+pub(crate) fn inert_callback(file: &FileFacts, value: Span, lookup: &SemanticLookup<'_>) -> bool {
     let Some(target) = target(file, value, lookup) else {
         return false;
     };
@@ -235,7 +235,10 @@ fn inert_callback(file: &FileFacts, value: Span, lookup: &SemanticLookup<'_>) ->
                     .expression_return
                     .as_ref()
                     .and_then(|value| value.argument)
-                    .is_some_and(|span| file.ast.host_zero_values.contains(&span))
+                    .is_some_and(|span| {
+                        file.ast.host_zero_values.contains(&span)
+                            || file.ast.host_undefined_arguments.contains(&span)
+                    })
                     || (!function.expression_body
                         && file
                             .source_text(function.body)
@@ -251,6 +254,11 @@ fn dialect_trigger_dead(
     trigger: BrowserCallbackTrigger,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    if crate::effect_execution::at_call(file, call, primitive, index, lookup)
+        != crate::effect_execution::ApplyExecution::Proven
+    {
+        return true;
+    }
     let inert_compute = call
         .arguments
         .first()

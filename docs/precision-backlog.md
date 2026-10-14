@@ -1,5 +1,26 @@
 # Precision backlog
 
+ADR 0302 (2026-10-14): deferred effect apply no longer proves an execution
+from its callback position alone. Literal `defer: true` with a dependency-free
+compute suppresses SC1001 and owner/leaf claims in the unreachable apply;
+a proven writable compute dependency permits later apply, and unknown
+dependencies/options remain uncertifiable. `createRenderEffect` uses the
+same dialect-owned option slot and loses its initial owner/read attribution
+when deferred. Named callbacks keep independent uses. The bounded dependency
+proof leaves derived/readonly sources, custom equality, conditional reads,
+unknown calls/Gets, async work and opaque options open. This does not claim
+full scheduler or error-trigger coverage. Faithful rc.13 fixture declarations
+and installed-package `tsc --noEmit` both pass; no TypeScript claim was added.
+The original reproduction has no findings in either source or contract mode.
+A matching-parent rc.13 corpus comparison moves only Bridge.tsx:379:19
+SC1001 to uncertifiable, because its compute reads a memo whose changeability
+this bounded proof leaves open: 562/3238 to 561/3239 violations/uncertifiable,
+49 projects, no new violation. The older requested lead baseline predates
+four parent commits; its additional 28 SC9005 notices and one removed Jar
+Hell obligation are parent changes, not effects of this fix. A retained
+session regression pins cross-file compute changes against fresh reads and
+cleanup ownership; call-site execution answers guard the shared caches.
+
 ADR 0270 script inspection simplified (2026-10-10, supersedes the review-8
 allowlist below): the conventional Vite config is a named premise, vetoed only
 where an app script names Vite and departs from the exact conventional `vite`

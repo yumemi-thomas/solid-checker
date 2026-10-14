@@ -546,6 +546,8 @@ pub(super) struct SemanticLookup<'a> {
     /// property that is a proven component's one route, the `default` of the
     /// module a dialect component loader renders.
     lazy_default_render_witnesses: OnceLock<HashSet<(&'a str, Span, Span)>>,
+    effect_apply_regions: OnceLock<crate::effect_execution::ApplyRegions>,
+    effect_apply_calls: OnceLock<crate::effect_execution::ApplyCalls<'a>>,
 }
 
 /// Which parts of the returned-adapter contract this build's dialect can
@@ -623,6 +625,14 @@ pub(super) struct FilePrimitives {
 }
 
 impl<'a> SemanticLookup<'a> {
+    pub(crate) fn effect_apply_calls(&self) -> &crate::effect_execution::ApplyCalls<'a> {
+        self.effect_apply_calls
+            .get_or_init(|| crate::effect_execution::calls(self))
+    }
+    pub(crate) fn effect_apply_regions(&self) -> &crate::effect_execution::ApplyRegions {
+        self.effect_apply_regions
+            .get_or_init(|| crate::effect_execution::regions(self))
+    }
     pub(super) fn new(
         facts: &'a ProjectFacts,
         ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
@@ -680,6 +690,8 @@ impl<'a> SemanticLookup<'a> {
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: OnceLock::new(),
             lazy_default_render_witnesses: OnceLock::new(),
+            effect_apply_regions: OnceLock::new(),
+            effect_apply_calls: OnceLock::new(),
         }
     }
 
@@ -1296,6 +1308,25 @@ impl<'a> SemanticLookup<'a> {
             component_keys.sort_unstable();
             let mut hasher = Sha256::new();
             hasher.update(b"components\0");
+            // ADR 0302: a compute helper or source in another file decides an
+            // apply's owner/execution edge. Bind each call's answer, including
+            // named callbacks that also have independent invocations.
+            let mut apply_sites = self.effect_apply_calls().iter().collect::<Vec<_>>();
+            apply_sites.sort_unstable_by_key(|(site, _)| **site);
+            hasher.update(b"effect-apply-execution\0");
+            for ((path, span, argument), execution) in apply_sites {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+                hasher.update(u64::try_from(*argument).unwrap_or(u64::MAX).to_le_bytes());
+                let tag = match execution {
+                    crate::effect_execution::ApplyExecution::Proven => 0_u8,
+                    crate::effect_execution::ApplyExecution::Absent => 1,
+                    crate::effect_execution::ApplyExecution::Unknown => 2,
+                };
+                hasher.update([tag]);
+            }
             let mut member_targets = self.object_member_targets().iter().collect::<Vec<_>>();
             member_targets.sort_unstable_by(|a, b| {
                 (a.0.path.as_ref(), a.0.start_byte, a.0.end_byte).cmp(&(

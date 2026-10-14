@@ -578,6 +578,7 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     // after every producer has run and before unresolved obligations are
     // attributed to exported surfaces.
     draft.discard_deleted_static_diagnostics(facts);
+    crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
     crate::attribution::discharge_closed_program_export_dispatch(
         facts,
         semantic_lookup,

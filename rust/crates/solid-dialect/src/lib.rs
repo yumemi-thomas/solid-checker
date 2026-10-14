@@ -2170,9 +2170,16 @@ pub trait Dialect: Sync {
     /// this callback. Future dependency demand needs a separate witness.
     fn browser_callback_defer_options(
         &self,
-        _primitive: Primitive,
-        _argument: usize,
+        primitive: Primitive,
+        argument: usize,
     ) -> Option<usize> {
+        self.effect_apply_defer_options(primitive, argument)
+    }
+
+    /// Options slot that can withhold an effect apply's initial execution.
+    /// This is an execution premise for every consumer, not just the browser
+    /// host graph. Later delivery requires a changing compute dependency.
+    fn effect_apply_defer_options(&self, _primitive: Primitive, _argument: usize) -> Option<usize> {
         None
     }
 

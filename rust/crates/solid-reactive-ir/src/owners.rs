@@ -3083,7 +3083,7 @@ pub(crate) fn inside_known_value_function_argument(
                     call.arguments.len(),
                 );
                 semantics.stores_as_value
-                    || (semantics.execution.is_some()
+                    || (semantics.requires_return_invocation
                         && callback_execution_at_call(
                             file,
                             call,
@@ -3110,6 +3110,11 @@ pub(crate) fn callback_execution_at_call(
     argument: usize,
     lookup: &SemanticLookup<'_>,
 ) -> Option<solid_dialect::Execution> {
+    if crate::effect_execution::at_call(file, call, primitive, argument, lookup)
+        != crate::effect_execution::ApplyExecution::Proven
+    {
+        return None;
+    }
     let semantics = lookup
         .dialect
         .callback_semantics_at(primitive, argument, call.arguments.len());
@@ -3134,6 +3139,23 @@ pub(crate) fn callback_owner_at_call(
     argument: usize,
     lookup: &SemanticLookup<'_>,
 ) -> Option<solid_dialect::CallbackOwner> {
+    use crate::effect_execution::ApplyExecution;
+    match crate::effect_execution::at_call(file, call, primitive, argument, lookup) {
+        ApplyExecution::Absent => return None,
+        ApplyExecution::Unknown => return Some(solid_dialect::CallbackOwner::Conditional),
+        ApplyExecution::Proven => {}
+    }
+    if lookup
+        .dialect
+        .effect_apply_defer_options(primitive, argument)
+        .is_some_and(|options| {
+            crate::call_option_literal(file, call, options, "defer")
+                == solid_dialect::OptionLiteral::True
+        })
+    {
+        // A deferred apply has no inherited first run, including render effects.
+        return Some(solid_dialect::CallbackOwner::None);
+    }
     let semantics = lookup
         .dialect
         .callback_semantics_at(primitive, argument, call.arguments.len());
@@ -3902,7 +3924,17 @@ pub(crate) fn read_escapes_synchronous_extent(
                 // that apply changes. Dropping the read from the caller's summary
                 // would close a `reads` domain over a read the call performs.
                 if semantics.owner == Some(solid_dialect::CallbackOwner::InheritsFirstRun) {
-                    return false;
+                    // The first apply is absent, or unproven, if options can
+                    // defer it. Later runs do not read for the creating caller.
+                    return dialect
+                        .effect_apply_defer_options(primitive, index)
+                        .is_some_and(|options| {
+                            matches!(
+                                crate::call_option_literal(file, call, options, "defer"),
+                                solid_dialect::OptionLiteral::True
+                                    | solid_dialect::OptionLiteral::Unknown
+                            )
+                        });
                 }
                 matches!(
                     semantics.execution,
