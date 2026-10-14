@@ -19,6 +19,16 @@ pipeline.
    behaviour, which is uncertifiable.
 4. **Pipeline.** Contract consumption is switched off first. The code stays
    for one release as a rollback, then everything contract-only is deleted.
+5. **Rollback.** The switch-off is one commit, rolled back with `git revert`.
+   There is no hidden flag, so no contract gate or fixture is kept alive for
+   that release.
+6. **Read-only projects.** The combined-program tsconfig is written to a
+   scratch directory with the same anchoring, so these projects still get
+   source analysis.
+7. **Host-free runs, two passes.** The host is inferred from project code
+   first, then package source is selected and analyzed under it. If the build
+   (development or production) is not proven, or scopes mix browser and server
+   execution, package calls stay uncertifiable.
 
 Premises a clean result rests on, stated in reports: Vite with the Solid
 plugin, standard runtime configuration, package integrity (ADR 0300), and the
@@ -79,10 +89,35 @@ Everything that exists only for contracts goes:
 - the contract corpus and registry pins;
 - the schema, CLI contract commands, their fixtures, gates and docs.
 
-The exact inventory and removal order are in
-`rust/target/research/contract-deletion-inventory.md` (being written).
+The exact inventory is in
+`rust/target/research/contract-deletion-inventory.md`, checked against
+`8f70a211e`. It covers about 250k Rust and Go lines, 110k JavaScript lines and
+3,000 data files. Some IR types named `Contract*` carry ordinary analysis
+summaries, so they are renamed rather than deleted.
 Shared parts stay: the dialect vocabulary, Solid's runtime model, Type Facts
 used by ordinary analysis, host constants and host inference.
+
+## Removal order
+
+Each step lands green on its own. The inventory's section 5 has the details.
+
+| Step | Content | Size |
+| --- | --- | --- |
+| P0 | Measure: per-site sweep with contracts disabled; a dual-mode comparison script | small |
+| P1 | Source gaps: namespace redirects, non-Solid packages, `browser` map, `?raw`/JSON modules; seed a source-selection corpus gate | large |
+| P2 | Neutral IR vocabulary: move the `Contract*` summary types (no behaviour change) | medium |
+| P3 | `PackageBoundary`: imports that cannot be analyzed, each with a reason; host passed separately (no finding moves) | medium |
+| P4 | Host-free runs (decision 7) | large |
+| P5 | WASM host protocol | large |
+| P6 | Move callers and fixtures off contract mode; scratch tsconfig for read-only projects | large |
+| P7 | Switch consumption off (one commit, the revert point) | medium |
+| — | one release | — |
+| D1–D8 | Delete consumption (backend, IR), emission, certification and probes, the dialect's negative authority, the Type Facts certification protocol, historical ledgers and benchmarks, schemas and docs | large in total |
+
+These constraints are fixed:
+- P2–P6 come before P7.
+- P1's seed recycling comes before D3.
+- D6 comes after D4.
 
 ## Risks
 
