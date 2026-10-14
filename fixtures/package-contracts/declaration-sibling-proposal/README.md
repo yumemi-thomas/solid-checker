@@ -22,9 +22,11 @@ declaration-to-runtime redirects:
 - `isEven` proposes one `plain` return, `reset` `returns: []`, `choose` a
   return of each of its caller's arguments `first` and `second`, and all three
   `creates: []` -- exactly what `isZero`, declared in the entry file, proposes;
-- `isOdd` is re-exported by `export { isOdd } from "./helpers.js"`. The
-  redirects join import bindings only, so it still proposes neither domain.
-  It is the negative control, and the one remaining gap this fixture names.
+- `isOdd` is re-exported by `export { isOdd } from "./helpers.js"`. Since
+  re-exports are redirected exactly like imports (ADR 0297 review round 2),
+  it proposes the same `returns` and `creates` as `isEven`. The comment in
+  `helpers.js` predates that change and is kept, because it is part of the
+  package bytes the integrity pins.
 
 Only proposals move. Every closure here is still decided by the certifier's
 census over the authenticated implementation.
