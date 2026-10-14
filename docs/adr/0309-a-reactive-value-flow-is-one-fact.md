@@ -1,6 +1,7 @@
 # ADR 0309: A reactive value's flow is one fact
 
-- Status: proposed (owner, 2026-10-14). Not started.
+- Status: accepted (owner, 2026-10-14), with the ten decisions below. Not
+  started. Design pass: `rust/target/research/adr0309-design.md`.
 - Owner: a new `solid-reactive-ir` stage, `value_flow`, between the project
   indexes and `interproc`.
 - Phase 1b of docs/contract-removal-plan.md. It comes before phase P2.
@@ -66,11 +67,15 @@ template substitutions, default initializers, JSX attribute values, `Proxy`
 targets, callback arguments, `call`/`apply`/`bind`, returns, property writes
 and container stores.
 
+**Read events** are where a value can be read: calls, and the Gets and
+protocol steps that run code. These are getter Gets, iteration, a `then`
+lookup, a spread, a `for…in` enumeration, and a tagged template call. Each
+event carries an invocation context from the existing facts: synchronous on
+the current stack under a tracked or an untracked context, or deferred past
+the stack.
+
 **Terminals** are where a flow ends:
-- **Call sites.** A call carries its execution role from the existing facts:
-  synchronous on the current stack under a tracked or an untracked context,
-  or deferred past the stack. A call site is the only terminal that can read
-  the value.
+- **Read events,** as above.
 - **Known non-invoking operations,** each an exact entry in one table, for
   example `Object.assign` copying a data property. The flow continues
   through the copy.
@@ -79,7 +84,7 @@ and container stores.
   without a model. The ADR 0300 integrity premise limits which unseen code
   can write.
 
-**Query:** a value is certified only when every flow ends at a call site
+**Query:** a value is certified only when every flow ends at a read event
 whose read has a row, or at a non-invoking terminal whose output flows are
 certified in turn. A flow that reaches unknown is an SC9011 obligation that
 names the first escape. It is never a silence.
@@ -89,7 +94,59 @@ package source only for selected packages (ADRs 0291, 0304). The cost
 therefore follows demand, not program size. Budget: at most 1.2× each
 project's corpus wall time.
 
+## Owner decisions (2026-10-14)
+
+1. **Shared flow evidence, not an execution certificate.** The fact supplies
+   transport and read events. The existing source, completion, execution and
+   owner proofs keep their own owners and query it.
+2. **Stored or unused values.** Storage is a transfer, not proof. A
+   published or opaque retained value is unknown. Certification needs
+   evidence that the value is used completely, or that nothing at runtime
+   consumes it.
+3. **Captured reads under unknown invocation.** A strict read inside a
+   closure that unknown code invokes is closed only by a closed census of
+   the captured uses, where every actual invocation installs a proven safe
+   read context. Other claim domains stay open. This admits `toObservable`
+   without trusting names.
+4. **Context sensitivity.** Relational summaries over actuals, formals,
+   results and captures, with bounded invocation specialization that keeps
+   per-instance source pairing. Overflowing the bound refuses explicitly. A
+   member of a may-set never yields a violation.
+5. **Mutation premise.** ADRs 0273 and 0300 stay, as explicitly tagged
+   evidence. An exact allocation write discharges a veto only with a
+   complete derivation of its target. Dynamic reflection, prototype writes
+   and `eval` stay unknown. An assumed absence of writes never becomes an
+   affirmative census.
+6. **Legacy fixtures.** Old clean fixtures are not authoritative where an
+   unsound table fallback produced them. Reviewed legacy behaviour is pinned,
+   but unknown standard-library, bodyless and JSX exemptions are blocked.
+   tsc-clean runtime controls precede any intentional conservative snapshot
+   change.
+7. **Escape location.** An escape is reported at the current seed hand-off
+   location, with the exact first unknown operation as evidence. "First"
+   means the shortest transfer path, then canonical source order, never
+   worklist or hash order. Every unknown is retained internally, and a
+   cleared path never hides another one.
+8. **Cost baseline.** Two comparisons: against P0, and paired against the
+   build after the round-3 allowlist. The limit is 1.2× per project, shadow
+   overhead and peak memory included. The benchmark runs before any consumer
+   moves.
+9. **Constructors.** The first recall commit covers exact selected base
+   classes, with an affirmative `this` and field-initializer order. Derived
+   classes, constructors that return a replacement, and auto-accessors
+   refuse until they are normalized and proven separately. No
+   package-specific name tests.
+10. **External boundaries.** Typed-candidate obligations and unknown
+    package and prop surfaces stay outside the graph. Seeding cannot replace
+    SC9005/SC9012 discovery for unproven external inputs, and a type never
+    creates authority (ADR 0294).
+
 ## Migration
+
+The design pass section 7 is the commit order: the round-3 allowlist first;
+then the fact in shadow mode (identities, missing fact events, edges, read
+events), no finding moving; then one consumer per commit; then deletions;
+then one recall target per commit.
 
 1. Build the fact beside the existing slices, in shadow mode. On every
    fixture and corpus project it must be at least as strict as the P1b
