@@ -15,6 +15,12 @@ pub mod solid2_rc3;
 mod validate;
 
 pub(crate) use consumer::owner_guard_at_call;
+/// The one synthetic accepted contract (`pkg` exporting `run`) the consumer's
+/// own tests are written against, for tests of the seams that consume it.
+#[cfg(test)]
+pub(crate) use consumer::tests::{
+    accepted as accepted_contract_fixture, accepted_exports, admitted_index,
+};
 
 pub use consumer::{
     AcceptedContractIndex, AcceptedContractInput, AcceptedContractUse, AcceptedImportIdentity,

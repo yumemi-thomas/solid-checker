@@ -1397,6 +1397,529 @@ fn inferred_host_is_a_separate_input_beside_the_browser_view_it_selected() {
     fs::remove_dir_all(scratch).unwrap();
 }
 
+/// A recorded source-edge refusal, supplied through the explicit analysis API
+/// by this test and by no production caller: the dormant consumer end of
+/// `PackageBoundary::record_source_edge_refusal`. It asserts the consumer's
+/// own behavior, not that any producer decides to record anything, and not
+/// that a contract emission or certification transaction refuses it.
+#[test]
+fn a_recorded_source_edge_refusal_is_one_neutral_finding_beside_independent_source_facts() {
+    use solid_facts_backend::{
+        AnalysisInputs, BackendError, DiagnosticSession, InferredAcceptedContracts,
+        NativeIncrementalSession, RequestedRuleEnablement, TypeFactsSession,
+        decode_policy2_trust_configuration,
+        fixture_authorization::{authorize_fixture_contract, read_fixture_contract_request},
+        inferred_project_accepted_contracts_with_note,
+    };
+    use solid_reactive_ir::{
+        BuildError, RuntimeEnvironment,
+        contract_semantics::AcceptedContractIndex,
+        package_boundary::{
+            ImportKey, PackageBoundary, SourceEdgeForm, SourceEdgeMismatch, SourceEdgeSite,
+        },
+    };
+    use std::{fs, path::Path};
+
+    fn copy_tree(from: &Path, to: &Path) {
+        fs::create_dir_all(to).unwrap();
+        for entry in fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            let destination = to.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy_tree(&entry.path(), &destination);
+            } else {
+                fs::copy(entry.path(), destination).unwrap();
+            }
+        }
+    }
+
+    let Ok(producer) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let repository = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let scratch = repository.join(format!(
+        "rust/target/source-edge-refusal-{}",
+        std::process::id()
+    ));
+    copy_tree(
+        &repository.join("fixtures/reactive-ir/node_modules"),
+        &scratch.join("node_modules"),
+    );
+    let dialect = solid_facts_backend::dialect::default_dialect();
+    // Opens a Type Facts session over `directory` and returns what an
+    // analysis is given: the session (kept alive), the sources and the facts.
+    macro_rules! open_project {
+        ($directory:expr) => {{
+            let project = $directory
+                .join("tsconfig.json")
+                .to_str()
+                .unwrap()
+                .to_owned();
+            let typescript = TypeFactsSession::open(&producer, &project, &[]).unwrap();
+            let (mut session, sources) =
+                NativeIncrementalSession::open_pipelined(dialect, project, typescript).unwrap();
+            let facts = session.analyze().unwrap();
+            (session, sources, facts)
+        }};
+    }
+    // The one record: `importer`, `specifier`, and the exact range of the
+    // first occurrence of `statement` in that file, found by text.
+    fn refusal(
+        facts: &solid_facts::ProjectFacts,
+        file: &str,
+        specifier: &str,
+        form: SourceEdgeForm,
+        source: &str,
+        statement: &str,
+    ) -> PackageBoundary {
+        let importer = facts
+            .files
+            .iter()
+            .find(|candidate| candidate.path.as_str().ends_with(file))
+            .expect("the importer is a project file")
+            .path
+            .to_string();
+        let start = source.find(statement).expect("statement in source");
+        let mut boundary = PackageBoundary::default();
+        boundary.record_source_edge_refusal(
+            ImportKey::new(importer, specifier),
+            SourceEdgeSite {
+                form,
+                start_byte: start as u64,
+                end_byte: (start + statement.len()) as u64,
+            },
+        );
+        boundary
+    }
+
+    // A real accepted contract and a real inferred browser host for the
+    // project in `directory`: what the host fork is built from.
+    macro_rules! inferred_project {
+        ($directory:expr) => {{
+            let authorization = authorize_fixture_contract(
+                &$directory,
+                &read_fixture_contract_request(&$directory).unwrap(),
+            )
+            .unwrap();
+            let trust =
+                decode_policy2_trust_configuration(&authorization.trust_configuration).unwrap();
+            let (session, sources, facts) = open_project!($directory);
+            let InferredAcceptedContracts {
+                contracts, hosts, ..
+            } = inferred_project_accepted_contracts_with_note(
+                &$directory,
+                &[$directory.join(solid_facts_backend::fixture_authorization::CATALOG)],
+                &[],
+                Some(&trust),
+                false,
+                &RuntimeEnvironment::default(),
+                dialect.vocabulary,
+                &facts,
+                AcceptedContractIndex::default(),
+            )
+            .unwrap();
+            let hosts = hosts.expect("the fixture infers a browser host");
+            (session, sources, facts, contracts, hosts)
+        }};
+    }
+
+    // ---- 1. The inferred-host fixture: real accepted contract, real fork ----
+    let directory = scratch.join("spa");
+    copy_tree(
+        &repository.join("fixtures/reactive-ir/inferred-host-spa"),
+        &directory,
+    );
+    let directory = fs::canonicalize(directory).unwrap();
+    let (_session, sources, facts, contracts, hosts) = inferred_project!(directory);
+    let main = fs::read_to_string(directory.join("src/main.ts")).unwrap();
+    let statement = r#"import { startClosed } from "reactive-package";"#;
+    let recorded = refusal(
+        &facts,
+        "src/main.ts",
+        "reactive-package",
+        SourceEdgeForm::Import,
+        &main,
+        statement,
+    );
+    let analyze = |session: &mut DiagnosticSession, inputs: AnalysisInputs<'_>| {
+        session.analyze_inputs_measured_with_enablement(
+            Path::new(&facts.project_id),
+            &sources,
+            &facts,
+            inputs,
+            RequestedRuleEnablement::default(),
+        )
+    };
+    let none = PackageBoundary::default();
+    let with_host = |boundary| AnalysisInputs {
+        boundary,
+        contracts: &contracts,
+        hosts: Some(&hosts),
+    };
+
+    // B1: no record. The real contract still yields the browser-view
+    // violation, which is what the record will replace.
+    let (base, _) = analyze(&mut DiagnosticSession::new(dialect), with_host(&none)).unwrap();
+    assert!(
+        base.snapshot.findings.iter().any(|finding| {
+            finding.rule == "missing-owner"
+                && finding.kind == "violation"
+                && finding
+                    .evidence
+                    .iter()
+                    .any(|step| step.message.starts_with("inferred browser:"))
+        }),
+        "{:#?}",
+        base.snapshot.findings
+    );
+
+    // B2: the record, with the host. The eligible occurrence keeps the
+    // browser half's marker and appends the host reason; the contract-derived
+    // violation is gone, which is the intended loss of a positive claim.
+    let (analysis, _) =
+        analyze(&mut DiagnosticSession::new(dialect), with_host(&recorded)).unwrap();
+    let findings = &analysis.snapshot.findings;
+    assert_eq!(findings.len(), 1, "{findings:#?}");
+    let finding = &findings[0];
+    assert_eq!(finding.id, "SC9005");
+    assert_eq!(finding.rule, "package-contract-incomplete");
+    assert_eq!(finding.kind, "uncertifiable");
+    assert_eq!(finding.severity, "error");
+    assert_eq!(
+        finding.message,
+        "source analysis was withheld for reactive-package: the available facts do not establish the source boundary needed to determine its reactive behavior"
+    );
+    assert_eq!(
+        finding.hint,
+        "This finding does not certify reactive behavior across this edge. It does not establish a runtime target, execution, or the existence of an export."
+    );
+    assert_eq!(finding.analysis_context, "source-boundary-withheld:import");
+    assert_eq!(finding.coverage_family, "");
+    assert_eq!(finding.primary_location.start_byte, 0);
+    assert_eq!(finding.primary_location.end_byte, statement.len() as u64);
+    assert_eq!(
+        (
+            finding.primary_location.line,
+            finding.primary_location.column
+        ),
+        (1, 1)
+    );
+    assert_eq!(analysis.snapshot.status, "uncertifiable");
+    assert_eq!(
+        finding
+            .evidence
+            .iter()
+            .map(|step| step.message.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "the analysis input recorded that source-boundary analysis was withheld for this exact occurrence",
+            // The statement is a browser proof site, so the merged finding
+            // also carries the host's reason, as every eligible one does.
+            format!(
+                "inferred browser: Vite index.html module entry; roots: {}",
+                directory.join("src/main.ts").display()
+            )
+            .as_str(),
+        ]
+    );
+
+    // B3: both halves of the fork deny, so each alone answers the same one
+    // neutral finding.
+    let (baseline, browser) = contracts.execution_views().unwrap();
+    let contracts_only = |contracts| AnalysisInputs {
+        boundary: &recorded,
+        contracts,
+        hosts: None,
+    };
+    for half in [&baseline, &browser] {
+        let (alone, _) =
+            analyze(&mut DiagnosticSession::new(dialect), contracts_only(half)).unwrap();
+        assert_eq!(
+            alone.snapshot.findings.len(),
+            1,
+            "{:#?}",
+            alone.snapshot.findings
+        );
+        assert_eq!(
+            alone.snapshot.findings[0].analysis_context,
+            "source-boundary-withheld:import"
+        );
+    }
+
+    // B4: same-generation diagnostic reuse is a property of the baseline
+    // index alone (the host fork never reports `reused`). Adding the record
+    // misses the retained answer, repeating it hits, removing it misses and
+    // answers what no record answered.
+    let mut session = DiagnosticSession::new(dialect);
+    let plain = |boundary| AnalysisInputs {
+        boundary,
+        contracts: &baseline,
+        hosts: None,
+    };
+    let (first, timings) = analyze(&mut session, plain(&none)).unwrap();
+    assert!(!timings.reused);
+    let (again, timings) = analyze(&mut session, plain(&none)).unwrap();
+    assert!(timings.reused);
+    assert!(std::sync::Arc::ptr_eq(&first, &again));
+    let (added, timings) = analyze(&mut session, plain(&recorded)).unwrap();
+    assert!(!timings.reused);
+    assert_eq!(added.snapshot.findings.len(), 1);
+    let (repeated, timings) = analyze(&mut session, plain(&recorded)).unwrap();
+    assert!(timings.reused);
+    assert!(std::sync::Arc::ptr_eq(&added, &repeated));
+    let (removed, timings) = analyze(&mut session, plain(&none)).unwrap();
+    assert!(!timings.reused);
+    assert_eq!(
+        serde_json::to_value(&removed.snapshot.findings).unwrap(),
+        serde_json::to_value(&first.snapshot.findings).unwrap()
+    );
+    // The host fork, repeated in one session, answers equal merged findings
+    // each time, and equal to a fresh session's. It reports and promises no
+    // reuse: the outer `timings.reused` is not asserted here.
+    let mut host_session = DiagnosticSession::new(dialect);
+    let host_first = analyze(&mut host_session, with_host(&recorded)).unwrap().0;
+    let host_second = analyze(&mut host_session, with_host(&recorded)).unwrap().0;
+    for repeated in [&host_first, &host_second] {
+        assert_eq!(
+            serde_json::to_value(&repeated.snapshot.findings).unwrap(),
+            serde_json::to_value(&analysis.snapshot.findings).unwrap()
+        );
+    }
+
+    // B5: a record the facts do not hold is an explicit error, no findings,
+    // and no nearby statement stands in for it.
+    let mut shifted = PackageBoundary::default();
+    for (key, sites) in recorded.source_edge_refusals() {
+        for site in sites {
+            shifted.record_source_edge_refusal(
+                key.clone(),
+                SourceEdgeSite {
+                    start_byte: site.start_byte + 1,
+                    ..*site
+                },
+            );
+        }
+    }
+    match analyze(&mut DiagnosticSession::new(dialect), with_host(&shifted)) {
+        Err(BackendError::ReactiveIr(BuildError::SourceEdge(
+            SourceEdgeMismatch::NoSuchOccurrence { .. },
+        ))) => {}
+        Err(other) => panic!("unexpected error: {other}"),
+        Ok(_) => panic!("a record the facts do not hold was analyzed"),
+    }
+
+    // ---- 1b. Eligible, ineligible and repeated occurrences ----
+    // Two statements of one key in the browser entry, and one in a file no
+    // browser root reaches. Eligibility is the host's per-site answer, never
+    // inferred from the import being there.
+    let repeated = scratch.join("spa-repeated");
+    copy_tree(&directory, &repeated);
+    let repeated = fs::canonicalize(repeated).unwrap();
+    let entry = "import { startClosed } from \"reactive-package\";\nimport { startClosed as again } from \"reactive-package\";\nstartClosed();\nagain();\n";
+    let unreached = "import { startClosed } from \"reactive-package\";\nexport const run = () => startClosed();\n";
+    fs::write(repeated.join("src/main.ts"), entry).unwrap();
+    fs::write(repeated.join("src/unreached.ts"), unreached).unwrap();
+    let (_repeated_session, repeated_sources, repeated_facts, repeated_contracts, repeated_hosts) =
+        inferred_project!(repeated);
+    let mut every = PackageBoundary::default();
+    for (file, source, statement) in [
+        (
+            "src/main.ts",
+            entry,
+            "import { startClosed } from \"reactive-package\";",
+        ),
+        (
+            "src/main.ts",
+            entry,
+            "import { startClosed as again } from \"reactive-package\";",
+        ),
+        (
+            "src/unreached.ts",
+            unreached,
+            "import { startClosed } from \"reactive-package\";",
+        ),
+    ] {
+        every.extend(refusal(
+            &repeated_facts,
+            file,
+            "reactive-package",
+            SourceEdgeForm::Import,
+            source,
+            statement,
+        ));
+    }
+    let (every_analysis, _) = DiagnosticSession::new(dialect)
+        .analyze_inputs_measured_with_enablement(
+            Path::new(&repeated_facts.project_id),
+            &repeated_sources,
+            &repeated_facts,
+            AnalysisInputs {
+                boundary: &every,
+                contracts: &repeated_contracts,
+                hosts: Some(&repeated_hosts),
+            },
+            RequestedRuleEnablement::default(),
+        )
+        .unwrap();
+    let rows = every_analysis
+        .snapshot
+        .findings
+        .iter()
+        .map(|finding| {
+            (
+                finding
+                    .primary_location
+                    .path
+                    .rsplit('/')
+                    .next()
+                    .unwrap()
+                    .to_owned(),
+                finding.primary_location.start_byte,
+                finding.analysis_context.clone(),
+                finding
+                    .evidence
+                    .iter()
+                    .filter(|step| step.message.starts_with("inferred browser:"))
+                    .count(),
+            )
+        })
+        .collect::<Vec<_>>();
+    // Pinned after the first non-updating run: the unreached occurrence keeps
+    // its ineligible baseline marker with no host step, and each of the two
+    // repeated statements is its own finding that gained the host's reason.
+    let neutral = "source-boundary-withheld:import".to_owned();
+    assert_eq!(
+        rows,
+        vec![
+            ("unreached.ts".to_owned(), 0, neutral.clone(), 0),
+            ("main.ts".to_owned(), 0, neutral.clone(), 1),
+            ("main.ts".to_owned(), 48, neutral, 1),
+        ],
+        "{:#?}",
+        every_analysis.snapshot.findings
+    );
+
+    // ---- 2. Source facts survive the marker: an independent implementation ----
+    // `callback-forwarding` imports `invoke` and `readCount` from a source
+    // file in the program. The recorded refusal denies no contract (there is
+    // none) and removes no source summary, so the forwarded callback still
+    // derives its strict read beside the marker.
+    let source_directory = scratch.join("callback-forwarding");
+    copy_tree(
+        &repository.join("fixtures/reactive-ir/callback-forwarding"),
+        &source_directory,
+    );
+    let source_directory = fs::canonicalize(source_directory).unwrap();
+    let (_source_session, source_sources, source_facts) = open_project!(source_directory);
+    let app = fs::read_to_string(source_directory.join("App.tsx")).unwrap();
+    let import = r#"import { invoke, readCount } from "./source";"#;
+    let source_record = refusal(
+        &source_facts,
+        "App.tsx",
+        "./source",
+        SourceEdgeForm::Import,
+        &app,
+        import,
+    );
+    let empty = AcceptedContractIndex::default();
+    let source_analysis = |boundary| {
+        DiagnosticSession::new(dialect)
+            .analyze_inputs_measured_with_enablement(
+                Path::new(&source_facts.project_id),
+                &source_sources,
+                &source_facts,
+                AnalysisInputs {
+                    boundary,
+                    contracts: &empty,
+                    hosts: None,
+                },
+                RequestedRuleEnablement::default(),
+            )
+            .unwrap()
+            .0
+    };
+    let plain = source_analysis(&none);
+    let marked = source_analysis(&source_record);
+    let strict = |analysis: &solid_facts_backend::DiagnosticAnalysis| {
+        analysis
+            .snapshot
+            .findings
+            .iter()
+            .filter(|finding| finding.rule == "strict-read-untracked")
+            .map(|finding| (finding.message.clone(), finding.primary_location.start_byte))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(strict(&plain).len(), 1, "{:#?}", plain.snapshot.findings);
+    assert!(strict(&plain)[0].0.contains("invoke"));
+    assert_eq!(
+        strict(&marked),
+        strict(&plain),
+        "the source-derived finding is unchanged beside the marker"
+    );
+    assert_eq!(
+        marked
+            .snapshot
+            .findings
+            .iter()
+            .filter(|finding| finding.analysis_context == "source-boundary-withheld:import")
+            .count(),
+        1
+    );
+    assert!(
+        plain
+            .snapshot
+            .findings
+            .iter()
+            .all(|finding| finding.analysis_context != "source-boundary-withheld:import")
+    );
+
+    // ---- 3. TypeScript's claim and this one are different propositions ----
+    // An import of an export the declarations lack: `tsc` reports TS2305 for
+    // it (recorded in the handoff report). The recorded refusal asserts only
+    // that the analysis input withheld source analysis, never that the export
+    // is missing or present.
+    let missing_directory = scratch.join("spa-missing");
+    copy_tree(&directory, &missing_directory);
+    let missing_directory = fs::canonicalize(missing_directory).unwrap();
+    let absent = "import { absent } from \"reactive-package\";\nabsent();\n";
+    fs::write(missing_directory.join("src/main.ts"), absent).unwrap();
+    let (_missing_session, missing_sources, missing_facts) = open_project!(missing_directory);
+    let missing_record = refusal(
+        &missing_facts,
+        "src/main.ts",
+        "reactive-package",
+        SourceEdgeForm::Import,
+        absent,
+        "import { absent } from \"reactive-package\";",
+    );
+    let (missing, _) = DiagnosticSession::new(dialect)
+        .analyze_inputs_measured_with_enablement(
+            Path::new(&missing_facts.project_id),
+            &missing_sources,
+            &missing_facts,
+            AnalysisInputs {
+                boundary: &missing_record,
+                contracts: &empty,
+                hosts: None,
+            },
+            RequestedRuleEnablement::default(),
+        )
+        .unwrap();
+    let neutral = missing
+        .snapshot
+        .findings
+        .iter()
+        .filter(|finding| finding.analysis_context == "source-boundary-withheld:import")
+        .collect::<Vec<_>>();
+    assert_eq!(neutral.len(), 1, "{:#?}", missing.snapshot.findings);
+    for text in [&neutral[0].message, &neutral[0].hint] {
+        for word in ["missing", "does not exist", "not found", "no export"] {
+            assert!(!text.contains(word), "{word}: {text}");
+        }
+    }
+    fs::remove_dir_all(scratch).unwrap();
+}
+
 #[test]
 fn write_scope_diagnostics_have_semantic_locations() {
     let Some(findings) = diagnostic_fixture("write-scope") else {

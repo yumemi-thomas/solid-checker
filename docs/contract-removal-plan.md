@@ -175,6 +175,13 @@ refactor, five individually green commits, no finding moving:
 7. `packageSummaries` and notes stay byte-identical through P3; P7 decides,
    with a changelog.
 
+Clarification (2026-10-15, ADR 0310): item 1 concerns *recorded reasons*, which
+still emit nothing. A **source-edge refusal** is a different input: an
+explicitly recorded exact occurrence that the analysis reports as one neutral
+SC9005 finding and whose accepted contract it withholds. It is a dormant
+consumer — no production caller records one — and the producer, cache,
+admission, emission and certification obligations stay open (ADR 0310).
+
 P3's four selected slices are integrated through the independently reviewed
 `p3-independent` extraction, with no finding moving. The original
 `p3-boundary` history remains intact. Slice 4, extracting the host index from

@@ -5340,12 +5340,49 @@ mod barrel_binding_tests {
             .is_none()
         );
     }
+
+    /// T9: the recorded `export … from` edge is denied at the barrel's own
+    /// pair, so nothing binds a package through it; an importer of the barrel
+    /// then has no contract-derived claim, and the one finding is the barrel
+    /// edge's own (see `discover_boundary_defects`).
+    #[test]
+    fn a_denied_export_from_edge_binds_no_package_through_the_barrel() {
+        use crate::contract_semantics::{AcceptedContractInput, accepted_contract_fixture};
+        let facts = project("export { run } from 'pkg';");
+        let contracts = AcceptedContractIndex::new([AcceptedContractInput {
+            importer: "barrel.ts".into(),
+            specifier: "pkg".into(),
+            contract: accepted_contract_fixture(),
+            artifact_identity: None,
+        }])
+        .unwrap();
+        let resolve = |index: &AcceptedContractIndex| {
+            resolve_barrel_binding(&facts, index, &facts.files[0], "run", &mut HashSet::new())
+        };
+        assert!(matches!(
+            resolve(&contracts),
+            Ok(Some(BarrelBinding::Package { .. }))
+        ));
+        let denied = contracts.without_import_edges(&BTreeSet::from([(
+            "barrel.ts".to_owned(),
+            "pkg".to_owned(),
+        )]));
+        // Unresolved, which every caller treats as unknown: a denied edge
+        // never yields a package binding, and never reads as absence either.
+        assert_eq!(resolve(&denied), Err(()));
+    }
 }
 
 /// The acceptance gate's defects: one per demanded export of every import no
 /// accepted contract binds and the requirement markers name, in file and
 /// import order (phase P3 of the contract-removal plan). Stored apart from
 /// what binding found about bound contracts.
+///
+/// Then one neutral defect per **recorded source-edge refusal**: the caller's
+/// statement that source-boundary analysis was withheld for that exact
+/// occurrence (`PackageBoundary::record_source_edge_refusal`). It is the
+/// caller's decision, not something this join established, and it asserts no
+/// contract absence, invalidity, execution or missing export.
 ///
 /// The markers are read through `inputs.contracts`, not from the boundary's
 /// legacy keys directly: the index applies them per execution view and per
@@ -5361,6 +5398,7 @@ pub(super) fn discover_boundary_defects(
     let accepted = inputs.contracts;
     let mut defects = Vec::new();
     for file in &facts.files {
+        let withheld = crate::source_refusal::recorded_occurrences(file, inputs.boundary);
         for import in &file.ast.imports {
             // Exactly the imports `project_accepted_contracts` binds.
             if import.type_only
@@ -5368,6 +5406,15 @@ pub(super) fn discover_boundary_defects(
                     .contract(file.path.as_str(), &import.module)
                     .is_ok()
             {
+                continue;
+            }
+            // A recorded occurrence has its own neutral defect below, and no
+            // legacy marker adds a second story at the same edge.
+            if withheld.iter().any(|(specifier, edge)| {
+                edge.form == crate::package_boundary::SourceEdgeForm::Import
+                    && edge.span == import.span
+                    && *specifier == import.module
+            }) {
                 continue;
             }
             let Some(reason) = accepted.uncertifiable_reason(file.path.as_str(), &import.module)
@@ -5388,6 +5435,22 @@ pub(super) fn discover_boundary_defects(
                 reason,
                 refusal,
             );
+        }
+        for (specifier, edge) in withheld {
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::PackageContractExportMissing {
+                    module: specifier,
+                    // Data only, never printed: the demanded names.
+                    export: edge.labels.join(", "),
+                    reexported: edge.form == crate::package_boundary::SourceEdgeForm::ExportFrom,
+                    site: crate::ContractDefectSite::Import,
+                    admission_refusal: None,
+                },
+                location: location(file.path.shared(), edge.span),
+                analysis_context: format!("{SOURCE_BOUNDARY_WITHHELD_CONTEXT}{}", edge.form.code()),
+                fixes: vec![],
+                uncertain: false,
+            });
         }
     }
     defects
@@ -5462,6 +5525,13 @@ fn push_missing_accepted_import(
 /// re-scatter the collapse or mislabel the evidence.
 pub(crate) const UNACCEPTED_IMPORT_CONTEXT: &str =
     "no receipt-accepted contract matches this exact import";
+
+/// The analysis context of a **recorded source-edge refusal**, followed by
+/// the form's code (`import`, `export-from`, …). Three places agree on it,
+/// as they do on [`UNACCEPTED_IMPORT_CONTEXT`]: the producer above, the
+/// neutral wording in `projection`, and the exact-occurrence rule there that
+/// keeps one finding per occurrence and no coverage heading for it.
+pub(crate) const SOURCE_BOUNDARY_WITHHELD_CONTEXT: &str = "source-boundary-withheld:";
 
 fn push_missing_accepted_export(
     missing: &mut Vec<StaticDefect>,

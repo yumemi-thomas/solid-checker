@@ -235,3 +235,7 @@ _Avoid_: Elided region, dead region, untracked region (that is the once-executin
 **Failure class**:
 A user-facing grouping of the runtime misbehavior that findings prevent: silent staleness (reads that register no dependency), feedback loops (writes and actions in owned scopes), escaped async (pending reads outside tracked or Loading-bounded regions), and lifecycle leaks (effects, cleanups, and boundaries without a live owner).
 _Avoid_: Bug category, rule group (that is the SCxxxx numbering)
+
+**Source-edge refusal**:
+A caller's recorded statement that source-boundary analysis was withheld for one exact occurrence of an import specifier (ADR 0310): an importer, the specifier as written, and a form plus the byte range of the whole statement or expression, held in the package boundary apart from package identities. The analysis joins it to the supplied facts by exact membership, withholds the accepted contract at that pair, and reports one neutral SC9005 uncertifiable finding per occurrence. It does not authenticate the caller's decision and establishes no missing module, missing export, runtime target or execution; a source implementation the program supplies is not withdrawn by it, and a record carries no generation, so the caller reacquires it for each facts generation.
+_Avoid_: Source refusal, retained reason, missing-contract finding

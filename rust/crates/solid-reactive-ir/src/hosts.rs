@@ -91,6 +91,16 @@ impl BrowserViewSelection {
     pub(crate) fn blocked(&self) -> &BTreeSet<(String, String)> {
         &self.blocked
     }
+
+    /// A selection of exactly `importers`, with nothing blocked, for tests of
+    /// the seams that consume a selection without building a host.
+    #[cfg(test)]
+    pub(crate) fn of_importers<'a>(importers: impl IntoIterator<Item = &'a str>) -> Self {
+        Self {
+            importers: importers.into_iter().map(str::to_owned).collect(),
+            blocked: BTreeSet::new(),
+        }
+    }
 }
 
 impl ProjectHostIndex {

@@ -40,7 +40,7 @@ fn operation(id: &str, min: u32) -> Operation {
     }
 }
 
-fn accepted() -> AcceptedContract {
+pub(crate) fn accepted() -> AcceptedContract {
     let runtime = artifact("./dist/index.js", 'b');
     let declarations = artifact("./types/index.d.ts", 'c');
     let identity = ExportIdentity {
@@ -784,7 +784,7 @@ fn one_artifact_identity_naming_two_contracts_is_dropped_not_preferred() {
 
 /// An index holding one contract for `pkg`, admitted by artifact: what a
 /// project catalog contributes once its acceptance reproduced in the tree.
-fn admitted_index(semantic: char) -> AcceptedContractIndex {
+pub(crate) fn admitted_index(semantic: char) -> AcceptedContractIndex {
     let mut contract = accepted();
     contract.receipt.semantic_digest = digest(semantic);
     AcceptedContractIndex::from_artifact_acceptances([(format!("artifact-{semantic}"), contract)])
@@ -998,4 +998,27 @@ fn a_per_importer_explanation_answers_before_the_specifier_keyed_one() {
         Some("from the root's copy")
     );
     assert_eq!(index.admission_refusal("pkg"), Some("from the root's copy"));
+}
+
+/// `pkg` exporting each of `exports`, every one a callable like `run`. The
+/// flag leaves that export's `creates` domain open, which projects an
+/// explicit owner-requirements obligation at an import of it: the unknown
+/// the acceptance gate reports, independent of any call.
+pub(crate) fn accepted_exports(exports: &[(&str, bool)]) -> AcceptedContract {
+    let mut contract = accepted();
+    let template = contract.selected_case.exports["run"].clone();
+    contract.selected_case.exports = exports
+        .iter()
+        .map(|(name, open_creates)| {
+            let mut export = template.clone();
+            export.identity.public_name = (*name).into();
+            export.identity.runtime.export_name = (*name).into();
+            export.identity.declarations.export_name = (*name).into();
+            if *open_creates {
+                export.call.claims.creates = KnowledgeSet::Unknown;
+            }
+            ((*name).to_owned(), export)
+        })
+        .collect();
+    contract
 }

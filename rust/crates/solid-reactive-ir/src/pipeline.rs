@@ -2,6 +2,7 @@
 //! assembles a `Program`, plus the bounded-parallelism helpers.
 
 use std::{
+    borrow::Cow,
     cell::Cell,
     collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
@@ -376,6 +377,29 @@ pub fn build_with_analysis_inputs_measured(
     )
 }
 
+/// The accepted contracts, with each importer/specifier pair the boundary
+/// records a contract-bound source-edge refusal for withheld from every tier:
+/// importer-keyed, artifact-admitted, per-importer admitted, scoped and every
+/// browser view. Applied once, at the shared build seam after
+/// [`AcceptedContractIndex::external_packages`], so both a direct and a
+/// retained build see the same index.
+///
+/// The result is the borrowed input when nothing is recorded, or when what is
+/// recorded names only loads the binder never bound (a literal-only record
+/// denies nothing). This withholds accepted-contract semantics at the pair
+/// and nothing else: source declarations, alias roots and redirects are built
+/// independently of contracts and stay as they were.
+pub(crate) fn deny_recorded_edges<'a>(
+    contracts: Cow<'a, AcceptedContractIndex>,
+    boundary: &PackageBoundary,
+) -> Cow<'a, AcceptedContractIndex> {
+    let denied = boundary.denied_import_edges();
+    if denied.is_empty() {
+        return contracts;
+    }
+    Cow::Owned(contracts.into_owned().without_import_edges(&denied))
+}
+
 pub(crate) fn build_with_analysis_inputs_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
@@ -384,7 +408,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     caches: BuildCaches<'_>,
     runtime_configuration: crate::RuntimeConfigurationPremise,
 ) -> Result<(Program, BuildTimings), BuildError> {
-    let external_contracts = inputs.contracts.external_packages();
+    // A recorded refusal that the facts do not support is an error before any
+    // contract is withheld on its account: the check and the denial below read
+    // the same record, so a build never denies what it did not validate.
+    crate::source_refusal::check(inputs.boundary, facts)?;
+    let external_contracts =
+        deny_recorded_edges(inputs.contracts.external_packages(), inputs.boundary);
     let contracts = external_contracts.as_ref();
     let inputs = AnalysisInputs {
         boundary: inputs.boundary,

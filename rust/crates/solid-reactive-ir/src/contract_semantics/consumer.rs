@@ -148,6 +148,18 @@ pub struct AcceptedContractIndex {
     /// which apply project-wide. Empty for every project with no nested
     /// catalog, and then every query answers exactly as it did without it.
     scopes: Vec<ScopedAcceptances>,
+    /// Exact `(importer, specifier)` pairs whose accepted contract is
+    /// withheld at every tier of this index, nested scopes and browser view
+    /// included: the caller recorded that source-boundary analysis was
+    /// withheld for the pair (`PackageBoundary::record_source_edge_refusal`).
+    ///
+    /// Private and only ever set through [`Self::without_import_edges`] at the
+    /// analysis build seam. It denies *contract semantics* at the pair and
+    /// nothing else: it removes no source summary, no alias or redirect, and
+    /// no enumeration of what the project accepted (`semantic_identity`,
+    /// `admitted_contracts`, the uncertifiable markers and the admission
+    /// explanations still answer as they did).
+    denied_edges: BTreeSet<(String, String)>,
 }
 
 /// One nested directory's acceptances. `index` is a complete index of its own
@@ -280,6 +292,9 @@ impl AcceptedContractIndex {
 
     /// This index's own answer for one import, ignoring scopes.
     fn own_contract(&self, importer: &str, specifier: &str) -> Option<&AcceptedContract> {
+        if self.denies(importer, specifier) {
+            return None;
+        }
         self.imports
             .get(&(importer.to_owned(), specifier.to_owned()))
             .and_then(|contracts| contracts.first())
@@ -288,6 +303,36 @@ impl AcceptedContractIndex {
                     .get(&(importer.to_owned(), specifier.to_owned()))
             })
             .or_else(|| self.admitted.get(specifier))
+    }
+
+    /// Whether this index withholds the accepted contract of one exact pair.
+    /// No allocation for an index with nothing denied, which is every index
+    /// no source-edge refusal was recorded against.
+    fn denies(&self, importer: &str, specifier: &str) -> bool {
+        !self.denied_edges.is_empty()
+            && self
+                .denied_edges
+                .contains(&(importer.to_owned(), specifier.to_owned()))
+    }
+
+    /// This index with the accepted contract of each exact `(importer,
+    /// specifier)` pair in `edges` withheld at every tier: the importer-keyed
+    /// entries, artifact admission, per-importer admission, every scope and
+    /// the browser view. A pair is withheld whole; no other importer of the
+    /// specifier and no other specifier of the importer is touched.
+    ///
+    /// This is not source denial: source declarations, aliases and redirects
+    /// are built independently of accepted contracts and are unchanged.
+    #[must_use]
+    pub(crate) fn without_import_edges(mut self, edges: &BTreeSet<(String, String)>) -> Self {
+        self.denied_edges.extend(edges.iter().cloned());
+        if let Some(view) = self.inferred_browser.as_mut() {
+            view.contracts = std::mem::take(&mut view.contracts).without_import_edges(edges);
+        }
+        for scope in &mut self.scopes {
+            scope.index = std::mem::take(&mut scope.index).without_import_edges(edges);
+        }
+        self
     }
 
     /// This index's own explanation for one import, ignoring scopes: the one
@@ -464,6 +509,7 @@ impl AcceptedContractIndex {
             context_provided_packages: BTreeSet::new(),
             identity: Vec::new(),
             scopes: Vec::new(),
+            denied_edges: BTreeSet::new(),
         }
     }
 
@@ -522,6 +568,7 @@ impl AcceptedContractIndex {
             context_provided_packages: BTreeSet::new(),
             identity,
             scopes: Vec::new(),
+            denied_edges: BTreeSet::new(),
         })
     }
 
@@ -646,6 +693,7 @@ impl AcceptedContractIndex {
         }
         self.context_provided_packages
             .extend(fallback.context_provided_packages);
+        self.denied_edges.extend(fallback.denied_edges);
         // A fallback's scopes stay scopes: folding them into this index's own
         // tiers would let a nested catalog answer files outside its directory.
         for scope in fallback.scopes {
@@ -868,6 +916,16 @@ impl AcceptedContractIndex {
                 hash.update(scope.index.cache_fingerprint());
             }
         }
+        // Nothing is hashed for an index that withholds no pair, so every
+        // index keeps the fingerprint it always had until one does.
+        if !self.denied_edges.is_empty() {
+            hash.update(b"denied-edges");
+            hash.update((self.denied_edges.len() as u64).to_be_bytes());
+            for (importer, specifier) in &self.denied_edges {
+                hash_text(&mut hash, importer);
+                hash_text(&mut hash, specifier);
+            }
+        }
         if let Some(view) = &self.inferred_browser {
             // The selection is all of the host this view reads. The host's own
             // bytes are part of `AnalysisInputs::cache_fingerprints`. Counts
@@ -893,6 +951,12 @@ impl AcceptedContractIndex {
         specifier: &str,
         identity: &ExportIdentity,
     ) -> Result<AcceptedContractUse<'a>, SemanticQueryError> {
+        if self.denies(importer, specifier) {
+            return Err(SemanticQueryError::MissingImport {
+                importer: importer.into(),
+                specifier: specifier.into(),
+            });
+        }
         if let Some(view) = self.browser_view_at(importer, specifier) {
             return view.resolve(importer, specifier, identity);
         }
@@ -900,6 +964,7 @@ impl AcceptedContractIndex {
         let contract = self
             .scopes_for(importer)
             .chain(std::iter::once(self))
+            .filter(|index| !index.denies(importer, specifier))
             .find_map(|index| {
                 index
                     .imports
@@ -946,6 +1011,12 @@ impl AcceptedContractIndex {
         importer: &str,
         specifier: &str,
     ) -> Result<&AcceptedContract, SemanticQueryError> {
+        if self.denies(importer, specifier) {
+            return Err(SemanticQueryError::MissingImport {
+                importer: importer.into(),
+                specifier: specifier.into(),
+            });
+        }
         if let Some(view) = self.browser_view_at(importer, specifier) {
             return view.contract(importer, specifier);
         }
@@ -1972,4 +2043,4 @@ pub fn native_claim_precedence<T: Ord + Clone>(
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

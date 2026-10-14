@@ -33,6 +33,7 @@ pub use runtime_configuration::RuntimeConfigurationPremise;
 mod object_members;
 mod server_rules;
 mod source_discovery;
+mod source_refusal;
 mod static_api;
 mod static_rules;
 pub mod summary_semantics;
@@ -2435,6 +2436,10 @@ impl FunctionBoundary for FunctionNode {
 pub enum BuildError {
     #[error("fact location offset does not fit Oxc span")]
     SpanWidth,
+    /// A recorded source-edge refusal the supplied facts do not support, or
+    /// that cannot be honored exactly. No program is produced.
+    #[error(transparent)]
+    SourceEdge(#[from] package_boundary::SourceEdgeMismatch),
 }
 
 fn push_unique_summary_read(reads: &mut Vec<SummaryRead>, read: SummaryRead) {
