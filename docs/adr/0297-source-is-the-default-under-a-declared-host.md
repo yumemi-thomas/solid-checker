@@ -248,3 +248,58 @@ entries. Every entry names its requesting file, line and binding form; source
 refusals also name the offending closure edge. Per-site deltas and reasons are
 in the corpus's `experiments/sweep-sol-reexport2-reasons.json`, beside
 `sweep-sol-reexport2.json`.
+
+## Review round 3
+
+Recursive runtime edges now pass the exact importer/declaration/selected-root
+admission predicate before entering the traversal map. Admission of an outer
+relative barrel does not authorize its rejected bare re-export edge. Explicit
+selection of an outer installed copy therefore cannot substitute its body for
+a nested copy, even when both manifests name the same package and version.
+The two reversed-body process cases stay `SC9011` uncertifiable under that
+explicit selection; wildcard selection follows the actual nested body and
+proves its read only when that body reads.
+
+Exported-value provenance now fails closed outside its binder-resolved
+transport model. An accepted unselected package's imported or derived value in
+a class, accessor, mutation/escape argument, captured-state use, or another
+unclosed use retains the exporting package's contract. This is a package-wide
+boundary, including side-effect helpers that may mutate another file's export;
+it does not guess the semantics of `Object.assign` or another named mutator.
+Known initializers, assignments and returned values still propagate provenance;
+discarded direct calls with literal-only arguments and no escaping result keep
+source selection. Shadowed bindings do not acquire imported provenance.
+Transparent parentheses/assertions preserve discarded calls; erased TypeScript
+`typeof` queries do not introduce a runtime value use.
+
+Process regressions cover both duplicate-copy orders, class fields, exported
+classes and `Object.assign` for a private boolean helper and published
+`clsx@2.1.1`, plus getter, mutation-closure and discarded-call controls. The
+published clsx declarations and ESM implementation are retained as test data;
+fixture-issued receipts confer only explicit out-of-band test trust. These
+paths preserve the existing `SC9005` open-return claim rather than issuing a
+new guessed violation. Missing external acceptance remains source analysis's
+obligation. Namespace redirects, cyclic/ambiguous star refusals and contract
+mode's bare-star projection gap remain as described in round 2.
+
+The 49-project release/browser corpus is identical to an exact build of the
+lead's `f5214e87a`: 565 violations, 3,235 uncertifiable, zero errors, and every
+finding (not only its site) equal. All three probus-hk source proofs remain.
+The saved `sweep-sol-reexport2.json` predates other merged work: against that
+file there are three added violation rows and 40 fewer uncertifiable rows,
+all inherited from the lead. The added violations are donegeon-client
+`WaitlistRoute.tsx:33:108` and kui `TopicsRoute.tsx:425:75` in two project views.
+No package is newly retained: the same 12 entries across nine apps remain.
+The corpus's `sweep-sol-reexport3-reasons.json` preserves the complete retention
+table, saved-sweep deltas and exact-parent comparison;
+`sweep-sol-reexport3-parent.json` retains the lead's measured findings.
+
+Verification: 844 backend library tests, 80 checker unit tests, all five armed
+process suites (158 tests, including 12 round-3 cases), TypeScript on all seven
+original reproducers, coverage of 299 projects/2,044 findings with no snapshot
+changes, formatting/diff/schema/manifest checks, and backend all-target Clippy
+with warnings denied. The broader diagnostic suite exposed an inherited stale
+five-versus-four assertion from the receiver-proof merge; it now agrees with
+the existing snapshot, and its focused rerun passed. Full `make verify` and
+workspace-wide Clippy remain the lead's integration pass. No bundled contract,
+snapshot or checked-in executable changed.

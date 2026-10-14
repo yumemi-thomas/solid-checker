@@ -7543,6 +7543,19 @@ fn symbol_redirects(
     }
     let mut edge_targets = HashMap::<(PathBuf, String), BTreeSet<PathBuf>>::new();
     for (importer, specifier, target) in &rows {
+        // Admission belongs to every edge, not just the outer import whose
+        // symbol is redirected. Otherwise an admitted relative barrel can
+        // traverse a row for a different installed copy (ADR 0297 round 3).
+        let Some(declaration) = declarations
+            .get(&(importer.clone(), specifier.clone()))
+            .filter(|paths| paths.len() == 1)
+            .and_then(|paths| paths.first())
+        else {
+            continue;
+        };
+        if !admitted(importer, target, declaration) {
+            continue;
+        }
         edge_targets
             .entry((importer.clone(), specifier.clone()))
             .or_default()

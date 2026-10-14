@@ -480,6 +480,99 @@ fn exported_external_modules(
                 break;
             }
         }
+        // Transport above proves some flows; silence is not proof of absence.
+        // Drop the exporting boundary only when every imported/derived use
+        // belongs to that model. Classes, accessors, captured state and mutation
+        // calls can publish by channels it does not summarize. A side-effect
+        // helper may also mutate another file's exported state.
+        let references = &facts.reference_declarations;
+        let unclosed = references
+            .iter()
+            .filter(|(reference, declaration)| {
+                tainted.contains(declaration)
+                    && !facts
+                        .type_queries
+                        .iter()
+                        .any(|query| query.contains(*reference))
+            })
+            .map(|(reference, _)| reference)
+            .chain(load.as_ref())
+            .any(|reference| {
+                if facts
+                    .classes
+                    .iter()
+                    .any(|class| class.span.contains(*reference))
+                    || facts
+                        .object_properties
+                        .iter()
+                        .any(|property| !property.data && property.value.contains(*reference))
+                    || facts
+                        .write_targets
+                        .iter()
+                        .chain(&facts.deleted_targets)
+                        .any(|target| target.contains(*reference))
+                    || facts
+                        .assignments
+                        .iter()
+                        .any(|assignment| assignment.target.contains(*reference))
+                {
+                    return true;
+                }
+                // No guessed purity: arguments may escape or mutate a
+                // receiver/global. A tainted callee receiving local values
+                // may mutate them too. Literal-only discarded calls remain
+                // the narrow internal-use control.
+                if facts.calls.iter().any(|call| {
+                    call.arguments
+                        .iter()
+                        .any(|argument| argument.span.contains(*reference))
+                        || (call.callee.contains(*reference)
+                            && call.arguments.iter().any(|argument| {
+                                references.iter().any(|(argument_reference, _)| {
+                                    argument.span.contains(*argument_reference)
+                                })
+                            }))
+                }) {
+                    return true;
+                }
+                let transported = facts.bindings.iter().any(|binding| {
+                    binding.initializer.is_some_and(|span| {
+                        span.contains(*reference)
+                            && functions_by_start.iter().all(|function| {
+                                !span.contains(function.span) || !function.body.contains(*reference)
+                            })
+                    })
+                }) || facts
+                    .assignments
+                    .iter()
+                    .any(|assignment| assignment.value_span.contains(*reference))
+                    || returned_values
+                        .values()
+                        .flatten()
+                        .any(|span| span.contains(*reference))
+                    || facts.functions.iter().any(|function| {
+                        function.expression_body && function.body.contains(*reference)
+                    })
+                    || facts.module_level_exports().any(|export| {
+                        !export.type_only
+                            && export.span.contains(*reference)
+                            && facts
+                                .functions
+                                .iter()
+                                .all(|function| !function.body.contains(*reference))
+                    });
+                let discarded = facts.calls.iter().any(|call| {
+                    call.result_discarded && facts.peel_ts_sugar_span(call.callee) == *reference
+                });
+                !transported && !discarded
+            });
+        if unclosed {
+            modules.insert(
+                module.to_owned(),
+                (import_span, "exported-value provenance is not closed"),
+            );
+            continue;
+        }
         if facts
             .module_level_exports()
             .filter(|edge| !edge.type_only && edge.module.is_none())
@@ -526,6 +619,14 @@ mod tests {
             "import { x } from 'pkg'; export function y() { return x(); }",
             "import { x } from 'pkg'; export const y = () => x();",
             "import { x } from 'pkg'; let y; y = x; export { y };",
+            "import { x } from 'pkg'; class C { value = x(); } const c = new C(); export function y() { return c.value; }",
+            "import { x } from 'pkg'; export class C { value = x(); }",
+            "import { x } from 'pkg'; const obj = {}; Object.assign(obj, { value: x() }); export { obj };",
+            "import { x } from 'pkg'; const obj = {}; mutate(obj, x()); export { obj };",
+            "import { x } from 'pkg'; const obj = { get value() { return x(); } }; export { obj };",
+            "import { x } from 'pkg'; let state = x(); export const update = () => { state++; };",
+            "import { x } from 'pkg'; const obj = {}; x(obj); export { obj };",
+            "import { x } from 'pkg'; const value = x(); export const update = () => { sink(value); };",
         ] {
             let facts = solid_facts::ast::extract("module.ts", source).unwrap();
             assert!(
@@ -541,6 +642,10 @@ mod tests {
             "import { x } from 'pkg'; export default () => { x(); return 1; };",
             "import { x } from 'pkg'; function internal() { return x(); } export const y = 1;",
             "import { x } from 'pkg'; function y(x) { return x; } export { y };",
+            "import { x } from 'pkg'; x('literal'); export const y = 1;",
+            "import { x } from 'pkg'; (((x)))(); export const y = 1;",
+            "import { x } from 'pkg'; (x as typeof x)(); export const y = 1;",
+            "import { x } from 'pkg'; class C { value = 1; } x(); export { C };",
             "export type { T } from 'pkg';",
         ] {
             let facts = solid_facts::ast::extract("module.ts", source).unwrap();

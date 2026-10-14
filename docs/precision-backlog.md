@@ -30662,6 +30662,52 @@ Build tools and app-game have zero retained entries. The corpus's
 `experiments/sweep-sol-reexport2-reasons.json` records every exact edge and
 per-site delta; `sweep-sol-reexport2.json` holds the complete findings.
 
+### Review round 3 (2026-10-14, ADR 0297)
+
+Resolved:
+
+- **Recursive installed-copy substitution.** Every runtime traversal edge now
+  passes admission against that importer's unique resolved declaration and
+  selected package root before joining the graph. An admitted relative barrel
+  cannot traverse a rejected edge to another installed copy. Reversing the
+  outer/nested runtime bodies previously produced a false SC1001 in one order
+  and silent certification in the other. Explicit outer-copy selection now
+  reports SC9011 uncertifiable in both; wildcard follows the nested body.
+- **Unclosed exported-value provenance.** Class fields/instances and mutation
+  calls could hide accepted Q-derived values reaching selected A's exports,
+  removing A's open-return boundary. Retention now requires every use to belong
+  to the proven binder-resolved transport model before dropping that boundary.
+  Classes, accessors, arbitrary mutation/escape arguments, captured-state uses
+  and other unclosed uses conservatively retain A, including side-effect
+  helpers that may affect another file's export. Both class and Object.assign
+  reproducers preserve SC9005 uncertifiable with the private helper and actual
+  published clsx 2.1.1. Literal-only discarded direct-call controls still select
+  source; shadowed references remain distinct.
+
+The seven review reproducers pass `tsc --noEmit` against installed
+published Solid/Web rc.13 types and clsx 2.1.1 where used. No new violation rule,
+contract artifact, receipt authority or TypeScript diagnostic is introduced.
+Process tests construct fixture-issued receipts in temporary projects and keep
+the published clsx declarations/ESM body as test data. Unknown external
+acceptance remains source analysis's obligation; namespace redirects, pure
+star-cycle/ambiguous joins and contract mode's bare-star gap remain open.
+
+Measured round-3 corpus: 565 violation rows and 3,235 uncertifiable, every
+complete finding identical to an exact pinned release build of the lead's
+`f5214e87a` over the same 49 projects; zero errors and all three probus-hk source
+proofs preserved. Against the older saved round-2 sweep (562/3,275), the
+inherited delta is +3 violation rows/-40 uncertifiable: donegeon-client
+`WaitlistRoute.tsx:33:108` and kui `TopicsRoute.tsx:425:75` in two project views
+are the added violation rows, already recorded in the merged getter work.
+No package is newly retained; the same 12 entries across nine apps remain.
+`experiments/sweep-sol-reexport3-reasons.json` records both comparisons and
+every retention reason; `sweep-sol-reexport3-parent.json` is the exact-parent
+measurement. Coverage compares 299 projects/2,044 findings with no snapshot
+changes. Backend library/checker/process tests and backend all-target Clippy
+passed; an inherited process assertion was aligned with the existing
+interprocedural-methods-v2 snapshot (four strict reads, not five) and rerun.
+Full verification remains the lead's integration pass.
+
 ## Package integrity review round 1 (2026-10-14, ADR 0300)
 
 Four P1 false-violation families were confirmed against published typings:

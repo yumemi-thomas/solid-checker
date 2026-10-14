@@ -49,10 +49,12 @@ struct Scratch {
 
 impl Scratch {
     fn new(name: &str, tag: &str) -> Self {
-        let root = std::env::temp_dir().join(format!(
-            "solid-checker-dependency-daemon-{tag}-{}",
-            std::process::id()
-        ));
+        let root = std::env::temp_dir()
+            .join("sc-scratch.noindex")
+            .join(format!(
+                "solid-checker-dependency-daemon-{tag}-{}",
+                std::process::id()
+            ));
         let _ = fs::remove_dir_all(&root);
         copy_tree(&fixture(name), &root.join("project"));
         let project = fs::canonicalize(root.join("project")).unwrap();
@@ -1117,6 +1119,350 @@ export function StatusOpen() {
   return <div>{reactive.isReadyOpen() ? "ready" : "waiting"}</div>;
 }
 "#;
+
+/// Review round 3: a relative barrel cannot authorize a rejected recursive
+/// edge to another installed copy, even when both manifests name the same
+/// package and version. Both body orders are type-valid.
+fn check_recursive_reexport_copy(nested_reads: bool) {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let app = "import { createSignal } from 'solid-js';\nimport { isReadyOpen as read } from './nested/barrel';\nexport function App() { const [ready] = createSignal(true); const value = read(ready); return <div>{value ? 'yes' : 'no'}</div>; }";
+    let (scratch, _) =
+        accepted_solid_package_with(&format!("recursive-copy-{nested_reads}"), app, |scratch| {
+            fs::copy(
+                fixture("dependency-source-all").join("solid-js.d.ts"),
+                scratch.path("solid-js.d.ts"),
+            )
+            .unwrap();
+            let outer = scratch.path("node_modules/reactive-package");
+            edit(
+                &outer.join("index.d.ts"),
+                "isReadyOpen()",
+                "isReadyOpen(source?: () => boolean)",
+            );
+            let nested = scratch.path("nested/node_modules/reactive-package");
+            copy_tree(&outer, &nested);
+            let read = "export function isReadyOpen(source) { return source(); }";
+            let plain = "export function isReadyOpen(source) { return true; }";
+            fs::write(
+                outer.join("index.js"),
+                if nested_reads { plain } else { read },
+            )
+            .unwrap();
+            fs::write(
+                nested.join("index.js"),
+                if nested_reads { read } else { plain },
+            )
+            .unwrap();
+            fs::write(
+                scratch.path("nested/barrel.ts"),
+                "export { isReadyOpen } from 'reactive-package';",
+            )
+            .unwrap();
+            let config_path = scratch.path("tsconfig.json");
+            let mut config: serde_json::Value =
+                serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+            config["include"] = serde_json::json!([]);
+            config["files"] = serde_json::json!(["App.tsx", "jsx.d.ts", "solid-js.d.ts"]);
+            fs::write(config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        });
+    let run = |selection: &'static str| {
+        let (success, run) = invoke(
+            &typefacts,
+            &scratch.project,
+            &with_host(&["--dependency-source", selection]),
+            false,
+        );
+        assert!(success, "{}", run.stderr);
+        run
+    };
+    let explicit = run("reactive-package");
+    assert!(
+        explicit.json()["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| finding["id"] == "SC9011" && finding["kind"] == "uncertifiable"),
+        "nested reads {nested_reads}: {}",
+        stdout(&explicit)
+    );
+    assert!(
+        !explicit.json()["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| finding["kind"] == "violation"),
+        "{}",
+        stdout(&explicit)
+    );
+    let wildcard = run("*");
+    assert_eq!(
+        wildcard.json()["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| finding["id"] == "SC1001" && finding["kind"] == "violation"),
+        nested_reads,
+        "{}",
+        stdout(&wildcard)
+    );
+    if !nested_reads {
+        assert!(
+            wildcard.json()["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|finding| finding["id"] == "SC9014"),
+            "{}",
+            stdout(&wildcard)
+        );
+    }
+}
+
+#[test]
+fn round3_duplicates_minimal() {
+    check_recursive_reexport_copy(false);
+}
+
+#[test]
+fn round3_duplicates_reverse() {
+    check_recursive_reexport_copy(true);
+}
+
+/// Build a second fixture-accepted package bound to the exact importing
+/// runtime file, then merge its catalog with the first package's catalog.
+fn authorize_external_test_package(scratch: &Scratch, name: &str) {
+    use sha2::{Digest, Sha256};
+    use solid_facts_backend::fixture_authorization::{
+        authorize_fixture_contract, read_fixture_contract_request,
+    };
+    let base = fixture("package-plain-return-consumer");
+    let old = format!(
+        "{:x}",
+        Sha256::digest(fs::read(base.join("node_modules/reactive-package/package.json")).unwrap())
+    );
+    let package = scratch.path(&format!("node_modules/{name}"));
+    let manifest = fs::read(package.join("package.json")).unwrap();
+    let new = format!("{:x}", Sha256::digest(&manifest));
+    let rebind = |text: String| {
+        text.replace(&old, &new)
+            .replace(
+                &manifest_closure_digest(&format!("sha256:{old}")),
+                &manifest_closure_digest(&format!("sha256:{new}")),
+            )
+            .replace("reactive-package", name)
+    };
+    let mut document: serde_json::Value = serde_json::from_str(&rebind(
+        fs::read_to_string(base.join("node_modules/reactive-package/solid-reactivity.json"))
+            .unwrap(),
+    ))
+    .unwrap();
+    let mut request: serde_json::Value = serde_json::from_str(&rebind(
+        fs::read_to_string(base.join(".solid-checker/authorize-contract.json")).unwrap(),
+    ))
+    .unwrap();
+    let version: serde_json::Value = serde_json::from_slice(&manifest).unwrap();
+    document["package"]["version"] = version["version"].clone();
+    request["import"]["packageVersion"] = version["version"].clone();
+    request["import"]["importer"] = "node_modules/reactive-package/index.js".into();
+    if name == "clsx" {
+        document["summaries"]
+            .as_object_mut()
+            .unwrap()
+            .remove("summary-plain-return");
+        document["entrypoints"]["."]["exports"] =
+            serde_json::json!({"clsx": "summary-returns-open"});
+        let mut export = request["import"]["exports"]["isReadyOpen"].clone();
+        export["declarations"]["exportName"] = "clsx".into();
+        export["runtime"]["exportName"] = "clsx".into();
+        request["import"]["exports"] = serde_json::json!({"clsx": export});
+    }
+    fs::write(
+        package.join("solid-reactivity.json"),
+        serde_json::to_vec_pretty(&document).unwrap(),
+    )
+    .unwrap();
+    let catalog_path = scratch.path(".solid-checker/accepted-contracts.json");
+    let mut catalog: serde_json::Value =
+        serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
+    fs::write(
+        scratch.path(".solid-checker/authorize-contract.json"),
+        serde_json::to_vec_pretty(&request).unwrap(),
+    )
+    .unwrap();
+    authorize_fixture_contract(
+        &scratch.project,
+        &read_fixture_contract_request(&scratch.project).unwrap(),
+    )
+    .unwrap();
+    let external: serde_json::Value =
+        serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
+    catalog["contracts"]
+        .as_array_mut()
+        .unwrap()
+        .extend(external["contracts"].as_array().unwrap().iter().cloned());
+    fs::write(catalog_path, serde_json::to_vec_pretty(&catalog).unwrap()).unwrap();
+}
+
+fn check_accepted_external_value_provenance(external: &str, tag: &str, body: &str) {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let (scratch, trust) = accepted_solid_package_with(
+        &format!("open-provenance-{external}-{tag}"),
+        NAMED_APP,
+        |scratch| {
+            let package = scratch.path(&format!("node_modules/{external}"));
+            if external == "clsx" {
+                copy_tree(
+                    &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/clsx-2.1.1"),
+                    &package,
+                );
+            } else {
+                fs::create_dir_all(&package).unwrap();
+                fs::write(package.join("package.json"), r#"{"name":"external-package","version":"1.0.0","types":"index.d.ts","module":"index.js"}"#).unwrap();
+                fs::write(
+                    package.join("index.d.ts"),
+                    "export declare function isReadyOpen(): boolean;",
+                )
+                .unwrap();
+                fs::write(
+                    package.join("index.js"),
+                    "export function isReadyOpen() { return true; }",
+                )
+                .unwrap();
+            }
+            let (imported, call) = if external == "clsx" {
+                ("clsx", "x('ok')")
+            } else {
+                ("isReadyOpen", "x()")
+            };
+            fs::write(scratch.path("node_modules/reactive-package/index.js"), format!("import {{ {imported} as x }} from '{external}'; {}\nexport function isReady() {{ return true; }}", body.replace("x()", call))).unwrap();
+            if external == "clsx" && tag != "discarded" {
+                edit(
+                    &scratch.path("node_modules/reactive-package/index.d.ts"),
+                    "isReadyOpen(): boolean",
+                    "isReadyOpen(): string",
+                );
+            }
+        },
+    );
+    authorize_external_test_package(&scratch, external);
+    let trust = trust.to_string_lossy();
+    let run = |extra: &[&str]| {
+        let mut args = with_host(&[]);
+        args.extend(["--receipt-trust-configuration", trust.as_ref()]);
+        args.extend(extra);
+        let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
+        assert!(success, "{external}/{tag}: {}", run.stderr);
+        run
+    };
+    let contracts = run(&["--no-dependency-source"]);
+    assert!(
+        contracts.json()["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| finding["id"] == "SC9005" && finding["kind"] == "uncertifiable"),
+        "{}",
+        stdout(&contracts)
+    );
+    for selection in ["reactive-package", "*"] {
+        let selected = run(&["--dependency-source", selection]);
+        assert!(selected.stderr.contains(&format!("accepted unselected package {external}")) || selected.json()["packageSummaries"].as_array().unwrap().iter().any(|summary| summary["name"] == external && summary["evidence"] == "accepted"), "{external}/{tag}: {}", stdout(&selected));
+        if tag == "discarded" {
+            assert!(
+                !selected.stderr.contains("accepted unselected package"),
+                "{}",
+                selected.stderr
+            );
+        } else {
+            assert_eq!(
+                selected.json()["findings"],
+                contracts.json()["findings"],
+                "{external}/{tag}/{selection}"
+            );
+            assert!(
+                selected
+                    .stderr
+                    .contains(&format!("accepted unselected package {external}")),
+                "{}",
+                selected.stderr
+            );
+        }
+    }
+}
+
+macro_rules! open_provenance_test {
+    ($name:ident, $external:literal, $tag:literal, $body:literal) => {
+        #[test]
+        fn $name() {
+            check_accepted_external_value_provenance($external, $tag, $body);
+        }
+    };
+}
+
+open_provenance_test!(
+    round3_external_class_field,
+    "external-package",
+    "class-field",
+    "class C { value = x(); } const c = new C(); export function isReadyOpen() { return c.value; }"
+);
+open_provenance_test!(
+    round3_external_class_export,
+    "external-package",
+    "class-export",
+    "export class C { value = x(); } export function isReadyOpen() { return new C().value; }"
+);
+open_provenance_test!(
+    round3_external_assign_object,
+    "external-package",
+    "assign-object",
+    "const obj = { value: false }; Object.assign(obj, { value: x() }); export { obj }; export function isReadyOpen() { return obj.value; }"
+);
+open_provenance_test!(
+    round3_clsx_class_field,
+    "clsx",
+    "class-field",
+    "class C { value = x(); } const c = new C(); export function isReadyOpen() { return c.value; }"
+);
+open_provenance_test!(
+    round3_clsx_class_export,
+    "clsx",
+    "class-export",
+    "export class C { value = x(); } export function isReadyOpen() { return new C().value; }"
+);
+open_provenance_test!(
+    round3_clsx_assign_object,
+    "clsx",
+    "assign-object",
+    "const obj = { value: false }; Object.assign(obj, { value: x() }); export { obj }; export function isReadyOpen() { return obj.value; }"
+);
+open_provenance_test!(
+    round3_external_mutation_closure,
+    "external-package",
+    "mutation-closure",
+    "const obj = { value: false }; function set(value) { obj.value = value; } export const update = () => set(x()); export function isReadyOpen() { return obj.value; }"
+);
+open_provenance_test!(
+    round3_external_getter,
+    "external-package",
+    "getter",
+    "const obj = { get value() { return x(); } }; export function isReadyOpen() { return obj.value; }"
+);
+open_provenance_test!(
+    round3_external_discarded_control,
+    "external-package",
+    "discarded",
+    "x(); export function isReadyOpen() { return true; }"
+);
+open_provenance_test!(
+    round3_clsx_discarded_control,
+    "clsx",
+    "discarded",
+    "x(); export function isReadyOpen() { return true; }"
+);
 
 /// Exact re-export edges select runtime source, in project and package
 /// barrels alike. A reactive runtime read proves a violation where contract
