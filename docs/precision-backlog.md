@@ -30717,3 +30717,10 @@ are kui's TopicsRoute site in shell and feature-topics, and donegeon's
 WaitlistRoute site; each becomes SC9012. No violation is added. Withdrawing
 getter transport also changes the uncertifiable finding set; this is a
 precision retreat, not evidence that the withdrawn reads are clean.
+
+Parked (owner, 2026-10-14): recover kui and donegeon by escape analysis of
+the package object instead of the writes. If every visible use of the value a
+selected package hands out (`useLocation()`, the context value) is a plain
+member read, no visible write can reach it, whatever other computed writes
+target. It is not started, so that the running source-mode work can converge
+first. Both sites stay SC9012 until then.
