@@ -1,5 +1,15 @@
 # Precision backlog
 
+P4 prerequisite, open (2026-10-14; P3 review, `/tmp/sc-scratch.noindex/p3/p3-review.md`).
+Requirements restored by `retain_exported_contracts` reach only the
+project-wide tier, not the inferred browser view. It is unreachable today:
+the browser view exists only without a declared target, and dependency-source
+selection requires one. Once P4 lets an inferred host and source selection
+coexist, a browser importer would miss its SC9005 note (SC9011/SC9012 still
+fire at the call sites). Also from that review: the `PackageBoundary` digest
+hashes reason detail text that carries project `file:line`, so a line shift
+there flushes every derived cache; keep detail out of the domain key.
+
 Prototype-write vetoes, open (2026-10-14; review of the parked
 `p1a-demand-nonsolid` commits, `/tmp/sc-scratch.noindex/p1/p1a-veto-review.md`).
 The base binary at `d9ed2224d` has a **false positive**: a project assignment
